@@ -3,11 +3,10 @@ package toolmanager
 import (
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
+	"sort"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/provider"
 	"github.com/Cyclone1070/iav/internal/tool"
@@ -15,37 +14,35 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockResult struct {
+// -- Mocks --
+
+type mockInvocation struct {
 	llmContent string
 	display    tool.ToolDisplay
-	success    bool
+	err        error
 }
 
-func (m *mockResult) LLMContent() string        { return m.llmContent }
-func (m *mockResult) Display() tool.ToolDisplay { return m.display }
-func (m *mockResult) Success() bool             { return m.success }
-
-type mockInput struct {
-	Value string `json:"value"`
+func (i *mockInvocation) Display() tool.ToolDisplay { return i.display }
+func (i *mockInvocation) Execute(ctx context.Context) (string, error) {
+	return i.llmContent, i.err
 }
-
-func (m *mockInput) Display() string { return m.Value }
 
 type mockTool struct {
 	name        string
 	declaration tool.Declaration
-	executeFunc func(ctx context.Context, req ToolRequest) (ToolResult, error)
+	prepareFunc func(ctx context.Context, params json.RawMessage) (Invocation, error)
 }
 
 func (m *mockTool) Name() string                  { return m.name }
 func (m *mockTool) Declaration() tool.Declaration { return m.declaration }
-func (m *mockTool) Request() ToolRequest          { return &mockInput{} }
-func (m *mockTool) Execute(ctx context.Context, req ToolRequest) (ToolResult, error) {
-	if m.executeFunc != nil {
-		return m.executeFunc(ctx, req)
+func (m *mockTool) Prepare(ctx context.Context, params json.RawMessage) (Invocation, error) {
+	if m.prepareFunc != nil {
+		return m.prepareFunc(ctx, params)
 	}
-	return &mockResult{llmContent: "ok", display: tool.StringDisplay("ok"), success: true}, nil
+	return &mockInvocation{llmContent: "ok", display: tool.StringDisplay("ok")}, nil
 }
+
+// -- Tests --
 
 func TestRegister_AddsTool(t *testing.T) {
 	tm := NewToolManager()
@@ -97,60 +94,64 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 
 func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	tm := NewToolManager()
-	var capturedInput *mockInput
+	var capturedParams json.RawMessage
 	tm.Register(&mockTool{
 		name: "test",
-		executeFunc: func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			capturedInput = req.(*mockInput)
-			return &mockResult{llmContent: "ok", success: true}, nil
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+			capturedParams = params
+			return &mockInvocation{llmContent: "ok"}, nil
 		},
 	})
 
-	events := make(chan workflow.Event, 10)
-	res, err := tm.Execute(context.Background(), provider.ToolCall{
+	_, err := tm.Execute(context.Background(), provider.ToolCall{
 		ID: "tc-456",
 		Function: provider.FunctionCall{
 			Name:      "test",
 			Arguments: json.RawMessage(`{"value": "hello"}`),
 		},
-	}, events)
+	}, nil)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "hello", capturedInput.Value)
-	assert.Equal(t, "tc-456", res.ToolCallID)
+	assert.Equal(t, `{"value": "hello"}`, string(capturedParams))
 }
 
-func TestExecute_MalformedJSON_ReturnsMessageToLLM(t *testing.T) {
+func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	tm := NewToolManager()
-	tm.Register(&mockTool{name: "test"})
+	tm.Register(&mockTool{
+		name: "test",
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+			return nil, fmt.Errorf("bad params")
+		},
+	})
 
 	res, err := tm.Execute(context.Background(), provider.ToolCall{
 		ID: "tc-789",
 		Function: provider.FunctionCall{
-			Name:      "test",
-			Arguments: json.RawMessage(`{invalid}`),
+			Name: "test",
 		},
 	}, nil)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "tc-789", res.ToolCallID)
-	assert.Contains(t, res.Content, "Error: invalid arguments for tool \"test\"")
+	assert.Contains(t, res.Content, "Error: failed to prepare tool \"test\": bad params")
 }
 
 func TestExecute_EmitsToolEvents(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "test",
-		executeFunc: func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return &mockResult{llmContent: "ok", display: tool.StringDisplay("result"), success: true}, nil
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+			return &mockInvocation{
+				llmContent: "result",
+				display:    tool.StringDisplay("display output"),
+			}, nil
 		},
 	})
 
 	events := make(chan workflow.Event, 10)
 	_, err := tm.Execute(context.Background(), provider.ToolCall{
+		ID: "tc-1",
 		Function: provider.FunctionCall{
-			Name:      "test",
-			Arguments: json.RawMessage(`{"value": "hello"}`),
+			Name: "test",
 		},
 	}, events)
 
@@ -159,47 +160,45 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	e1 := <-events
 	start, ok := e1.(workflow.ToolStartEvent)
 	assert.True(t, ok)
+	assert.Equal(t, "tc-1", start.CallID)
 	assert.Equal(t, "test", start.ToolName)
-	assert.Equal(t, "hello", start.RequestDisplay)
+	assert.Equal(t, tool.StringDisplay("display output"), start.Display)
 
 	e2 := <-events
 	end, ok := e2.(workflow.ToolEndEvent)
 	assert.True(t, ok)
-	assert.Equal(t, "test", end.ToolName)
-	assert.Equal(t, tool.StringDisplay("result"), end.Display)
-	assert.True(t, end.Success)
+	assert.Equal(t, "tc-1", end.CallID)
+	assert.Empty(t, end.Error)
 }
 
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "shell",
-		executeFunc: func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			return &mockResult{
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+			return &mockInvocation{
 				llmContent: "Command finished",
 				display: tool.ShellDisplay{
-					Command:    "ls",
-					WorkingDir: "/",
-					Output:     strings.NewReader("file1\nfile2\n"),
-					Wait:       func() {},
+					Command: "ls",
+					Output:  strings.NewReader("file1\nfile2\n"),
+					Wait:    func() {},
 				},
-				success: true,
 			}, nil
 		},
 	})
 
 	events := make(chan workflow.Event, 10)
 	_, err := tm.Execute(context.Background(), provider.ToolCall{
+		ID: "tc-shell",
 		Function: provider.FunctionCall{
-			Name:      "shell",
-			Arguments: json.RawMessage(`{}`),
+			Name: "shell",
 		},
 	}, events)
 
 	assert.NoError(t, err)
 
-	e1 := <-events
-	assert.IsType(t, workflow.ToolStartEvent{}, e1)
+	// ToolStartEvent
+	<-events
 
 	var streamOutput strings.Builder
 loop:
@@ -207,11 +206,11 @@ loop:
 		e := <-events
 		switch ev := e.(type) {
 		case workflow.ToolStreamEvent:
+			assert.Equal(t, "tc-shell", ev.CallID)
 			streamOutput.WriteString(ev.Chunk)
 		case workflow.ToolEndEvent:
-			assert.Equal(t, "shell", ev.ToolName)
-			assert.True(t, ev.Success)
-			assert.Nil(t, ev.Display)
+			assert.Equal(t, "tc-shell", ev.CallID)
+			assert.Empty(t, ev.Error)
 			break loop
 		}
 	}
@@ -219,54 +218,68 @@ loop:
 	assert.Equal(t, "file1\nfile2\n", streamOutput.String())
 }
 
-func TestExecute_ContextCancelled_StopsStreaming(t *testing.T) {
+func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
-		name: "shell",
-		executeFunc: func(ctx context.Context, req ToolRequest) (ToolResult, error) {
-			pipeR, pipeW := io.Pipe()
-			go func() {
-				<-ctx.Done()
-				pipeW.Close()
-			}()
-			return &mockResult{
-				display: tool.ShellDisplay{
-					Output: pipeR,
-					Wait:   func() {},
-				},
-				success: true,
+		name: "fail",
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+			return &mockInvocation{
+				llmContent: "Detailed error in content",
+				err:        fmt.Errorf("infra failure"),
 			}, nil
 		},
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
 	events := make(chan workflow.Event, 10)
-
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
-
-	_, err := tm.Execute(ctx, provider.ToolCall{
-		Function: provider.FunctionCall{Name: "shell", Arguments: json.RawMessage(`{}`)},
+	res, err := tm.Execute(context.Background(), provider.ToolCall{
+		ID:       "tc-fail",
+		Function: provider.FunctionCall{Name: "fail"},
 	}, events)
 
-	assert.Error(t, err)
+	assert.NoError(t, err)
+	assert.Equal(t, "Detailed error in content", res.Content)
+
+	// ToolStartEvent
+	<-events
+
+	// ToolEndEvent
+	e2 := <-events
+	end, ok := e2.(workflow.ToolEndEvent)
+	assert.True(t, ok)
+	assert.Equal(t, "tc-fail", end.CallID)
+	assert.Equal(t, "Execution failed", end.Error)
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{name: "tool"})
 
-	var wg sync.WaitGroup
+	results := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, _ = tm.Execute(context.Background(), provider.ToolCall{
+		go func(id int) {
+			_, err := tm.Execute(context.Background(), provider.ToolCall{
+				ID:       fmt.Sprintf("tc-%d", id),
 				Function: provider.FunctionCall{Name: "tool", Arguments: json.RawMessage(`{}`)},
 			}, nil)
-		}()
+			results <- (err == nil)
+		}(i)
 	}
-	wg.Wait()
+
+	for i := 0; i < 10; i++ {
+		assert.True(t, <-results)
+	}
+}
+
+func TestDeclarations_Sorted(t *testing.T) {
+	tm := NewToolManager()
+	tm.Register(&mockTool{name: "z"})
+	tm.Register(&mockTool{name: "a"})
+	tm.Register(&mockTool{name: "m"})
+
+	decls := tm.Declarations()
+	var names []string
+	for _, d := range decls {
+		names = append(names, d.Name)
+	}
+	assert.True(t, sort.StringsAreSorted(names))
 }

@@ -25,27 +25,28 @@ type DoneEvent struct{}
 
 func (DoneEvent) isEvent() {}
 
-// ToolStartEvent is emitted when a tool execution begins.
+// ToolStartEvent is emitted after Prepare succeeds.
+// Display contains rich display data (DiffDisplay, StringDisplay, etc.) for UI.
 type ToolStartEvent struct {
-	ToolName       string
-	RequestDisplay string // e.g., "Reading src/index.ts"
+	CallID   string           // Unique ID from provider.ToolCall.ID
+	ToolName string           // Tool identifier
+	Display  tool.ToolDisplay // Rich display computed during Prepare
 }
 
 func (ToolStartEvent) isEvent() {}
 
 // ToolStreamEvent is emitted for streaming tool output (shell commands).
 type ToolStreamEvent struct {
-	ToolName string
-	Chunk    string
+	CallID string
+	Chunk  string
 }
 
 func (ToolStreamEvent) isEvent() {}
 
-// ToolEndEvent is emitted when any tool execution completes.
+// ToolEndEvent is emitted when tool execution completes.
 type ToolEndEvent struct {
-	ToolName string
-	Display  tool.ToolDisplay
-	Success  bool
+	CallID string
+	Error  string // Empty = success, non-empty = failure message for UI
 }
 
 func (ToolEndEvent) isEvent() {}

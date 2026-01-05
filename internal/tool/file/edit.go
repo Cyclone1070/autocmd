@@ -9,7 +9,6 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/Cyclone1070/iav/internal/workflow/toolmanager"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -93,7 +92,7 @@ func (t *EditFileTool) Declaration() tool.Declaration {
 	}
 }
 
-func (t *EditFileTool) Request() toolmanager.ToolRequest {
+func (t *EditFileTool) Request() any {
 	return &EditFileRequest{}
 }
 
@@ -105,7 +104,7 @@ func (t *EditFileTool) Request() toolmanager.ToolRequest {
 // For guaranteed conflict-free edits, external file locking would be required.
 //
 // Note: ctx is accepted for API consistency but not used - file I/O is synchronous.
-func (t *EditFileTool) Execute(ctx context.Context, req toolmanager.ToolRequest) (toolmanager.ToolResult, error) {
+func (t *EditFileTool) Execute(ctx context.Context, req any) (any, error) {
 	r, ok := req.(*EditFileRequest)
 	if !ok {
 		return nil, fmt.Errorf("invalid request type: %T", req)

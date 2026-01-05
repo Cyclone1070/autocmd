@@ -5,6 +5,7 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -13,12 +14,16 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
-// executeReadForEdit is a test helper that calls Execute on ReadFileTool.
+// executeReadForEdit is a test helper that calls Prepare on ReadFileTool.
 func executeReadForEdit(t *testing.T, tool *ReadFileTool, req *ReadFileRequest) {
 	t.Helper()
-	_, err := tool.Execute(context.Background(), req)
+	params, err := json.Marshal(req)
 	if err != nil {
-		t.Fatalf("Execute returned error: %v", err)
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+	_, err = tool.Prepare(context.Background(), params)
+	if err != nil {
+		t.Fatalf("Prepare returned error: %v", err)
 	}
 }
 

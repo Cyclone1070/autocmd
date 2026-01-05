@@ -3,29 +3,16 @@ package file
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
 // Local mocks for read tests
-
-type mockFileInfoForRead struct {
-	name  string
-	size  int64
-	isDir bool
-}
-
-func (m *mockFileInfoForRead) Name() string       { return m.name }
-func (m *mockFileInfoForRead) Size() int64        { return m.size }
-func (m *mockFileInfoForRead) Mode() os.FileMode  { return 0o644 }
-func (m *mockFileInfoForRead) ModTime() time.Time { return time.Time{} }
-func (m *mockFileInfoForRead) IsDir() bool        { return m.isDir }
-func (m *mockFileInfoForRead) Sys() any           { return nil }
 
 type mockFileSystemForRead struct {
 	files  map[string][]byte
@@ -47,16 +34,6 @@ func (m *mockFileSystemForRead) createFile(path string, content []byte) {
 
 func (m *mockFileSystemForRead) createDir(path string) {
 	m.dirs[path] = true
-}
-
-func (m *mockFileSystemForRead) Stat(path string) (os.FileInfo, error) {
-	if m.dirs[path] {
-		return &mockFileInfoForRead{name: path, isDir: true}, nil
-	}
-	if content, ok := m.files[path]; ok {
-		return &mockFileInfoForRead{name: path, size: int64(len(content)), isDir: false}, nil
-	}
-	return nil, os.ErrNotExist
 }
 
 func (m *mockFileSystemForRead) ReadFile(path string) ([]byte, error) {
@@ -98,33 +75,28 @@ func (m *mockChecksumManagerForRead) Compute(content []byte) string {
 	return fmt.Sprintf("mock-checksum-%x", content)
 }
 
+func (m *mockChecksumManagerForRead) Update(path, checksum string) {
+	m.checksums[path] = checksum
+}
+
 func (m *mockChecksumManagerForRead) Get(path string) (string, bool) {
 	checksum, ok := m.checksums[path]
 	return checksum, ok
 }
 
-func (m *mockChecksumManagerForRead) Update(path, checksum string) {
-	m.checksums[path] = checksum
-}
-
-func (m *mockChecksumManagerForRead) Clear() {
-	m.checksums = make(map[string]string)
-}
-
 // Test functions
 
-// executeRead is a test helper that calls Execute and type-asserts the result.
-func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) *ReadFileResponse {
+// executeRead calls Prepare then Execute, returning the LLM output string.
+// Prepare errors: returns ("", err)
+// Execute errors: returns (llmContent, err) per contract
+func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (string, error) {
 	t.Helper()
-	result, err := rtool.Execute(context.Background(), req)
+	params, _ := json.Marshal(req)
+	inv, err := rtool.Prepare(context.Background(), params)
 	if err != nil {
-		t.Fatalf("Execute returned infra error: %v", err)
+		return "", err
 	}
-	resp, ok := result.(*ReadFileResponse)
-	if !ok {
-		t.Fatalf("Execute returned wrong type: %T", result)
-	}
-	return resp
+	return inv.Execute(context.Background())
 }
 
 func TestReadFile(t *testing.T) {
@@ -143,15 +115,14 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 0, Limit: 100}
-		resp := executeRead(t, readTool, readReq)
+		output, err := executeRead(t, readTool, readReq)
 
-		if resp.Error != "" {
-			t.Fatalf("Execute failed: %s", resp.Error)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if resp.Content != contentStr {
-			t.Errorf("expected content %q, got %q", contentStr, resp.Content)
-		}
+		assertContains(t, output, "00001| test content")
+		assertContains(t, output, "(End of file - total 1 lines)")
 
 		// Verify cache was updated
 		checksum, ok := checksumManager.Get("/workspace/test.txt")
@@ -175,33 +146,15 @@ func TestReadFile(t *testing.T) {
 
 		// Read lines 2 and 3 (Offset=1, Limit=2)
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 1, Limit: 2}
-		resp := executeRead(t, readTool, readReq)
+		output, err := executeRead(t, readTool, readReq)
 
-		if resp.Error != "" {
-			t.Fatalf("Execute failed: %s", resp.Error)
-		}
-
-		expected := "line2\nline3"
-		if resp.Content != expected {
-			t.Errorf("expected content %q, got %q", expected, resp.Content)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
 		}
 
-		// Verify metadata
-		if resp.StartLine != 2 {
-			t.Errorf("expected StartLine 2, got %d", resp.StartLine)
-		}
-		if resp.EndLine != 3 {
-			t.Errorf("expected EndLine 3, got %d", resp.EndLine)
-		}
-		if resp.TotalLines != 4 {
-			t.Errorf("expected TotalLines 4, got %d", resp.TotalLines)
-		}
-
-		// Verify LLMContent formatting
-		llm := resp.LLMContent()
-		assertContains(t, llm, "00002| line2")
-		assertContains(t, llm, "00003| line3")
-		assertContains(t, llm, "(File has more lines. Use offset=3 to read more)")
+		assertContains(t, output, "00002| line2")
+		assertContains(t, output, "00003| line3")
+		assertContains(t, output, "(File has more lines. Use offset=3 to read more)")
 	})
 
 	t.Run("binary detection rejection", func(t *testing.T) {
@@ -217,8 +170,8 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "binary.bin"}
-		resp := executeRead(t, readTool, readReq)
-		if resp.Error == "" {
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
 			t.Errorf("expected error for binary file, got success")
 		}
 	})
@@ -235,8 +188,8 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "large.txt"}
-		resp := executeRead(t, readTool, readReq)
-		if resp.Error == "" {
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
 			t.Fatalf("expected error for file exceeding MaxFileSize, got success")
 		}
 	})
@@ -252,22 +205,13 @@ func TestReadFile(t *testing.T) {
 		offset := 100
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: offset, Limit: 10}
-		resp := executeRead(t, readTool, readReq)
+		output, err := executeRead(t, readTool, readReq)
 
-		if resp.Error != "" {
-			t.Fatalf("Execute failed: %s", resp.Error)
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
 		}
 
-		if resp.Content != "" {
-			t.Errorf("expected empty content, got %q", resp.Content)
-		}
-		if resp.TotalLines != 1 {
-			t.Errorf("expected TotalLines 1, got %d", resp.TotalLines)
-		}
-
-		// Verify LLMContent handles offset beyond EOF correctly
-		llm := resp.LLMContent()
-		assertContains(t, llm, "(End of file - total 1 lines)")
+		assertContains(t, output, "(End of file - total 1 lines)")
 	})
 
 	t.Run("directory rejection", func(t *testing.T) {
@@ -279,8 +223,8 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "subdir"}
-		resp := executeRead(t, readTool, readReq)
-		if resp.Error == "" {
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
 			t.Error("expected error when reading directory")
 		}
 	})
@@ -293,10 +237,104 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
-		resp := executeRead(t, readTool, readReq)
-		if resp.Error == "" {
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
 			t.Errorf("expected error for nonexistent file, got success")
 		}
+	})
+
+	t.Run("empty path returns error", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		readReq := &ReadFileRequest{Path: ""}
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
+			t.Error("expected error for empty path")
+		}
+		assertContains(t, err.Error(), "path is required")
+	})
+
+	t.Run("path outside workspace returns error", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		readReq := &ReadFileRequest{Path: "../outside.txt"}
+		_, err := executeRead(t, readTool, readReq)
+		if err == nil {
+			t.Error("expected error for path outside workspace")
+		}
+		assertContains(t, err.Error(), "outside workspace")
+	})
+
+	t.Run("negative offset clamps to zero", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.MaxFileSize = maxFileSize
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		readReq := &ReadFileRequest{Path: "test.txt", Offset: -5, Limit: 10}
+		output, err := executeRead(t, readTool, readReq)
+
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
+		// Should start from line 1 (offset clamped to 0)
+		assertContains(t, output, "00001| line1")
+	})
+
+	t.Run("zero limit defaults to config", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.MaxFileSize = maxFileSize
+		cfg.Tools.DefaultReadFileLimit = 1
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+		fs.createFile("/workspace/test.txt", []byte("line1\nline2\nline3"))
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		readReq := &ReadFileRequest{Path: "test.txt", Limit: 0}
+		output, err := executeRead(t, readTool, readReq)
+
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
+		// Should only show 1 line (defaulted from config)
+		assertContains(t, output, "00001| line1")
+		assertContains(t, output, "(File has more lines. Use offset=1 to read more)")
+	})
+
+	t.Run("high limit is accepted", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		cfg.Tools.MaxFileSize = maxFileSize
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		readReq := &ReadFileRequest{Path: "test.txt", Limit: 100000}
+		output, err := executeRead(t, readTool, readReq)
+
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
+		// Should show both lines
+		assertContains(t, output, "00001| line1")
+		assertContains(t, output, "00002| line2")
+		assertContains(t, output, "(End of file - total 2 lines)")
 	})
 }
 

@@ -2,7 +2,9 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -80,62 +82,99 @@ func (t *ReadFileTool) Declaration() tool.Declaration {
 	}
 }
 
-// Request returns a new request struct for JSON unmarshalling.
-func (t *ReadFileTool) Request() toolmanager.ToolRequest {
-	return &ReadFileRequest{}
+// ReadFileRequest is the input for ReadFileTool.
+type ReadFileRequest struct {
+	Path   string `json:"path"`
+	Offset int    `json:"offset,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
 }
 
-// Execute reads a file from the workspace with line-based pagination.
-//
-// Note: ctx is accepted for API consistency but not used - file I/O is synchronous.
-func (t *ReadFileTool) Execute(ctx context.Context, req toolmanager.ToolRequest) (toolmanager.ToolResult, error) {
-	r, ok := req.(*ReadFileRequest)
-	if !ok {
-		return nil, fmt.Errorf("invalid request type: %T", req)
+// Prepare validates the request and returns an Invocation.
+func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (toolmanager.Invocation, error) {
+	req := &ReadFileRequest{}
+	if err := json.Unmarshal(params, req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
 	}
 
-	if err := r.Validate(t.config); err != nil {
-		return &ReadFileResponse{Error: err.Error()}, nil
+	if req.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if req.Offset < 0 {
+		req.Offset = 0
+	}
+	if req.Limit <= 0 {
+		req.Limit = t.config.Tools.DefaultReadFileLimit
 	}
 
-	abs, err := t.pathResolver.Abs(r.Path)
+	abs, err := t.pathResolver.Abs(req.Path)
 	if err != nil {
-		return &ReadFileResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
-	// Read full file content
-	data, err := t.fileOps.ReadFile(abs)
+	return &readFileInvocation{
+		fileOps:         t.fileOps,
+		checksumManager: t.checksumManager,
+		absPath:         abs,
+		offset:          req.Offset,
+		limit:           req.Limit,
+		display:         tool.StringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
+	}, nil
+}
+
+type readFileInvocation struct {
+	fileOps         fileReader
+	checksumManager checksumComputer
+	absPath         string
+	offset          int
+	limit           int
+	display         tool.ToolDisplay
+}
+
+func (i *readFileInvocation) Display() tool.ToolDisplay {
+	return i.display
+}
+
+func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
+	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return "", ctx.Err()
 		}
-		return &ReadFileResponse{Error: err.Error()}, nil
+		return fmt.Sprintf("Error: %s", err.Error()), err
 	}
 
-	// Normalize line endings for consistent checksum (matches EditFileTool behavior)
-	normalizedContent := strings.ReplaceAll(string(data), "\r\n", "\n")
+	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+	checksum := i.checksumManager.Compute([]byte(normalized))
+	i.checksumManager.Update(i.absPath, checksum)
 
-	// Always update checksum since we read the full file (on normalized content)
-	checksum := t.checksumManager.Compute([]byte(normalizedContent))
-	t.checksumManager.Update(abs, checksum)
-
-	// Split into lines using content.SplitLines which handles both \n and \r\n
 	lines := content.SplitLines(string(data))
+	paginatedLines, pagRes := pagination.ApplyPagination(lines, i.offset, i.limit)
 
-	// Apply pagination
-	paginatedLines, pagRes := pagination.ApplyPagination(lines, r.Offset, r.Limit)
-
-	// Calculate display lines
-	startLine := r.Offset + 1
+	startLine := i.offset + 1
 	endLine := startLine + len(paginatedLines) - 1
 	if len(paginatedLines) == 0 {
 		endLine = startLine - 1
 	}
 
-	return &ReadFileResponse{
-		Content:    strings.Join(paginatedLines, "\n"),
-		StartLine:  startLine,
-		EndLine:    endLine,
-		TotalLines: pagRes.TotalCount,
-	}, nil
+	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), nil
+}
+
+func formatFileContent(lines []string, startLine, endLine, totalLines int) string {
+	if len(lines) == 0 {
+		return fmt.Sprintf("<file>\n\n(End of file - total %d lines)\n</file>", totalLines)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("<file>\n")
+	for i, line := range lines {
+		sb.WriteString(fmt.Sprintf("%05d| %s\n", startLine+i, line))
+	}
+
+	if endLine < totalLines {
+		sb.WriteString(fmt.Sprintf("\n(File has more lines. Use offset=%d to read more)", endLine))
+	} else {
+		sb.WriteString(fmt.Sprintf("\n(End of file - total %d lines)", totalLines))
+	}
+	sb.WriteString("\n</file>")
+	return sb.String()
 }

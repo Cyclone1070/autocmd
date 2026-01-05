@@ -2,26 +2,23 @@ package toolmanager
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/Cyclone1070/iav/internal/tool"
 )
 
-// ToolResult is returned by tools after execution.
-type ToolResult interface {
-	// LLMContent returns the string content sent to the LLM.
-	LLMContent() string
-
-	// Display returns the display type for UI rendering.
+// Invocation is a validated, prepared tool call ready for execution.
+// Returned by Tool.Prepare(), enforces prepare-before-execute sequence.
+type Invocation interface {
+	// Display returns what to show in UI (computed during Prepare).
+	// Returns rich display types: DiffDisplay for edit, StringDisplay for read, etc.
 	Display() tool.ToolDisplay
 
-	// Success returns true if the tool execution succeeded.
-	Success() bool
-}
-
-// ToolRequest is implemented by tool request structs.
-type ToolRequest interface {
-	// Display returns a human-readable summary for tool start events.
-	Display() string
+	// Execute runs the operation and returns content for the LLM.
+	// Success: (content, nil)
+	// Failure: (errorContent, err) - errorContent shown to LLM, err signals failure.
+	// User sees generic "execution failed", LLM sees detailed error in content.
+	Execute(ctx context.Context) (llmContent string, err error)
 }
 
 // Tool defines the interface for individual tools.
@@ -32,9 +29,8 @@ type Tool interface {
 	// Declaration returns the tool's schema for the LLM.
 	Declaration() tool.Declaration
 
-	// Request returns a pointer to the request struct (e.g., &ReadFileRequest{}).
-	Request() ToolRequest
-
-	// Execute runs the tool with the request and returns a ToolResult.
-	Execute(ctx context.Context, req ToolRequest) (ToolResult, error)
+	// Prepare unmarshals params, validates comprehensively, and returns an Invocation.
+	// Handles: JSON parsing, path validation, file existence, snippet matching, etc.
+	// If Prepare succeeds, Execute should only fail due to write errors or race conditions.
+	Prepare(ctx context.Context, params json.RawMessage) (Invocation, error)
 }

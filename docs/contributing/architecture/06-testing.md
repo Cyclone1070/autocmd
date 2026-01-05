@@ -14,10 +14,6 @@
 *   **Local Helpers**: Test helper functions should be defined in the test file that uses them.
     *   **Why**: Keeps tests self-contained and readable.
 
-*   **Exception – `internal/testutils`**: Truly generic helpers MAY be placed here.
-    *   `testutils` MUST NOT import anything from the codebase (`internal/*`, `cmd/*`).
-    *   Only standard library and external dependencies allowed. Use sparingly.
-
 > [!CAUTION]
 > **ANTI-PATTERN**: Shared Mock Package
 >

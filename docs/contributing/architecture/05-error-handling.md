@@ -53,21 +53,7 @@
 > Sentinels create coupling and become part of your public API. Use them sparingly — only when callers actually check with `errors.Is` and branch.
 
 > [!TIP]
-> **Merging Errors**: If multiple distinct errors lead to the same handling sequence, merge them into a single sentinel or use `fmt.Errorf` wrapping. Don't create separate error types just because the causes are different. Handling paths are what defines the error type.
-
-## Error Wrapping
-
-Always wrap errors with context using `%w`:
-*   `fmt.Errorf("read file: %w", err)`
-
-Checking wrapped errors:
-*   **Sentinel**: `errors.Is(err, pkg.ErrNotFound)`
-*   **Struct**: `errors.As(err, &pathErr)`
-
-> [!NOTE]
-> **Multiple Implementations**: If there are multiple implementations (e.g., different storage backends), define errors in the parent package and all implementations import.
-
-
+> **Merging Errors**: If multiple distinct errors lead to the same handling sequence, merge them into a single sentinel or use `fmt.Errorf` wrapping. Don't create separate error types just because the causes are different. Handling paths are what defines the error types.
 
 **Example**:
 

@@ -26,13 +26,6 @@
 > *   **Why**: This is `model/` in disguise. It couples all consumers and forces implementers to satisfy methods they don't need.
 > *   **Solution**: Each consumer defines its own minimal interface. Duplication is acceptable. Coupling is not.
 
-> [!CAUTION]
-> **ANTI-PATTERN**: Confusing Interface Sharing with Implementation Sharing
->
-> *   **Interfaces**: Consumer-defined, NOT shared across packages.
-> *   **Implementations**: CAN be shared in dedicated packages (via dependency injection or direct import for pure helpers).
-> *   **Mistake**: Duplicating implementations because you're avoiding shared interfaces. Share the concrete type, not the interface.
-
 > [!TIP]
 > **Exception: Helper Package Interfaces**
 >

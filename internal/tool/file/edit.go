@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,6 +25,19 @@ type checksumManager interface {
 	Compute(data []byte) string
 	Get(path string) (checksum string, ok bool)
 	Update(path string, checksum string)
+}
+
+// EditOperation defines a single find-replace operation.
+type EditOperation struct {
+	Before               string `json:"before"`
+	After                string `json:"after"`
+	ExpectedReplacements int    `json:"expected_replacements,omitempty"`
+}
+
+// EditFileRequest is the input for EditFileTool.
+type EditFileRequest struct {
+	Path       string          `json:"path"`
+	Operations []EditOperation `json:"operations"`
 }
 
 // EditFileTool handles file editing operations.
@@ -92,84 +106,112 @@ func (t *EditFileTool) Declaration() tool.Declaration {
 	}
 }
 
-func (t *EditFileTool) Request() any {
-	return &EditFileRequest{}
+// Prepare validates the request and returns an Invocation.
+func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+	req := &EditFileRequest{}
+	if err := json.Unmarshal(params, req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	if req.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if len(req.Operations) == 0 {
+		return nil, fmt.Errorf("operations are required")
+	}
+	for i := range req.Operations {
+		if req.Operations[i].ExpectedReplacements <= 0 {
+			req.Operations[i].ExpectedReplacements = 1
+		}
+	}
+
+	abs, err := t.pathResolver.Abs(req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	return &editFileInvocation{
+		fileOps:         t.fileOps,
+		checksumManager: t.checksumManager,
+		config:          t.config,
+		absPath:         abs,
+		operations:      req.Operations,
+	}, nil
 }
 
-// Execute applies edit operations to an existing file in the workspace.
-// It detects concurrent modifications by comparing file checksums and validates
-// operations before applying them. The file is written atomically.
-//
-// Note: There is a narrow race condition window between checksum validation and write.
-// For guaranteed conflict-free edits, external file locking would be required.
-//
-// Note: ctx is accepted for API consistency but not used - file I/O is synchronous.
-func (t *EditFileTool) Execute(ctx context.Context, req any) (any, error) {
-	r, ok := req.(*EditFileRequest)
-	if !ok {
-		return nil, fmt.Errorf("invalid request type: %T", req)
-	}
+type editFileInvocation struct {
+	fileOps         fileEditor
+	checksumManager checksumManager
+	config          *config.Config
+	absPath         string
+	operations      []EditOperation
 
-	if err := r.Validate(); err != nil {
-		return &EditFileResponse{Error: err.Error()}, nil
-	}
+	// Results for Display()
+	diff         string
+	addedLines   int
+	removedLines int
+}
 
-	abs, err := t.pathResolver.Abs(r.Path)
-	if err != nil {
-		return &EditFileResponse{Error: err.Error()}, nil
+func (i *editFileInvocation) Display() tool.ToolDisplay {
+	if i.diff == "" {
+		return tool.StringDisplay(fmt.Sprintf("Edit %s", filepath.Base(i.absPath)))
+	}
+	return tool.DiffDisplay{
+		Diff:         i.diff,
+		AddedLines:   i.addedLines,
+		RemovedLines: i.removedLines,
+	}
+}
+
+func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
+	// Check context before Stat
+	if ctx.Err() != nil {
+		return "", ctx.Err()
 	}
 
 	// Check if file exists
-	info, err := t.fileOps.Stat(abs)
+	info, err := i.fileOps.Stat(i.absPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &EditFileResponse{Error: fmt.Sprintf("file does not exist: %s", abs)}, nil
+		if ctx.Err() != nil {
+			return "", ctx.Err()
 		}
-		return &EditFileResponse{Error: fmt.Sprintf("failed to stat %s: %v", abs, err)}, nil
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("Error: file does not exist: %s", i.absPath), err
+		}
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.absPath, err), err
 	}
 
 	// Read full file content
-	data, err := t.fileOps.ReadFile(abs)
+	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return "", ctx.Err()
 		}
-		return &EditFileResponse{Error: err.Error()}, nil
+		return fmt.Sprintf("Error: %v", err), err
 	}
 
 	rawContent := string(data)
-
-	// Detect original line endings for restoration
 	hasCRLF := strings.Contains(rawContent, "\r\n")
-
-	// Normalize to \n for consistent matching
 	oldContent := strings.ReplaceAll(rawContent, "\r\n", "\n")
 
-	// Compute current checksum (on normalized content for consistency)
-	currentChecksum := t.checksumManager.Compute([]byte(oldContent))
-
 	// Check for conflicts with cached version
-	priorChecksum, checksumOk := t.checksumManager.Get(abs)
+	currentChecksum := i.checksumManager.Compute([]byte(oldContent))
+	priorChecksum, checksumOk := i.checksumManager.Get(i.absPath)
 	if checksumOk && priorChecksum != currentChecksum {
-		return &EditFileResponse{Error: fmt.Sprintf("edit conflict: file changed since last read: %s", abs)}, nil
+		return fmt.Sprintf("Error: edit conflict: file changed since last read: %s", i.absPath), fmt.Errorf("edit conflict")
 	}
 
-	// Preserve original permissions
 	originalPerm := info.Mode()
 
-	// Apply operations sequentially (on normalized content)
+	// Apply operations sequentially
 	content := oldContent
-	for _, op := range r.Operations {
-		// Normalize operation strings for matching
+	for _, op := range i.operations {
 		before := strings.ReplaceAll(op.Before, "\r\n", "\n")
 		after := strings.ReplaceAll(op.After, "\r\n", "\n")
 
-		// Empty Before means append to end of file
 		if before == "" {
-			// Append has exactly 1 logical "target" (end of file).
-			// If count > 1 is specified, it's a mismatch since there's only 1 place to append.
 			if op.ExpectedReplacements > 1 {
-				return &EditFileResponse{Error: fmt.Sprintf("replacement count mismatch: append has 1 target, got %d", op.ExpectedReplacements)}, nil
+				return fmt.Sprintf("Error: replacement count mismatch: append has 1 target, got %d", op.ExpectedReplacements), fmt.Errorf("replacement count mismatch")
 			}
 			content += after
 			continue
@@ -177,16 +219,14 @@ func (t *EditFileTool) Execute(ctx context.Context, req any) (any, error) {
 
 		count := strings.Count(content, before)
 		if count == 0 {
-			return &EditFileResponse{Error: fmt.Sprintf("snippet not found: %q in %s", op.Before, abs)}, nil
+			return fmt.Sprintf("Error: snippet not found: %q in %s", op.Before, i.absPath), fmt.Errorf("snippet not found")
 		}
 
-		expected := op.ExpectedReplacements
-
-		if count != expected {
-			return &EditFileResponse{Error: fmt.Sprintf("replacement count mismatch in %s: expected %d, found %d", abs, expected, count)}, nil
+		if count != op.ExpectedReplacements {
+			return fmt.Sprintf("Error: replacement count mismatch in %s: expected %d, found %d", i.absPath, op.ExpectedReplacements, count), fmt.Errorf("replacement count mismatch")
 		}
 
-		content = strings.Replace(content, before, after, expected)
+		content = strings.Replace(content, before, after, op.ExpectedReplacements)
 	}
 
 	// Restore original line endings if file had CRLF
@@ -198,31 +238,26 @@ func (t *EditFileTool) Execute(ctx context.Context, req any) (any, error) {
 	newContentBytes := []byte(finalContent)
 
 	// Check size limit
-	maxFileSize := t.config.Tools.MaxFileSize
-	if int64(len(newContentBytes)) > maxFileSize {
-		return &EditFileResponse{Error: fmt.Sprintf("file too large after edit: %s (size %d, limit %d)", abs, len(newContentBytes), maxFileSize)}, nil
+	if int64(len(newContentBytes)) > i.config.Tools.MaxFileSize {
+		return fmt.Sprintf("Error: file too large after edit: %s (size %d, limit %d)", i.absPath, len(newContentBytes), i.config.Tools.MaxFileSize), fmt.Errorf("file too large")
 	}
 
 	// Write the modified content atomically
-	if err := t.fileOps.WriteFileAtomic(abs, newContentBytes, originalPerm); err != nil {
+	if err := i.fileOps.WriteFileAtomic(i.absPath, newContentBytes, originalPerm); err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return "", ctx.Err()
 		}
-		return &EditFileResponse{Error: fmt.Sprintf("failed to write file %s: %v", abs, err)}, nil
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.absPath, err), err
 	}
 
-	// Compute new checksum and update cache (on normalized content)
-	newChecksum := t.checksumManager.Compute([]byte(content))
-	t.checksumManager.Update(abs, newChecksum)
+	// Update checksum cache
+	newChecksum := i.checksumManager.Compute([]byte(content))
+	i.checksumManager.Update(i.absPath, newChecksum)
 
-	diff, added, removed := computeUnifiedDiff(filepath.Base(abs), oldContent, content)
+	// Compute diff for Display()
+	i.diff, i.addedLines, i.removedLines = computeUnifiedDiff(filepath.Base(i.absPath), oldContent, content)
 
-	return &EditFileResponse{
-		Path:         abs,
-		Diff:         diff,
-		AddedLines:   added,
-		RemovedLines: removed,
-	}, nil
+	return fmt.Sprintf("Successfully modified file: %s", i.absPath), nil
 }
 
 func computeUnifiedDiff(filename, oldContent, newContent string) (diff string, added, removed int) {

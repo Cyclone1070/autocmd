@@ -11,7 +11,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
-	"github.com/Cyclone1070/iav/internal/workflow/toolmanager"
 )
 
 // fileReader defines the minimal filesystem operations needed for reading files.
@@ -90,7 +89,7 @@ type ReadFileRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (toolmanager.Invocation, error) {
+func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &ReadFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal request: %w", err)

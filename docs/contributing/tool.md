@@ -7,6 +7,7 @@ The `tool` package defines tool types and display data structures. It is the fou
 **Owns:**
 - `Declaration` — Tool schema (name, description, parameters) sent to LLM
 - `Schema` — JSON Schema type definitions for parameters
+- `Invocation` — Interface for prepared tool calls
 - `ToolDisplay` — Interface for UI display types
 - `StringDisplay`, `DiffDisplay`, `ShellDisplay` — Concrete display types
 
@@ -16,32 +17,40 @@ The `tool` package defines tool types and display data structures. It is the fou
 
 ---
 
-## Error Handling Contract
+## Error Handling Rules (for tool implementations)
 
-Tools must follow this error handling pattern:
+### `Prepare()` Contract
 
-| Error Type                  | Return                                | Example                                                       |
-| --------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| **Tool failure** (expected) | `nil` error, encode in `LLMContent()` | File not found, permission denied, validation error, exit ≠ 0 |
-| **Infra error** (context)   | Return error                          | `context.Canceled`, `context.DeadlineExceeded`                |
+**Returns error for:** Validation failures. Anything that can be determined before doing real work.
+- Input parsing failures
+- Missing or invalid parameters
+- Path resolution failures
 
-**Rationale:** Tool failures are recoverable — the agent sees the error in `LLMContent()` and decides what to do (retry, ask user). Infra errors stop the loop.
+**Never returns error for:** I/O operations. Prepare must not perform file reads, network calls, or other side effects.
 
-```go
-func (t *MyTool) Execute(ctx context.Context, req any) (toolResult, error) {
-    // Always check context first
-    if ctx.Err() != nil {
-        return nil, ctx.Err()  // Infra → return error, stops loop
-    }
+### `Execute()` Contract
 
-    result, err := doWork()
-    if err != nil {
-        // Tool failure → encode in result, loop continues
-        return &MyResult{
-            Content: fmt.Sprintf("Error: %v", err),
-        }, nil
-    }
+**Returns `("", ctx.Err())` for:** Context cancellation. Check `ctx.Err()` before and after I/O operations.
 
-    return &MyResult{Content: result}, nil
-}
-```
+**Returns `(errorContent, err)` for:** Operation failures. The error content describes the problem for the LLM. The error itself is for logging/metrics.
+- File system errors (not found, permission denied, etc.)
+- Network errors
+- Validation errors discovered during execution (e.g., binary file detection)
+
+**Returns `(content, nil)` for:** Success.
+
+---
+
+## Errors This Package Throws
+
+### From `Prepare()`
+
+All errors are validation failures. They should be wrapped in a message and shown to the LLM. Do not propagate to the loop.
+
+### From `Execute()`
+
+Two categories:
+
+1. **Context errors.** Must propagate. Terminates the loop.
+
+2. **Operation errors.** Must NOT propagate. The error content is embedded in the first return value (`llmContent`). The second return value (`err`) is for logging only.

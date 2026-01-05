@@ -30,12 +30,12 @@ func (i *mockInvocation) Execute(ctx context.Context) (string, error) {
 type mockTool struct {
 	name        string
 	declaration tool.Declaration
-	prepareFunc func(ctx context.Context, params json.RawMessage) (Invocation, error)
+	prepareFunc func(ctx context.Context, params json.RawMessage) (tool.Invocation, error)
 }
 
 func (m *mockTool) Name() string                  { return m.name }
 func (m *mockTool) Declaration() tool.Declaration { return m.declaration }
-func (m *mockTool) Prepare(ctx context.Context, params json.RawMessage) (Invocation, error) {
+func (m *mockTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	if m.prepareFunc != nil {
 		return m.prepareFunc(ctx, params)
 	}
@@ -97,7 +97,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	var capturedParams json.RawMessage
 	tm.Register(&mockTool{
 		name: "test",
-		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 			capturedParams = params
 			return &mockInvocation{llmContent: "ok"}, nil
 		},
@@ -119,7 +119,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "test",
-		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
 		},
 	})
@@ -139,7 +139,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "test",
-		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 			return &mockInvocation{
 				llmContent: "result",
 				display:    tool.StringDisplay("display output"),
@@ -175,7 +175,7 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "shell",
-		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 			return &mockInvocation{
 				llmContent: "Command finished",
 				display: tool.ShellDisplay{
@@ -222,7 +222,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	tm := NewToolManager()
 	tm.Register(&mockTool{
 		name: "fail",
-		prepareFunc: func(ctx context.Context, params json.RawMessage) (Invocation, error) {
+		prepareFunc: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 			return &mockInvocation{
 				llmContent: "Detailed error in content",
 				err:        fmt.Errorf("infra failure"),

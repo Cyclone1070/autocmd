@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"io"
 )
 
@@ -31,6 +32,18 @@ type Declaration struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Parameters  *Schema `json:"parameters,omitempty"`
+}
+
+// Invocation is a validated, prepared tool call ready for execution.
+// Returned by Tool.Prepare(), enforces prepare-before-execute sequence.
+type Invocation interface {
+	// Display returns what to show in UI (computed during Prepare).
+	Display() ToolDisplay
+
+	// Execute runs the operation and returns content for the LLM.
+	// Success: (content, nil)
+	// Failure: (errorContent, err) - errorContent shown to LLM, err signals failure.
+	Execute(ctx context.Context) (llmContent string, err error)
 }
 
 // ToolDisplay is implemented by all display types returned from tools.

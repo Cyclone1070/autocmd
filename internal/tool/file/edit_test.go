@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
@@ -23,7 +24,7 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 	}
 	inv, err := etool.Prepare(context.Background(), params)
 	if err != nil {
-		return "", err
+		return err.Error(), err
 	}
 	return inv.Execute(context.Background())
 }
@@ -412,5 +413,70 @@ func TestEditFile(t *testing.T) {
 			t.Error("expected error for path outside workspace")
 		}
 		assertContains(t, err.Error(), "outside workspace")
+	})
+
+	t.Run("file changed between Prepare and Execute fails", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForWrite(cfg)
+		checksumManager := newMockChecksumManagerForWrite()
+		fs.createFile("/workspace/test.txt", []byte("original"), 0o644)
+
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		// Prepare the edit
+		req := &EditFileRequest{
+			Path:       "test.txt",
+			Operations: []EditOperation{{Before: "original", After: "modified"}},
+		}
+		params, _ := json.Marshal(req)
+		inv, err := editTool.Prepare(context.Background(), params)
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+
+		// Simulate external change between Prepare and Execute
+		fs.createFile("/workspace/test.txt", []byte("changed externally"), 0o644)
+
+		// Execute should fail with stale edit error
+		output, err := inv.Execute(context.Background())
+		if err == nil {
+			t.Fatal("expected stale edit error")
+		}
+		assertContains(t, output, "file changed since edit was prepared")
+	})
+
+	t.Run("Display returns DiffDisplay with diff content", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForWrite(cfg)
+		checksumManager := newMockChecksumManagerForWrite()
+		fs.createFile("/workspace/test.txt", []byte("old content"), 0o644)
+
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		req := &EditFileRequest{
+			Path:       "test.txt",
+			Operations: []EditOperation{{Before: "old", After: "new"}},
+		}
+		params, _ := json.Marshal(req)
+		inv, err := editTool.Prepare(context.Background(), params)
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+
+		display := inv.Display()
+		diffDisplay, ok := display.(tool.DiffDisplay)
+		if !ok {
+			t.Fatalf("expected DiffDisplay, got %T", display)
+		}
+
+		if diffDisplay.Filename != "test.txt" {
+			t.Errorf("expected Filename 'test.txt', got %q", diffDisplay.Filename)
+		}
+		if diffDisplay.Diff == "" {
+			t.Error("expected non-empty Diff")
+		}
+		if diffDisplay.AddedLines == 0 && diffDisplay.RemovedLines == 0 {
+			t.Error("expected non-zero added or removed lines")
+		}
 	})
 }

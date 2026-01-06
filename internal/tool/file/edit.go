@@ -10,7 +10,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/pmezard/go-difflib/difflib"
+	udiff "github.com/aymanbagabas/go-udiff"
 )
 
 // fileEditor defines the minimal filesystem operations needed for editing files.
@@ -106,7 +106,7 @@ func (t *EditFileTool) Declaration() tool.Declaration {
 	}
 }
 
-// Prepare validates the request and returns an Invocation.
+// Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
 func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &EditFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
@@ -130,64 +130,23 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 		return nil, err
 	}
 
-	return &editFileInvocation{
-		fileOps:         t.fileOps,
-		checksumManager: t.checksumManager,
-		config:          t.config,
-		absPath:         abs,
-		operations:      req.Operations,
-	}, nil
-}
-
-type editFileInvocation struct {
-	fileOps         fileEditor
-	checksumManager checksumManager
-	config          *config.Config
-	absPath         string
-	operations      []EditOperation
-
-	// Results for Display()
-	diff         string
-	addedLines   int
-	removedLines int
-}
-
-func (i *editFileInvocation) Display() tool.ToolDisplay {
-	if i.diff == "" {
-		return tool.StringDisplay(fmt.Sprintf("Edit %s", filepath.Base(i.absPath)))
-	}
-	return tool.DiffDisplay{
-		Diff:         i.diff,
-		AddedLines:   i.addedLines,
-		RemovedLines: i.removedLines,
-	}
-}
-
-func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
-	// Check context before Stat
+	// Check context before I/O
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return nil, ctx.Err()
 	}
 
-	// Check if file exists
-	info, err := i.fileOps.Stat(i.absPath)
+	// Read file and apply edits in memory to compute diff
+	info, err := t.fileOps.Stat(abs)
 	if err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: file does not exist: %s", i.absPath), err
+			return nil, fmt.Errorf("file does not exist: %s", req.Path)
 		}
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.absPath, err), err
+		return nil, fmt.Errorf("failed to stat %s: %w", req.Path, err)
 	}
 
-	// Read full file content
-	data, err := i.fileOps.ReadFile(i.absPath)
+	data, err := t.fileOps.ReadFile(abs)
 	if err != nil {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-		return fmt.Sprintf("Error: %v", err), err
+		return nil, fmt.Errorf("failed to read file %s: %w", req.Path, err)
 	}
 
 	rawContent := string(data)
@@ -195,23 +154,21 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 	oldContent := strings.ReplaceAll(rawContent, "\r\n", "\n")
 
 	// Check for conflicts with cached version
-	currentChecksum := i.checksumManager.Compute([]byte(oldContent))
-	priorChecksum, checksumOk := i.checksumManager.Get(i.absPath)
+	currentChecksum := t.checksumManager.Compute([]byte(oldContent))
+	priorChecksum, checksumOk := t.checksumManager.Get(abs)
 	if checksumOk && priorChecksum != currentChecksum {
-		return fmt.Sprintf("Error: edit conflict: file changed since last read: %s", i.absPath), fmt.Errorf("edit conflict")
+		return nil, fmt.Errorf("edit conflict: file changed since last read: %s", req.Path)
 	}
 
-	originalPerm := info.Mode()
-
-	// Apply operations sequentially
+	// Apply operations sequentially in memory
 	content := oldContent
-	for _, op := range i.operations {
+	for _, op := range req.Operations {
 		before := strings.ReplaceAll(op.Before, "\r\n", "\n")
 		after := strings.ReplaceAll(op.After, "\r\n", "\n")
 
 		if before == "" {
 			if op.ExpectedReplacements > 1 {
-				return fmt.Sprintf("Error: replacement count mismatch: append has 1 target, got %d", op.ExpectedReplacements), fmt.Errorf("replacement count mismatch")
+				return nil, fmt.Errorf("replacement count mismatch: append has 1 target, got %d", op.ExpectedReplacements)
 			}
 			content += after
 			continue
@@ -219,11 +176,11 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 
 		count := strings.Count(content, before)
 		if count == 0 {
-			return fmt.Sprintf("Error: snippet not found: %q in %s", op.Before, i.absPath), fmt.Errorf("snippet not found")
+			return nil, fmt.Errorf("snippet not found: %q in %s", op.Before, req.Path)
 		}
 
 		if count != op.ExpectedReplacements {
-			return fmt.Sprintf("Error: replacement count mismatch in %s: expected %d, found %d", i.absPath, op.ExpectedReplacements, count), fmt.Errorf("replacement count mismatch")
+			return nil, fmt.Errorf("replacement count mismatch in %s: expected %d, found %d", req.Path, op.ExpectedReplacements, count)
 		}
 
 		content = strings.Replace(content, before, after, op.ExpectedReplacements)
@@ -238,45 +195,97 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 	newContentBytes := []byte(finalContent)
 
 	// Check size limit
-	if int64(len(newContentBytes)) > i.config.Tools.MaxFileSize {
-		return fmt.Sprintf("Error: file too large after edit: %s (size %d, limit %d)", i.absPath, len(newContentBytes), i.config.Tools.MaxFileSize), fmt.Errorf("file too large")
+	if int64(len(newContentBytes)) > t.config.Tools.MaxFileSize {
+		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", req.Path, len(newContentBytes), t.config.Tools.MaxFileSize)
 	}
 
-	// Write the modified content atomically
-	if err := i.fileOps.WriteFileAtomic(i.absPath, newContentBytes, originalPerm); err != nil {
+	diff, added, removed := computeUnifiedDiff(oldContent, content)
+
+	return &editFileInvocation{
+		fileOps:          t.fileOps,
+		checksumManager:  t.checksumManager,
+		absPath:          abs,
+		relPath:          req.Path,
+		newContent:       newContentBytes,
+		originalPerm:     info.Mode(),
+		expectedChecksum: currentChecksum,
+		display: tool.DiffDisplay{
+			Filename:     filepath.Base(abs),
+			Diff:         diff,
+			AddedLines:   added,
+			RemovedLines: removed,
+		},
+	}, nil
+}
+
+type editFileInvocation struct {
+	fileOps          fileEditor
+	checksumManager  checksumManager
+	absPath          string
+	relPath          string
+	newContent       []byte
+	originalPerm     os.FileMode
+	expectedChecksum string
+	display          tool.ToolDisplay
+}
+
+func (i *editFileInvocation) Display() tool.ToolDisplay {
+	return i.display
+}
+
+func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
+	// Check context
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	// Re-read file and verify checksum to prevent TOCTOU race
+	data, err := i.fileOps.ReadFile(i.absPath)
+	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.absPath, err), err
+		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), err
+	}
+	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+	currentChecksum := i.checksumManager.Compute([]byte(normalized))
+	if currentChecksum != i.expectedChecksum {
+		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), fmt.Errorf("stale edit")
 	}
 
-	// Update checksum cache
-	newChecksum := i.checksumManager.Compute([]byte(content))
+	// Write the modified content atomically using pre-computed content
+	if err := i.fileOps.WriteFileAtomic(i.absPath, i.newContent, i.originalPerm); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
+	}
+
+	// Update checksum cache with normalized content
+	newNormalized := strings.ReplaceAll(string(i.newContent), "\r\n", "\n")
+	newChecksum := i.checksumManager.Compute([]byte(newNormalized))
 	i.checksumManager.Update(i.absPath, newChecksum)
 
-	// Compute diff for Display()
-	i.diff, i.addedLines, i.removedLines = computeUnifiedDiff(filepath.Base(i.absPath), oldContent, content)
-
-	return fmt.Sprintf("Successfully modified file: %s", i.absPath), nil
+	return fmt.Sprintf("Successfully modified file: %s", i.relPath), nil
 }
 
-func computeUnifiedDiff(filename, oldContent, newContent string) (diff string, added, removed int) {
-	ud := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(oldContent),
-		B:        difflib.SplitLines(newContent),
-		FromFile: "a/" + filename,
-		ToFile:   "b/" + filename,
-		Context:  3,
-	}
-	diff, _ = difflib.GetUnifiedDiffString(ud)
+func computeUnifiedDiff(oldContent, newContent string) (diff string, added, removed int) {
+	// Use empty labels since we strip the headers anyway
+	rawDiff := udiff.Unified("", "", oldContent, newContent)
 
-	// Count added/removed lines
-	for _, line := range strings.Split(diff, "\n") {
-		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+	// Strip the --- and +++ header lines, keep only hunks
+	var lines []string
+	for _, line := range strings.Split(rawDiff, "\n") {
+		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") {
+			continue
+		}
+		if strings.HasPrefix(line, "+") {
 			added++
-		} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+		} else if strings.HasPrefix(line, "-") {
 			removed++
 		}
+		lines = append(lines, line)
 	}
+	diff = strings.Join(lines, "\n")
 	return diff, added, removed
 }

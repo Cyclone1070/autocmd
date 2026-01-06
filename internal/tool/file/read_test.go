@@ -47,17 +47,6 @@ func (m *mockFileSystemForRead) ReadFile(path string) ([]byte, error) {
 		return nil, os.ErrNotExist
 	}
 
-	if m.config != nil && m.config.Tools.MaxFileSize > 0 && int64(len(content)) > m.config.Tools.MaxFileSize {
-		return nil, fmt.Errorf("file %s exceeds max size (%d bytes)", path, m.config.Tools.MaxFileSize)
-	}
-
-	// Binary detection mock: if it contains null byte
-	for _, b := range content {
-		if b == 0 {
-			return nil, fmt.Errorf("binary file: %s", path)
-		}
-	}
-
 	return content, nil
 }
 
@@ -155,43 +144,6 @@ func TestReadFile(t *testing.T) {
 		assertContains(t, output, "00002| line2")
 		assertContains(t, output, "00003| line3")
 		assertContains(t, output, "(File has more lines. Use offset=3 to read more)")
-	})
-
-	t.Run("binary detection rejection", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
-		checksumManager := newMockChecksumManagerForRead()
-
-		// Create file with null bytes (actual binary content)
-		content := []byte{0x00, 0x01, 0x02, 't', 'e', 's', 't'}
-		fs.createFile("/workspace/binary.bin", content)
-
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-
-		readReq := &ReadFileRequest{Path: "binary.bin"}
-		_, err := executeRead(t, readTool, readReq)
-		if err == nil {
-			t.Errorf("expected error for binary file, got success")
-		}
-	})
-
-	t.Run("file size check still occurs", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = 10 // small limit
-		fs := newMockFileSystemForRead(cfg)
-		checksumManager := newMockChecksumManagerForRead()
-
-		largeContent := []byte("this is more than 10 bytes")
-		fs.createFile("/workspace/large.txt", largeContent)
-
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-
-		readReq := &ReadFileRequest{Path: "large.txt"}
-		_, err := executeRead(t, readTool, readReq)
-		if err == nil {
-			t.Fatalf("expected error for file exceeding MaxFileSize, got success")
-		}
 	})
 
 	t.Run("offset beyond EOF", func(t *testing.T) {

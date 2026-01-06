@@ -324,9 +324,12 @@ func TestWriteFile(t *testing.T) {
 		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
-		_, err := executeWrite(t, writeTool, req)
-		if err == nil {
-			t.Error("expected error when EnsureDirs fails")
+		result, err := executeWrite(t, writeTool, req)
+		if err != nil {
+			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		}
+		if !strings.Contains(result, "failed to create directories") {
+			t.Errorf("expected error message about directories, got: %s", result)
 		}
 	})
 }

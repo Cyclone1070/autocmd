@@ -128,7 +128,7 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (to
 		absPath:         abs,
 		relPath:         req.Path,
 		content:         []byte(req.Content),
-		display:         tool.StringDisplay(fmt.Sprintf("Write %s", req.Path)),
+		display:         tool.StringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
 	}, nil
 }
 
@@ -153,14 +153,13 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 	// Check if file already exists (TOCTOU protection)
 	_, err := i.fileOps.Stat(i.absPath)
 	if err == nil {
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath),
-			fmt.Errorf("file already exists")
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath), nil
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), nil
 	}
 
 	// Ensure parent directories exist
@@ -169,7 +168,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to create directories: %v", err), err
+		return fmt.Sprintf("Error: failed to create directories: %v", err), nil
 	}
 
 	// Note: Binary check already done in Prepare
@@ -180,7 +179,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), nil
 	}
 
 	// Update checksum cache

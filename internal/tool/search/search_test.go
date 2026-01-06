@@ -271,9 +271,9 @@ func TestSearchContent_CommandFailure(t *testing.T) {
 	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
-	_, err := executeSearch(t, tool, req)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "rg failed")
+	result, err := executeSearch(t, tool, req)
+	assert.NoError(t, err) // Operation errors return nil per tool.md contract
+	assert.Contains(t, result, "rg failed")
 }
 
 func TestSearchContent_InvalidJSON(t *testing.T) {

@@ -245,12 +245,12 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), nil
 	}
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
 	currentChecksum := i.checksumManager.Compute([]byte(normalized))
 	if currentChecksum != i.expectedChecksum {
-		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), fmt.Errorf("stale edit")
+		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), nil
 	}
 
 	// Write the modified content atomically using pre-computed content
@@ -258,7 +258,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), nil
 	}
 
 	// Update checksum cache with normalized content

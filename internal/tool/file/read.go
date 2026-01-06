@@ -134,12 +134,16 @@ func (i *readFileInvocation) Display() tool.ToolDisplay {
 }
 
 func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: %s", err.Error()), err
+		return fmt.Sprintf("Error: %s", err.Error()), nil
 	}
 
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")

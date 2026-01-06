@@ -2,6 +2,7 @@ package directory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,14 +11,13 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
+	"github.com/Cyclone1070/iav/internal/tool"
 )
 
-// directoryEntry is a private helper struct for internal processing of directory entries.
+// directoryEntry is a private helper internal processing
 type directoryEntry struct {
-	RelativePath string
-	IsDir        bool
+	Name  string
+	IsDir bool
 }
 
 // dirLister defines the filesystem operations needed for listing directories.
@@ -31,21 +31,22 @@ type ignoreMatcher interface {
 	ShouldIgnore(relativePath string) bool
 }
 
-// ListDirectoryTool handles directory listing operations.
-type ListDirectoryTool struct {
-	fs            dirLister
+// ListDirTool allows agents to list directory contents with proper validation and tree formatting.
+type ListDirTool struct {
+	fs           dirLister
+	config       *config.Config
+	pathResolver pathResolver
+	// ignoreMatcher is optional (can be nil)
 	ignoreMatcher ignoreMatcher
-	config        *config.Config
-	pathResolver  pathResolver
 }
 
-// NewListDirectoryTool creates a new ListDirectoryTool with injected dependencies.
+// NewListDirectoryTool creates a new ListDirTool.
 func NewListDirectoryTool(
 	fs dirLister,
-	ignoreMatcher ignoreMatcher,
 	cfg *config.Config,
 	pathResolver pathResolver,
-) *ListDirectoryTool {
+	ignoreMatcher ignoreMatcher, // optional, can be nil
+) *ListDirTool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -55,193 +56,204 @@ func NewListDirectoryTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &ListDirectoryTool{
+	return &ListDirTool{
 		fs:            fs,
-		ignoreMatcher: ignoreMatcher,
 		config:        cfg,
 		pathResolver:  pathResolver,
+		ignoreMatcher: ignoreMatcher,
 	}
 }
 
-// Run lists the contents of a directory within the workspace.
-// It supports optional recursion and pagination, validating that the path is within
-// workspace boundaries, respecting gitignore rules, and returning entries sorted by path.
-func (t *ListDirectoryTool) Run(ctx context.Context, req *ListDirectoryRequest) (*ListDirectoryResponse, error) {
-	if err := req.Validate(t.config); err != nil {
-		return nil, err
+// Name returns the name of the tool.
+func (t *ListDirTool) Name() string {
+	return "list_directory"
+}
+
+// Declaration returns the JSON schema for the tool.
+func (t *ListDirTool) Declaration() tool.Declaration {
+	return tool.Declaration{
+		Name:        t.Name(),
+		Description: "Lists the contents of a directory. Returns the output as a tree structure. Truncates results if there are too many items.",
+		Parameters: &tool.Schema{
+			Type: tool.TypeObject,
+			Properties: map[string]*tool.Schema{
+				"path": {
+					Type:        tool.TypeString,
+					Description: "The absolute path to the directory.",
+				},
+				"ignore": {
+					Type:        tool.TypeArray,
+					Items:       &tool.Schema{Type: tool.TypeString},
+					Description: "Optional glob patterns to ignore (e.g. '*.test.ts').",
+				},
+			},
+			Required: []string{"path"},
+		},
 	}
-	path := req.Path
-	if path == "" {
-		path = "."
-	}
-	abs, err := t.pathResolver.Abs(path)
-	if err != nil {
-		return nil, err
-	}
-	rel, err := t.pathResolver.Rel(abs)
-	if err != nil {
-		return nil, err
+}
+
+// ListDirRequest represents the input parameters.
+type ListDirRequest struct {
+	Path   string   `json:"path"`
+	Ignore []string `json:"ignore,omitempty"`
+}
+
+// listDirInvocation represents a validated request.
+type listDirInvocation struct {
+	resolvedPath   string
+	ignorePatterns []string
+	tool           *ListDirTool
+}
+
+// Prepare validates path existence and returns an Invocation.
+func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+	var req ListDirRequest
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
-	limit := req.Limit
+	if req.Path == "" {
+		return nil, errors.New("path is required")
+	}
 
-	// Check if path exists and is a directory
-	info, err := t.fs.Stat(abs)
+	// 1. Resolve Path
+	absPath, err := t.pathResolver.Abs(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+
+	// 2. Validate Existence (Fail Fast)
+	info, err := t.fs.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("path does not exist: %s", abs)
+			return nil, fmt.Errorf("path does not exist: %s", absPath)
 		}
-		return nil, fmt.Errorf("failed to stat %s: %w", abs, err)
+		return nil, fmt.Errorf("failed to access path: %w", err)
 	}
-
 	if !info.IsDir() {
-		return nil, fmt.Errorf("not a directory: %s", abs)
+		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
-	maxDepth := req.MaxDepth
-
-	// Collect entries recursively
-	visited := make(map[string]bool)
-	maxResults := t.config.Tools.MaxListDirectoryResults
-	var currentCount int
-
-	directoryEntries, capHit, err := t.listRecursive(ctx, abs, 0, maxDepth, visited, req.IncludeIgnored, maxResults, &currentCount)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort: directories first, then files, both alphabetically by RelativePath
-	sort.Slice(directoryEntries, func(i, j int) bool {
-		// Directories come before files
-		if directoryEntries[i].IsDir && !directoryEntries[j].IsDir {
-			return true
-		}
-		if !directoryEntries[i].IsDir && directoryEntries[j].IsDir {
-			return false
-		}
-		// Within same type, sort alphabetically
-		return directoryEntries[i].RelativePath < directoryEntries[j].RelativePath
-	})
-
-	// Apply pagination
-	directoryEntries, paginationResult := pagination.ApplyPagination(directoryEntries, req.Offset, limit)
-
-	if capHit {
-		paginationResult.Truncated = true
-	}
-
-	var sb strings.Builder
-	for _, entry := range directoryEntries {
-		path := entry.RelativePath
-		if entry.IsDir && !strings.HasSuffix(path, "/") {
-			path += "/"
-		}
-		sb.WriteString(path + "\n")
-	}
-
-	return &ListDirectoryResponse{
-		DirectoryPath:    rel,
-		FormattedEntries: sb.String(),
-		Offset:           req.Offset,
-		Limit:            limit,
-		TotalCount:       paginationResult.TotalCount,
-		HitMaxResults:    capHit,
+	return &listDirInvocation{
+		resolvedPath:   absPath,
+		ignorePatterns: req.Ignore,
+		tool:           t,
 	}, nil
 }
 
-// listRecursive recursively lists all entries up to maxDepth
-// Returns entries, boolean (true if cap hit), error
-func (t *ListDirectoryTool) listRecursive(ctx context.Context, abs string, currentDepth int, maxDepth int, visited map[string]bool, includeIgnored bool, maxResults int, currentCount *int) ([]directoryEntry, bool, error) {
-	// Check cap
-	if *currentCount >= maxResults {
-		return nil, true, nil
-	}
-
-	// Check cancellation
+// Execute performs the safe directory listing (re-verifying existence).
+func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 	if ctx.Err() != nil {
-		return nil, false, ctx.Err()
-	}
-	// Check depth limit (-1 = unlimited, 0 = current level only, 1 = current + 1 level, etc.)
-	if maxDepth >= 0 && currentDepth > maxDepth {
-		return []directoryEntry{}, false, nil
+		return "", ctx.Err()
 	}
 
-	// Detect symlink loops using canonical path
-	canonicalPath, err := filepath.EvalSymlinks(abs)
+	// 1. Re-verify State (TOCTOU Safety)
+	info, err := i.tool.fs.Stat(i.resolvedPath)
 	if err != nil {
-		// If we can't resolve symlinks, use the original path
-		canonicalPath = abs
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), nil
+		}
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), nil
+	}
+	if !info.IsDir() {
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), nil
 	}
 
-	if visited[canonicalPath] {
-		// Symlink loop detected, skip
-		return []directoryEntry{}, false, nil
-	}
-	visited[canonicalPath] = true
-
-	allEntries, err := t.fs.ListDir(abs)
+	// 2. List Directory (Shallow / Depth 1)
+	entries, err := i.tool.fs.ListDir(i.resolvedPath)
 	if err != nil {
-		// Detect specific error conditions using errors.Is
-		if errors.Is(err, path.ErrOutsideWorkspace) {
-			return nil, false, err
+		if ctx.Err() != nil {
+			return "", ctx.Err()
 		}
-
-		// Wrap other errors for context
-		return nil, false, fmt.Errorf("failed to list directory %s: %w", abs, err)
+		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), nil
 	}
 
-	var directoryEntries []directoryEntry
-	for _, entry := range allEntries {
-		if *currentCount >= maxResults {
-			return directoryEntries, true, nil
-		}
+	// 3. Filter & Convert
+	var validEntries []directoryEntry
+	for _, e := range entries {
+		name := e.Name()
 
-		// Calculate relative path for this entry
-		entryAbs := filepath.Join(abs, entry.Name())
-		entryRel, err := t.pathResolver.Rel(entryAbs)
+		// Check gitignore patterns (relative to workspace root)
+		fullPath := filepath.Join(i.resolvedPath, name)
+		relPath, err := i.tool.pathResolver.Rel(fullPath)
 		if err != nil {
-			// This indicates a bug in path resolution or directory structure - don't mask it
-			return nil, false, fmt.Errorf("relative path for %s: %w", entryAbs, err)
+			relPath = name
 		}
 
-		// Normalize to forward slashes
-		entryRel = filepath.ToSlash(entryRel)
+		if i.tool.ignoreMatcher != nil && i.tool.ignoreMatcher.ShouldIgnore(relPath) {
+			continue
+		}
 
-		// Apply gitignore filtering (unless IncludeIgnored is true)
-		if !includeIgnored && t.ignoreMatcher != nil {
-			if t.ignoreMatcher.ShouldIgnore(entryRel) {
-				continue // Skip gitignored files
+		// Check explicit ignore patterns from request
+		isIgnored := false
+		for _, pattern := range i.ignorePatterns {
+			if matched, _ := filepath.Match(pattern, name); matched {
+				isIgnored = true
+				break
 			}
 		}
-
-		isDir := entry.IsDir()
-		if !isDir && (entry.Mode()&os.ModeSymlink != 0) {
-			// Check if symlink points to a directory
-			if target, err := t.fs.Stat(entryAbs); err == nil {
-				isDir = target.IsDir()
-			}
+		if isIgnored {
+			continue
 		}
 
-		directoryEntry := directoryEntry{
-			RelativePath: entryRel,
-			IsDir:        isDir,
-		}
-
-		directoryEntries = append(directoryEntries, directoryEntry)
-		*currentCount++
-
-		// Recurse into subdirectories
-		if isDir {
-			subEntries, capHit, err := t.listRecursive(ctx, entryAbs, currentDepth+1, maxDepth, visited, includeIgnored, maxResults, currentCount)
-			if err != nil {
-				return nil, false, err
-			}
-			directoryEntries = append(directoryEntries, subEntries...)
-			if capHit {
-				return directoryEntries, true, nil
-			}
-		}
+		validEntries = append(validEntries, directoryEntry{
+			Name:  name,
+			IsDir: e.IsDir(),
+		})
 	}
 
-	return directoryEntries, false, nil
+	// 4. Sort (Dirs first, then files)
+	sort.Slice(validEntries, func(x, y int) bool {
+		if validEntries[x].IsDir != validEntries[y].IsDir {
+			return validEntries[x].IsDir // true (dir) comes before false (file)
+		}
+		return validEntries[x].Name < validEntries[y].Name
+	})
+
+	// 5. Truncate
+	maxResults := i.tool.config.Tools.MaxListDirectoryResults
+	if maxResults <= 0 {
+		maxResults = 100
+	}
+
+	truncated := false
+	hiddenCount := 0
+	if len(validEntries) > maxResults {
+		hiddenCount = len(validEntries) - maxResults
+		validEntries = validEntries[:maxResults]
+		truncated = true
+	}
+
+	// 6. Format Tree
+	var sb strings.Builder
+	sb.WriteString(i.resolvedPath)
+	if !strings.HasSuffix(i.resolvedPath, "/") {
+		sb.WriteString("/")
+	}
+	sb.WriteString("\n")
+
+	for _, entry := range validEntries {
+		sb.WriteString("  ") // indent
+		sb.WriteString(entry.Name)
+		if entry.IsDir {
+			sb.WriteString("/")
+		}
+		sb.WriteString("\n")
+	}
+
+	if truncated {
+		sb.WriteString(fmt.Sprintf("\n(Results truncated. %d items hidden. Use specificity or ignore patterns to see more.)", hiddenCount))
+	} else if len(validEntries) == 0 {
+		sb.WriteString("  (empty)")
+	}
+
+	return sb.String(), nil
+}
+
+// Display returns the user-facing description.
+func (i *listDirInvocation) Display() tool.ToolDisplay {
+	return tool.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(i.resolvedPath)))
 }

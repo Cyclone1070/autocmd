@@ -119,7 +119,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         tool.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, searchPath)),
+		display:         tool.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
 	}, nil
 }
 
@@ -138,6 +138,10 @@ func (i *searchContentInvocation) Display() tool.ToolDisplay {
 }
 
 func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
 	maxResults := 100 // Hard limit matching OpenCode behavior
 	maxLineLength := i.config.Tools.MaxLineLength
 
@@ -153,14 +157,15 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 	cmd = append(cmd, "--", i.pattern, i.absPath)
 
 	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, nil)
-	// If the command fails to start (e.g., rg missing), return error
 	if err != nil {
-		return fmt.Sprintf("Error: rg failed to start: %v", err), err
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return fmt.Sprintf("Error: rg failed to start: %v", err), nil
 	}
 
-	// rg returns status 1 if no matches found, which isn't an error for us.
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("rg failed")
+		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), nil
 	}
 
 	// Process output

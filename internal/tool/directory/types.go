@@ -8,44 +8,9 @@ import (
 
 // -- Directory Tool Contract Types --
 
-// ListDirectoryRequest represents the parameters for a ListDirectory operation
-type ListDirectoryRequest struct {
-	Path           string `json:"path"`
-	MaxDepth       int    `json:"max_depth,omitempty"`
-	IncludeIgnored bool   `json:"include_ignored,omitempty"`
-	Offset         int    `json:"offset,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-}
+// -- Directory Tool Contract Types --
 
-func (r *ListDirectoryRequest) Validate(cfg *config.Config) error {
-	if r.Offset < 0 {
-		r.Offset = 0
-	}
-	if r.Limit <= 0 {
-		r.Limit = cfg.Tools.DefaultListDirectoryLimit
-	}
-	if r.Limit > cfg.Tools.MaxListDirectoryLimit {
-		r.Limit = cfg.Tools.MaxListDirectoryLimit
-	}
-	if r.MaxDepth < 0 {
-		r.MaxDepth = -1 // unlimited
-	}
-	return nil
-}
-
-// ListDirectoryResponse contains the result of a ListDirectory operation
-type ListDirectoryResponse struct {
-	DirectoryPath    string
-	FormattedEntries string // newline-separated, dirs have "/" suffix
-	Offset           int
-	Limit            int
-	TotalCount       int
-	HitMaxResults    bool
-}
-
-func (r ListDirectoryResponse) Success() bool {
-	return true
-}
+// (ListDirectory types moved to internal/tool/directory/list.go)
 
 // FindFileRequest represents the parameters for a FindFile operation
 type FindFileRequest struct {

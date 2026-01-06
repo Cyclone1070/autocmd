@@ -437,10 +437,10 @@ func TestEditFile(t *testing.T) {
 		// Simulate external change between Prepare and Execute
 		fs.createFile("/workspace/test.txt", []byte("changed externally"), 0o644)
 
-		// Execute should fail with stale edit error
+		// Execute should return error in message, nil error
 		output, err := inv.Execute(context.Background())
-		if err == nil {
-			t.Fatal("expected stale edit error")
+		if err != nil {
+			t.Errorf("unexpected error: operation errors should return nil per tool.md contract, got: %v", err)
 		}
 		assertContains(t, output, "file changed since edit was prepared")
 	})

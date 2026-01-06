@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -175,9 +176,12 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "subdir"}
-		_, err := executeRead(t, readTool, readReq)
-		if err == nil {
-			t.Error("expected error when reading directory")
+		result, err := executeRead(t, readTool, readReq)
+		if err != nil {
+			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		}
+		if !strings.Contains(result, "Error") {
+			t.Errorf("expected error message, got: %s", result)
 		}
 	})
 
@@ -189,9 +193,12 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
-		_, err := executeRead(t, readTool, readReq)
-		if err == nil {
-			t.Errorf("expected error for nonexistent file, got success")
+		result, err := executeRead(t, readTool, readReq)
+		if err != nil {
+			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		}
+		if !strings.Contains(result, "Error") {
+			t.Errorf("expected error message, got: %s", result)
 		}
 	})
 

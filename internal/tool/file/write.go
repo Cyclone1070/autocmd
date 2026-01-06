@@ -80,6 +80,12 @@ func (t *WriteFileTool) Declaration() tool.Declaration {
 	}
 }
 
+// WriteFileRequest is the input for WriteFileTool.
+type WriteFileRequest struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &WriteFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {

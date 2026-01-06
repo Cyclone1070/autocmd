@@ -14,7 +14,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool"
 )
 
-// directoryEntry is a private helper internal processing
+// directoryEntry is an internal helper for directory entries.
 type directoryEntry struct {
 	Name  string
 	IsDir bool
@@ -79,7 +79,7 @@ func (t *ListDirTool) Declaration() tool.Declaration {
 			Properties: map[string]*tool.Schema{
 				"path": {
 					Type:        tool.TypeString,
-					Description: "The absolute path to the directory.",
+					Description: "Path to the directory.",
 				},
 				"ignore": {
 					Type:        tool.TypeArray,

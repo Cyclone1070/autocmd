@@ -21,25 +21,25 @@ The `tool` package defines tool types and display data structures. It is the fou
 
 ### `Prepare()` Contract
 
-**Returns error for:** Validation failures. Anything that can be determined before doing real work.
-- Input parsing failures
-- Missing or invalid parameters
-- Path resolution failures
-
-**Never returns error for:** I/O operations. Prepare must not perform file reads, network calls, or other side effects.
+**Responsibility:** Validate that the request is syntactically correct and semantically feasible.
+**Returns error for:**
+- Invalid inputs (parsing, missing fields).
+- State violations (e.g. target does not exist).
+*Validation should be comprehensive to "fail fast".*
 
 ### `Execute()` Contract
 
-**Returns `("", ctx.Err())` for:** Context cancellation. Check `ctx.Err()` before and after I/O operations.
+**Responsibility:** Perform the action safely.
+**Requirement:** **Re-verify volatile state.** Because time passes between Prepare and Execute, valid state (like file existence) may have changed. You must re-check it to prevent race conditions.
 
-**Returns `(errorContent, err)` for:** Operation failures. The error content describes the problem for the LLM. The error itself is for logging/metrics.
-- File system errors (not found, permission denied, etc.)
+**Returns `("", ctx.Err())` for:** Context error. Check `ctx.Err()` before/after I/O.
+
+**Returns `(errorContent, err)` for:** Operation failures.
+- File system errors
 - Network errors
-- Validation errors discovered during execution (e.g., binary file detection)
+- Validation errors discovered during execution
 
 **Returns `(content, nil)` for:** Success.
-
----
 
 ## Errors This Package Throws
 

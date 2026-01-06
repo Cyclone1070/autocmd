@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
+	"github.com/Cyclone1070/iav/internal/tool"
 )
+
+// SearchContentRequest matches OpenCode's input schema.
+type SearchContentRequest struct {
+	Pattern string `json:"pattern"`
+	Path    string `json:"path"`
+	Include string `json:"include,omitempty"`
+}
 
 // SearchContentTool handles content searching operations.
 type SearchContentTool struct {
@@ -48,15 +54,46 @@ func NewSearchContentTool(
 	}
 }
 
-// Run searches for content matching a regex pattern using ripgrep.
-// It validates the search path is within workspace boundaries, respects gitignore rules
-// (unless includeIgnored is true), and returns matches with pagination support.
-func (t *SearchContentTool) Run(ctx context.Context, req *SearchContentRequest) (*SearchContentResponse, error) {
-	if err := req.Validate(t.config); err != nil {
-		return nil, err
+func (t *SearchContentTool) Name() string {
+	return "search_content"
+}
+
+func (t *SearchContentTool) Declaration() tool.Declaration {
+	return tool.Declaration{
+		Name:        "search_content",
+		Description: "Search for content matching a regex pattern in files.",
+		Parameters: &tool.Schema{
+			Type: tool.TypeObject,
+			Properties: map[string]*tool.Schema{
+				"pattern": {
+					Type:        tool.TypeString,
+					Description: "The regex pattern to search for in file contents",
+				},
+				"path": {
+					Type:        tool.TypeString,
+					Description: "The file or directory to search in. Defaults to the current working directory.",
+				},
+				"include": {
+					Type:        tool.TypeString,
+					Description: "File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")",
+				},
+			},
+			Required: []string{"pattern"},
+		},
+	}
+}
+
+func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+	req := &SearchContentRequest{}
+	if err := json.Unmarshal(params, req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
 	}
 
-	searchPath := req.SearchPath
+	if req.Pattern == "" {
+		return nil, fmt.Errorf("pattern is required")
+	}
+
+	searchPath := req.Path
 	if searchPath == "" {
 		searchPath = "."
 	}
@@ -66,46 +103,64 @@ func (t *SearchContentTool) Run(ctx context.Context, req *SearchContentRequest) 
 		return nil, err
 	}
 
-	// Check if search path exists
-	info, err := t.fs.Stat(absSearchPath)
+	// Check if path exists (file or directory is fine)
+	_, err = t.fs.Stat(absSearchPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("path does not exist: %s", absSearchPath)
+			return nil, fmt.Errorf("path does not exist: %s", searchPath)
 		}
-		return nil, fmt.Errorf("failed to stat %s: %w", absSearchPath, err)
+		return nil, fmt.Errorf("failed to stat %s: %w", searchPath, err)
 	}
 
-	if !info.IsDir() {
-		return nil, fmt.Errorf("not a directory: %s", absSearchPath)
-	}
+	return &searchContentInvocation{
+		commandExecutor: t.commandExecutor,
+		config:          t.config,
+		pathResolver:    t.pathResolver,
+		absPath:         absSearchPath,
+		pattern:         req.Pattern,
+		include:         req.Include,
+		display:         tool.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, searchPath)),
+	}, nil
+}
 
-	limit := req.Limit
+type searchContentInvocation struct {
+	commandExecutor commandExecutor
+	config          *config.Config
+	pathResolver    pathResolver
+	absPath         string
+	pattern         string
+	include         string
+	display         tool.ToolDisplay
+}
 
-	maxResults := t.config.Tools.MaxSearchContentResults
+func (i *searchContentInvocation) Display() tool.ToolDisplay {
+	return i.display
+}
 
-	// Hard limit on line length to avoid memory issues
-	maxLineLength := t.config.Tools.MaxLineLength
+func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
+	maxResults := 100 // Hard limit matching OpenCode behavior
+	maxLineLength := i.config.Tools.MaxLineLength
 
 	// Build ripgrep command
-	// rg --json "query" searchPath [--no-ignore]
-	cmd := []string{"rg", "--json"}
-	if !req.CaseSensitive {
-		cmd = append(cmd, "-i")
-	}
-	if req.IncludeIgnored {
-		cmd = append(cmd, "--no-ignore")
-	}
-	cmd = append(cmd, req.Query, absSearchPath)
+	// rg --json [--glob=<include>] [--] <pattern> <path>
+	cmd := []string{"rg", "--json", "--glob=!.git/*"}
 
-	// Execute command
-	res, err := t.commandExecutor.Run(ctx, cmd, absSearchPath, nil)
+	if i.include != "" {
+		cmd = append(cmd, fmt.Sprintf("--glob=%s", i.include))
+	}
+
+	// Double check pattern/path separation
+	cmd = append(cmd, "--", i.pattern, i.absPath)
+
+	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, nil)
+	// If the command fails to start (e.g., rg missing), return error
 	if err != nil {
-		return nil, fmt.Errorf("rg failed to start: %w", err)
+		return fmt.Sprintf("Error: rg failed to start: %v", err), err
 	}
 
-	// rg returns 1 if no matches are found (not an error for us).
+	// rg returns status 1 if no matches found, which isn't an error for us.
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return nil, fmt.Errorf("rg failed with exit code %d: %s", res.ExitCode, res.Stderr)
+		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("rg failed")
 	}
 
 	// Process output
@@ -119,7 +174,6 @@ func (t *SearchContentTool) Run(ctx context.Context, req *SearchContentRequest) 
 			continue
 		}
 
-		// Parse JSON line
 		var rgMatch struct {
 			Type string `json:"type"`
 			Data struct {
@@ -138,7 +192,7 @@ func (t *SearchContentTool) Run(ctx context.Context, req *SearchContentRequest) 
 		}
 
 		if rgMatch.Type == "match" {
-			relPath, err := t.pathResolver.Rel(rgMatch.Data.Path.Text)
+			relPath, err := i.pathResolver.Rel(rgMatch.Data.Path.Text)
 			if err != nil {
 				relPath = rgMatch.Data.Path.Text
 			}
@@ -161,44 +215,40 @@ func (t *SearchContentTool) Run(ctx context.Context, req *SearchContentRequest) 
 		}
 	}
 
-	// Sort results for consistency (by file, then line number)
-	sort.Slice(matches, func(i, j int) bool {
-		if matches[i].File != matches[j].File {
-			return matches[i].File < matches[j].File
-		}
-		return matches[i].LineNumber < matches[j].LineNumber
-	})
-
-	// Apply pagination
-	paginatedMatches, paginationResult := pagination.ApplyPagination(matches, req.Offset, limit)
-
-	return &SearchContentResponse{
-		FormattedMatches: formatSearchMatches(paginatedMatches),
-		Offset:           req.Offset,
-		Limit:            limit,
-		TotalCount:       paginationResult.TotalCount,
-		HitMaxResults:    hitMaxResults,
-	}, nil
+	return formatSearchMatches(matches, hitMaxResults), nil
 }
 
-// formatSearchMatches groups matches by file and formats them in a grep-like output.
-func formatSearchMatches(matches []searchContentMatch) string {
+// searchContentMatch represents a single match in a file
+// Internal usage only, no longer part of public API
+type searchContentMatch struct {
+	File        string
+	LineNumber  int
+	LineContent string
+}
+
+// formatSearchMatches formats matches OpenCode style
+func formatSearchMatches(matches []searchContentMatch, truncated bool) string {
 	if len(matches) == 0 {
-		return "No matches found."
+		return "No files found"
 	}
 
 	var sb strings.Builder
-	currentFile := ""
+	sb.WriteString(fmt.Sprintf("Found %d matches\n", len(matches)))
 
+	currentFile := ""
 	for _, m := range matches {
 		if m.File != currentFile {
 			if currentFile != "" {
 				sb.WriteString("\n")
 			}
-			sb.WriteString(m.File + ":\n")
+			sb.WriteString("\n" + m.File + ":\n")
 			currentFile = m.File
 		}
 		sb.WriteString(fmt.Sprintf("  Line %d: %s\n", m.LineNumber, m.LineContent))
+	}
+
+	if truncated {
+		sb.WriteString("\n(Results are truncated. Consider using a more specific path or pattern.)\n")
 	}
 
 	return sb.String()

@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -163,6 +164,19 @@ func (m *mockChecksumManagerForWrite) Clear() {
 	m.checksums = make(map[string]string)
 }
 
+func executeWrite(t *testing.T, wtool *WriteFileTool, req *WriteFileRequest) (string, error) {
+	t.Helper()
+	params, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+	inv, err := wtool.Prepare(context.Background(), params)
+	if err != nil {
+		return "", err
+	}
+	return inv.Execute(context.Background())
+}
+
 // Test functions
 
 func TestWriteFile(t *testing.T) {
@@ -175,17 +189,13 @@ func TestWriteFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(cfg)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, cfg, path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 		content := "test content"
 
 		req := &WriteFileRequest{Path: "new.txt", Content: content}
-		resp, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if resp.BytesWritten != len(content) {
-			t.Errorf("expected %d bytes written, got %d", len(content), resp.BytesWritten)
 		}
 
 		// Verify file was created
@@ -198,7 +208,7 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		// Verify cache was updated
-		checksum, ok := checksumManager.Get(resp.AbsolutePath)
+		checksum, ok := checksumManager.Get("/workspace/new.txt")
 		if !ok {
 			t.Error("expected cache to be updated after write")
 		}
@@ -213,10 +223,10 @@ func TestWriteFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/existing.txt", []byte("existing"), 0o644)
 
-		writeTool := NewWriteFileTool(fs, checksumManager, config.DefaultConfig(), path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), config.DefaultConfig())
 
 		req := &WriteFileRequest{Path: "existing.txt", Content: "new content"}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for existing file, got nil")
 		}
@@ -234,10 +244,10 @@ func TestWriteFile(t *testing.T) {
 			largeContent[i] = 'A'
 		}
 
-		writeTool := NewWriteFileTool(fs, checksumManager, cfg, path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &WriteFileRequest{Path: "large.txt", Content: string(largeContent)}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for large content, got nil")
 		}
@@ -248,12 +258,12 @@ func TestWriteFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(cfg)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, config.DefaultConfig(), path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), config.DefaultConfig())
 		// Content with NUL byte
 		binaryContent := []byte{0x48, 0x65, 0x6C, 0x00, 0x6C, 0x6F}
 
 		req := &WriteFileRequest{Path: "binary.bin", Content: string(binaryContent)}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for binary content, got nil")
 		}
@@ -263,12 +273,12 @@ func TestWriteFile(t *testing.T) {
 		cfg := config.DefaultConfig()
 		fs := newMockFileSystemForWrite(cfg)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, cfg, path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		expectedPerm := os.FileMode(0o644)
 
 		req := &WriteFileRequest{Path: "default_perm.txt", Content: "content"}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -287,10 +297,10 @@ func TestWriteFile(t *testing.T) {
 		cfg := config.DefaultConfig()
 		fs := newMockFileSystemForWrite(cfg)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, cfg, path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -311,10 +321,10 @@ func TestWriteFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.setOperationError("EnsureDirs", errors.New("failed to mkdir"))
 
-		writeTool := NewWriteFileTool(fs, checksumManager, cfg, path.NewResolver(workspaceRoot))
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
-		_, err := writeTool.Run(context.Background(), req)
+		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Error("expected error when EnsureDirs fails")
 		}

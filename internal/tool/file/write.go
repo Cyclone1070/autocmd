@@ -2,11 +2,14 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
@@ -35,8 +38,8 @@ type WriteFileTool struct {
 func NewWriteFileTool(
 	fileOps fileWriter,
 	checksumManager checksumUpdater,
-	cfg *config.Config,
 	pathResolver pathResolver,
+	cfg *config.Config,
 ) *WriteFileTool {
 	if fileOps == nil {
 		panic("fileOps is required")
@@ -44,74 +47,141 @@ func NewWriteFileTool(
 	if checksumManager == nil {
 		panic("checksumManager is required")
 	}
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
+	}
+	if cfg == nil {
+		panic("config is required")
 	}
 	return &WriteFileTool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
-		config:          cfg,
 		pathResolver:    pathResolver,
+		config:          cfg,
 	}
 }
 
-// Run creates a new file in the workspace with the specified content and permissions.
-// It validates the path is within workspace boundaries, checks for binary content,
-// enforces size limits, and writes atomically using a temp file + rename pattern.
-// Returns an error if the file already exists, is binary, too large, or outside the workspace.
-//
-// Note: ctx is accepted for API consistency but not used - file I/O is synchronous.
-func (t *WriteFileTool) Run(ctx context.Context, req *WriteFileRequest) (*WriteFileResponse, error) {
-	if err := req.Validate(t.config); err != nil {
-		return nil, err
+func (t *WriteFileTool) Name() string {
+	return "write_file"
+}
+
+func (t *WriteFileTool) Declaration() tool.Declaration {
+	return tool.Declaration{
+		Name:        "write_file",
+		Description: "Create a new file with the specified content. File must not already exist.",
+		Parameters: &tool.Schema{
+			Type: tool.TypeObject,
+			Properties: map[string]*tool.Schema{
+				"path":    {Type: tool.TypeString, Description: "Path to file"},
+				"content": {Type: tool.TypeString, Description: "File content"},
+			},
+			Required: []string{"path", "content"},
+		},
+	}
+}
+
+func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+	req := &WriteFileRequest{}
+	if err := json.Unmarshal(params, req); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	if req.Path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if req.Content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+	if int64(len(req.Content)) > t.config.Tools.MaxFileSize {
+		return nil, fmt.Errorf("content too large: %d bytes exceeds limit %d",
+			len(req.Content), t.config.Tools.MaxFileSize)
 	}
 
 	abs, err := t.pathResolver.Abs(req.Path)
 	if err != nil {
 		return nil, err
 	}
-	rel, err := t.pathResolver.Rel(abs)
-	if err != nil {
-		return nil, err
-	}
 
-	// Check if file already exists
+	// Fail-fast checks: existence and binary content
 	_, err = t.fileOps.Stat(abs)
 	if err == nil {
-		return nil, fmt.Errorf("file already exists: %s", abs)
+		return nil, fmt.Errorf("file already exists: %s", req.Path)
 	}
 	if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to stat %s: %w", abs, err)
-	}
-
-	parentDir := filepath.Dir(abs)
-	if err := t.fileOps.EnsureDirs(parentDir); err != nil {
-		return nil, fmt.Errorf("failed to create directories for %s: %w", parentDir, err)
+		return nil, fmt.Errorf("failed to stat %s: %w", req.Path, err)
 	}
 
 	contentBytes := []byte(req.Content)
-
-	// Check for binary content
 	if content.IsBinaryContent(contentBytes) {
-		return nil, fmt.Errorf("cannot write binary content to: %s", abs)
+		return nil, fmt.Errorf("cannot write binary content to: %s", req.Path)
 	}
 
-	perm := os.FileMode(0o644)
-	// Write the file atomically
-	if err := t.fileOps.WriteFileAtomic(abs, contentBytes, perm); err != nil {
-		return nil, fmt.Errorf("failed to write file %s: %w", abs, err)
-	}
-
-	// Compute checksum and update cache
-	checksum := t.checksumManager.Compute(contentBytes)
-	t.checksumManager.Update(abs, checksum)
-
-	return &WriteFileResponse{
-		AbsolutePath: abs,
-		RelativePath: rel,
-		BytesWritten: len(contentBytes),
+	return &writeFileInvocation{
+		fileOps:         t.fileOps,
+		checksumManager: t.checksumManager,
+		absPath:         abs,
+		relPath:         req.Path,
+		content:         []byte(req.Content),
+		display:         tool.StringDisplay(fmt.Sprintf("Write %s", req.Path)),
 	}, nil
+}
+
+type writeFileInvocation struct {
+	fileOps         fileWriter
+	checksumManager checksumUpdater
+	absPath         string
+	relPath         string
+	content         []byte
+	display         tool.ToolDisplay
+}
+
+func (i *writeFileInvocation) Display() tool.ToolDisplay {
+	return i.display
+}
+
+func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	// Check if file already exists (TOCTOU protection)
+	_, err := i.fileOps.Stat(i.absPath)
+	if err == nil {
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath),
+			fmt.Errorf("file already exists")
+	}
+	if !os.IsNotExist(err) {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), err
+	}
+
+	// Ensure parent directories exist
+	parentDir := filepath.Dir(i.absPath)
+	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return fmt.Sprintf("Error: failed to create directories: %v", err), err
+	}
+
+	// Note: Binary check already done in Prepare
+
+	// Write file atomically
+	perm := os.FileMode(0o644)
+	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
+	}
+
+	// Update checksum cache
+	normalized := strings.ReplaceAll(string(i.content), "\r\n", "\n")
+	checksum := i.checksumManager.Compute([]byte(normalized))
+	i.checksumManager.Update(i.absPath, checksum)
+
+	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
+		i.relPath, len(i.content)), nil
 }

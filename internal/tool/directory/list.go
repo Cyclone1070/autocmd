@@ -20,17 +20,6 @@ type directoryEntry struct {
 	IsDir bool
 }
 
-// dirLister defines the filesystem operations needed for listing directories.
-type dirLister interface {
-	Stat(path string) (os.FileInfo, error)
-	ListDir(path string) ([]os.FileInfo, error)
-}
-
-// ignoreMatcher defines the interface for gitignore pattern matching.
-type ignoreMatcher interface {
-	ShouldIgnore(relativePath string) bool
-}
-
 // ListDirTool allows agents to list directory contents with proper validation and tree formatting.
 type ListDirTool struct {
 	fs           dirLister

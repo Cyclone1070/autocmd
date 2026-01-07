@@ -57,6 +57,9 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 
 	inv, err := t.Prepare(ctx, tc.Function.Arguments)
 	if err != nil {
+		if ctx.Err() != nil {
+			return provider.Message{}, ctx.Err()
+		}
 		declJSON, _ := json.MarshalIndent(t.Declaration(), "", "  ")
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, declJSON)
 

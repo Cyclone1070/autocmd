@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 // fileReader defines the minimal filesystem operations needed for reading files.
 type fileReader interface {
 	ReadFile(path string) ([]byte, error)
+	Stat(path string) (os.FileInfo, error)
 }
 
 // checksumComputer defines the interface for checksum computation and updates.
@@ -92,7 +94,7 @@ type ReadFileRequest struct {
 func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &ReadFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
 	if req.Path == "" {
@@ -108,6 +110,21 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 	abs, err := t.pathResolver.Abs(req.Path)
 	if err != nil {
 		return nil, err
+	}
+
+	// Fail Fast: Verify file exists and is not a directory
+	info, err := t.fileOps.Stat(abs)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file does not exist: %s", abs)
+		}
+		return nil, fmt.Errorf("failed to access file: %w", err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("path is a directory, not a file: %s", abs)
 	}
 
 	return &readFileInvocation{
@@ -143,7 +160,7 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: %s", err.Error()), nil
+		return fmt.Sprintf("Error: %s", err.Error()), err
 	}
 
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")

@@ -325,8 +325,8 @@ func TestWriteFile(t *testing.T) {
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
 		result, err := executeWrite(t, writeTool, req)
-		if err != nil {
-			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		if err == nil {
+			t.Errorf("expected operation error for logging per tool.md contract")
 		}
 		if !strings.Contains(result, "failed to create directories") {
 			t.Errorf("expected error message about directories, got: %s", result)

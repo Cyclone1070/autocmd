@@ -439,8 +439,8 @@ func TestEditFile(t *testing.T) {
 
 		// Execute should return error in message, nil error
 		output, err := inv.Execute(context.Background())
-		if err != nil {
-			t.Errorf("unexpected error: operation errors should return nil per tool.md contract, got: %v", err)
+		if err == nil {
+			t.Errorf("expected operation error for logging per tool.md contract")
 		}
 		assertContains(t, output, "file changed since edit was prepared")
 	})

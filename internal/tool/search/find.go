@@ -109,6 +109,9 @@ func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 	// Fail Fast: Verify path exists and is a directory
 	info, err := t.fs.Stat(absPath)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", absPath)
 		}
@@ -119,18 +122,22 @@ func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 	}
 
 	return &findFileInvocation{
-		tool:    t,
-		absPath: absPath,
-		pattern: req.Pattern,
-		display: tool.StringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
+		fs:              t.fs,
+		commandExecutor: t.commandExecutor,
+		pathResolver:    t.pathResolver,
+		absPath:         absPath,
+		pattern:         req.Pattern,
+		display:         tool.StringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
 	}, nil
 }
 
 type findFileInvocation struct {
-	tool    *FindFileTool
-	absPath string
-	pattern string
-	display tool.ToolDisplay
+	fs              fileSystem
+	commandExecutor commandExecutor
+	pathResolver    pathResolver
+	absPath         string
+	pattern         string
+	display         tool.ToolDisplay
 }
 
 func (i *findFileInvocation) Display() tool.ToolDisplay {
@@ -143,33 +150,33 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 	}
 
 	// Re-verify State
-	info, err := i.tool.fs.Stat(i.absPath)
+	info, err := i.fs.Stat(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), nil
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), err
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), nil
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), err
 	}
 	if !info.IsDir() {
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), nil
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), fmt.Errorf("path is no longer a directory: %s", i.absPath)
 	}
 
 	// fd --glob "pattern" searchPath
 	cmd := []string{"fd", "--glob", i.pattern, i.absPath}
 
-	res, err := i.tool.commandExecutor.Run(ctx, cmd, i.absPath, nil)
+	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, nil)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: fd failed to start: %v", err), nil
+		return fmt.Sprintf("Error: fd failed to start: %v", err), err
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), nil
+		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("fd exit code %d", res.ExitCode)
 	}
 
 	maxResults := 100
@@ -182,7 +189,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 			continue
 		}
 
-		relPath, err := i.tool.pathResolver.Rel(line)
+		relPath, err := i.pathResolver.Rel(line)
 		if err != nil {
 			relPath = line
 		}

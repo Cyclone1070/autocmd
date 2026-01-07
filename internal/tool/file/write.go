@@ -89,7 +89,7 @@ type WriteFileRequest struct {
 func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &WriteFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
 	if req.Path == "" {
@@ -114,6 +114,9 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (to
 		return nil, fmt.Errorf("file already exists: %s", req.Path)
 	}
 	if !os.IsNotExist(err) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("failed to stat %s: %w", req.Path, err)
 	}
 
@@ -153,13 +156,13 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 	// Check if file already exists (TOCTOU protection)
 	_, err := i.fileOps.Stat(i.absPath)
 	if err == nil {
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath), nil
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath), fmt.Errorf("file already exists: %s", i.relPath)
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), nil
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), err
 	}
 
 	// Ensure parent directories exist
@@ -168,7 +171,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to create directories: %v", err), nil
+		return fmt.Sprintf("Error: failed to create directories: %v", err), err
 	}
 
 	// Note: Binary check already done in Prepare
@@ -179,7 +182,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), nil
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
 	}
 
 	// Update checksum cache

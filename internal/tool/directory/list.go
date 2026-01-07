@@ -100,9 +100,13 @@ type ListDirRequest struct {
 
 // listDirInvocation represents a validated request.
 type listDirInvocation struct {
+	fs             dirLister
+	pathResolver   pathResolver
+	ignoreMatcher  ignoreMatcher
+	config         *config.Config
 	resolvedPath   string
 	ignorePatterns []string
-	tool           *ListDirTool
+	display        tool.ToolDisplay
 }
 
 // Prepare validates path existence and returns an Invocation.
@@ -125,6 +129,9 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (tool
 	// 2. Validate Existence (Fail Fast)
 	info, err := t.fs.Stat(absPath)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", absPath)
 		}
@@ -135,9 +142,13 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (tool
 	}
 
 	return &listDirInvocation{
+		fs:             t.fs,
+		pathResolver:   t.pathResolver,
+		ignoreMatcher:  t.ignoreMatcher,
+		config:         t.config,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
-		tool:           t,
+		display:        tool.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
 	}, nil
 }
 
@@ -148,27 +159,27 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 	}
 
 	// 1. Re-verify State (TOCTOU Safety)
-	info, err := i.tool.fs.Stat(i.resolvedPath)
+	info, err := i.fs.Stat(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), nil
+			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), err
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), nil
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), err
 	}
 	if !info.IsDir() {
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), nil
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), fmt.Errorf("path is no longer a directory: %s", i.resolvedPath)
 	}
 
 	// 2. List Directory (Shallow / Depth 1)
-	entries, err := i.tool.fs.ListDir(i.resolvedPath)
+	entries, err := i.fs.ListDir(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), nil
+		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), err
 	}
 
 	// 3. Filter & Convert
@@ -178,12 +189,12 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 
 		// Check gitignore patterns (relative to workspace root)
 		fullPath := filepath.Join(i.resolvedPath, name)
-		relPath, err := i.tool.pathResolver.Rel(fullPath)
+		relPath, err := i.pathResolver.Rel(fullPath)
 		if err != nil {
 			relPath = name
 		}
 
-		if i.tool.ignoreMatcher != nil && i.tool.ignoreMatcher.ShouldIgnore(relPath) {
+		if i.ignoreMatcher != nil && i.ignoreMatcher.ShouldIgnore(relPath) {
 			continue
 		}
 
@@ -214,7 +225,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 	})
 
 	// 5. Truncate
-	maxResults := i.tool.config.Tools.MaxListDirectoryResults
+	maxResults := i.config.Tools.MaxListDirectoryResults
 	if maxResults <= 0 {
 		maxResults = 100
 	}
@@ -255,5 +266,5 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 
 // Display returns the user-facing description.
 func (i *listDirInvocation) Display() tool.ToolDisplay {
-	return tool.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(i.resolvedPath)))
+	return i.display
 }

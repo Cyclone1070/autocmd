@@ -86,7 +86,7 @@ func (t *SearchContentTool) Declaration() tool.Declaration {
 func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &SearchContentRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
 	if req.Pattern == "" {
@@ -106,6 +106,9 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 	// Check if path exists (file or directory is fine)
 	_, err = t.fs.Stat(absSearchPath)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", searchPath)
 		}
@@ -113,6 +116,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 	}
 
 	return &searchContentInvocation{
+		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		config:          t.config,
 		pathResolver:    t.pathResolver,
@@ -124,6 +128,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 }
 
 type searchContentInvocation struct {
+	fs              fileSystem
 	commandExecutor commandExecutor
 	config          *config.Config
 	pathResolver    pathResolver
@@ -140,6 +145,18 @@ func (i *searchContentInvocation) Display() tool.ToolDisplay {
 func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 	if ctx.Err() != nil {
 		return "", ctx.Err()
+	}
+
+	// Re-verify state
+	_, err := i.fs.Stat(i.absPath)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if os.IsNotExist(err) {
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), err
+		}
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), err
 	}
 
 	maxResults := 100 // Hard limit matching OpenCode behavior
@@ -161,11 +178,11 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: rg failed to start: %v", err), nil
+		return fmt.Sprintf("Error: rg failed to start: %v", err), err
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), nil
+		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("rg exit code %d", res.ExitCode)
 	}
 
 	// Process output
@@ -234,7 +251,7 @@ type searchContentMatch struct {
 // formatSearchMatches formats matches OpenCode style
 func formatSearchMatches(matches []searchContentMatch, truncated bool) string {
 	if len(matches) == 0 {
-		return "No files found"
+		return "No matches found."
 	}
 
 	var sb strings.Builder

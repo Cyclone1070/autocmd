@@ -390,15 +390,11 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 	// 2. Modify State (Delete Directory)
 	fs.remove("/workspace/temp")
 
-	// 3. Execute (Should Fail Gracefully / Return Error Message)
+	// 3. Execute (Should return error for logging per tool.md, loop continues)
 	output, err := invocation.Execute(context.Background())
-	if err != nil {
-		// It returns error in current implementation signature?
-		// No, implementation returns (string, error).
-		// My implementation returns a STRING describing the error for "no longer exists", and nil error.
-		// Wait, let's check list.go logic.
-		// if os.IsNotExist(err) { return fmt.Sprintf("Error: Directory %s no longer exists.", ...), nil }
-		t.Fatalf("Execute shouldn't return Go error for TOCTOU: %v", err)
+	if err == nil {
+		// Per new tool.md contract, operation errors return err for logging
+		t.Fatalf("Expected operation error for logging per new tool.md contract")
 	}
 
 	if !strings.Contains(output, "no longer exists") {

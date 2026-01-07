@@ -249,7 +249,7 @@ func TestSearchContent_NoMatches(t *testing.T) {
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
 	require.NoError(t, err)
-	assert.Equal(t, "No files found", result)
+	assert.Equal(t, "No matches found.", result)
 }
 
 func TestSearchContent_CommandFailure(t *testing.T) {
@@ -272,7 +272,7 @@ func TestSearchContent_CommandFailure(t *testing.T) {
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
-	assert.NoError(t, err) // Operation errors return nil per tool.md contract
+	assert.Error(t, err) // Operation errors return err for logging per tool.md contract
 	assert.Contains(t, result, "rg failed")
 }
 
@@ -297,7 +297,7 @@ func TestSearchContent_InvalidJSON(t *testing.T) {
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
 	require.NoError(t, err)
-	assert.Equal(t, "No files found", result) // Should treat as no matches
+	assert.Equal(t, "No matches found.", result) // Should treat as no matches
 }
 
 func TestSearchContent_LineLengthLimit(t *testing.T) {

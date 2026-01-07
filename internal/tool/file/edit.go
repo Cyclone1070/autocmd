@@ -110,7 +110,7 @@ func (t *EditFileTool) Declaration() tool.Declaration {
 func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
 	req := &EditFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
 	if req.Path == "" {
@@ -138,6 +138,9 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 	// Read file and apply edits in memory to compute diff
 	info, err := t.fileOps.Stat(abs)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("file does not exist: %s", req.Path)
 		}
@@ -146,6 +149,9 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 
 	data, err := t.fileOps.ReadFile(abs)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("failed to read file %s: %w", req.Path, err)
 	}
 
@@ -245,12 +251,12 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), nil
+		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), err
 	}
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
 	currentChecksum := i.checksumManager.Compute([]byte(normalized))
 	if currentChecksum != i.expectedChecksum {
-		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), nil
+		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), fmt.Errorf("checksum mismatch")
 	}
 
 	// Write the modified content atomically using pre-computed content
@@ -258,7 +264,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), nil
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
 	}
 
 	// Update checksum cache with normalized content

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -50,6 +51,29 @@ func (m *mockFileSystemForRead) ReadFile(path string) ([]byte, error) {
 
 	return content, nil
 }
+
+func (m *mockFileSystemForRead) Stat(path string) (os.FileInfo, error) {
+	if m.dirs[path] {
+		return mockFileInfoForRead{name: path, isDir: true}, nil
+	}
+	if content, ok := m.files[path]; ok {
+		return mockFileInfoForRead{name: path, size: int64(len(content)), isDir: false}, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+type mockFileInfoForRead struct {
+	name  string
+	size  int64
+	isDir bool
+}
+
+func (m mockFileInfoForRead) Name() string       { return m.name }
+func (m mockFileInfoForRead) Size() int64        { return m.size }
+func (m mockFileInfoForRead) Mode() os.FileMode  { return 0o644 }
+func (m mockFileInfoForRead) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfoForRead) IsDir() bool        { return m.isDir }
+func (m mockFileInfoForRead) Sys() any           { return nil }
 
 type mockChecksumManagerForRead struct {
 	checksums map[string]string
@@ -176,12 +200,13 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "subdir"}
-		result, err := executeRead(t, readTool, readReq)
-		if err != nil {
-			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		params, _ := json.Marshal(readReq)
+		_, err := readTool.Prepare(context.Background(), params)
+		if err == nil {
+			t.Error("expected Prepare to fail for directory")
 		}
-		if !strings.Contains(result, "Error") {
-			t.Errorf("expected error message, got: %s", result)
+		if !strings.Contains(err.Error(), "directory") {
+			t.Errorf("expected directory error message, got: %v", err)
 		}
 	})
 
@@ -193,12 +218,13 @@ func TestReadFile(t *testing.T) {
 		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
-		result, err := executeRead(t, readTool, readReq)
-		if err != nil {
-			t.Errorf("unexpected error: operation errors should return nil per tool.md contract")
+		params, _ := json.Marshal(readReq)
+		_, err := readTool.Prepare(context.Background(), params)
+		if err == nil {
+			t.Error("expected Prepare to fail for non-existent file")
 		}
-		if !strings.Contains(result, "Error") {
-			t.Errorf("expected error message, got: %s", result)
+		if !strings.Contains(err.Error(), "does not exist") {
+			t.Errorf("expected 'does not exist' error message, got: %v", err)
 		}
 	})
 

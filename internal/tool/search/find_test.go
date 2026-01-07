@@ -161,8 +161,9 @@ func TestFindFile_CommandFailure(t *testing.T) {
 
 	req := &FindFileRequest{Pattern: "*.go", Path: ""}
 	resp, err := executeFind(context.Background(), findTool, req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Operation error: err returned for logging, loop continues
+	if err == nil {
+		t.Fatal("expected operation error to be returned for logging")
 	}
 	if !strings.Contains(resp, "Error: fd failed with exit code 2: fd error") {
 		t.Errorf("expected error message in output, got: %q", resp)

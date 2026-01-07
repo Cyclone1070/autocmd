@@ -17,40 +17,26 @@ The `tool` package defines tool types and display data structures. It is the fou
 
 ---
 
-## Error Handling Rules (for tool implementations)
+## Error Handling Contract
 
-### `Prepare()` Contract
+### Context Cancellation
 
-**Responsibility:** Validate that the request is syntactically correct and semantically feasible.
-**Returns error for:**
-- Invalid inputs (parsing, missing fields).
-- State violations (e.g. target does not exist).
-*Validation should be comprehensive to "fail fast".*
+Context cancellation **always terminates the loop**. Both `Prepare()` and `Execute()` must check for it.
 
-### `Execute()` Contract
+Go context is cooperative - functions must explicitly check `ctx.Err()`. Since `fs.Stat()` and similar I/O don't respect context, you must check after they return.
 
-**Responsibility:** Perform the action safely.
-**Requirement:** **Re-verify volatile state.** Because time passes between Prepare and Execute, valid state (like file existence) may have changed. You must re-check it to prevent race conditions.
+### `Prepare()` Returns
 
-**Returns `("", ctx.Err())` for:** Context error. Check `ctx.Err()` before/after I/O.
+| Return                                  | When              | Loop Effect                             |
+| --------------------------------------- | ----------------- | --------------------------------------- |
+| `(invocation, nil)`                     | Validation passed | Continues to Execute                    |
+| `(nil, error)` where `ctx.Err() != nil` | Context cancelled | **Loop terminates**                     |
+| `(nil, error)` where `ctx.Err() == nil` | Validation failed | **Loop continues** — error shown to LLM |
 
-**Returns `(errorContent, err)` for:** Operation failures.
-- File system errors
-- Network errors
-- Validation errors discovered during execution
+### `Execute()` Returns
 
-**Returns `(content, nil)` for:** Success.
-
-## Errors This Package Throws
-
-### From `Prepare()`
-
-All errors are validation failures. They should be wrapped in a message and shown to the LLM. Do not propagate to the loop.
-
-### From `Execute()`
-
-Two categories:
-
-1. **Context errors.** Must propagate. Terminates the loop.
-
-2. **Operation errors.** Must NOT propagate. The error content is embedded in the first return value (`llmContent`). The second return value (`err`) is for logging only.
+| Return                                         | When              | Loop Effect                                           |
+| ---------------------------------------------- | ----------------- | ----------------------------------------------------- |
+| `(content, nil)`                               | Success           | **Loop continues**                                    |
+| `(errorContent, err)` where `ctx.Err() != nil` | Context cancelled | **Loop terminates**                                   |
+| `(errorContent, err)` where `ctx.Err() == nil` | Operation failed  | **Loop continues** — content shown to LLM, err logged |

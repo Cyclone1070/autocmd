@@ -18,24 +18,38 @@ The `loop` package orchestrates the agent's think-act cycle. It coordinates betw
 
 ## Error Handling Rules
 
-How to handle errors received from dependencies:
+### Loop-Terminating Errors
 
-1. **Provider error → terminate.** If the LLM provider returns an error, propagate it immediately. There is no recovery path — the agent cannot continue without LLM responses.
+These errors stop the loop immediately:
 
-2. **ToolManager error → terminate.** The only error toolmanager returns is context cancellation. Propagate it to stop the loop.
+1. **Provider error.** LLM returned an error (network, API, rate limit). No recovery path.
+2. **Context cancellation.** User cancelled or timeout expired. Can come from:
+   - Loop's own `ctx.Err()` check at iteration start
+   - `provider.Generate()` returning an error
+   - `toolmanager.Execute()` returning an error (from Prepare or Execute)
 
-3. **ToolManager success with error content → continue.** When toolmanager returns a message (even one containing error text), add it to the conversation and continue the loop. The agent will see the error and decide what to do next.
+When the loop receives an error, it:
+1. Adds `[Session cancelled by user]` to session (for context errors)
+2. Saves session (best effort)
+3. Returns the error to caller
+
+### Loop-Continuing Messages
+
+These are **not errors** — they are messages added to conversation:
+
+1. **Tool returned error content.** The toolmanager wraps it in a message. Loop continues.
+2. **Tool not found.** The toolmanager returns a message with available tools. Loop continues.
+3. **Tool preparation failed.** The toolmanager returns a message with expected schema. Loop continues.
+
+**Key rule:** If `toolmanager.Execute()` returns `(message, nil)`, the loop always continues — even if the message contains error text.
 
 ---
 
-## Errors This Package Throws
+## Error Flow
 
-`Loop.Run()` returns an error in the following cases:
-
-1. **LLM provider failure.** Network errors, API errors, rate limits, malformed responses. The loop cannot continue without valid LLM responses.
-
-2. **Context cancellation.** User cancelled, timeout expired, or parent context was cancelled. The loop respects context and exits cleanly.
-
-**What callers should do:**
-
-These errors are fatal to the current conversation. Log the error and notify the user. There is no automatic retry logic — the caller decides whether to start a new loop.
+```
+Context cancelled       → toolmanager returns error → loop terminates
+Provider error          → loop terminates
+Tool validation error   → toolmanager returns message → LLM sees it → loop continues
+Tool operation error    → toolmanager returns message → LLM sees it → loop continues
+```

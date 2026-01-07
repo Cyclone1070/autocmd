@@ -18,28 +18,27 @@ The `toolmanager` package manages tool registry and execution. It translates bet
 
 ## Error Handling Rules
 
-How to handle errors received from tools:
+### Context Cancellation
 
-1. **Tool not found.** Return a message listing available tools. Do not return an error — let the LLM retry with a valid tool name.
+Context cancellation **always terminates the loop**. Check `ctx.Err()` after both `Prepare()` and `Execute()` return errors.
 
-2. **Prepare error.** Wrap the error in a message: `"Error: failed to prepare tool: <error>"`. Do not propagate the error. The LLM sees the message and can fix its request.
+### Return Contract
 
-3. **Execute context error.** If `Execute()` returns an error and `ctx.Err() != nil`, propagate the error immediately. This terminates the loop.
-
-4. **Execute tool error.** If `Execute()` returns `(llmContent, err)` where err is not a context error, wrap `llmContent` in a message and emit `ToolEndEvent` with the error flag set. Do not propagate the error — the loop continues.
-
-5. **Execute success.** Wrap the content in a message and emit `ToolEndEvent` without error.
+| Scenario                      | Return           | Loop Effect                              |
+| ----------------------------- | ---------------- | ---------------------------------------- |
+| Tool not found                | `(message, nil)` | **Continues** — LLM sees available tools |
+| Prepare error + ctx cancelled | `(_, error)`     | **Terminates**                           |
+| Prepare error + ctx OK        | `(message, nil)` | **Continues** — LLM sees expected schema |
+| Execute error + ctx cancelled | `(_, error)`     | **Terminates**                           |
+| Execute error + ctx OK        | `(message, nil)` | **Continues** — LLM sees error content   |
+| Execute success               | `(message, nil)` | **Continues** — LLM sees result          |
 
 ---
 
 ## Errors This Package Throws
 
-`ToolManager.Execute()` returns an error in the following cases:
+`Execute()` returns an error **only** for context cancellation.
 
-1. **Context cancellation.** User cancelled or timeout expired. This is the only error that propagates.
+When the caller receives an error, stop iterating tool calls. The loop should terminate.
 
-**What callers should do:**
-
-When `Execute()` returns an error, stop iterating tool calls. The loop should terminate.
-
-When `Execute()` returns `(message, nil)`, add the message to the conversation regardless of whether it contains error text. The loop continues.
+When the caller receives `(message, nil)`, add the message to conversation. The loop continues regardless of message content.

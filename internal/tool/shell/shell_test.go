@@ -2,590 +2,298 @@ package shell
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	"encoding/json"
+	"io"
 	"os"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
-// Local mocks for shell tests
+// --- Mocks ---
 
-type mockFileSystemForShell struct {
-	files map[string][]byte
-	dirs  map[string]bool
+type mockPathResolver struct {
+	mock.Mock
 }
 
-func newMockFileSystemForShell() *mockFileSystemForShell {
-	return &mockFileSystemForShell{
-		files: make(map[string][]byte),
-		dirs:  make(map[string]bool),
+func (m *mockPathResolver) Abs(path string) (string, error) {
+	args := m.Called(path)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockPathResolver) Rel(path string) (string, error) {
+	args := m.Called(path)
+	return args.String(0), args.Error(1)
+}
+
+type mockEnvFileOps struct {
+	mock.Mock
+}
+
+func (m *mockEnvFileOps) ReadFile(filename string) ([]byte, error) {
+	args := m.Called(filename)
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+type mockCommandExecutor struct {
+	mock.Mock
+}
+
+func (m *mockCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.StreamingCmd, error) {
+	args := m.Called(ctx, command, dir, env, timeout)
+	if res := args.Get(0); res != nil {
+		return res.(*executor.StreamingCmd), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+// realPathResolver uses the actual file system for tests
+type realPathResolver struct {
+	baseDir string
+}
+
+func (r *realPathResolver) Abs(path string) (string, error) {
+	if path == "." || path == "" {
+		return r.baseDir, nil
+	}
+	return path, nil
+}
+
+func (r *realPathResolver) Rel(path string) (string, error) {
+	return ".", nil
+}
+
+// consumeOutput reads the output stream from the display to prevent deadlock if IO pipes are used.
+func consumeOutput(inv tool.Invocation) {
+	if d, ok := inv.Display().(tool.ShellDisplay); ok {
+		go io.Copy(io.Discard, d.Output)
 	}
 }
 
-func (m *mockFileSystemForShell) createDir(path string) {
-	m.dirs[path] = true
+// --- Tests ---
+
+func TestShellTool_Name(t *testing.T) {
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	assert.Equal(t, "shell", tl.Name())
 }
 
-func (m *mockFileSystemForShell) createFile(path string, content []byte) {
-	m.files[path] = content
+func TestShellTool_Declaration(t *testing.T) {
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	decl := tl.Declaration()
+	assert.Equal(t, "shell", decl.Name)
+	assert.Contains(t, decl.Description, "shell command")
+	assert.NotNil(t, decl.Parameters)
+	assert.Contains(t, decl.Parameters.Properties, "command")
+	assert.Contains(t, decl.Parameters.Properties, "description")
+	assert.Contains(t, decl.Parameters.Required, "command")
+	assert.Contains(t, decl.Parameters.Required, "description")
 }
 
-func (m *mockFileSystemForShell) ReadFile(path string) ([]byte, error) {
-	content, ok := m.files[path]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	return content, nil
-}
+func TestShellTool_Prepare_Validation(t *testing.T) {
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	ctx := context.Background()
 
-type mockCommandExecutorForShell struct {
-	runFunc            func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error)
-	runWithTimeoutFunc func(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (*executor.Result, error)
-}
-
-func (m *mockCommandExecutorForShell) Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
-	if m.runFunc != nil {
-		return m.runFunc(ctx, cmd, dir, env)
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockCommandExecutorForShell) RunWithTimeout(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-	if m.runWithTimeoutFunc != nil {
-		return m.runWithTimeoutFunc(ctx, cmd, dir, env, timeout)
-	}
-	return nil, errors.New("not implemented")
-}
-
-// mockExitError simulates an exit error with a specific exit code
-type mockExitError struct {
-	exitCode int
-}
-
-func (e *mockExitError) Error() string {
-	return fmt.Sprintf("exit status %d", e.exitCode)
-}
-
-func (e *mockExitError) ExitCode() int {
-	return e.exitCode
-}
-
-func newMockExitError(code int) error {
-	return &mockExitError{exitCode: code}
-}
-
-func TestShellTool_Run_Truncated(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		return &executor.Result{
-			Stdout:    "truncated output",
-			ExitCode:  0,
-			Truncated: true,
-		}, nil
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"echo", "something"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if !resp.Truncated {
-		t.Error("expected resp.Truncated to be true")
-	}
-}
-
-// Test functions
-
-func TestShellTool_Run_SimpleCommand(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		if command[0] != "echo" {
-			return nil, errors.New("unexpected command")
-		}
-		return &executor.Result{Stdout: "hello\n", ExitCode: 0}, nil
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"echo", "hello"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if resp.ExitCode != 0 {
-		t.Errorf("ExitCode = %d, want 0", resp.ExitCode)
-	}
-	if strings.TrimSpace(resp.Stdout) != "hello" {
-		t.Errorf("Stdout = %q, want %q", resp.Stdout, "hello")
-	}
-}
-
-func TestShellTool_Run_WorkingDir(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	mockFS.createDir("/workspace/subdir")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	var capturedDir string
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		capturedDir = dir
-		return &executor.Result{Stdout: "", ExitCode: 0}, nil
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"pwd"}, WorkingDir: "subdir"}
-	_, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-
-	expectedDir := "/workspace/subdir"
-	if capturedDir != expectedDir {
-		t.Errorf("Working directory = %q, want %q", capturedDir, expectedDir)
-	}
-}
-
-func TestShellTool_Run_Env(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	var capturedEnv []string
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		capturedEnv = env
-		return &executor.Result{Stdout: "", ExitCode: 0}, nil
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{
-		Command: []string{"env"},
-		Env: map[string]string{
-			"CUSTOM_VAR": "custom_value",
-			"TEST_MODE":  "true",
+	tests := []struct {
+		name    string
+		params  string
+		wantErr string
+	}{
+		{
+			name:    "Missing command",
+			params:  `{"description": "foo"}`,
+			wantErr: "command is required",
+		},
+		{
+			name:    "Empty command",
+			params:  `{"command": [], "description": "foo"}`,
+			wantErr: "command is required",
+		},
+		{
+			name:    "Invalid JSON",
+			params:  `{invalid`,
+			wantErr: "failed to parse arguments",
 		},
 	}
-	_, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
 
-	hasCustomVar := false
-	hasTestMode := false
-	for _, envVar := range capturedEnv {
-		if envVar == "CUSTOM_VAR=custom_value" {
-			hasCustomVar = true
-		}
-		if envVar == "TEST_MODE=true" {
-			hasTestMode = true
-		}
-	}
-
-	if !hasCustomVar {
-		t.Error("Expected CUSTOM_VAR=custom_value in environment")
-	}
-	if !hasTestMode {
-		t.Error("Expected TEST_MODE=true in environment")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tl.Prepare(ctx, json.RawMessage(tt.params))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
 	}
 }
 
-func TestShellTool_Run_EnvFiles(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
+// Integration tests use real OSCommandExecutor
+func TestShellTool_Prepare_Success(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cwd, _ := os.Getwd()
+	realPR := &realPathResolver{baseDir: cwd}
+	realCE := executor.NewOSCommandExecutor(cfg)
 
-	// Create env files
-	envFile1Content := `DB_HOST=localhost
-DB_PORT=5432
-API_KEY=secret123`
-	mockFS.createFile("/workspace/.env", []byte(envFile1Content))
+	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
 
-	envFile2Content := `DB_PORT=3306
-CACHE_URL=redis://localhost`
-	mockFS.createFile("/workspace/.env.local", []byte(envFile2Content))
+	ctx := context.Background()
+	params := `{"command": ["echo", "hello"], "description": "say hello"}`
 
-	var capturedEnv []string
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		capturedEnv = env
-		return &executor.Result{Stdout: "", ExitCode: 0}, nil
-	}
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+	require.NotNil(t, inv)
 
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
+	// Consume output to prevent blocking
+	consumeOutput(inv)
 
-	t.Run("Single env file", func(t *testing.T) {
-		req := &ShellRequest{Command: []string{"env"}, EnvFiles: []string{".env"}}
-		_, err := shellTool.Run(context.Background(), req)
-		if err != nil {
-			t.Fatalf("Run failed: %v", err)
-		}
+	// Verify Display
+	disp := inv.Display()
+	shellDisp, ok := disp.(tool.ShellDisplay)
+	require.True(t, ok)
+	assert.Equal(t, "[echo hello]", shellDisp.Command)
+	assert.Equal(t, "say hello", shellDisp.Description)
+	assert.Equal(t, ".", shellDisp.WorkingDir)
+	assert.NotNil(t, shellDisp.Output)
+	assert.NotNil(t, shellDisp.Wait)
 
-		// Check that env vars from file are present
-		hasDBHost := false
-		hasDBPort := false
-		hasAPIKey := false
-		for _, envVar := range capturedEnv {
-			if envVar == "DB_HOST=localhost" {
-				hasDBHost = true
-			}
-			if envVar == "DB_PORT=5432" {
-				hasDBPort = true
-			}
-			if envVar == "API_KEY=secret123" {
-				hasAPIKey = true
-			}
-		}
-
-		if !hasDBHost {
-			t.Error("Expected DB_HOST=localhost in environment")
-		}
-		if !hasDBPort {
-			t.Error("Expected DB_PORT=5432 in environment")
-		}
-		if !hasAPIKey {
-			t.Error("Expected API_KEY=secret123 in environment")
-		}
-	})
-
-	t.Run("Multiple env files with override - explicit ordering", func(t *testing.T) {
-		req := &ShellRequest{Command: []string{"env"}, EnvFiles: []string{".env", ".env.local"}}
-		_, err := shellTool.Run(context.Background(), req)
-		if err != nil {
-			t.Fatalf("Run failed: %v", err)
-		}
-
-		// Count all DB_PORT occurrences and track the last one
-		dbPortCount := 0
-		lastDBPort := ""
-		for _, envVar := range capturedEnv {
-			if strings.HasPrefix(envVar, "DB_PORT=") {
-				dbPortCount++
-				lastDBPort = envVar
-			}
-		}
-
-		// Both values should be in the array (env append behavior)
-		if dbPortCount < 2 {
-			t.Errorf("Expected at least 2 DB_PORT entries (from both files), got %d", dbPortCount)
-		}
-
-		// The LAST value wins (OS behavior) - should be from .env.local
-		if lastDBPort != "DB_PORT=3306" {
-			t.Errorf("Expected last DB_PORT=3306 (from .env.local), got %s", lastDBPort)
-		}
-	})
-
-	t.Run("Request.Env overrides EnvFiles", func(t *testing.T) {
-		req := &ShellRequest{
-			Command:  []string{"env"},
-			EnvFiles: []string{".env"},
-			Env:      map[string]string{"DB_HOST": "production.example.com"},
-		}
-		_, err := shellTool.Run(context.Background(), req)
-		if err != nil {
-			t.Fatalf("Run failed: %v", err)
-		}
-
-		// Request.Env should override EnvFiles
-		var dbHostValue string
-		for _, envVar := range capturedEnv {
-			if strings.HasPrefix(envVar, "DB_HOST=") {
-				dbHostValue = envVar
-			}
-		}
-
-		if !strings.Contains(dbHostValue, "production.example.com") {
-			t.Errorf("Expected DB_HOST=production.example.com from Request.Env, got %s", dbHostValue)
-		}
-	})
-
-	t.Run("Nonexistent env file", func(t *testing.T) {
-		req := &ShellRequest{Command: []string{"env"}, EnvFiles: []string{".env.missing"}}
-		shellTool := NewShellTool(mockFS, &mockCommandExecutorForShell{}, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-		_, err := shellTool.Run(context.Background(), req)
-		if err == nil {
-			t.Fatal("Expected error for nonexistent env file, got nil")
-		}
-		if !strings.Contains(err.Error(), ".env.missing") {
-			t.Errorf("Expected error to mention .env.missing, got: %v", err)
-		}
-	})
-
-	req := &ShellRequest{Command: []string{"env"}, EnvFiles: []string{"../../etc/passwd"}}
-	_, err := shellTool.Run(context.Background(), req)
-	if !errors.Is(err, path.ErrOutsideWorkspace) {
-		t.Errorf("Expected ErrOutsideWorkspace error, got %v", err)
-	}
+	// Clean up: wait for command to finish
+	_, _ = inv.Execute(ctx)
 }
 
-func TestShellTool_Run_OutsideWorkspace(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
+func TestShellTool_Display_Wait(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cwd, _ := os.Getwd()
+	realPR := &realPathResolver{baseDir: cwd}
+	realCE := executor.NewOSCommandExecutor(cfg)
 
-	shellTool := NewShellTool(mockFS, &mockCommandExecutorForShell{}, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-	req := &ShellRequest{Command: []string{"ls"}, WorkingDir: "../outside"}
-	_, err := shellTool.Run(context.Background(), req)
-	if !errors.Is(err, path.ErrOutsideWorkspace) {
-		t.Errorf("Expected ErrOutsideWorkspace error, got %v", err)
+	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
+
+	ctx := context.Background()
+	params := `{"command": ["sleep", "0.5"], "description": "wait"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	disp := inv.Display().(tool.ShellDisplay)
+
+	// Wait should block initially
+	timeout := time.After(100 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		disp.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("Wait should have blocked")
+	case <-timeout:
+		// expected to block
+	}
+
+	// Consume output in background to allow execution to proceed
+	go io.Copy(io.Discard, disp.Output)
+
+	// Execute should unblock Wait
+	_, err = inv.Execute(ctx)
+	require.NoError(t, err)
+
+	select {
+	case <-done:
+		// success - Wait was called from the goroutine or Execute completed
+	case <-time.After(1 * time.Second):
+		t.Fatal("Wait should have unblocked after Execute")
 	}
 }
 
-func TestShellTool_Run_NonZeroExit(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
+func TestShellTool_Execute_Echo(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cwd, _ := os.Getwd()
+	realPR := &realPathResolver{baseDir: cwd}
+	realCE := executor.NewOSCommandExecutor(cfg)
 
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		return &executor.Result{Stderr: "error output", ExitCode: 1}, newMockExitError(1)
-	}
+	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
 
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
+	ctx := context.Background()
+	params := `{"command": ["echo", "test_output"], "description": "test"}`
 
-	req := &ShellRequest{Command: []string{"false"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if resp.ExitCode == 0 {
-		t.Error("Expected non-zero exit code")
-	}
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Stream reader check
+	disp := inv.Display().(tool.ShellDisplay)
+
+	// Start a goroutine to read streaming output
+	var streamContent []byte
+	done := make(chan struct{})
+	go func() {
+		streamContent, _ = io.ReadAll(disp.Output)
+		close(done)
+	}()
+
+	output, err := inv.Execute(ctx)
+	require.NoError(t, err)
+
+	<-done // Wait for stream to finish
+
+	expected := "test_output"
+	// Check streaming output
+	assert.Contains(t, string(streamContent), expected)
+
+	// Check returned output
+	assert.Contains(t, output, expected)
+	assert.Contains(t, output, "(Exit code: 0)")
 }
 
-func TestShellTool_Run_CommandInjection(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
+func TestShellTool_Execute_Failure(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cwd, _ := os.Getwd()
+	realPR := &realPathResolver{baseDir: cwd}
+	realCE := executor.NewOSCommandExecutor(cfg)
 
-	var capturedCommand []string
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		capturedCommand = command
-		return &executor.Result{Stdout: "", ExitCode: 0}, nil
-	}
+	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
 
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
+	ctx := context.Background()
+	params := `{"command": ["ls", "non_existent_file_xyz"], "description": "fail"}`
 
-	req := &ShellRequest{Command: []string{"echo", "hello; rm -rf /"}}
-	_, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
 
-	if len(capturedCommand) != 2 {
-		t.Errorf("Expected 2 command parts, got %d", len(capturedCommand))
-	}
-	if capturedCommand[1] != "hello; rm -rf /" {
-		t.Errorf("Expected literal argument, got %q", capturedCommand[1])
-	}
+	consumeOutput(inv) // Prevent deadlock
+
+	output, err := inv.Execute(ctx)
+	// Execute returns correct output string with exit code, error should be nil for command failure
+	require.NoError(t, err)
+	assert.Contains(t, output, "No such file") // Standard ls error
+	assert.Contains(t, output, "(Exit code:")
+	assert.NotContains(t, output, "(Exit code: 0)")
 }
 
-func TestShellTool_Run_Timeout(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
+func TestShellTool_Execute_Timeout(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cwd, _ := os.Getwd()
+	realPR := &realPathResolver{baseDir: cwd}
+	realCE := executor.NewOSCommandExecutor(cfg)
 
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		return nil, context.DeadlineExceeded
-	}
+	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
 
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
+	// Sleep for 2s, timeout 1s
+	ctx := context.Background()
+	params := `{"command": ["sleep", "2"], "timeout_seconds": 1, "description": "sleep"}`
 
-	req := &ShellRequest{Command: []string{"sleep", "10"}, TimeoutSeconds: 1}
-	_, err := shellTool.Run(context.Background(), req)
-	if err == nil {
-		t.Error("Expected timeout error, got nil")
-	}
-}
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
 
-func TestShellTool_Run_DockerCheck(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
+	consumeOutput(inv) // Prevent deadlock
 
-	factory := &mockCommandExecutorForShell{}
-	factory.runFunc = func(ctx context.Context, command []string, dir string, env []string) (*executor.Result, error) {
-		// Handle Docker check command
-		if len(command) >= 2 && command[0] == "docker" && command[1] == "info" {
-			return &executor.Result{Stdout: "", ExitCode: 0}, nil
-		}
-		return nil, errors.New("unexpected command in Run")
-	}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		if command[0] == "docker" && command[1] == "run" {
-			return &executor.Result{Stdout: "container running", ExitCode: 0}, nil
-		}
-		return nil, errors.New("unexpected command in RunWithTimeout")
-	}
+	start := time.Now()
+	output, err := inv.Execute(ctx)
+	elapsed := time.Since(start)
 
-	dockerConfig := DockerConfig{
-		CheckCommand: []string{"docker", "info"},
-	}
-
-	shellTool := NewShellTool(mockFS, factory, config.DefaultConfig(), dockerConfig, path.NewResolver("/workspace"))
-
-	req := &ShellRequest{Command: []string{"docker", "run", "hello"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if !strings.Contains(resp.Stdout, "container running") {
-		t.Errorf("Stdout = %q, want 'container running'", resp.Stdout)
-	}
-}
-
-func TestShellTool_Run_EnvInjection(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	var capturedEnv []string
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		capturedEnv = env
-		return &executor.Result{Stdout: "", ExitCode: 0}, nil
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"env"}, Env: map[string]string{"PATH": ""}}
-	_, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-
-	hasEmptyPath := slices.Contains(capturedEnv, "PATH=")
-	if !hasEmptyPath {
-		t.Error("Expected PATH= in environment (empty PATH)")
-	}
-}
-
-func TestShellTool_Run_ContextCancellation(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		<-ctx.Done()
-		return &executor.Result{Stdout: "", ExitCode: -1}, ctx.Err()
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"sleep", "100"}, TimeoutSeconds: 10}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	// Test that Run handles context cancellation gracefully and returns the error
-	resp, err := shellTool.Run(ctx, req)
-	if err == nil {
-		t.Error("Expected context cancellation error, got nil")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Expected context.DeadlineExceeded, got %v", err)
-	}
-	if resp == nil {
-		t.Error("Expected response")
-	}
-	if resp.ExitCode != -1 {
-		t.Errorf("Expected ExitCode=-1 for cancelled context, got %d", resp.ExitCode)
-	}
-}
-
-func TestShellTool_Run_SpecificExitCode(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		return &executor.Result{Stdout: "", ExitCode: 42}, newMockExitError(42)
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"exit42"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if resp.ExitCode != 42 {
-		t.Errorf("ExitCode = %d, want 42", resp.ExitCode)
-	}
-}
-
-func TestShellTool_Run_DockerComposeNote(t *testing.T) {
-	mockFS := newMockFileSystemForShell()
-	mockFS.createDir("/workspace")
-	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-
-	factory := &mockCommandExecutorForShell{}
-	factory.runWithTimeoutFunc = func(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.Result, error) {
-		// Mock the up -d command
-		if slices.Contains(command, "up") && slices.Contains(command, "-d") {
-			return &executor.Result{Stdout: "Started containers\n", ExitCode: 0}, nil
-		}
-		return nil, fmt.Errorf("unexpected RunWithTimeout command: %v", command)
-	}
-	factory.runFunc = func(ctx context.Context, command []string, dir string, env []string) (*executor.Result, error) {
-		// Mock the check command
-		if slices.Contains(command, "info") {
-			return &executor.Result{Stdout: "ok", ExitCode: 0}, nil
-		}
-		// Mock the ps -q command
-		if slices.Contains(command, "ps") && slices.Contains(command, "-q") {
-			return &executor.Result{Stdout: "id1\nid2\n", ExitCode: 0}, nil
-		}
-		return nil, fmt.Errorf("unexpected Run command: %v", command)
-	}
-
-	shellTool := NewShellTool(mockFS, factory, cfg, DockerConfig{
-		CheckCommand: []string{"docker", "info"},
-	}, path.NewResolver(workspaceRoot))
-
-	req := &ShellRequest{Command: []string{"docker", "compose", "up", "-d"}}
-	resp, err := shellTool.Run(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-
-	expectedNote := "Started 2 Docker containers"
-	if resp.Note != expectedNote {
-		t.Errorf("Note = %q, want %q", resp.Note, expectedNote)
-	}
+	assert.ErrorIs(t, err, executor.ErrTimeout)
+	assert.Contains(t, output, "(Command timed out)")
+	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(900))
 }

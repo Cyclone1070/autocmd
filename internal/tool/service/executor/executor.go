@@ -14,11 +14,34 @@ import (
 )
 
 // Result represents the outcome of a command execution.
+// For RunStreaming, Stdout contains combined stdout/stderr output and Stderr is empty.
 type Result struct {
 	Stdout    string
 	Stderr    string
 	ExitCode  int
 	Truncated bool
+}
+
+// StreamingCmd represents a running command with real-time output streaming.
+// Output provides a combined stdout/stderr stream for UI consumption.
+// Wait blocks until the command completes and returns the final result.
+// Wait is safe to call multiple times; subsequent calls return the cached result.
+type StreamingCmd struct {
+	Output io.Reader
+
+	once   sync.Once
+	result *Result
+	err    error
+	wait   func() (*Result, error)
+}
+
+// Wait blocks until the command completes and returns the result.
+// Safe to call multiple times; subsequent calls return the cached result.
+func (s *StreamingCmd) Wait() (*Result, error) {
+	s.once.Do(func() {
+		s.result, s.err = s.wait()
+	})
+	return s.result, s.err
 }
 
 // OSCommandExecutor implements command execution using os/exec for real system commands.
@@ -159,6 +182,140 @@ func (f *OSCommandExecutor) RunWithTimeout(ctx context.Context, command []string
 	}
 
 	return res, nil
+}
+
+// RunStreaming executes a command with streaming output for real-time UI display.
+// It returns immediately after starting the command. The caller reads from Output
+// and calls Wait() to get the final result when done.
+// The timeout is measured from when the command starts, not when Wait() is called.
+func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*StreamingCmd, error) {
+	if len(command) == 0 {
+		return nil, os.ErrInvalid
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.Stdin = nil
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("command %s failed to start: %w", command[0], err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("command %s failed to start: %w", command[0], err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("command %s failed to start: %w", command[0], err)
+	}
+
+	// Start timeout timer immediately after command starts
+	timeoutCh := time.After(timeout)
+
+	// Combined output pipe for streaming to UI
+	pr, pw := io.Pipe()
+
+	// Buffer to capture output for final Result
+	maxBytes := int(f.config.Tools.DefaultMaxCommandOutputSize)
+	collector := newCollector(maxBytes, 8000)
+	var collectorMu sync.Mutex
+
+	// Copy stdout and stderr to both the pipe (UI) and collector (Result)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	copyStream := func(src io.Reader) {
+		defer wg.Done()
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := src.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				pw.Write(chunk)
+				collectorMu.Lock()
+				collector.Write(chunk)
+				collectorMu.Unlock()
+			}
+			if readErr != nil {
+				break
+			}
+		}
+	}
+
+	go copyStream(stdoutPipe)
+	go copyStream(stderrPipe)
+
+	// Goroutine to close pipe when streams finish
+	go func() {
+		wg.Wait()
+		pw.Close()
+	}()
+
+	// Wait function captures the result (uses timeoutCh started at command start)
+	waitFn := func() (*Result, error) {
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		var execErr error
+		select {
+		case err := <-done:
+			execErr = err
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			<-done // Wait for process to actually exit
+			execErr = ctx.Err()
+		case <-timeoutCh:
+			if cmd.Process != nil {
+				_ = cmd.Process.Signal(os.Interrupt)
+				select {
+				case <-done:
+				case <-time.After(time.Duration(f.config.Tools.DockerGracefulShutdownMs) * time.Millisecond):
+					_ = cmd.Process.Kill()
+					<-done
+				}
+			}
+			execErr = ErrTimeout
+		}
+
+		// Wait for output collection to finish
+		wg.Wait()
+
+		collectorMu.Lock()
+		output := collector.String()
+		truncated := collector.Truncated()
+		collectorMu.Unlock()
+
+		exitCode := f.getExitCode(execErr)
+		if errors.Is(execErr, ErrTimeout) {
+			exitCode = -1
+		}
+
+		res := &Result{
+			Stdout:    output,
+			Stderr:    "",
+			ExitCode:  exitCode,
+			Truncated: truncated,
+		}
+
+		if errors.Is(execErr, ErrTimeout) ||
+			errors.Is(execErr, context.Canceled) ||
+			errors.Is(execErr, context.DeadlineExceeded) {
+			return res, execErr
+		}
+
+		return res, nil
+	}
+
+	return &StreamingCmd{
+		Output: pr,
+		wait:   waitFn,
+	}, nil
 }
 
 func (f *OSCommandExecutor) collectOutput(stdout, stderr io.Reader) (string, string, bool) {

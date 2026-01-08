@@ -69,10 +69,11 @@ func (DiffDisplay) isToolDisplay() {}
 
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
-	Command    string
-	WorkingDir string
-	Output     io.Reader // Stream stdout/stderr from here
-	Wait       func()    // Call after reading Output to wait for execution to finish.
+	Command     string
+	Description string // Added for display
+	WorkingDir  string
+	Output      io.Reader // Stream stdout/stderr
+	Wait        func()    // Wait for execution to finish
 }
 
 func (ShellDisplay) isToolDisplay() {}

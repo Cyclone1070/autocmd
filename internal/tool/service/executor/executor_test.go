@@ -124,6 +124,143 @@ func TestRunWithTimeout(t *testing.T) {
 	})
 }
 
+func TestRunStreaming(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.DockerGracefulShutdownMs = 100
+	exec := NewOSCommandExecutor(cfg)
+
+	t.Run("SimpleCommand", func(t *testing.T) {
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil, 5*time.Second)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Read streaming output
+		buf := make([]byte, 1024)
+		n, _ := streamCmd.Output.Read(buf)
+		streamOutput := string(buf[:n])
+
+		// Wait for result
+		res, err := streamCmd.Wait()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(streamOutput, "hello") {
+			t.Errorf("expected stream to contain 'hello', got %q", streamOutput)
+		}
+		if !strings.Contains(res.Stdout, "hello") {
+			t.Errorf("expected stdout to contain 'hello', got %q", res.Stdout)
+		}
+		if res.ExitCode != 0 {
+			t.Errorf("expected exit code 0, got %d", res.ExitCode)
+		}
+	})
+
+	t.Run("EmptyCommand", func(t *testing.T) {
+		_, err := exec.RunStreaming(context.Background(), []string{}, "", nil, 1*time.Second)
+		if err != os.ErrInvalid {
+			t.Errorf("expected os.ErrInvalid, got %v", err)
+		}
+	})
+
+	t.Run("Timeout", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping timeout test on Windows")
+		}
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 100*time.Millisecond)
+		if err != nil {
+			t.Fatalf("unexpected error starting: %v", err)
+		}
+
+		// Drain output to prevent blocking
+		go func() {
+			buf := make([]byte, 1024)
+			for {
+				_, err := streamCmd.Output.Read(buf)
+				if err != nil {
+					break
+				}
+			}
+		}()
+
+		res, err := streamCmd.Wait()
+		if err != ErrTimeout {
+			t.Errorf("expected ErrTimeout, got %v", err)
+		}
+		if res.ExitCode != -1 {
+			t.Errorf("expected exit code -1 for timeout, got %d", res.ExitCode)
+		}
+	})
+
+	t.Run("MultipleWaitCalls", func(t *testing.T) {
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "once"}, "", nil, 5*time.Second)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Drain output
+		go func() {
+			buf := make([]byte, 1024)
+			for {
+				_, err := streamCmd.Output.Read(buf)
+				if err != nil {
+					break
+				}
+			}
+		}()
+
+		// Call Wait multiple times
+		res1, err1 := streamCmd.Wait()
+		res2, err2 := streamCmd.Wait()
+		res3, err3 := streamCmd.Wait()
+
+		// All should return the same result
+		if res1 != res2 || res2 != res3 {
+			t.Error("multiple Wait() calls should return same result pointer")
+		}
+		if err1 != err2 || err2 != err3 {
+			t.Error("multiple Wait() calls should return same error")
+		}
+		if !strings.Contains(res1.Stdout, "once") {
+			t.Errorf("expected stdout to contain 'once', got %q", res1.Stdout)
+		}
+	})
+
+	t.Run("TimeoutStartsAtCommandStart", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping timeout test on Windows")
+		}
+		// Command runs for 200ms, timeout is 100ms
+		// But we delay calling Wait() by 150ms
+		// If timeout started at Wait(), the command would complete
+		// If timeout started at command start, it should timeout
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "0.2"}, "", nil, 100*time.Millisecond)
+		if err != nil {
+			t.Fatalf("unexpected error starting: %v", err)
+		}
+
+		// Drain output
+		go func() {
+			buf := make([]byte, 1024)
+			for {
+				_, err := streamCmd.Output.Read(buf)
+				if err != nil {
+					break
+				}
+			}
+		}()
+
+		// Delay before calling Wait
+		time.Sleep(50 * time.Millisecond)
+
+		_, err = streamCmd.Wait()
+		if err != ErrTimeout {
+			t.Errorf("expected ErrTimeout (timeout should start at command start), got %v", err)
+		}
+	})
+}
+
 func TestCollector(t *testing.T) {
 	t.Run("UnderLimit", func(t *testing.T) {
 		c := newCollector(10, 5)

@@ -2,12 +2,14 @@ package shell
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 )
 
@@ -16,7 +18,6 @@ type ShellTool struct {
 	envFileOps      envFileOps
 	commandExecutor commandExecutor
 	config          *config.Config
-	dockerConfig    DockerConfig
 	pathResolver    pathResolver
 }
 
@@ -25,9 +26,11 @@ func NewShellTool(
 	envFileOps envFileOps,
 	commandExecutor commandExecutor,
 	cfg *config.Config,
-	dockerConfig DockerConfig,
 	pathResolver pathResolver,
 ) *ShellTool {
+	if envFileOps == nil {
+		panic("envFileOps is required")
+	}
 	if commandExecutor == nil {
 		panic("commandExecutor is required")
 	}
@@ -41,24 +44,84 @@ func NewShellTool(
 		envFileOps:      envFileOps,
 		commandExecutor: commandExecutor,
 		config:          cfg,
-		dockerConfig:    dockerConfig,
 		pathResolver:    pathResolver,
 	}
 }
 
-// Run executes a shell command with Docker readiness checks,
-// environment variable support, timeout handling, and output collection.
-// NOTE: This tool does NOT enforce policy - the caller is responsible for policy checks.
-func (t *ShellTool) Run(ctx context.Context, req *ShellRequest) (*ShellResponse, error) {
-	if err := req.Validate(t.config); err != nil {
-		return nil, err
+// Name returns the tool's identifier.
+func (t *ShellTool) Name() string {
+	return "shell"
+}
+
+// Declaration returns the tool's schema for the LLM.
+func (t *ShellTool) Declaration() tool.Declaration {
+	return tool.Declaration{
+		Name:        "shell",
+		Description: "Execute a shell command on the local machine.",
+		Parameters: &tool.Schema{
+			Type: tool.TypeObject,
+			Properties: map[string]*tool.Schema{
+				"command": {
+					Type:        tool.TypeArray,
+					Description: "The command to execute, including arguments.",
+					Items: &tool.Schema{
+						Type: tool.TypeString,
+					},
+				},
+				"working_dir": {
+					Type:        tool.TypeString,
+					Description: "Working directory for execution. Defaults to workspace root.",
+				},
+				"timeout_seconds": {
+					Type:        tool.TypeInteger,
+					Description: "Timeout in seconds. Defaults to configuration.",
+				},
+				"env": {
+					Type:        tool.TypeObject,
+					Description: "Environment variables to set.",
+				},
+				"env_files": {
+					Type:        tool.TypeArray,
+					Description: "Paths to .env files to load.",
+					Items: &tool.Schema{
+						Type: tool.TypeString,
+					},
+				},
+				"description": {
+					Type:        tool.TypeString,
+					Description: "Description of the command for display purposes.",
+				},
+			},
+			Required: []string{"command", "description"},
+		},
+	}
+}
+
+// Prepare validates the request, resolves paths, and starts the streaming command.
+func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+	// 1. Parse Parameters
+	var req struct {
+		Command        []string          `json:"command"`
+		WorkingDir     string            `json:"working_dir"`
+		TimeoutSeconds int               `json:"timeout_seconds"`
+		Env            map[string]string `json:"env"`
+		EnvFiles       []string          `json:"env_files"`
+		Description    string            `json:"description"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
+	// 2. Validate
+	if len(req.Command) == 0 {
+		return nil, fmt.Errorf("command is required")
+	}
+
+	// 3. Resolve Working Directory
 	workingDir := req.WorkingDir
 	if workingDir == "" {
 		workingDir = "."
 	}
-
 	wdAbs, err := t.pathResolver.Abs(workingDir)
 	if err != nil {
 		return nil, err
@@ -68,74 +131,93 @@ func (t *ShellTool) Run(ctx context.Context, req *ShellRequest) (*ShellResponse,
 		return nil, err
 	}
 
-	if IsDockerCommand(req.Command) {
-		retryAttempts := t.config.Tools.DockerRetryAttempts
-		retryIntervalMs := t.config.Tools.DockerRetryIntervalMs
-
-		if err := EnsureDockerReady(ctx, t.commandExecutor, t.dockerConfig, retryAttempts, retryIntervalMs); err != nil {
-			return nil, err
-		}
-	}
-
+	// 4. Prepare Environment
 	env := os.Environ()
-
 	for _, envFile := range req.EnvFiles {
 		envFilePath, err := t.pathResolver.Abs(envFile)
 		if err != nil {
 			return nil, err
 		}
-
 		envVars, err := ParseEnvFile(t.envFileOps, envFilePath)
 		if err != nil {
 			return nil, err
 		}
-
-		// EnvFiles override system env
 		for k, v := range envVars {
 			env = append(env, k+"="+v)
 		}
 	}
-
-	// Request.Env overrides everything
 	for k, v := range req.Env {
 		env = append(env, k+"="+v)
 	}
 
+	// 5. Calculate Timeout
 	timeout := time.Duration(req.TimeoutSeconds) * time.Second
-
-	result, execErr := t.commandExecutor.RunWithTimeout(ctx, req.Command, wdAbs, env, timeout)
-	if result == nil {
-		result = &executor.Result{ExitCode: -1}
+	if req.TimeoutSeconds <= 0 {
+		timeout = time.Duration(t.config.Tools.DefaultShellTimeout) * time.Second
 	}
 
-	resp := &ShellResponse{
-		Stdout:     result.Stdout,
-		Stderr:     result.Stderr,
-		WorkingDir: wdRel,
-		ExitCode:   result.ExitCode,
-		Truncated:  result.Truncated,
+	// 6. Start Streaming Command via Executor
+	streamCmd, err := t.commandExecutor.RunStreaming(ctx, req.Command, wdAbs, env, timeout)
+	if err != nil {
+		return nil, err
 	}
 
-	if execErr != nil {
-		if errors.Is(execErr, executor.ErrTimeout) {
-			return resp, execErr
+	return &shellInvocation{
+		streamCmd:   streamCmd,
+		workingDir:  wdRel,
+		commandStr:  fmt.Sprintf("%v", req.Command),
+		description: req.Description,
+	}, nil
+}
+
+type shellInvocation struct {
+	streamCmd   *executor.StreamingCmd
+	workingDir  string
+	commandStr  string
+	description string
+}
+
+func (i *shellInvocation) Display() tool.ToolDisplay {
+	return tool.ShellDisplay{
+		Command:     i.commandStr,
+		Description: i.description,
+		WorkingDir:  i.workingDir,
+		Output:      i.streamCmd.Output,
+		Wait: func() {
+			// Block until command completes by calling Wait (result discarded here)
+			_, _ = i.streamCmd.Wait()
+		},
+	}
+}
+
+func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	// Wait for command to complete and get result
+	result, err := i.streamCmd.Wait()
+
+	// Handle infrastructure errors
+	if err != nil {
+		if errors.Is(err, executor.ErrTimeout) {
+			return result.Stdout + "\n(Command timed out)", executor.ErrTimeout
 		}
-		// Check for context cancellation
-		if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
-			return resp, execErr
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", err
 		}
-		// Command ran but failed - we already have the exit code in resp
-		return resp, nil
+		return fmt.Sprintf("Execution error: %v", err), err
 	}
 
-	if IsDockerComposeUpDetached(req.Command) {
-		ids, err := CollectComposeContainers(ctx, t.commandExecutor, wdAbs)
-		if err == nil {
-			resp.Note = FormatContainerStartedNote(ids)
-		} else {
-			resp.Note = fmt.Sprintf("Warning: Could not list started containers: %v", err)
-		}
+	// Format output
+	output := result.Stdout
+	exitCode := result.ExitCode
+
+	// Add truncation note if applicable
+	var truncationNote string
+	if result.Truncated {
+		truncationNote = "\n(Output truncated)"
 	}
 
-	return resp, nil
+	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), nil
 }

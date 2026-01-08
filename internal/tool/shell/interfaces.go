@@ -19,6 +19,5 @@ type pathResolver interface {
 
 // commandExecutor defines the interface for executing shell commands.
 type commandExecutor interface {
-	Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error)
-	RunWithTimeout(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (*executor.Result, error)
+	RunStreaming(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (*executor.StreamingCmd, error)
 }

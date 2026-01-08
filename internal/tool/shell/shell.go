@@ -171,7 +171,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (tool.I
 }
 
 type shellInvocation struct {
-	streamCmd   streamingCommand
+	streamCmd   *executor.StreamingCmd
 	workingDir  string
 	commandStr  string
 	description string

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,50 +50,27 @@ type mockCommandExecutor struct {
 	mock.Mock
 }
 
-func (m *mockCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (streamingCommand, error) {
+func (m *mockCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*executor.StreamingCmd, error) {
 	args := m.Called(ctx, command, dir, env, timeout)
 	if res := args.Get(0); res != nil {
-		return res.(streamingCommand), args.Error(1)
+		return res.(*executor.StreamingCmd), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
 
-// mockStreamingCommand implements streamingCommand for testing
-type mockStreamingCommand struct {
-	output io.Reader
-	result *executor.Result
-	err    error
-}
-
-func (m *mockStreamingCommand) Output() io.Reader {
-	return m.output
-}
-
-func (m *mockStreamingCommand) Wait() (*executor.Result, error) {
-	return m.result, m.err
-}
-
-// newMockStreamingCmd creates a mock streaming command for testing
-func newMockStreamingCmd(output string, result *executor.Result, err error) *mockStreamingCommand {
+// newTestStreamingCmd creates a real StreamingCmd for testing using executor's constructor
+func newTestStreamingCmd(output string, result *executor.Result, waitErr error) *executor.StreamingCmd {
 	pr, pw := io.Pipe()
+
+	// Write output in background
 	go func() {
 		pw.Write([]byte(output))
 		pw.Close()
 	}()
-	return &mockStreamingCommand{
-		output: pr,
-		result: result,
-		err:    err,
-	}
-}
 
-// executorAdapter wraps a real OSCommandExecutor to satisfy the commandExecutor interface
-type executorAdapter struct {
-	exec *executor.OSCommandExecutor
-}
-
-func (a *executorAdapter) RunStreaming(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (streamingCommand, error) {
-	return a.exec.RunStreaming(ctx, cmd, dir, env, timeout)
+	return executor.NewStreamingCmd(pr, func() (*executor.Result, error) {
+		return result, waitErr
+	})
 }
 
 // --- Tests ---
@@ -161,9 +139,9 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("hello", &executor.Result{Stdout: "hello", ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("hello", &executor.Result{Stdout: "hello", ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "description": "say hello"}`
@@ -198,9 +176,9 @@ func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
 	mockPR.On("Abs", "/custom/path").Return("/custom/path", nil)
 	mockPR.On("Rel", "/custom/path").Return("custom/path", nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"ls"}, "/custom/path", mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["ls"], "working_dir": "/custom/path", "description": "list"}`
@@ -230,7 +208,7 @@ func TestShellTool_Prepare_EnvFiles(t *testing.T) {
 	// Mock env file reading
 	mockEnv.On("ReadFile", "/workspace/.env").Return([]byte("KEY1=value1\nKEY2=value2"), nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.MatchedBy(func(env []string) bool {
 		hasKey1 := false
 		hasKey2 := false
@@ -243,7 +221,7 @@ func TestShellTool_Prepare_EnvFiles(t *testing.T) {
 			}
 		}
 		return hasKey1 && hasKey2
-	}), mock.Anything).Return(mockStreamCmd, nil)
+	}), mock.Anything).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo"], "env_files": [".env"], "description": "test"}`
@@ -267,7 +245,7 @@ func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.MatchedBy(func(env []string) bool {
 		for _, e := range env {
 			if e == "CUSTOM_VAR=custom_value" {
@@ -275,7 +253,7 @@ func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
 			}
 		}
 		return false
-	}), mock.Anything).Return(mockStreamCmd, nil)
+	}), mock.Anything).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo"], "env": {"CUSTOM_VAR": "custom_value"}, "description": "test"}`
@@ -298,9 +276,9 @@ func TestShellTool_Prepare_CustomTimeout(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"sleep"}, "/workspace", mock.Anything, 30*time.Second).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["sleep"], "timeout_seconds": 30, "description": "wait"}`
@@ -324,9 +302,9 @@ func TestShellTool_Prepare_DefaultTimeout(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.Anything, 60*time.Second).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo"], "description": "test"}`
@@ -413,9 +391,9 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("hello world", &executor.Result{Stdout: "hello world", ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("hello world", &executor.Result{Stdout: "hello world", ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "description": "test"}`
@@ -446,9 +424,9 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("error output", &executor.Result{Stdout: "error output", ExitCode: 1}, nil)
+	streamCmd := newTestStreamingCmd("error output", &executor.Result{Stdout: "error output", ExitCode: 1}, nil)
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["false"], "description": "fail"}`
@@ -476,9 +454,9 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("partial", &executor.Result{Stdout: "partial", ExitCode: -1}, executor.ErrTimeout)
+	streamCmd := newTestStreamingCmd("partial", &executor.Result{Stdout: "partial", ExitCode: -1}, executor.ErrTimeout)
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["sleep", "10"], "timeout_seconds": 1, "description": "sleep"}`
@@ -506,9 +484,9 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("", &executor.Result{}, context.Canceled)
+	streamCmd := newTestStreamingCmd("", &executor.Result{}, context.Canceled)
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	params := `{"command": ["sleep", "10"], "description": "sleep"}`
@@ -537,9 +515,9 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("output", &executor.Result{Stdout: "output", ExitCode: 0, Truncated: true}, nil)
+	streamCmd := newTestStreamingCmd("output", &executor.Result{Stdout: "output", ExitCode: 0, Truncated: true}, nil)
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["cat", "bigfile"], "description": "cat"}`
@@ -567,9 +545,9 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	mockStreamCmd := newMockStreamingCmd("streaming_test", &executor.Result{Stdout: "streaming_test", ExitCode: 0}, nil)
+	streamCmd := newTestStreamingCmd("streaming_test", &executor.Result{Stdout: "streaming_test", ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(mockStreamCmd, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo", "streaming"], "description": "stream"}`
@@ -605,22 +583,18 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	mockPR.On("Abs", ".").Return("/workspace", nil)
 	mockPR.On("Rel", "/workspace").Return(".", nil)
 
-	// Create a mock that blocks on Wait
+	// Create a blocking streaming command
 	pr, pw := io.Pipe()
 	waitCalled := make(chan struct{})
-	mockStreamCmd := &mockStreamingCommand{
-		output: pr,
-		result: &executor.Result{Stdout: "done", ExitCode: 0},
-	}
-	// Override Wait to block until channel is closed
-	originalWait := mockStreamCmd
-	blockingMock := &blockingMockStreamingCommand{
-		mockStreamingCommand: originalWait,
-		waitCh:               waitCalled,
-	}
+	var once sync.Once
+
+	streamCmd := executor.NewStreamingCmd(pr, func() (*executor.Result, error) {
+		<-waitCalled // Block until signaled
+		return &executor.Result{Stdout: "done", ExitCode: 0}, nil
+	})
 
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(blockingMock, nil)
+		Return(streamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["sleep", "1"], "description": "wait"}`
@@ -645,7 +619,7 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	}
 
 	// Signal that Wait can return
-	close(waitCalled)
+	once.Do(func() { close(waitCalled) })
 	pw.Close()
 
 	select {
@@ -654,15 +628,4 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Wait should have unblocked")
 	}
-}
-
-// blockingMockStreamingCommand wraps mockStreamingCommand and blocks on Wait
-type blockingMockStreamingCommand struct {
-	*mockStreamingCommand
-	waitCh <-chan struct{}
-}
-
-func (m *blockingMockStreamingCommand) Wait() (*executor.Result, error) {
-	<-m.waitCh
-	return m.mockStreamingCommand.result, m.mockStreamingCommand.err
 }

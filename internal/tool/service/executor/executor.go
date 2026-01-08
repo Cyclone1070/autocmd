@@ -49,6 +49,15 @@ func (s *StreamingCmd) Wait() (*Result, error) {
 	return s.result, s.err
 }
 
+// NewStreamingCmd creates a new StreamingCmd with the given output reader and wait function.
+// This is primarily used for testing; production code uses RunStreaming.
+func NewStreamingCmd(output io.Reader, wait func() (*Result, error)) *StreamingCmd {
+	return &StreamingCmd{
+		output: output,
+		wait:   wait,
+	}
+}
+
 // OSCommandExecutor implements command execution using os/exec for real system commands.
 type OSCommandExecutor struct {
 	config *config.Config

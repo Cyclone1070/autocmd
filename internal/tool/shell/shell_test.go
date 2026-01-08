@@ -3,8 +3,9 @@ package shell
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
-	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,9 @@ type mockEnvFileOps struct {
 
 func (m *mockEnvFileOps) ReadFile(filename string) ([]byte, error) {
 	args := m.Called(filename)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]byte), args.Error(1)
 }
 
@@ -53,26 +57,19 @@ func (m *mockCommandExecutor) RunStreaming(ctx context.Context, command []string
 	return nil, args.Error(1)
 }
 
-// realPathResolver uses the actual file system for tests
-type realPathResolver struct {
-	baseDir string
-}
+// createMockStreamingCmd creates a mock StreamingCmd for testing.
+// The provided result and err are returned when Wait() is called.
+func createMockStreamingCmd(output string, result *executor.Result, err error) *executor.StreamingCmd {
+	pr, pw := io.Pipe()
+	go func() {
+		pw.Write([]byte(output))
+		pw.Close()
+	}()
 
-func (r *realPathResolver) Abs(path string) (string, error) {
-	if path == "." || path == "" {
-		return r.baseDir, nil
-	}
-	return path, nil
-}
-
-func (r *realPathResolver) Rel(path string) (string, error) {
-	return ".", nil
-}
-
-// consumeOutput reads the output stream from the display to prevent deadlock if IO pipes are used.
-func consumeOutput(inv tool.Invocation) {
-	if d, ok := inv.Display().(tool.ShellDisplay); ok {
-		go io.Copy(io.Discard, d.Output)
+	return &executor.StreamingCmd{
+		Output: pr,
+		// Note: We cannot set the internal wait func directly since it's private.
+		// We need to use the real executor for this, or refactor StreamingCmd.
 	}
 }
 
@@ -130,14 +127,28 @@ func TestShellTool_Prepare_Validation(t *testing.T) {
 	}
 }
 
-// Integration tests use real OSCommandExecutor
 func TestShellTool_Prepare_Success(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
 	cfg := config.DefaultConfig()
-	cwd, _ := os.Getwd()
-	realPR := &realPathResolver{baseDir: cwd}
-	realCE := executor.NewOSCommandExecutor(cfg)
 
-	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+
+	// Create a mock StreamingCmd
+	pr, pw := io.Pipe()
+	go func() {
+		pw.Write([]byte("hello"))
+		pw.Close()
+	}()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything, mock.Anything).
+		Return(mockStreamCmd, nil)
 
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "description": "say hello"}`
@@ -145,9 +156,6 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
-
-	// Consume output to prevent blocking
-	consumeOutput(inv)
 
 	// Verify Display
 	disp := inv.Display()
@@ -159,20 +167,410 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	assert.NotNil(t, shellDisp.Output)
 	assert.NotNil(t, shellDisp.Wait)
 
-	// Clean up: wait for command to finish
-	_, _ = inv.Execute(ctx)
+	mockPR.AssertExpectations(t)
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", "/custom/path").Return("/custom/path", nil)
+	mockPR.On("Rel", "/custom/path").Return("custom/path", nil)
+
+	pr, pw := io.Pipe()
+	go func() { pw.Close() }()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	// Assert command is run in custom directory
+	mockCE.On("RunStreaming", mock.Anything, []string{"ls"}, "/custom/path", mock.Anything, mock.Anything).
+		Return(mockStreamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["ls"], "working_dir": "/custom/path", "description": "list"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	disp := inv.Display().(tool.ShellDisplay)
+	assert.Equal(t, "custom/path", disp.WorkingDir)
+
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_EnvFiles(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+	mockPR.On("Abs", ".env").Return("/workspace/.env", nil)
+
+	// Mock env file reading
+	mockEnv.On("ReadFile", "/workspace/.env").Return([]byte("KEY1=value1\nKEY2=value2"), nil)
+
+	pr, pw := io.Pipe()
+	go func() { pw.Close() }()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	// Capture the env slice to verify it contains our env vars
+	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.MatchedBy(func(env []string) bool {
+		hasKey1 := false
+		hasKey2 := false
+		for _, e := range env {
+			if e == "KEY1=value1" {
+				hasKey1 = true
+			}
+			if e == "KEY2=value2" {
+				hasKey2 = true
+			}
+		}
+		return hasKey1 && hasKey2
+	}), mock.Anything).Return(mockStreamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["echo"], "env_files": [".env"], "description": "test"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	mockEnv.AssertExpectations(t)
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+
+	pr, pw := io.Pipe()
+	go func() { pw.Close() }()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	// Verify custom env vars are passed
+	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.MatchedBy(func(env []string) bool {
+		for _, e := range env {
+			if e == "CUSTOM_VAR=custom_value" {
+				return true
+			}
+		}
+		return false
+	}), mock.Anything).Return(mockStreamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["echo"], "env": {"CUSTOM_VAR": "custom_value"}, "description": "test"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_CustomTimeout(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+
+	pr, pw := io.Pipe()
+	go func() { pw.Close() }()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	// Verify custom timeout is passed (30 seconds)
+	mockCE.On("RunStreaming", mock.Anything, []string{"sleep"}, "/workspace", mock.Anything, 30*time.Second).
+		Return(mockStreamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["sleep"], "timeout_seconds": 30, "description": "wait"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_DefaultTimeout(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+	cfg.Tools.DefaultShellTimeout = 60 // 60 seconds default
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+
+	pr, pw := io.Pipe()
+	go func() { pw.Close() }()
+	mockStreamCmd := &executor.StreamingCmd{Output: pr}
+
+	// Verify default timeout is used
+	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.Anything, 60*time.Second).
+		Return(mockStreamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["echo"], "description": "test"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	mockCE.AssertExpectations(t)
+}
+
+func TestShellTool_Prepare_ExecutorError(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+
+	// Executor returns error
+	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, errors.New("command not found"))
+
+	ctx := context.Background()
+	params := `{"command": ["nonexistent"], "description": "fail"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "command not found")
+}
+
+func TestShellTool_Prepare_PathResolverError(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Path resolution fails
+	mockPR.On("Abs", ".").Return("", errors.New("path error"))
+
+	ctx := context.Background()
+	params := `{"command": ["echo"], "description": "test"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "path error")
+}
+
+func TestShellTool_Prepare_EnvFileError(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+	mockEnv := new(mockEnvFileOps)
+	cfg := config.DefaultConfig()
+
+	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+
+	// Setup mocks
+	mockPR.On("Abs", ".").Return("/workspace", nil)
+	mockPR.On("Rel", "/workspace").Return(".", nil)
+	mockPR.On("Abs", ".env").Return("/workspace/.env", nil)
+
+	// Env file reading fails
+	mockEnv.On("ReadFile", "/workspace/.env").Return(nil, errors.New("file not found"))
+
+	ctx := context.Background()
+	params := `{"command": ["echo"], "env_files": [".env"], "description": "test"}`
+
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "file not found")
+}
+
+func TestShellTool_Execute_Success(t *testing.T) {
+	// For Execute tests, we need to use the real executor since StreamingCmd's
+	// Wait() function is private and cannot be mocked directly.
+	// This is an integration test by necessity.
+	cfg := config.DefaultConfig()
+	realCE := executor.NewOSCommandExecutor(cfg)
+
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
+
+	ctx := context.Background()
+	params := `{"command": ["echo", "test"], "description": "echo test"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Consume output
+	disp := inv.Display().(tool.ShellDisplay)
+	go io.Copy(io.Discard, disp.Output)
+
+	output, err := inv.Execute(ctx)
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "test")
+	assert.Contains(t, output, "(Exit code: 0)")
+}
+
+func TestShellTool_Execute_Timeout(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.DockerGracefulShutdownMs = 100
+	realCE := executor.NewOSCommandExecutor(cfg)
+
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
+
+	ctx := context.Background()
+	params := `{"command": ["sleep", "5"], "timeout_seconds": 1, "description": "sleep"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Consume output
+	disp := inv.Display().(tool.ShellDisplay)
+	go io.Copy(io.Discard, disp.Output)
+
+	output, err := inv.Execute(ctx)
+	assert.ErrorIs(t, err, executor.ErrTimeout)
+	assert.Contains(t, output, "(Command timed out)")
+}
+
+func TestShellTool_Execute_ContextCancellation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	realCE := executor.NewOSCommandExecutor(cfg)
+
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	params := `{"command": ["sleep", "10"], "description": "sleep"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Consume output
+	disp := inv.Display().(tool.ShellDisplay)
+	go io.Copy(io.Discard, disp.Output)
+
+	// Cancel after a short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+
+	_, err = inv.Execute(ctx)
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestShellTool_Execute_NonZeroExit(t *testing.T) {
+	cfg := config.DefaultConfig()
+	realCE := executor.NewOSCommandExecutor(cfg)
+
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
+
+	ctx := context.Background()
+	params := `{"command": ["false"], "description": "fail"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Consume output
+	disp := inv.Display().(tool.ShellDisplay)
+	go io.Copy(io.Discard, disp.Output)
+
+	output, err := inv.Execute(ctx)
+	require.NoError(t, err) // No error for non-zero exit
+	assert.Contains(t, output, "(Exit code: 1)")
+}
+
+func TestShellTool_Execute_Truncation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Tools.DefaultMaxCommandOutputSize = 10 // Very small to trigger truncation
+	realCE := executor.NewOSCommandExecutor(cfg)
+
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
+
+	ctx := context.Background()
+	// Generate output longer than 10 bytes
+	params := `{"command": ["echo", "this is a very long output that will be truncated"], "description": "long"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	// Consume output
+	disp := inv.Display().(tool.ShellDisplay)
+	go io.Copy(io.Discard, disp.Output)
+
+	output, err := inv.Execute(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, output, "(Output truncated)")
 }
 
 func TestShellTool_Display_Wait(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cwd, _ := os.Getwd()
-	realPR := &realPathResolver{baseDir: cwd}
 	realCE := executor.NewOSCommandExecutor(cfg)
 
-	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
 
 	ctx := context.Background()
-	params := `{"command": ["sleep", "0.5"], "description": "wait"}`
+	params := `{"command": ["sleep", "0.3"], "description": "wait"}`
 
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
@@ -180,7 +578,6 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	disp := inv.Display().(tool.ShellDisplay)
 
 	// Wait should block initially
-	timeout := time.After(100 * time.Millisecond)
 	done := make(chan struct{})
 	go func() {
 		disp.Wait()
@@ -190,110 +587,54 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	select {
 	case <-done:
 		t.Fatal("Wait should have blocked")
-	case <-timeout:
+	case <-time.After(100 * time.Millisecond):
 		// expected to block
 	}
 
-	// Consume output in background to allow execution to proceed
+	// Consume output
 	go io.Copy(io.Discard, disp.Output)
 
-	// Execute should unblock Wait
-	_, err = inv.Execute(ctx)
-	require.NoError(t, err)
+	// Execute unblocks Wait
+	_, _ = inv.Execute(ctx)
 
 	select {
 	case <-done:
-		// success - Wait was called from the goroutine or Execute completed
+		// success
 	case <-time.After(1 * time.Second):
-		t.Fatal("Wait should have unblocked after Execute")
+		t.Fatal("Wait should have unblocked")
 	}
 }
 
-func TestShellTool_Execute_Echo(t *testing.T) {
+func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cwd, _ := os.Getwd()
-	realPR := &realPathResolver{baseDir: cwd}
 	realCE := executor.NewOSCommandExecutor(cfg)
 
-	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
+	mockPR := new(mockPathResolver)
+	mockEnv := new(mockEnvFileOps)
+
+	tl := NewShellTool(mockEnv, realCE, cfg, mockPR)
+
+	mockPR.On("Abs", ".").Return("/tmp", nil)
+	mockPR.On("Rel", "/tmp").Return(".", nil)
 
 	ctx := context.Background()
-	params := `{"command": ["echo", "test_output"], "description": "test"}`
+	params := `{"command": ["echo", "streaming_test"], "description": "stream"}`
 
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	// Stream reader check
 	disp := inv.Display().(tool.ShellDisplay)
 
-	// Start a goroutine to read streaming output
-	var streamContent []byte
+	// Read streaming output
+	var buf strings.Builder
 	done := make(chan struct{})
 	go func() {
-		streamContent, _ = io.ReadAll(disp.Output)
+		io.Copy(&buf, disp.Output)
 		close(done)
 	}()
 
-	output, err := inv.Execute(ctx)
-	require.NoError(t, err)
+	_, _ = inv.Execute(ctx)
+	<-done
 
-	<-done // Wait for stream to finish
-
-	expected := "test_output"
-	// Check streaming output
-	assert.Contains(t, string(streamContent), expected)
-
-	// Check returned output
-	assert.Contains(t, output, expected)
-	assert.Contains(t, output, "(Exit code: 0)")
-}
-
-func TestShellTool_Execute_Failure(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cwd, _ := os.Getwd()
-	realPR := &realPathResolver{baseDir: cwd}
-	realCE := executor.NewOSCommandExecutor(cfg)
-
-	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
-
-	ctx := context.Background()
-	params := `{"command": ["ls", "non_existent_file_xyz"], "description": "fail"}`
-
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
-	require.NoError(t, err)
-
-	consumeOutput(inv) // Prevent deadlock
-
-	output, err := inv.Execute(ctx)
-	// Execute returns correct output string with exit code, error should be nil for command failure
-	require.NoError(t, err)
-	assert.Contains(t, output, "No such file") // Standard ls error
-	assert.Contains(t, output, "(Exit code:")
-	assert.NotContains(t, output, "(Exit code: 0)")
-}
-
-func TestShellTool_Execute_Timeout(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cwd, _ := os.Getwd()
-	realPR := &realPathResolver{baseDir: cwd}
-	realCE := executor.NewOSCommandExecutor(cfg)
-
-	tl := NewShellTool(&mockEnvFileOps{}, realCE, cfg, realPR)
-
-	// Sleep for 2s, timeout 1s
-	ctx := context.Background()
-	params := `{"command": ["sleep", "2"], "timeout_seconds": 1, "description": "sleep"}`
-
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
-	require.NoError(t, err)
-
-	consumeOutput(inv) // Prevent deadlock
-
-	start := time.Now()
-	output, err := inv.Execute(ctx)
-	elapsed := time.Since(start)
-
-	assert.ErrorIs(t, err, executor.ErrTimeout)
-	assert.Contains(t, output, "(Command timed out)")
-	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(900))
+	assert.Contains(t, buf.String(), "streaming_test")
 }

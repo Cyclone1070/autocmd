@@ -137,7 +137,7 @@ func TestRunStreaming(t *testing.T) {
 
 		// Read streaming output
 		buf := make([]byte, 1024)
-		n, _ := streamCmd.Output.Read(buf)
+		n, _ := streamCmd.Output().Read(buf)
 		streamOutput := string(buf[:n])
 
 		// Wait for result
@@ -177,7 +177,7 @@ func TestRunStreaming(t *testing.T) {
 		go func() {
 			buf := make([]byte, 1024)
 			for {
-				_, err := streamCmd.Output.Read(buf)
+				_, err := streamCmd.Output().Read(buf)
 				if err != nil {
 					break
 				}
@@ -203,7 +203,7 @@ func TestRunStreaming(t *testing.T) {
 		go func() {
 			buf := make([]byte, 1024)
 			for {
-				_, err := streamCmd.Output.Read(buf)
+				_, err := streamCmd.Output().Read(buf)
 				if err != nil {
 					break
 				}
@@ -244,7 +244,7 @@ func TestRunStreaming(t *testing.T) {
 		go func() {
 			buf := make([]byte, 1024)
 			for {
-				_, err := streamCmd.Output.Read(buf)
+				_, err := streamCmd.Output().Read(buf)
 				if err != nil {
 					break
 				}

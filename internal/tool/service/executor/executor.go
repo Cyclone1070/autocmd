@@ -23,16 +23,21 @@ type Result struct {
 }
 
 // StreamingCmd represents a running command with real-time output streaming.
-// Output provides a combined stdout/stderr stream for UI consumption.
-// Wait blocks until the command completes and returns the final result.
+// Use Output() to get the combined stdout/stderr stream for UI consumption.
+// Use Wait() to block until the command completes and get the final result.
 // Wait is safe to call multiple times; subsequent calls return the cached result.
 type StreamingCmd struct {
-	Output io.Reader
+	output io.Reader
 
 	once   sync.Once
 	result *Result
 	err    error
 	wait   func() (*Result, error)
+}
+
+// Output returns the combined stdout/stderr stream for real-time consumption.
+func (s *StreamingCmd) Output() io.Reader {
+	return s.output
 }
 
 // Wait blocks until the command completes and returns the result.
@@ -313,7 +318,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 	}
 
 	return &StreamingCmd{
-		Output: pr,
+		output: pr,
 		wait:   waitFn,
 	}, nil
 }

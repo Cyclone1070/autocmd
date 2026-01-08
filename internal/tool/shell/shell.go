@@ -171,7 +171,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (tool.I
 }
 
 type shellInvocation struct {
-	streamCmd   *executor.StreamingCmd
+	streamCmd   streamingCommand
 	workingDir  string
 	commandStr  string
 	description string
@@ -182,7 +182,7 @@ func (i *shellInvocation) Display() tool.ToolDisplay {
 		Command:     i.commandStr,
 		Description: i.description,
 		WorkingDir:  i.workingDir,
-		Output:      i.streamCmd.Output,
+		Output:      i.streamCmd.Output(),
 		Wait: func() {
 			// Block until command completes by calling Wait (result discarded here)
 			_, _ = i.streamCmd.Wait()

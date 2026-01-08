@@ -17,6 +17,9 @@ type OSFileSystem struct {
 
 // NewOSFileSystem creates a new OSFileSystem.
 func NewOSFileSystem(cfg *config.Config) *OSFileSystem {
+	if cfg == nil {
+		panic("cfg is required")
+	}
 	return &OSFileSystem{config: cfg}
 }
 

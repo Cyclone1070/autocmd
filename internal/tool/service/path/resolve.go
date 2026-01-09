@@ -62,7 +62,7 @@ func (r *Resolver) Abs(path string) (string, error) {
 
 	// Boundary check: must be the root itself or a child of the root
 	if !strings.HasPrefix(abs, r.workspaceRoot+"/") && abs != r.workspaceRoot {
-		return "", ErrOutsideWorkspace
+		return "", fmt.Errorf("path is outside workspace root: %s", path)
 	}
 
 	return abs, nil
@@ -78,7 +78,7 @@ func (r *Resolver) Rel(path string) (string, error) {
 	rel, err := filepath.Rel(r.workspaceRoot, abs)
 	if err != nil {
 		// This should theoretically not happen if Abs passed
-		return "", ErrOutsideWorkspace
+		return "", fmt.Errorf("path is outside workspace root: %s", path)
 	}
 
 	if rel == "." {

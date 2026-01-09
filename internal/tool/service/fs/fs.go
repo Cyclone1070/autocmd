@@ -109,11 +109,6 @@ func (fs *OSFileSystem) EnsureDirs(path string) error {
 	return os.MkdirAll(path, 0o755)
 }
 
-// Readlink reads the target of a symlink.
-func (fs *OSFileSystem) Readlink(path string) (string, error) {
-	return os.Readlink(path)
-}
-
 // UserHomeDir returns the current user's home directory.
 func (fs *OSFileSystem) UserHomeDir() (string, error) {
 	return os.UserHomeDir()

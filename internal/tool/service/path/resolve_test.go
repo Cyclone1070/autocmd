@@ -1,9 +1,9 @@
 package path
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,66 +12,75 @@ func TestAbs(t *testing.T) {
 	resolver := NewResolver(workspaceRoot)
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
-		err      error
+		name      string
+		input     string
+		expected  string
+		wantError bool
 	}{
 		{
-			name:     "relative path within workspace",
-			input:    "src/main.go",
-			expected: "/workspace/src/main.go",
-			err:      nil,
+			name:      "relative path within workspace",
+			input:     "src/main.go",
+			expected:  "/workspace/src/main.go",
+			wantError: false,
 		},
 		{
-			name:     "absolute path within workspace",
-			input:    "/workspace/src/main.go",
-			expected: "/workspace/src/main.go",
-			err:      nil,
+			name:      "absolute path within workspace",
+			input:     "/workspace/src/main.go",
+			expected:  "/workspace/src/main.go",
+			wantError: false,
 		},
 		{
-			name:     "path with dots within workspace",
-			input:    "src/../src/main.go",
-			expected: "/workspace/src/main.go",
-			err:      nil,
+			name:      "path with dots within workspace",
+			input:     "src/../src/main.go",
+			expected:  "/workspace/src/main.go",
+			wantError: false,
 		},
 		{
-			name:     "workspace root",
-			input:    ".",
-			expected: "/workspace",
-			err:      nil,
+			name:      "workspace root",
+			input:     ".",
+			expected:  "/workspace",
+			wantError: false,
 		},
 		{
-			name:     "absolute workspace root",
-			input:    "/workspace",
-			expected: "/workspace",
-			err:      nil,
+			name:      "absolute workspace root",
+			input:     "/workspace",
+			expected:  "/workspace",
+			wantError: false,
 		},
 		{
-			name:     "escape attempt via parent dots",
-			input:    "../../../etc/passwd",
-			expected: "",
-			err:      ErrOutsideWorkspace,
+			name:      "escape attempt via parent dots",
+			input:     "../../../etc/passwd",
+			expected:  "",
+			wantError: true,
 		},
 		{
-			name:     "absolute path outside workspace",
-			input:    "/etc/passwd",
-			expected: "",
-			err:      ErrOutsideWorkspace,
+			name:      "absolute path outside workspace",
+			input:     "/etc/passwd",
+			expected:  "",
+			wantError: true,
 		},
 		{
-			name:     "prefix match but not child",
-			input:    "/workspacefoo/bar",
-			expected: "",
-			err:      ErrOutsideWorkspace,
+			name:      "prefix match but not child",
+			input:     "/workspacefoo/bar",
+			expected:  "",
+			wantError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			abs, err := resolver.Abs(tt.input)
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("expected error %v, got %v", tt.err, err)
+			if tt.wantError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), "outside workspace") {
+					t.Fatalf("expected outside workspace error, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 			if abs != tt.expected {
 				t.Errorf("expected abs %q, got %q", tt.expected, abs)
@@ -85,42 +94,51 @@ func TestRel(t *testing.T) {
 	resolver := NewResolver(workspaceRoot)
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
-		err      error
+		name      string
+		input     string
+		expected  string
+		wantError bool
 	}{
 		{
-			name:     "relative path within workspace",
-			input:    "src/main.go",
-			expected: "src/main.go",
-			err:      nil,
+			name:      "relative path within workspace",
+			input:     "src/main.go",
+			expected:  "src/main.go",
+			wantError: false,
 		},
 		{
-			name:     "absolute path within workspace",
-			input:    "/workspace/src/main.go",
-			expected: "src/main.go",
-			err:      nil,
+			name:      "absolute path within workspace",
+			input:     "/workspace/src/main.go",
+			expected:  "src/main.go",
+			wantError: false,
 		},
 		{
-			name:     "workspace root",
-			input:    "/workspace",
-			expected: "",
-			err:      nil,
+			name:      "workspace root",
+			input:     "/workspace",
+			expected:  "",
+			wantError: false,
 		},
 		{
-			name:     "escape attempt",
-			input:    "/etc/passwd",
-			expected: "",
-			err:      ErrOutsideWorkspace,
+			name:      "escape attempt",
+			input:     "/etc/passwd",
+			expected:  "",
+			wantError: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rel, err := resolver.Rel(tt.input)
-			if !errors.Is(err, tt.err) {
-				t.Fatalf("expected error %v, got %v", tt.err, err)
+			if tt.wantError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), "outside workspace") {
+					t.Fatalf("expected outside workspace error, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
 			if rel != tt.expected {
 				t.Errorf("expected rel %q, got %q", tt.expected, rel)

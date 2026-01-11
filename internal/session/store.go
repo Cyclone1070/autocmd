@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -23,13 +24,17 @@ func NewStore(cfg *config.Config) *Store {
 	return &Store{storageDir: cfg.Session.StorageDir}
 }
 
-// NewSession creates a new session with a unique ID.
-func (st *Store) NewSession() (*Session, error) {
+// Create creates a new session with a unique ID.
+func (st *Store) Create() (*Session, error) {
 	if err := os.MkdirAll(st.storageDir, 0755); err != nil {
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
+	now := time.Now()
 	s := &Session{
 		id:         uuid.New().String(),
+		name:       "",
+		created:    now,
+		updated:    now,
 		messages:   []provider.Message{},
 		storageDir: st.storageDir,
 	}
@@ -39,62 +44,125 @@ func (st *Store) NewSession() (*Session, error) {
 	return s, nil
 }
 
-// LoadSession loads a session from disk by ID.
-func (st *Store) LoadSession(id string) (*Session, error) {
-	path := filepath.Join(st.storageDir, id+".json")
-	data, err := os.ReadFile(path)
+// Get loads a session from disk by ID (loads both info and messages).
+func (st *Store) Get(id string) (*Session, error) {
+	// Read info file
+	infoPath := filepath.Join(st.storageDir, id+".json")
+	infoData, err := os.ReadFile(infoPath)
 	if err != nil {
-		return nil, fmt.Errorf("read session file: %w", err)
+		return nil, fmt.Errorf("read session info: %w", err)
 	}
 
-	var dto sessionDTO
-	if err := json.Unmarshal(data, &dto); err != nil {
-		return nil, fmt.Errorf("unmarshal session: %w", err)
+	var infoDTO sessionInfoDTO
+	if err := json.Unmarshal(infoData, &infoDTO); err != nil {
+		return nil, fmt.Errorf("unmarshal session info: %w", err)
 	}
+
+	// Read messages file
+	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
+	var messages []provider.Message
+	messagesData, err := os.ReadFile(messagesPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read session messages: %w", err)
+		}
+		// Messages file doesn't exist yet, use empty slice
+		messages = []provider.Message{}
+	} else {
+		var messagesDTO sessionMessagesDTO
+		if err := json.Unmarshal(messagesData, &messagesDTO); err != nil {
+			return nil, fmt.Errorf("unmarshal session messages: %w", err)
+		}
+		messages = messagesDTO.Messages
+	}
+
 	return &Session{
-		id:         dto.ID,
-		messages:   dto.Messages,
+		id:         infoDTO.ID,
+		name:       infoDTO.Name,
+		created:    time.UnixMilli(infoDTO.Created),
+		updated:    time.UnixMilli(infoDTO.Updated),
+		messages:   messages,
 		storageDir: st.storageDir,
 	}, nil
 }
 
-// ListSessions returns all session IDs sorted by modification time (newest first).
-func (st *Store) ListSessions() ([]string, error) {
+// List returns all sessions sorted by update time (newest first).
+// Only loads info files, NOT messages (efficient for large sessions).
+func (st *Store) List() ([]*Session, error) {
 	entries, err := os.ReadDir(st.storageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []string{}, nil
+			return []*Session{}, nil
 		}
 		return nil, fmt.Errorf("read storage dir: %w", err)
 	}
 
-	type sessionInfo struct {
-		id    string
-		mtime time.Time
+	type sessionMeta struct {
+		session *Session
+		updated time.Time
 	}
-	var infos []sessionInfo
+	var metas []sessionMeta
 
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+		// Only look at .json files (not .messages.json)
+		if entry.IsDir() {
 			continue
 		}
-		info, err := entry.Info()
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".messages.json") {
+			continue
+		}
+
+		id := name[:len(name)-5] // strip .json
+
+		// Read only the info file
+		infoPath := filepath.Join(st.storageDir, name)
+		infoData, err := os.ReadFile(infoPath)
 		if err != nil {
-			continue
+			continue // skip corrupted
 		}
-		infos = append(infos, sessionInfo{
-			id:    entry.Name()[:len(entry.Name())-5], // strip .json
-			mtime: info.ModTime(),
-		})
+
+		var infoDTO sessionInfoDTO
+		if err := json.Unmarshal(infoData, &infoDTO); err != nil {
+			continue // skip corrupted
+		}
+
+		// Create session without loading messages
+		s := &Session{
+			id:         infoDTO.ID,
+			name:       infoDTO.Name,
+			created:    time.UnixMilli(infoDTO.Created),
+			updated:    time.UnixMilli(infoDTO.Updated),
+			messages:   nil, // NOT loaded
+			storageDir: st.storageDir,
+		}
+		metas = append(metas, sessionMeta{session: s, updated: s.updated})
+		_ = id // silence unused warning
 	}
 
-	sort.Slice(infos, func(i, j int) bool {
-		return infos[i].mtime.After(infos[j].mtime)
+	// Sort by updated time, newest first
+	sort.Slice(metas, func(i, j int) bool {
+		return metas[i].updated.After(metas[j].updated)
 	})
 
-	ids := make([]string, len(infos))
-	for i, info := range infos {
-		ids[i] = info.id
+	sessions := make([]*Session, len(metas))
+	for i, m := range metas {
+		sessions[i] = m.session
 	}
-	return ids, nil
+	return sessions, nil
+}
+
+// Delete removes a session from disk by ID (both info and messages files).
+func (st *Store) Delete(id string) error {
+	infoPath := filepath.Join(st.storageDir, id+".json")
+	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
+
+	// Remove both files, ignore "not exist" errors
+	if err := os.Remove(infoPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Remove(messagesPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

@@ -1,4 +1,4 @@
-package toolmanager
+package workflow
 
 import (
 	"context"
@@ -9,28 +9,23 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/provider"
 	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/Cyclone1070/iav/internal/workflow"
 )
 
-type ToolManager struct {
+type toolManager struct {
 	registry map[string]Tool
 }
 
-func NewToolManager(tools ...Tool) *ToolManager {
-	tm := &ToolManager{
+func newToolManager(tools []Tool) *toolManager {
+	tm := &toolManager{
 		registry: make(map[string]Tool),
 	}
 	for _, t := range tools {
-		tm.Register(t)
+		tm.registry[t.Name()] = t
 	}
 	return tm
 }
 
-func (m *ToolManager) Register(t Tool) {
-	m.registry[t.Name()] = t
-}
-
-func (m *ToolManager) Declarations() []tool.Declaration {
+func (m *toolManager) declarations() []tool.Declaration {
 	decls := make([]tool.Declaration, 0, len(m.registry))
 	for _, t := range m.registry {
 		decls = append(decls, t.Declaration())
@@ -41,10 +36,10 @@ func (m *ToolManager) Declarations() []tool.Declaration {
 	return decls
 }
 
-func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events chan<- workflow.Event) (provider.Message, error) {
+func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events chan<- Event) (provider.Message, error) {
 	t, ok := m.registry[tc.Function.Name]
 	if !ok {
-		decls := m.Declarations()
+		decls := m.declarations()
 		declsJSON, _ := json.MarshalIndent(decls, "", "  ")
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, declsJSON)
 
@@ -73,7 +68,7 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 	display := inv.Display()
 
 	if events != nil {
-		events <- workflow.ToolStartEvent{
+		events <- ToolStartEvent{
 			CallID:   tc.ID,
 			ToolName: tc.Function.Name,
 			Display:  display,
@@ -81,7 +76,8 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 	}
 
 	var streamWg sync.WaitGroup
-	// Special handling for shell streaming: start reading from the pipe BEFORE Execute()
+	defer streamWg.Wait() // Ensure goroutine cleanup on ALL paths (including error returns)
+
 	if sh, ok := display.(tool.ShellDisplay); ok && sh.Output != nil && events != nil {
 		streamWg.Add(1)
 		go func() {
@@ -90,7 +86,7 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 			for {
 				n, err := sh.Output.Read(buf)
 				if n > 0 {
-					events <- workflow.ToolStreamEvent{
+					events <- ToolStreamEvent{
 						CallID: tc.ID,
 						Chunk:  string(buf[:n]),
 					}
@@ -99,22 +95,19 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 					break
 				}
 			}
-			if sh.Wait != nil {
-				sh.Wait()
-			}
+			// NOTE: Do NOT call sh.Wait() here - Execute() already calls streamCmd.Wait()
+			// Calling it twice causes a race condition.
 		}()
 	}
 
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
-		// Per contract, tools only return errors for infrastructure issues (context cancellation)
 		if ctx.Err() != nil {
 			return provider.Message{}, err
 		}
 
-		// Execution failed (e.g. write failure), but loop continues safely
 		if events != nil {
-			events <- workflow.ToolEndEvent{
+			events <- ToolEndEvent{
 				CallID: tc.ID,
 				Error:  "Execution failed",
 			}
@@ -129,7 +122,7 @@ func (m *ToolManager) Execute(ctx context.Context, tc provider.ToolCall, events 
 
 	streamWg.Wait()
 	if events != nil {
-		events <- workflow.ToolEndEvent{
+		events <- ToolEndEvent{
 			CallID: tc.ID,
 		}
 	}

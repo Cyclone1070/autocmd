@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/search"
@@ -14,7 +15,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
-	"github.com/Cyclone1070/iav/internal/workflow/toolmanager"
+	"github.com/Cyclone1070/iav/internal/workflow"
 )
 
 func main() {
@@ -48,7 +49,7 @@ func main() {
 	readTodosTool := todo.NewReadTodosTool(todoStore)
 	writeTodosTool := todo.NewWriteTodosTool(todoStore)
 
-	tm := toolmanager.NewToolManager(
+	tools := []workflow.Tool{
 		listDirTool,
 		readFileTool,
 		editFileTool,
@@ -58,9 +59,21 @@ func main() {
 		shellTool,
 		readTodosTool,
 		writeTodosTool,
-	)
+	}
 
-	_ = tm
+	// Create dependencies
+	store := session.NewStore(cfg)
+	events := make(chan workflow.Event, 100)
+
+	// TODO: Provider implementation is deferred.
+	// Once implemented, uncomment the following:
+	// provider := google.NewClient(os.Getenv("GEMINI_API_KEY"))
+	// wf := workflow.NewWorkflow(provider, store, cfg, events, tools)
+	// _ = wf
+
+	_ = tools
+	_ = store
+	_ = events
 
 	log.Println("All tools wired successfully!")
 }

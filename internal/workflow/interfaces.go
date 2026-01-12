@@ -19,7 +19,8 @@ type llmProvider interface {
 type sessionStore interface {
 	Create() (*session.Session, error)
 	Get(id string) (*session.Session, error)
-	List() ([]*session.Session, error)
+	Save(s *session.Session) error
+	List() ([]session.SessionSummary, error)
 	Delete(id string) error
 }
 

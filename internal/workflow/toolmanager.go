@@ -76,7 +76,9 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 	}
 
 	var streamWg sync.WaitGroup
-	defer streamWg.Wait() // Ensure goroutine cleanup on ALL paths (including error returns)
+	// Defer ensures goroutine cleanup on ALL paths (including early error returns).
+	// The explicit Wait() below ensures streaming completes before ToolEndEvent.
+	defer streamWg.Wait()
 
 	if sh, ok := display.(tool.ShellDisplay); ok && sh.Output != nil && events != nil {
 		streamWg.Add(1)
@@ -120,7 +122,9 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 		}, nil
 	}
 
+	// Wait for streaming goroutine to finish reading all output
 	streamWg.Wait()
+
 	if events != nil {
 		events <- ToolEndEvent{
 			CallID: tc.ID,

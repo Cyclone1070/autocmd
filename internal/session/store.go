@@ -10,11 +10,36 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/provider"
 	"github.com/google/uuid"
 )
 
-// Store manages session creation, loading, and listing.
+// sessionInfoDTO is used for the .json file (metadata only).
+type sessionInfoDTO struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	MessageCount int    `json:"messageCount"`
+	Created      int64  `json:"created"`
+	Updated      int64  `json:"updated"`
+}
+
+// sessionMessagesDTO is used for the .messages.json file.
+type sessionMessagesDTO struct {
+	Messages []provider.Message `json:"messages"`
+}
+
+// SessionSummary contains metadata about a session without messages.
+// Returned by List() for efficient browsing without loading full sessions.
+type SessionSummary struct {
+	ID           string
+	Name         string
+	MessageCount int
+	Created      time.Time
+	Updated      time.Time
+}
+
+// Store manages session creation, loading, saving, and listing.
 type Store struct {
 	storageDir string
 }
@@ -24,21 +49,20 @@ func NewStore(cfg *config.Config) *Store {
 	return &Store{storageDir: cfg.Session.StorageDir}
 }
 
-// Create creates a new session with a unique ID.
+// Create creates a new session with a unique ID and saves it.
 func (st *Store) Create() (*Session, error) {
 	if err := os.MkdirAll(st.storageDir, 0755); err != nil {
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
 	now := time.Now()
 	s := &Session{
-		id:         uuid.New().String(),
-		name:       "",
-		created:    now,
-		updated:    now,
-		messages:   []provider.Message{},
-		storageDir: st.storageDir,
+		id:       uuid.New().String(),
+		name:     "",
+		created:  now,
+		updated:  now,
+		messages: []provider.Message{},
 	}
-	if err := s.Save(); err != nil {
+	if err := st.Save(s); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -77,31 +101,64 @@ func (st *Store) Get(id string) (*Session, error) {
 	}
 
 	return &Session{
-		id:         infoDTO.ID,
-		name:       infoDTO.Name,
-		created:    time.UnixMilli(infoDTO.Created),
-		updated:    time.UnixMilli(infoDTO.Updated),
-		messages:   messages,
-		storageDir: st.storageDir,
+		id:       infoDTO.ID,
+		name:     infoDTO.Name,
+		created:  time.UnixMilli(infoDTO.Created),
+		updated:  time.UnixMilli(infoDTO.Updated),
+		messages: messages,
 	}, nil
 }
 
-// List returns all sessions sorted by update time (newest first).
-// Only loads info files, NOT messages (efficient for large sessions).
-func (st *Store) List() ([]*Session, error) {
+// Save persists a session to disk (both info and messages files).
+func (st *Store) Save(s *Session) error {
+	// Update the updated timestamp
+	s.updated = time.Now()
+
+	// Write info file
+	infoPath := filepath.Join(st.storageDir, s.id+".json")
+	infoDTO := sessionInfoDTO{
+		ID:           s.id,
+		Name:         s.name,
+		MessageCount: len(s.messages),
+		Created:      s.created.UnixMilli(),
+		Updated:      s.updated.UnixMilli(),
+	}
+	infoData, err := json.MarshalIndent(infoDTO, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session info: %w", err)
+	}
+	if err := fs.WriteFileAtomic(infoPath, infoData, 0644); err != nil {
+		return fmt.Errorf("write session info: %w", err)
+	}
+
+	// Write messages file
+	messagesPath := filepath.Join(st.storageDir, s.id+".messages.json")
+	messagesDTO := sessionMessagesDTO{
+		Messages: s.messages,
+	}
+	messagesData, err := json.MarshalIndent(messagesDTO, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session messages: %w", err)
+	}
+	if err := fs.WriteFileAtomic(messagesPath, messagesData, 0644); err != nil {
+		return fmt.Errorf("write session messages: %w", err)
+	}
+
+	return nil
+}
+
+// List returns summaries of all sessions sorted by update time (newest first).
+// Only loads metadata, NOT messages. Use Get() for full session data.
+func (st *Store) List() ([]SessionSummary, error) {
 	entries, err := os.ReadDir(st.storageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []*Session{}, nil
+			return []SessionSummary{}, nil
 		}
 		return nil, fmt.Errorf("read storage dir: %w", err)
 	}
 
-	type sessionMeta struct {
-		session *Session
-		updated time.Time
-	}
-	var metas []sessionMeta
+	var summaries []SessionSummary
 
 	for _, entry := range entries {
 		// Only look at .json files (not .messages.json)
@@ -112,8 +169,6 @@ func (st *Store) List() ([]*Session, error) {
 		if !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".messages.json") {
 			continue
 		}
-
-		id := name[:len(name)-5] // strip .json
 
 		// Read only the info file
 		infoPath := filepath.Join(st.storageDir, name)
@@ -127,29 +182,21 @@ func (st *Store) List() ([]*Session, error) {
 			continue // skip corrupted
 		}
 
-		// Create session without loading messages
-		s := &Session{
-			id:         infoDTO.ID,
-			name:       infoDTO.Name,
-			created:    time.UnixMilli(infoDTO.Created),
-			updated:    time.UnixMilli(infoDTO.Updated),
-			messages:   nil, // NOT loaded
-			storageDir: st.storageDir,
-		}
-		metas = append(metas, sessionMeta{session: s, updated: s.updated})
-		_ = id // silence unused warning
+		summaries = append(summaries, SessionSummary{
+			ID:           infoDTO.ID,
+			Name:         infoDTO.Name,
+			MessageCount: infoDTO.MessageCount,
+			Created:      time.UnixMilli(infoDTO.Created),
+			Updated:      time.UnixMilli(infoDTO.Updated),
+		})
 	}
 
 	// Sort by updated time, newest first
-	sort.Slice(metas, func(i, j int) bool {
-		return metas[i].updated.After(metas[j].updated)
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Updated.After(summaries[j].Updated)
 	})
 
-	sessions := make([]*Session, len(metas))
-	for i, m := range metas {
-		sessions[i] = m.session
-	}
-	return sessions, nil
+	return summaries, nil
 }
 
 // Delete removes a session from disk by ID (both info and messages files).

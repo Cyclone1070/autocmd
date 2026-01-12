@@ -41,6 +41,9 @@ func NewWorkflow(
 	events chan<- Event,
 	tools []Tool,
 ) *Workflow {
+	if cfg == nil {
+		panic("cfg is required")
+	}
 	return &Workflow{
 		provider:     provider,
 		toolManager:  newToolManager(tools),
@@ -89,7 +92,12 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 
 	defer func() {
 		if w.events != nil {
-			w.events <- DoneEvent{}
+			// Non-blocking send to prevent deadlock if channel is full.
+			// This defer must complete so runDone can be closed.
+			select {
+			case w.events <- DoneEvent{}:
+			default:
+			}
 		}
 	}()
 
@@ -100,7 +108,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 				Role:    provider.RoleUser,
 				Content: "[Session cancelled by user]",
 			})
-			_ = sess.Save()
+			_ = w.sessionStore.Save(sess)
 			return err
 		}
 
@@ -110,8 +118,12 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 
 		resp, err := w.provider.Generate(runCtx, model, sess.Messages(), w.toolManager.declarations())
 		if err != nil {
-			_ = sess.Save()
+			_ = w.sessionStore.Save(sess)
 			return fmt.Errorf("provider.Generate: %w", err)
+		}
+		if resp == nil {
+			_ = w.sessionStore.Save(sess)
+			return fmt.Errorf("provider.Generate returned nil response")
 		}
 
 		sess.Add(*resp)
@@ -121,14 +133,14 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		}
 
 		if len(resp.ToolCalls) == 0 {
-			_ = sess.Save()
+			_ = w.sessionStore.Save(sess)
 			return nil
 		}
 
 		for _, tc := range resp.ToolCalls {
 			toolResp, err := w.toolManager.execute(runCtx, tc, w.events)
 			if err != nil {
-				_ = sess.Save()
+				_ = w.sessionStore.Save(sess)
 				return fmt.Errorf("tools.Execute (%s): %w", tc.Function.Name, err)
 			}
 			sess.Add(toolResp)
@@ -140,7 +152,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		Content: "[Max iterations reached]",
 	})
 
-	_ = sess.Save()
+	_ = w.sessionStore.Save(sess)
 	return fmt.Errorf("max iterations (%d) reached", maxIterations)
 }
 
@@ -189,7 +201,21 @@ func (w *Workflow) NewSession() error {
 }
 
 // DeleteSession removes a session by ID.
+// If Run() is active on the session being deleted, it will be cancelled first.
 func (w *Workflow) DeleteSession(id string) error {
+	// Cancel any running loop on this session and wait for it to finish
+	if w.currentSession != nil && w.currentSession.ID() == id {
+		w.mu.Lock()
+		cancel := w.runCancel
+		done := w.runDone
+		w.mu.Unlock()
+
+		if cancel != nil {
+			cancel()
+			<-done
+		}
+	}
+
 	if err := w.sessionStore.Delete(id); err != nil {
 		return err
 	}
@@ -204,8 +230,8 @@ func (w *Workflow) CurrentSession() *session.Session {
 	return w.currentSession
 }
 
-// ListSessions returns all available sessions.
-func (w *Workflow) ListSessions() ([]*session.Session, error) {
+// ListSessions returns summaries of all available sessions.
+func (w *Workflow) ListSessions() ([]session.SessionSummary, error) {
 	return w.sessionStore.List()
 }
 

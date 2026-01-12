@@ -81,9 +81,7 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 	defer streamWg.Wait()
 
 	if sh, ok := display.(tool.ShellDisplay); ok && sh.Output != nil && events != nil {
-		streamWg.Add(1)
-		go func() {
-			defer streamWg.Done()
+		streamWg.Go(func() {
 			buf := make([]byte, 4096)
 			for {
 				n, err := sh.Output.Read(buf)
@@ -99,7 +97,7 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 			}
 			// NOTE: Do NOT call sh.Wait() here - Execute() already calls streamCmd.Wait()
 			// Calling it twice causes a race condition.
-		}()
+		})
 	}
 
 	llmContent, err := inv.Execute(ctx)

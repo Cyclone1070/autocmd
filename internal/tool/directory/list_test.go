@@ -308,7 +308,7 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 	fs.createDir("/workspace/big")
 
 	// Create 105 files
-	for i := 0; i < 105; i++ {
+	for i := range 105 {
 		fs.createFile(fmt.Sprintf("/workspace/big/file_%d.txt", i), []byte{}, 0644)
 	}
 

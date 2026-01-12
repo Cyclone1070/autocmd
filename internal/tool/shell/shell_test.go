@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -247,12 +248,7 @@ func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
 
 	streamCmd := newTestStreamingCmd("", &executor.Result{ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo"}, "/workspace", mock.MatchedBy(func(env []string) bool {
-		for _, e := range env {
-			if e == "CUSTOM_VAR=custom_value" {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(env, "CUSTOM_VAR=custom_value")
 	}), mock.Anything).Return(streamCmd, nil)
 
 	ctx := context.Background()

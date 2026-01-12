@@ -244,7 +244,7 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	tm := newToolManager([]Tool{&tmMockTool{name: "tool"}})
 
 	results := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(id int) {
 			_, err := tm.execute(context.Background(), provider.ToolCall{
 				ID:       fmt.Sprintf("tc-%d", id),
@@ -254,7 +254,7 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		assert.True(t, <-results)
 	}
 }

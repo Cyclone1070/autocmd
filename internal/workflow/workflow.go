@@ -102,7 +102,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	}()
 
 	maxIterations := w.cfg.Tools.MaxIterations
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		if err := runCtx.Err(); err != nil {
 			sess.Add(provider.Message{
 				Role:    provider.RoleUser,

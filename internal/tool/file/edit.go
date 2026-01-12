@@ -281,7 +281,7 @@ func computeUnifiedDiff(oldContent, newContent string) (diff string, added, remo
 
 	// Strip the --- and +++ header lines, keep only hunks
 	var lines []string
-	for _, line := range strings.Split(rawDiff, "\n") {
+	for line := range strings.SplitSeq(rawDiff, "\n") {
 		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") {
 			continue
 		}

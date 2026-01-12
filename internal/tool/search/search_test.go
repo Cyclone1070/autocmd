@@ -208,7 +208,7 @@ func TestSearchContent_Truncation(t *testing.T) {
 
 	// Generate 101 matches
 	var rgOutputBuilder strings.Builder
-	for i := 0; i < 101; i++ {
+	for range 101 {
 		rgOutputBuilder.WriteString(`{"type":"match","data":{"path":{"text":"/root/file.txt"},"lines":{"text":"match"},"line_number":1}}` + "\n")
 	}
 

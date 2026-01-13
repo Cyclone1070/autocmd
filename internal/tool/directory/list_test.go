@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
@@ -271,7 +271,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 
 	// Verify Display
 	display := invocation.Display()
-	content, ok := display.(tool.StringDisplay)
+	content, ok := display.(domain.StringDisplay)
 	if !ok {
 		t.Errorf("Display() returned wrong type")
 	} else if !strings.Contains(string(content), "Listing") {

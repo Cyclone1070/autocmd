@@ -1,4 +1,4 @@
-package tool
+package domain
 
 import (
 	"context"
@@ -36,6 +36,7 @@ type Declaration struct {
 
 // Invocation is a validated, prepared tool call ready for execution.
 // Returned by Tool.Prepare(), enforces prepare-before-execute sequence.
+// Must be in domain so tools can implement without importing workflow.
 type Invocation interface {
 	// Display returns what to show in UI (computed during Prepare).
 	Display() ToolDisplay
@@ -48,6 +49,7 @@ type Invocation interface {
 
 // ToolDisplay is implemented by all display types returned from tools.
 // The UI uses type switches to render each type appropriately.
+// Must be in domain so tools can implement without importing workflow.
 type ToolDisplay interface {
 	isToolDisplay()
 }
@@ -77,3 +79,4 @@ type ShellDisplay struct {
 }
 
 func (ShellDisplay) isToolDisplay() {}
+

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // SearchContentRequest matches OpenCode's input schema.
@@ -58,23 +58,23 @@ func (t *SearchContentTool) Name() string {
 	return "search_content"
 }
 
-func (t *SearchContentTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *SearchContentTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "search_content",
 		Description: "Search for content matching a regex pattern in files.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
 				"pattern": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "The regex pattern to search for in file contents",
 				},
 				"path": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "The file or directory to search in. Defaults to the current working directory.",
 				},
 				"include": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")",
 				},
 			},
@@ -83,7 +83,7 @@ func (t *SearchContentTool) Declaration() tool.Declaration {
 	}
 }
 
-func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &SearchContentRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -123,7 +123,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         tool.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
+		display:         domain.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
 	}, nil
 }
 
@@ -135,10 +135,10 @@ type searchContentInvocation struct {
 	absPath         string
 	pattern         string
 	include         string
-	display         tool.ToolDisplay
+	display         domain.ToolDisplay
 }
 
-func (i *searchContentInvocation) Display() tool.ToolDisplay {
+func (i *searchContentInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

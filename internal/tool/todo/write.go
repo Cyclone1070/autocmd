@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // WriteTodosTool handles writing todos.
@@ -29,21 +29,21 @@ func (t *WriteTodosTool) Name() string {
 }
 
 // Declaration returns the tool's schema for the LLM.
-func (t *WriteTodosTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *WriteTodosTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "todowrite",
 		Description: "Update the todo list. Replaces all todos with the provided list.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
 				"todos": {
-					Type:        tool.TypeArray,
+					Type:        domain.TypeArray,
 					Description: "List of todo items",
-					Items: &tool.Schema{
-						Type: tool.TypeObject,
-						Properties: map[string]*tool.Schema{
-							"description": {Type: tool.TypeString, Description: "Todo description"},
-							"status":      {Type: tool.TypeString, Description: "Status: pending, in_progress, completed, cancelled"},
+					Items: &domain.Schema{
+						Type: domain.TypeObject,
+						Properties: map[string]*domain.Schema{
+							"description": {Type: domain.TypeString, Description: "Todo description"},
+							"status":      {Type: domain.TypeString, Description: "Status: pending, in_progress, completed, cancelled"},
 						},
 						Required: []string{"description", "status"},
 					},
@@ -60,7 +60,7 @@ type WriteTodosRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &WriteTodosRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -85,17 +85,17 @@ func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (t
 	return &writeTodosInvocation{
 		store:   t.store,
 		todos:   req.Todos,
-		display: tool.StringDisplay(fmt.Sprintf("Writing %d todos", len(req.Todos))),
+		display: domain.StringDisplay(fmt.Sprintf("Writing %d todos", len(req.Todos))),
 	}, nil
 }
 
 type writeTodosInvocation struct {
 	store   todoStore
 	todos   []Todo
-	display tool.ToolDisplay
+	display domain.ToolDisplay
 }
 
-func (i *writeTodosInvocation) Display() tool.ToolDisplay {
+func (i *writeTodosInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

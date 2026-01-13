@@ -6,8 +6,7 @@ import (
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/provider"
-	"github.com/Cyclone1070/iav/internal/session"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // Workflow is the central orchestrator for the application.
@@ -22,7 +21,7 @@ type Workflow struct {
 	provider       llmProvider
 	toolManager    *toolManager
 	sessionStore   sessionStore
-	currentSession *session.Session
+	currentSession *domain.Session
 	currentModel   string
 	events         chan<- Event
 	cfg            *config.Config
@@ -85,8 +84,8 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	sess := w.currentSession
 	model := w.currentModel
 
-	sess.Add(provider.Message{
-		Role:    provider.RoleUser,
+	sess.Add(domain.Message{
+		Role:    domain.RoleUser,
 		Content: input,
 	})
 
@@ -104,8 +103,8 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	maxIterations := w.cfg.Tools.MaxIterations
 	for range maxIterations {
 		if err := runCtx.Err(); err != nil {
-			sess.Add(provider.Message{
-				Role:    provider.RoleUser,
+			sess.Add(domain.Message{
+				Role:    domain.RoleUser,
 				Content: "[Session cancelled by user]",
 			})
 			_ = w.sessionStore.Save(sess)
@@ -116,7 +115,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- ThinkingEvent{}
 		}
 
-		resp, err := w.provider.Generate(runCtx, model, sess.Messages(), w.toolManager.declarations())
+		resp, err := w.provider.Generate(runCtx, model, sess.GetMessages(), w.toolManager.declarations())
 		if err != nil {
 			_ = w.sessionStore.Save(sess)
 			return fmt.Errorf("provider.Generate: %w", err)
@@ -147,8 +146,8 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		}
 	}
 
-	sess.Add(provider.Message{
-		Role:    provider.RoleUser,
+	sess.Add(domain.Message{
+		Role:    domain.RoleUser,
 		Content: "[Max iterations reached]",
 	})
 
@@ -204,7 +203,7 @@ func (w *Workflow) NewSession() error {
 // If Run() is active on the session being deleted, it will be cancelled first.
 func (w *Workflow) DeleteSession(id string) error {
 	// Cancel any running loop on this session and wait for it to finish
-	if w.currentSession != nil && w.currentSession.ID() == id {
+	if w.currentSession != nil && w.currentSession.ID == id {
 		w.mu.Lock()
 		cancel := w.runCancel
 		done := w.runDone
@@ -219,19 +218,19 @@ func (w *Workflow) DeleteSession(id string) error {
 	if err := w.sessionStore.Delete(id); err != nil {
 		return err
 	}
-	if w.currentSession != nil && w.currentSession.ID() == id {
+	if w.currentSession != nil && w.currentSession.ID == id {
 		w.currentSession = nil
 	}
 	return nil
 }
 
 // CurrentSession returns the currently active session.
-func (w *Workflow) CurrentSession() *session.Session {
+func (w *Workflow) CurrentSession() *domain.Session {
 	return w.currentSession
 }
 
 // ListSessions returns summaries of all available sessions.
-func (w *Workflow) ListSessions() ([]session.SessionSummary, error) {
+func (w *Workflow) ListSessions() ([]domain.SessionSummary, error) {
 	return w.sessionStore.List()
 }
 

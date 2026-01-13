@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
 )
@@ -67,16 +67,16 @@ func (t *ReadFileTool) Name() string {
 }
 
 // Declaration returns the tool's schema for the LLM.
-func (t *ReadFileTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *ReadFileTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "read_file",
 		Description: "Read file contents with optional pagination. Use offset/limit to read large files in chunks.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
-				"path":   {Type: tool.TypeString, Description: "Path to file"},
-				"offset": {Type: tool.TypeInteger, Description: "Start line index (0-indexed)"},
-				"limit":  {Type: tool.TypeInteger, Description: "Max lines to return"},
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
+				"path":   {Type: domain.TypeString, Description: "Path to file"},
+				"offset": {Type: domain.TypeInteger, Description: "Start line index (0-indexed)"},
+				"limit":  {Type: domain.TypeInteger, Description: "Max lines to return"},
 			},
 			Required: []string{"path"},
 		},
@@ -91,7 +91,7 @@ type ReadFileRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &ReadFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -133,7 +133,7 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 		absPath:         abs,
 		offset:          req.Offset,
 		limit:           req.Limit,
-		display:         tool.StringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
+		display:         domain.StringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
 	}, nil
 }
 
@@ -143,10 +143,10 @@ type readFileInvocation struct {
 	absPath         string
 	offset          int
 	limit           int
-	display         tool.ToolDisplay
+	display         domain.ToolDisplay
 }
 
-func (i *readFileInvocation) Display() tool.ToolDisplay {
+func (i *readFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

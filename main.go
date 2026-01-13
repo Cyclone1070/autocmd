@@ -4,12 +4,12 @@ import (
 	"log"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/service/fs"
 	"github.com/Cyclone1070/iav/internal/tool/service/git"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -62,7 +62,7 @@ func main() {
 	}
 
 	// Create dependencies
-	store := session.NewStore(cfg)
+	store := session.NewStore(cfg, fileSystem)
 	events := make(chan workflow.Event, 100)
 
 	// TODO: Provider implementation is deferred.

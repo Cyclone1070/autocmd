@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // FindFileRequest represents the parameters for a FindFile operation
@@ -59,19 +59,19 @@ func (t *FindFileTool) Name() string {
 }
 
 // Declaration returns the JSON schema for the tool.
-func (t *FindFileTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *FindFileTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        t.Name(),
 		Description: "Find files matching a glob pattern.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
 				"pattern": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "Glob pattern to match files.",
 				},
 				"path": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "Path to search within. Defaults to workspace root.",
 				},
 			},
@@ -81,7 +81,7 @@ func (t *FindFileTool) Declaration() tool.Declaration {
 }
 
 // Prepare validates input and resolves path.
-func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &FindFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -127,7 +127,7 @@ func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         tool.StringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
+		display:         domain.StringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
 	}, nil
 }
 
@@ -137,10 +137,10 @@ type findFileInvocation struct {
 	pathResolver    pathResolver
 	absPath         string
 	pattern         string
-	display         tool.ToolDisplay
+	display         domain.ToolDisplay
 }
 
-func (i *findFileInvocation) Display() tool.ToolDisplay {
+func (i *findFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

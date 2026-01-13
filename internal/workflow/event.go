@@ -1,6 +1,6 @@
 package workflow
 
-import "github.com/Cyclone1070/iav/internal/tool"
+import "github.com/Cyclone1070/iav/internal/domain"
 
 // Event is the interface for all workflow events.
 // UI handles events via type switch.
@@ -28,9 +28,9 @@ func (DoneEvent) isEvent() {}
 // ToolStartEvent is emitted after Prepare succeeds.
 // Display contains rich display data (DiffDisplay, StringDisplay, etc.) for UI.
 type ToolStartEvent struct {
-	CallID   string           // Unique ID from provider.ToolCall.ID
-	ToolName string           // Tool identifier
-	Display  tool.ToolDisplay // Rich display computed during Prepare
+	CallID   string              // Unique ID from domain.ToolCall.ID
+	ToolName string              // Tool identifier
+	Display  domain.ToolDisplay  // Rich display computed during Prepare
 }
 
 func (ToolStartEvent) isEvent() {}

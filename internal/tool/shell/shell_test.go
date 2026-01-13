@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -153,7 +153,7 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 
 	// Verify Display
 	disp := inv.Display()
-	shellDisp, ok := disp.(tool.ShellDisplay)
+	shellDisp, ok := disp.(domain.ShellDisplay)
 	require.True(t, ok)
 	assert.Equal(t, "[echo hello]", shellDisp.Command)
 	assert.Equal(t, "say hello", shellDisp.Description)
@@ -187,7 +187,7 @@ func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	assert.Equal(t, "custom/path", disp.WorkingDir)
 
 	mockCE.AssertExpectations(t)
@@ -398,7 +398,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Consume output
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	go io.Copy(io.Discard, disp.Output)
 
 	output, err := inv.Execute(ctx)
@@ -430,7 +430,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	go io.Copy(io.Discard, disp.Output)
 
 	output, err := inv.Execute(ctx)
@@ -460,7 +460,7 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	go io.Copy(io.Discard, disp.Output)
 
 	output, err := inv.Execute(ctx)
@@ -490,7 +490,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	go io.Copy(io.Discard, disp.Output)
 
 	cancel() // Cancel the context
@@ -521,7 +521,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 	go io.Copy(io.Discard, disp.Output)
 
 	output, err := inv.Execute(ctx)
@@ -551,7 +551,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 
 	// Read streaming output
 	var buf strings.Builder
@@ -598,7 +598,7 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	inv, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(tool.ShellDisplay)
+	disp := inv.Display().(domain.ShellDisplay)
 
 	// Wait should block
 	done := make(chan struct{})

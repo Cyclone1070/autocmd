@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	udiff "github.com/aymanbagabas/go-udiff"
 )
 
@@ -79,23 +79,23 @@ func (t *EditFileTool) Name() string {
 	return "edit_file"
 }
 
-func (t *EditFileTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *EditFileTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "edit_file",
 		Description: "Edit an existing file by replacing text. Supports multiple operations.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
-				"path": {Type: tool.TypeString, Description: "Path to file"},
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
+				"path": {Type: domain.TypeString, Description: "Path to file"},
 				"operations": {
-					Type:        tool.TypeArray,
+					Type:        domain.TypeArray,
 					Description: "List of edit operations",
-					Items: &tool.Schema{
-						Type: tool.TypeObject,
-						Properties: map[string]*tool.Schema{
-							"before":                {Type: tool.TypeString, Description: "Text to find"},
-							"after":                 {Type: tool.TypeString, Description: "Replacement text"},
-							"expected_replacements": {Type: tool.TypeInteger, Description: "Expected match count"},
+					Items: &domain.Schema{
+						Type: domain.TypeObject,
+						Properties: map[string]*domain.Schema{
+							"before":                {Type: domain.TypeString, Description: "Text to find"},
+							"after":                 {Type: domain.TypeString, Description: "Replacement text"},
+							"expected_replacements": {Type: domain.TypeInteger, Description: "Expected match count"},
 						},
 						Required: []string{"before", "after"},
 					},
@@ -107,7 +107,7 @@ func (t *EditFileTool) Declaration() tool.Declaration {
 }
 
 // Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
-func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &EditFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -215,7 +215,7 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (too
 		newContent:       newContentBytes,
 		originalPerm:     info.Mode(),
 		expectedChecksum: currentChecksum,
-		display: tool.DiffDisplay{
+		display: domain.DiffDisplay{
 			Filename:     filepath.Base(abs),
 			Diff:         diff,
 			AddedLines:   added,
@@ -232,10 +232,10 @@ type editFileInvocation struct {
 	newContent       []byte
 	originalPerm     os.FileMode
 	expectedChecksum string
-	display          tool.ToolDisplay
+	display          domain.ToolDisplay
 }
 
-func (i *editFileInvocation) Display() tool.ToolDisplay {
+func (i *editFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

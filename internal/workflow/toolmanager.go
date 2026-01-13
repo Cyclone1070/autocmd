@@ -7,8 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/provider"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 type toolManager struct {
@@ -25,8 +24,8 @@ func newToolManager(tools []Tool) *toolManager {
 	return tm
 }
 
-func (m *toolManager) declarations() []tool.Declaration {
-	decls := make([]tool.Declaration, 0, len(m.registry))
+func (m *toolManager) declarations() []domain.Declaration {
+	decls := make([]domain.Declaration, 0, len(m.registry))
 	for _, t := range m.registry {
 		decls = append(decls, t.Declaration())
 	}
@@ -36,15 +35,15 @@ func (m *toolManager) declarations() []tool.Declaration {
 	return decls
 }
 
-func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events chan<- Event) (provider.Message, error) {
+func (m *toolManager) execute(ctx context.Context, tc domain.ToolCall, events chan<- Event) (domain.Message, error) {
 	t, ok := m.registry[tc.Function.Name]
 	if !ok {
 		decls := m.declarations()
 		declsJSON, _ := json.MarshalIndent(decls, "", "  ")
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, declsJSON)
 
-		return provider.Message{
-			Role:       provider.RoleTool,
+		return domain.Message{
+			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
 			Content:    errMsg,
 		}, nil
@@ -53,13 +52,13 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 	inv, err := t.Prepare(ctx, tc.Function.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
-			return provider.Message{}, ctx.Err()
+			return domain.Message{}, ctx.Err()
 		}
 		declJSON, _ := json.MarshalIndent(t.Declaration(), "", "  ")
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, declJSON)
 
-		return provider.Message{
-			Role:       provider.RoleTool,
+		return domain.Message{
+			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
 			Content:    errMsg,
 		}, nil
@@ -80,7 +79,7 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 	// The explicit Wait() below ensures streaming completes before ToolEndEvent.
 	defer streamWg.Wait()
 
-	if sh, ok := display.(tool.ShellDisplay); ok && sh.Output != nil && events != nil {
+	if sh, ok := display.(domain.ShellDisplay); ok && sh.Output != nil && events != nil {
 		streamWg.Go(func() {
 			buf := make([]byte, 4096)
 			for {
@@ -103,7 +102,7 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return provider.Message{}, err
+			return domain.Message{}, err
 		}
 
 		if events != nil {
@@ -113,8 +112,8 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 			}
 		}
 
-		return provider.Message{
-			Role:       provider.RoleTool,
+		return domain.Message{
+			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
 			Content:    llmContent,
 		}, nil
@@ -129,8 +128,8 @@ func (m *toolManager) execute(ctx context.Context, tc provider.ToolCall, events 
 		}
 	}
 
-	return provider.Message{
-		Role:       provider.RoleTool,
+	return domain.Message{
+		Role:       domain.RoleTool,
 		ToolCallID: tc.ID,
 		Content:    llmContent,
 	}, nil

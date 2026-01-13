@@ -2,14 +2,61 @@ package fs
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
+
+// OSFileSystem implements filesystem operations using the local OS filesystem primitives.
+type OSFileSystem struct {
+	config *config.Config
+}
+
+// NewOSFileSystem creates a new OSFileSystem.
+func NewOSFileSystem(cfg *config.Config) *OSFileSystem {
+	if cfg == nil {
+		panic("cfg is required")
+	}
+	return &OSFileSystem{config: cfg}
+}
+
+// ReadFile reads the entire content of a file with safety limits.
+// It checks for MaxFileSize and binary content.
+func (fs *OSFileSystem) ReadFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	if info.Size() > fs.config.Tools.MaxFileSize {
+		return nil, fmt.Errorf("file %s exceeds max size (%d bytes)", path, fs.config.Tools.MaxFileSize)
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+
+	if content.IsBinaryContent(data) {
+		return nil, fmt.Errorf("binary file: %s", path)
+	}
+
+	return data, nil
+}
 
 // WriteFileAtomic writes content to a file atomically using temp file + rename pattern.
 // This ensures that if the process crashes mid-write, the original file remains intact.
 // The temp file is created in the same directory as the target to ensure atomic rename.
-func WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
+func (fs *OSFileSystem) WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 
 	tmpFile, err := os.CreateTemp(dir, ".tmp-*")
@@ -57,7 +104,37 @@ func WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
 	return nil
 }
 
-// EnsureDir creates parent directories recursively if they don't exist.
-func EnsureDir(path string) error {
+// EnsureDirs creates parent directories recursively if they don't exist.
+func (fs *OSFileSystem) EnsureDirs(path string) error {
 	return os.MkdirAll(path, 0o755)
+}
+
+// UserHomeDir returns the current user's home directory.
+func (fs *OSFileSystem) UserHomeDir() (string, error) {
+	return os.UserHomeDir()
+}
+
+// ListDir lists the contents of a directory.
+// Returns a slice of FileInfo for each entry in the directory.
+func (fs *OSFileSystem) ListDir(path string) ([]os.FileInfo, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	infos := make([]os.FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+
+	return infos, nil
+}
+
+// Stat returns the FileInfo for a file.
+func (fs *OSFileSystem) Stat(path string) (os.FileInfo, error) {
+	return os.Stat(path)
 }

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
@@ -65,15 +65,15 @@ func (t *WriteFileTool) Name() string {
 	return "write_file"
 }
 
-func (t *WriteFileTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *WriteFileTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "write_file",
 		Description: "Create a new file with the specified content. File must not already exist.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
-				"path":    {Type: tool.TypeString, Description: "Path to file"},
-				"content": {Type: tool.TypeString, Description: "File content"},
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
+				"path":    {Type: domain.TypeString, Description: "Path to file"},
+				"content": {Type: domain.TypeString, Description: "File content"},
 			},
 			Required: []string{"path", "content"},
 		},
@@ -86,7 +86,7 @@ type WriteFileRequest struct {
 	Content string `json:"content"`
 }
 
-func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	req := &WriteFileRequest{}
 	if err := json.Unmarshal(params, req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -131,7 +131,7 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (to
 		absPath:         abs,
 		relPath:         req.Path,
 		content:         []byte(req.Content),
-		display:         tool.StringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
+		display:         domain.StringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
 	}, nil
 }
 
@@ -141,10 +141,10 @@ type writeFileInvocation struct {
 	absPath         string
 	relPath         string
 	content         []byte
-	display         tool.ToolDisplay
+	display         domain.ToolDisplay
 }
 
-func (i *writeFileInvocation) Display() tool.ToolDisplay {
+func (i *writeFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/provider"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,30 +17,30 @@ import (
 type tmMockTool struct {
 	name        string
 	description string
-	prepare     func(ctx context.Context, params json.RawMessage) (tool.Invocation, error)
+	prepare     func(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
 }
 
 func (mt *tmMockTool) Name() string { return mt.name }
-func (mt *tmMockTool) Declaration() tool.Declaration {
-	return tool.Declaration{Name: mt.name, Description: mt.description}
+func (mt *tmMockTool) Declaration() domain.Declaration {
+	return domain.Declaration{Name: mt.name, Description: mt.description}
 }
-func (mt *tmMockTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (mt *tmMockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	if mt.prepare != nil {
 		return mt.prepare(ctx, params)
 	}
-	return &tmMockInvocation{content: "ok", display: tool.StringDisplay("ok")}, nil
+	return &tmMockInvocation{content: "ok", display: domain.StringDisplay("ok")}, nil
 }
 
 type tmMockInvocation struct {
 	content string
 	err     error
-	display tool.ToolDisplay
+	display domain.ToolDisplay
 }
 
 func (m *tmMockInvocation) Execute(ctx context.Context) (string, error) {
 	return m.content, m.err
 }
-func (m *tmMockInvocation) Display() tool.ToolDisplay { return m.display }
+func (m *tmMockInvocation) Display() domain.ToolDisplay { return m.display }
 
 // --- Tests ---
 
@@ -72,9 +71,9 @@ func TestDeclarations_SortedByName(t *testing.T) {
 
 func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	tm := newToolManager([]Tool{})
-	res, err := tm.execute(context.Background(), provider.ToolCall{
+	res, err := tm.execute(context.Background(), domain.ToolCall{
 		ID:       "tc-123",
-		Function: provider.FunctionCall{Name: "unknown"},
+		Function: domain.FunctionCall{Name: "unknown"},
 	}, nil)
 
 	assert.NoError(t, err)
@@ -86,16 +85,16 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	var capturedParams []byte
 	mt := &tmMockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			capturedParams = params
 			return &tmMockInvocation{content: "ok"}, nil
 		},
 	}
 	tm := newToolManager([]Tool{mt})
 
-	_, err := tm.execute(context.Background(), provider.ToolCall{
+	_, err := tm.execute(context.Background(), domain.ToolCall{
 		ID: "tc-456",
-		Function: provider.FunctionCall{
+		Function: domain.FunctionCall{
 			Name:      "test",
 			Arguments: json.RawMessage(`{"value": "hello"}`),
 		},
@@ -108,15 +107,15 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	mt := &tmMockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
 		},
 	}
 	tm := newToolManager([]Tool{mt})
 
-	res, err := tm.execute(context.Background(), provider.ToolCall{
+	res, err := tm.execute(context.Background(), domain.ToolCall{
 		ID: "tc-789",
-		Function: provider.FunctionCall{
+		Function: domain.FunctionCall{
 			Name: "test",
 		},
 	}, nil)
@@ -128,19 +127,19 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 func TestExecute_EmitsToolEvents(t *testing.T) {
 	mt := &tmMockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &tmMockInvocation{
 				content: "result",
-				display: tool.StringDisplay("display output"),
+				display: domain.StringDisplay("display output"),
 			}, nil
 		},
 	}
 	tm := newToolManager([]Tool{mt})
 
 	events := make(chan Event, 10)
-	_, err := tm.execute(context.Background(), provider.ToolCall{
+	_, err := tm.execute(context.Background(), domain.ToolCall{
 		ID: "tc-1",
-		Function: provider.FunctionCall{
+		Function: domain.FunctionCall{
 			Name: "test",
 		},
 	}, events)
@@ -152,7 +151,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", start.CallID)
 	assert.Equal(t, "test", start.ToolName)
-	assert.Equal(t, tool.StringDisplay("display output"), start.Display)
+	assert.Equal(t, domain.StringDisplay("display output"), start.Display)
 
 	e2 := <-events
 	end, ok := e2.(ToolEndEvent)
@@ -164,10 +163,10 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	mt := &tmMockTool{
 		name: "shell",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &tmMockInvocation{
 				content: "Command finished",
-				display: tool.ShellDisplay{
+				display: domain.ShellDisplay{
 					Command: "ls",
 					Output:  strings.NewReader("file1\nfile2\n"),
 					Wait:    func() {},
@@ -178,9 +177,9 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	tm := newToolManager([]Tool{mt})
 
 	events := make(chan Event, 10)
-	_, err := tm.execute(context.Background(), provider.ToolCall{
+	_, err := tm.execute(context.Background(), domain.ToolCall{
 		ID: "tc-shell",
-		Function: provider.FunctionCall{
+		Function: domain.FunctionCall{
 			Name: "shell",
 		},
 	}, events)
@@ -211,7 +210,7 @@ loop:
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	mt := &tmMockTool{
 		name: "fail",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &tmMockInvocation{
 				content: "Detailed error in content",
 				err:     fmt.Errorf("infra failure"),
@@ -221,9 +220,9 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	tm := newToolManager([]Tool{mt})
 
 	events := make(chan Event, 10)
-	res, err := tm.execute(context.Background(), provider.ToolCall{
+	res, err := tm.execute(context.Background(), domain.ToolCall{
 		ID:       "tc-fail",
-		Function: provider.FunctionCall{Name: "fail"},
+		Function: domain.FunctionCall{Name: "fail"},
 	}, events)
 
 	assert.NoError(t, err)
@@ -246,9 +245,9 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	results := make(chan bool, 10)
 	for i := range 10 {
 		go func(id int) {
-			_, err := tm.execute(context.Background(), provider.ToolCall{
+			_, err := tm.execute(context.Background(), domain.ToolCall{
 				ID:       fmt.Sprintf("tc-%d", id),
-				Function: provider.FunctionCall{Name: "tool", Arguments: json.RawMessage(`{}`)},
+				Function: domain.FunctionCall{Name: "tool", Arguments: json.RawMessage(`{}`)},
 			}, nil)
 			results <- (err == nil)
 		}(i)

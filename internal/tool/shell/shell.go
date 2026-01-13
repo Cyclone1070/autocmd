@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 )
 
@@ -54,41 +54,41 @@ func (t *ShellTool) Name() string {
 }
 
 // Declaration returns the tool's schema for the LLM.
-func (t *ShellTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *ShellTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "shell",
 		Description: "Execute a shell command on the local machine.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
 				"command": {
-					Type:        tool.TypeArray,
+					Type:        domain.TypeArray,
 					Description: "The command to execute, including arguments.",
-					Items: &tool.Schema{
-						Type: tool.TypeString,
+					Items: &domain.Schema{
+						Type: domain.TypeString,
 					},
 				},
 				"working_dir": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "Working directory for execution. Defaults to workspace root.",
 				},
 				"timeout_seconds": {
-					Type:        tool.TypeInteger,
+					Type:        domain.TypeInteger,
 					Description: "Timeout in seconds. Defaults to configuration.",
 				},
 				"env": {
-					Type:        tool.TypeObject,
+					Type:        domain.TypeObject,
 					Description: "Environment variables to set.",
 				},
 				"env_files": {
-					Type:        tool.TypeArray,
+					Type:        domain.TypeArray,
 					Description: "Paths to .env files to load.",
-					Items: &tool.Schema{
-						Type: tool.TypeString,
+					Items: &domain.Schema{
+						Type: domain.TypeString,
 					},
 				},
 				"description": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "Description of the command for display purposes.",
 				},
 			},
@@ -98,7 +98,7 @@ func (t *ShellTool) Declaration() tool.Declaration {
 }
 
 // Prepare validates the request, resolves paths, and starts the streaming command.
-func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	// 1. Parse Parameters
 	var req struct {
 		Command        []string          `json:"command"`
@@ -177,8 +177,8 @@ type shellInvocation struct {
 	description string
 }
 
-func (i *shellInvocation) Display() tool.ToolDisplay {
-	return tool.ShellDisplay{
+func (i *shellInvocation) Display() domain.ToolDisplay {
+	return domain.ShellDisplay{
 		Command:     i.commandStr,
 		Description: i.description,
 		WorkingDir:  i.workingDir,

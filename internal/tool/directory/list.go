@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // directoryEntry is an internal helper for directory entries.
@@ -59,20 +59,20 @@ func (t *ListDirTool) Name() string {
 }
 
 // Declaration returns the JSON schema for the tool.
-func (t *ListDirTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *ListDirTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        t.Name(),
 		Description: "Lists the contents of a directory. Returns the output as a tree structure. Truncates results if there are too many items.",
-		Parameters: &tool.Schema{
-			Type: tool.TypeObject,
-			Properties: map[string]*tool.Schema{
+		Parameters: &domain.Schema{
+			Type: domain.TypeObject,
+			Properties: map[string]*domain.Schema{
 				"path": {
-					Type:        tool.TypeString,
+					Type:        domain.TypeString,
 					Description: "Path to the directory.",
 				},
 				"ignore": {
-					Type:        tool.TypeArray,
-					Items:       &tool.Schema{Type: tool.TypeString},
+					Type:        domain.TypeArray,
+					Items:       &domain.Schema{Type: domain.TypeString},
 					Description: "Optional glob patterns to ignore (e.g. '*.test.ts').",
 				},
 			},
@@ -95,11 +95,11 @@ type listDirInvocation struct {
 	config         *config.Config
 	resolvedPath   string
 	ignorePatterns []string
-	display        tool.ToolDisplay
+	display        domain.ToolDisplay
 }
 
 // Prepare validates path existence and returns an Invocation.
-func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	var req ListDirRequest
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -137,7 +137,7 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (tool
 		config:         t.config,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
-		display:        tool.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
+		display:        domain.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
 	}, nil
 }
 
@@ -254,6 +254,6 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 }
 
 // Display returns the user-facing description.
-func (i *listDirInvocation) Display() tool.ToolDisplay {
+func (i *listDirInvocation) Display() domain.ToolDisplay {
 	return i.display
 }

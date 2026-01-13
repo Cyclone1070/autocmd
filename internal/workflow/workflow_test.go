@@ -8,19 +8,17 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/provider"
-	"github.com/Cyclone1070/iav/internal/session"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
 // --- Mocks for Workflow tests ---
 
 type mockProvider struct {
-	generateFunc func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error)
+	generateFunc func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error)
 }
 
-func (m *mockProvider) Generate(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
+func (m *mockProvider) Generate(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, model, messages, tools)
 	}
@@ -33,14 +31,14 @@ func (m *mockProvider) ListModels(ctx context.Context) ([]string, error) {
 
 type mockTool struct {
 	name    string
-	prepare func(ctx context.Context, params json.RawMessage) (tool.Invocation, error)
+	prepare func(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
-func (mt *mockTool) Declaration() tool.Declaration {
-	return tool.Declaration{Name: mt.name}
+func (mt *mockTool) Declaration() domain.Declaration {
+	return domain.Declaration{Name: mt.name}
 }
-func (mt *mockTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (mt *mockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	if mt.prepare != nil {
 		return mt.prepare(ctx, params)
 	}
@@ -55,15 +53,53 @@ type mockInvocation struct {
 func (m *mockInvocation) Execute(ctx context.Context) (string, error) {
 	return m.content, m.err
 }
-func (m *mockInvocation) Display() tool.ToolDisplay { return nil }
+func (m *mockInvocation) Display() domain.ToolDisplay { return nil }
+
+type mockSessionStore struct {
+	sessions map[string]*domain.Session
+	current  *domain.Session
+}
+
+func newMockSessionStore() *mockSessionStore {
+	return &mockSessionStore{sessions: make(map[string]*domain.Session)}
+}
+
+func (m *mockSessionStore) Create() (*domain.Session, error) {
+	s := &domain.Session{
+		ID:       fmt.Sprintf("test-%d", len(m.sessions)),
+		Messages: []domain.Message{},
+	}
+	m.sessions[s.ID] = s
+	m.current = s
+	return s, nil
+}
+
+func (m *mockSessionStore) Get(id string) (*domain.Session, error) {
+	if s, ok := m.sessions[id]; ok {
+		return s, nil
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (m *mockSessionStore) Save(s *domain.Session) error {
+	m.sessions[s.ID] = s
+	return nil
+}
+
+func (m *mockSessionStore) List() ([]domain.SessionSummary, error) {
+	return nil, nil
+}
+
+func (m *mockSessionStore) Delete(id string) error {
+	delete(m.sessions, id)
+	return nil
+}
 
 // --- Helper to create test workflow ---
 
 func newTestWorkflow(t *testing.T, mp llmProvider, tools []Tool, events chan Event) *Workflow {
-	tmpDir := t.TempDir()
-	store := session.NewStore(&config.Config{Session: config.SessionConfig{StorageDir: tmpDir}})
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
-	return NewWorkflow(mp, store, cfg, events, tools)
+	return NewWorkflow(mp, newMockSessionStore(), cfg, events, tools)
 }
 
 // --- Tests ---
@@ -73,8 +109,8 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	events := make(chan Event, 10)
 
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
-			return &provider.Message{Role: provider.RoleAssistant, Content: "Hello!"}, nil
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
+			return &domain.Message{Role: domain.RoleAssistant, Content: "Hello!"}, nil
 		},
 	}
 
@@ -84,9 +120,9 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	assert.NoError(t, err)
 
 	sess := w.CurrentSession()
-	assert.Equal(t, 2, len(sess.Messages()))
-	assert.Equal(t, "Hi", sess.Messages()[0].Content)
-	assert.Equal(t, "Hello!", sess.Messages()[1].Content)
+	assert.Equal(t, 2, len(sess.GetMessages()))
+	assert.Equal(t, "Hi", sess.GetMessages()[0].Content)
+	assert.Equal(t, "Hello!", sess.GetMessages()[1].Content)
 
 	assert.IsType(t, ThinkingEvent{}, <-events)
 	assert.Equal(t, TextEvent{Text: "Hello!"}, <-events)
@@ -100,23 +136,23 @@ func TestRun_SingleToolCall(t *testing.T) {
 
 	callCount := 0
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
 			callCount++
 			if callCount == 1 {
-				return &provider.Message{
-					Role: provider.RoleAssistant,
-					ToolCalls: []provider.ToolCall{
-						{ID: "tc-1", Function: provider.FunctionCall{Name: "get_weather"}},
+				return &domain.Message{
+					Role: domain.RoleAssistant,
+					ToolCalls: []domain.ToolCall{
+						{ID: "tc-1", Function: domain.FunctionCall{Name: "get_weather"}},
 					},
 				}, nil
 			}
-			return &provider.Message{Role: provider.RoleAssistant, Content: "It's sunny!"}, nil
+			return &domain.Message{Role: domain.RoleAssistant, Content: "It's sunny!"}, nil
 		},
 	}
 
 	mt := &mockTool{
 		name: "get_weather",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{content: "Sunny"}, nil
 		},
 	}
@@ -128,7 +164,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 	assert.Equal(t, 2, callCount)
 
 	sess := w.CurrentSession()
-	assert.Equal(t, 4, len(sess.Messages())) // User, Assist(ToolCall), ToolResp, Assist(Text)
+	assert.Equal(t, 4, len(sess.GetMessages())) // User, Assist(ToolCall), ToolResp, Assist(Text)
 
 	// Consume events
 	assert.IsType(t, ThinkingEvent{}, <-events)  // First thinking
@@ -141,11 +177,11 @@ func TestRun_SingleToolCall(t *testing.T) {
 
 func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
-			return &provider.Message{
-				Role: provider.RoleAssistant,
-				ToolCalls: []provider.ToolCall{
-					{ID: "tc-inf", Function: provider.FunctionCall{Name: "infinite"}},
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
+			return &domain.Message{
+				Role: domain.RoleAssistant,
+				ToolCalls: []domain.ToolCall{
+					{ID: "tc-inf", Function: domain.FunctionCall{Name: "infinite"}},
 				},
 			}, nil
 		},
@@ -153,15 +189,13 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 
 	mt := &mockTool{
 		name: "infinite",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{content: "kept going"}, nil
 		},
 	}
 
-	tmpDir := t.TempDir()
-	store := session.NewStore(&config.Config{Session: config.SessionConfig{StorageDir: tmpDir}})
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
-	w := NewWorkflow(mp, store, cfg, nil, []Tool{mt})
+	w := NewWorkflow(mp, newMockSessionStore(), cfg, nil, []Tool{mt})
 
 	err := w.Run(context.Background(), "go")
 
@@ -169,12 +203,13 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "max iterations (3) reached")
 
 	sess := w.CurrentSession()
-	assert.Equal(t, "[Max iterations reached]", sess.Messages()[len(sess.Messages())-1].Content)
+	messages := sess.GetMessages()
+	assert.Equal(t, "[Max iterations reached]", messages[len(messages)-1].Content)
 }
 
 func TestRun_ProviderError_ReturnsError(t *testing.T) {
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
 			return nil, fmt.Errorf("provider fail")
 		},
 	}
@@ -192,24 +227,24 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 
 	callCount := 0
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
 			callCount++
 			if callCount == 1 {
-				return &provider.Message{
-					Role: provider.RoleAssistant,
-					ToolCalls: []provider.ToolCall{
-						{ID: "tc-err", Function: provider.FunctionCall{Name: "tool"}},
+				return &domain.Message{
+					Role: domain.RoleAssistant,
+					ToolCalls: []domain.ToolCall{
+						{ID: "tc-err", Function: domain.FunctionCall{Name: "tool"}},
 					},
 				}, nil
 			}
 			// After tool execution, return text to end loop
-			return &provider.Message{Role: provider.RoleAssistant, Content: "Done"}, nil
+			return &domain.Message{Role: domain.RoleAssistant, Content: "Done"}, nil
 		},
 	}
 
 	mt := &mockTool{
 		name: "tool",
-		prepare: func(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{content: "error content", err: fmt.Errorf("tool fail")}, nil
 		},
 	}
@@ -225,8 +260,8 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 
 func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	mp := &mockProvider{
-		generateFunc: func(ctx context.Context, model string, messages []provider.Message, tools []tool.Declaration) (*provider.Message, error) {
-			return &provider.Message{Role: provider.RoleAssistant, Content: "ok"}, nil
+		generateFunc: func(ctx context.Context, model string, messages []domain.Message, tools []domain.Declaration) (*domain.Message, error) {
+			return &domain.Message{Role: domain.RoleAssistant, Content: "ok"}, nil
 		},
 	}
 
@@ -239,5 +274,6 @@ func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 
 	sess := w.CurrentSession()
-	assert.Equal(t, "[Session cancelled by user]", sess.Messages()[len(sess.Messages())-1].Content)
+	messages := sess.GetMessages()
+	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
 }

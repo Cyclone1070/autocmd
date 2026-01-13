@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
@@ -464,7 +464,7 @@ func TestEditFile(t *testing.T) {
 		}
 
 		display := inv.Display()
-		diffDisplay, ok := display.(tool.DiffDisplay)
+		diffDisplay, ok := display.(domain.DiffDisplay)
 		if !ok {
 			t.Fatalf("expected DiffDisplay, got %T", display)
 		}

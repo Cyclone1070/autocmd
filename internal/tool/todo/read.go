@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 // ReadTodosTool handles reading todos.
@@ -29,33 +29,33 @@ func (t *ReadTodosTool) Name() string {
 }
 
 // Declaration returns the tool's schema for the LLM.
-func (t *ReadTodosTool) Declaration() tool.Declaration {
-	return tool.Declaration{
+func (t *ReadTodosTool) Declaration() domain.Declaration {
+	return domain.Declaration{
 		Name:        "todoread",
 		Description: "Read the current list of todos. Returns a JSON array of todo items.",
-		Parameters: &tool.Schema{
-			Type:       tool.TypeObject,
-			Properties: map[string]*tool.Schema{},
+		Parameters: &domain.Schema{
+			Type:       domain.TypeObject,
+			Properties: map[string]*domain.Schema{},
 			Required:   []string{},
 		},
 	}
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadTodosTool) Prepare(ctx context.Context, params json.RawMessage) (tool.Invocation, error) {
+func (t *ReadTodosTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 	// No validation needed for read - just return the invocation
 	return &readTodosInvocation{
 		store:   t.store,
-		display: tool.StringDisplay("Reading todos"),
+		display: domain.StringDisplay("Reading todos"),
 	}, nil
 }
 
 type readTodosInvocation struct {
 	store   todoStore
-	display tool.ToolDisplay
+	display domain.ToolDisplay
 }
 
-func (i *readTodosInvocation) Display() tool.ToolDisplay {
+func (i *readTodosInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 

@@ -19,7 +19,7 @@ import (
 // Pass nil if events are not needed.
 type Workflow struct {
 	provider       llmProvider
-	toolManager    *toolManager
+	toolExecutor   *toolExecutor
 	sessionStore   sessionStore
 	currentSession *domain.Session
 	currentModel   string
@@ -35,17 +35,17 @@ type Workflow struct {
 // NewWorkflow creates a new Workflow with all dependencies.
 func NewWorkflow(
 	provider llmProvider,
+	toolRegistry toolRegistry,
 	sessionStore sessionStore,
 	cfg *config.Config,
 	events chan<- Event,
-	tools []Tool,
 ) *Workflow {
 	if cfg == nil {
 		panic("cfg is required")
 	}
 	return &Workflow{
 		provider:     provider,
-		toolManager:  newToolManager(tools),
+		toolExecutor: newToolExecutor(toolRegistry),
 		sessionStore: sessionStore,
 		events:       events,
 		cfg:          cfg,
@@ -115,7 +115,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- ThinkingEvent{}
 		}
 
-		resp, err := w.provider.Generate(runCtx, model, sess.Messages, w.toolManager.declarations())
+		resp, err := w.provider.Generate(runCtx, model, sess.Messages, w.toolExecutor.declarations())
 		if err != nil {
 			_ = w.sessionStore.Save(sess)
 			return fmt.Errorf("provider.Generate: %w", err)
@@ -137,7 +137,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		}
 
 		for _, tc := range resp.ToolCalls {
-			toolResp, err := w.toolManager.execute(runCtx, tc, w.events)
+			toolResp, err := w.toolExecutor.execute(runCtx, tc, w.events)
 			if err != nil {
 				_ = w.sessionStore.Save(sess)
 				return fmt.Errorf("tools.Execute (%s): %w", tc.Function.Name, err)

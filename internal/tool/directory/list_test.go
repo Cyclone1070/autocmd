@@ -31,6 +31,19 @@ func (m *mockFileInfoForList) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfoForList) IsDir() bool        { return m.isDir }
 func (m *mockFileInfoForList) Sys() any           { return nil }
 
+// mockDirEntry wraps mockFileInfoForList to implement os.DirEntry
+type mockDirEntry struct {
+	*mockFileInfoForList
+}
+
+func (m *mockDirEntry) Type() os.FileMode {
+	return m.mode
+}
+
+func (m *mockDirEntry) Info() (os.FileInfo, error) {
+	return m.mockFileInfoForList, nil
+}
+
 type mockFileSystemForList struct {
 	files    map[string][]byte
 	dirs     map[string]bool
@@ -113,7 +126,7 @@ func (m *mockFileSystemForList) Stat(path string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockFileSystemForList) ListDir(path string) ([]os.FileInfo, error) {
+func (m *mockFileSystemForList) ListDir(path string) ([]os.DirEntry, error) {
 	if err, ok := m.errors[path]; ok {
 		return nil, err
 	}
@@ -132,7 +145,7 @@ func (m *mockFileSystemForList) ListDir(path string) ([]os.FileInfo, error) {
 		return nil, fmt.Errorf("not a directory")
 	}
 
-	var entries []os.FileInfo
+	var entries []os.DirEntry
 	prefix := finalPath
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
@@ -155,7 +168,10 @@ func (m *mockFileSystemForList) ListDir(path string) ([]os.FileInfo, error) {
 					return // Ignore if stat fails during list
 				}
 				if info != nil {
-					entries = append(entries, info)
+					// Wrap FileInfo in DirEntry
+					if mockInfo, ok := info.(*mockFileInfoForList); ok {
+						entries = append(entries, &mockDirEntry{mockInfo})
+					}
 				}
 			}
 		}

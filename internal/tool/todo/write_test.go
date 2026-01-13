@@ -42,9 +42,9 @@ func TestWriteTodosTool_Success(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
-			{Description: "Task 1", Status: TodoStatusPending},
-			{Description: "Task 2", Status: TodoStatusInProgress},
+		Todos: []todo{
+			{Description: "Task 1", Status: todoStatusPending},
+			{Description: "Task 2", Status: todoStatusInProgress},
 		},
 	}
 
@@ -52,7 +52,7 @@ func TestWriteTodosTool_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify JSON output
-	var todos []Todo
+	var todos []todo
 	err = json.Unmarshal([]byte(result), &todos)
 	require.NoError(t, err)
 	assert.Len(t, todos, 2)
@@ -65,7 +65,7 @@ func TestWriteTodosTool_EmptyTodos(t *testing.T) {
 	store := &mockTodoStore{}
 	tool := NewWriteTodosTool(store)
 
-	req := &WriteTodosRequest{Todos: []Todo{}}
+	req := &WriteTodosRequest{Todos: []todo{}}
 	result, err := executeWrite(t, tool, req)
 	require.NoError(t, err)
 	assert.Equal(t, "[]", result)
@@ -76,7 +76,7 @@ func TestWriteTodosTool_InvalidStatus(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
+		Todos: []todo{
 			{Description: "Task 1", Status: "invalid"},
 		},
 	}
@@ -92,8 +92,8 @@ func TestWriteTodosTool_EmptyDescription(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
-			{Description: "", Status: TodoStatusPending},
+		Todos: []todo{
+			{Description: "", Status: todoStatusPending},
 		},
 	}
 
@@ -108,8 +108,8 @@ func TestWriteTodosTool_StoreError(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
-			{Description: "Task 1", Status: TodoStatusPending},
+		Todos: []todo{
+			{Description: "Task 1", Status: todoStatusPending},
 		},
 	}
 
@@ -124,18 +124,18 @@ func TestWriteTodosTool_AllStatuses(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
-			{Description: "Pending", Status: TodoStatusPending},
-			{Description: "In Progress", Status: TodoStatusInProgress},
-			{Description: "Completed", Status: TodoStatusCompleted},
-			{Description: "Cancelled", Status: TodoStatusCancelled},
+		Todos: []todo{
+			{Description: "Pending", Status: todoStatusPending},
+			{Description: "In Progress", Status: todoStatusInProgress},
+			{Description: "Completed", Status: todoStatusCompleted},
+			{Description: "Cancelled", Status: todoStatusCancelled},
 		},
 	}
 
 	result, err := executeWrite(t, tool, req)
 	require.NoError(t, err)
 
-	var todos []Todo
+	var todos []todo
 	err = json.Unmarshal([]byte(result), &todos)
 	require.NoError(t, err)
 	assert.Len(t, todos, 4)
@@ -146,8 +146,8 @@ func TestWriteTodosTool_ContextCancelled(t *testing.T) {
 	tool := NewWriteTodosTool(store)
 
 	req := &WriteTodosRequest{
-		Todos: []Todo{
-			{Description: "Task 1", Status: TodoStatusPending},
+		Todos: []todo{
+			{Description: "Task 1", Status: todoStatusPending},
 		},
 	}
 

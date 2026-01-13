@@ -4,8 +4,10 @@ import (
 	"log"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/session"
+	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/search"
@@ -39,27 +41,21 @@ func main() {
 		ignoreMatcher = nil
 	}
 
-	listDirTool := directory.NewListDirectoryTool(fileSystem, cfg, pathResolver, ignoreMatcher)
-	readFileTool := file.NewReadFileTool(fileSystem, checksumMgr, pathResolver, cfg)
-	editFileTool := file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg)
-	writeFileTool := file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg)
-	findFileTool := search.NewFindFileTool(fileSystem, cmdExecutor, cfg, pathResolver)
-	searchContentTool := search.NewSearchContentTool(fileSystem, cmdExecutor, cfg, pathResolver)
-	shellTool := shell.NewShellTool(fileSystem, cmdExecutor, cfg, pathResolver)
-	readTodosTool := todo.NewReadTodosTool(todoStore)
-	writeTodosTool := todo.NewWriteTodosTool(todoStore)
-
-	tools := []workflow.Tool{
-		listDirTool,
-		readFileTool,
-		editFileTool,
-		writeFileTool,
-		findFileTool,
-		searchContentTool,
-		shellTool,
-		readTodosTool,
-		writeTodosTool,
+	// Construct all tools (composition root)
+	tools := []domain.Tool{
+		directory.NewListDirectoryTool(fileSystem, cfg, pathResolver, ignoreMatcher),
+		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver, cfg),
+		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg),
+		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg),
+		search.NewFindFileTool(fileSystem, cmdExecutor, cfg, pathResolver),
+		search.NewSearchContentTool(fileSystem, cmdExecutor, cfg, pathResolver),
+		shell.NewShellTool(fileSystem, cmdExecutor, cfg, pathResolver),
+		todo.NewReadTodosTool(todoStore),
+		todo.NewWriteTodosTool(todoStore),
 	}
+
+	// Create tool registry (pure storage)
+	toolRegistry := tool.NewRegistry(tools)
 
 	// Create dependencies
 	store := session.NewStore(cfg, fileSystem)
@@ -68,10 +64,10 @@ func main() {
 	// TODO: Provider implementation is deferred.
 	// Once implemented, uncomment the following:
 	// provider := google.NewClient(os.Getenv("GEMINI_API_KEY"))
-	// wf := workflow.NewWorkflow(provider, store, cfg, events, tools)
+	// wf := workflow.NewWorkflow(provider, toolRegistry, store, cfg, events)
 	// _ = wf
 
-	_ = tools
+	_ = toolRegistry
 	_ = store
 	_ = events
 

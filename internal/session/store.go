@@ -19,7 +19,7 @@ type fileSystem interface {
 	WriteFileAtomic(path string, content []byte, perm os.FileMode) error
 	EnsureDirs(path string) error
 	ReadFile(path string) ([]byte, error)
-	ReadDir(path string) ([]os.DirEntry, error)
+	ListDir(path string) ([]os.DirEntry, error)
 	Remove(path string) error
 }
 
@@ -149,7 +149,7 @@ func (st *Store) Save(s *domain.Session) error {
 // List returns summaries of all sessions sorted by update time (newest first).
 // Only loads metadata, NOT messages. Use Get() for full session data.
 func (st *Store) List() ([]domain.SessionSummary, error) {
-	entries, err := st.fs.ReadDir(st.storageDir)
+	entries, err := st.fs.ListDir(st.storageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []domain.SessionSummary{}, nil

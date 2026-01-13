@@ -11,7 +11,7 @@ type pathResolver interface {
 // dirLister defines the filesystem operations needed for listing directories.
 type dirLister interface {
 	Stat(path string) (os.FileInfo, error)
-	ListDir(path string) ([]os.FileInfo, error)
+	ListDir(path string) ([]os.DirEntry, error)
 }
 
 // ignoreMatcher defines the interface for gitignore pattern matching.

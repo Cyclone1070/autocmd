@@ -12,25 +12,25 @@ import (
 
 // Mock store for testing
 type mockTodoStore struct {
-	todos    []Todo
+	todos    []todo
 	readErr  error
 	writeErr error
 }
 
-func (m *mockTodoStore) Read() ([]Todo, error) {
+func (m *mockTodoStore) Read() ([]todo, error) {
 	if m.readErr != nil {
 		return nil, m.readErr
 	}
-	result := make([]Todo, len(m.todos))
+	result := make([]todo, len(m.todos))
 	copy(result, m.todos)
 	return result, nil
 }
 
-func (m *mockTodoStore) Write(todos []Todo) error {
+func (m *mockTodoStore) Write(todos []todo) error {
 	if m.writeErr != nil {
 		return m.writeErr
 	}
-	m.todos = make([]Todo, len(todos))
+	m.todos = make([]todo, len(todos))
 	copy(m.todos, todos)
 	return nil
 }
@@ -62,7 +62,7 @@ func TestReadTodosTool_Declaration(t *testing.T) {
 }
 
 func TestReadTodosTool_EmptyStore(t *testing.T) {
-	store := &mockTodoStore{todos: []Todo{}}
+	store := &mockTodoStore{todos: []todo{}}
 	tool := NewReadTodosTool(store)
 
 	result, err := executeRead(t, tool, "{}")
@@ -72,9 +72,9 @@ func TestReadTodosTool_EmptyStore(t *testing.T) {
 
 func TestReadTodosTool_WithTodos(t *testing.T) {
 	store := &mockTodoStore{
-		todos: []Todo{
-			{Description: "Task 1", Status: TodoStatusPending},
-			{Description: "Task 2", Status: TodoStatusCompleted},
+		todos: []todo{
+			{Description: "Task 1", Status: todoStatusPending},
+			{Description: "Task 2", Status: todoStatusCompleted},
 		},
 	}
 	tool := NewReadTodosTool(store)
@@ -83,12 +83,12 @@ func TestReadTodosTool_WithTodos(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify it's valid JSON
-	var todos []Todo
+	var todos []todo
 	err = json.Unmarshal([]byte(result), &todos)
 	require.NoError(t, err)
 	assert.Len(t, todos, 2)
 	assert.Equal(t, "Task 1", todos[0].Description)
-	assert.Equal(t, TodoStatusPending, todos[0].Status)
+	assert.Equal(t, todoStatusPending, todos[0].Status)
 }
 
 func TestReadTodosTool_StoreError(t *testing.T) {

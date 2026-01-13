@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 )
 
@@ -79,4 +80,11 @@ type ShellDisplay struct {
 }
 
 func (ShellDisplay) isToolDisplay() {}
+
+// Tool defines the interface for individual tools.
+type Tool interface {
+	Name() string
+	Declaration() Declaration
+	Prepare(ctx context.Context, params json.RawMessage) (Invocation, error)
+}
 

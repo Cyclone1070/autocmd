@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -22,9 +21,9 @@ type sessionStore interface {
 	Delete(id string) error
 }
 
-// Tool defines the interface for individual tools.
-type Tool interface {
-	Name() string
-	Declaration() domain.Declaration
-	Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
+// toolRegistry provides tool storage and lookup.
+// Implemented by tool.Registry, injected via NewWorkflow.
+type toolRegistry interface {
+	Declarations() []domain.Declaration
+	Get(name string) (domain.Tool, bool)
 }

@@ -4,41 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-type toolManager struct {
-	registry map[string]Tool
+type toolExecutor struct {
+	registry toolRegistry
 }
 
-func newToolManager(tools []Tool) *toolManager {
-	tm := &toolManager{
-		registry: make(map[string]Tool),
+func newToolExecutor(registry toolRegistry) *toolExecutor {
+	return &toolExecutor{
+		registry: registry,
 	}
-	for _, t := range tools {
-		tm.registry[t.Name()] = t
-	}
-	return tm
 }
 
-func (m *toolManager) declarations() []domain.Declaration {
-	decls := make([]domain.Declaration, 0, len(m.registry))
-	for _, t := range m.registry {
-		decls = append(decls, t.Declaration())
-	}
-	sort.Slice(decls, func(i, j int) bool {
-		return decls[i].Name < decls[j].Name
-	})
-	return decls
+func (e *toolExecutor) declarations() []domain.Declaration {
+	return e.registry.Declarations()
 }
 
-func (m *toolManager) execute(ctx context.Context, tc domain.ToolCall, events chan<- Event) (domain.Message, error) {
-	t, ok := m.registry[tc.Function.Name]
+func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events chan<- Event) (domain.Message, error) {
+	t, ok := e.registry.Get(tc.Function.Name)
 	if !ok {
-		decls := m.declarations()
+		decls := e.declarations()
 		declsJSON, _ := json.MarshalIndent(decls, "", "  ")
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, declsJSON)
 
@@ -134,3 +122,4 @@ func (m *toolManager) execute(ctx context.Context, tc domain.ToolCall, events ch
 		Content:    llmContent,
 	}, nil
 }
+

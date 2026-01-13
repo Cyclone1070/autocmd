@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Mocks for toolManager tests ---
+// --- Mocks for toolExecutor tests ---
 
 type tmMockTool struct {
 	name        string
@@ -42,27 +42,57 @@ func (m *tmMockInvocation) Execute(ctx context.Context) (string, error) {
 }
 func (m *tmMockInvocation) Display() domain.ToolDisplay { return m.display }
 
+type mockToolRegistry struct {
+	tools map[string]domain.Tool
+}
+
+func newMockToolRegistry(tools []domain.Tool) *mockToolRegistry {
+	m := &mockToolRegistry{tools: make(map[string]domain.Tool)}
+	for _, t := range tools {
+		m.tools[t.Name()] = t
+	}
+	return m
+}
+
+func (m *mockToolRegistry) Declarations() []domain.Declaration {
+	decls := make([]domain.Declaration, 0, len(m.tools))
+	for _, t := range m.tools {
+		decls = append(decls, t.Declaration())
+	}
+	sort.Slice(decls, func(i, j int) bool {
+		return decls[i].Name < decls[j].Name
+	})
+	return decls
+}
+
+func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
+	tool, ok := m.tools[name]
+	return tool, ok
+}
+
 // --- Tests ---
 
 func TestRegister_DuplicateName(t *testing.T) {
 	mt1 := &tmMockTool{name: "test-tool", description: "v1"}
 	mt2 := &tmMockTool{name: "test-tool", description: "v2"}
 
-	tm := newToolManager([]Tool{mt1, mt2})
+	registry := newMockToolRegistry([]domain.Tool{mt1, mt2})
+	executor := newToolExecutor(registry)
 
-	decls := tm.declarations()
+	decls := executor.declarations()
 	assert.Len(t, decls, 1)
 	assert.Equal(t, "v2", decls[0].Description)
 }
 
 func TestDeclarations_SortedByName(t *testing.T) {
-	tm := newToolManager([]Tool{
+	registry := newMockToolRegistry([]domain.Tool{
 		&tmMockTool{name: "z"},
 		&tmMockTool{name: "a"},
 		&tmMockTool{name: "m"},
 	})
+	executor := newToolExecutor(registry)
 
-	decls := tm.declarations()
+	decls := executor.declarations()
 	assert.Len(t, decls, 3)
 	assert.Equal(t, "a", decls[0].Name)
 	assert.Equal(t, "m", decls[1].Name)
@@ -70,8 +100,9 @@ func TestDeclarations_SortedByName(t *testing.T) {
 }
 
 func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
-	tm := newToolManager([]Tool{})
-	res, err := tm.execute(context.Background(), domain.ToolCall{
+	registry := newMockToolRegistry([]domain.Tool{})
+	executor := newToolExecutor(registry)
+	res, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:       "tc-123",
 		Function: domain.FunctionCall{Name: "unknown"},
 	}, nil)
@@ -90,9 +121,10 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 			return &tmMockInvocation{content: "ok"}, nil
 		},
 	}
-	tm := newToolManager([]Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
 
-	_, err := tm.execute(context.Background(), domain.ToolCall{
+	_, err := executor.execute(context.Background(), domain.ToolCall{
 		ID: "tc-456",
 		Function: domain.FunctionCall{
 			Name:      "test",
@@ -111,9 +143,10 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 			return nil, fmt.Errorf("bad params")
 		},
 	}
-	tm := newToolManager([]Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
 
-	res, err := tm.execute(context.Background(), domain.ToolCall{
+	res, err := executor.execute(context.Background(), domain.ToolCall{
 		ID: "tc-789",
 		Function: domain.FunctionCall{
 			Name: "test",
@@ -134,10 +167,11 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 			}, nil
 		},
 	}
-	tm := newToolManager([]Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
 
 	events := make(chan Event, 10)
-	_, err := tm.execute(context.Background(), domain.ToolCall{
+	_, err := executor.execute(context.Background(), domain.ToolCall{
 		ID: "tc-1",
 		Function: domain.FunctionCall{
 			Name: "test",
@@ -174,10 +208,11 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 			}, nil
 		},
 	}
-	tm := newToolManager([]Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
 
 	events := make(chan Event, 10)
-	_, err := tm.execute(context.Background(), domain.ToolCall{
+	_, err := executor.execute(context.Background(), domain.ToolCall{
 		ID: "tc-shell",
 		Function: domain.FunctionCall{
 			Name: "shell",
@@ -217,10 +252,11 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 			}, nil
 		},
 	}
-	tm := newToolManager([]Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
 
 	events := make(chan Event, 10)
-	res, err := tm.execute(context.Background(), domain.ToolCall{
+	res, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:       "tc-fail",
 		Function: domain.FunctionCall{Name: "fail"},
 	}, events)
@@ -240,12 +276,13 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
-	tm := newToolManager([]Tool{&tmMockTool{name: "tool"}})
+	registry := newMockToolRegistry([]domain.Tool{&tmMockTool{name: "tool"}})
+	executor := newToolExecutor(registry)
 
 	results := make(chan bool, 10)
 	for i := range 10 {
 		go func(id int) {
-			_, err := tm.execute(context.Background(), domain.ToolCall{
+			_, err := executor.execute(context.Background(), domain.ToolCall{
 				ID:       fmt.Sprintf("tc-%d", id),
 				Function: domain.FunctionCall{Name: "tool", Arguments: json.RawMessage(`{}`)},
 			}, nil)
@@ -259,16 +296,18 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 }
 
 func TestDeclarations_Sorted(t *testing.T) {
-	tm := newToolManager([]Tool{
+	registry := newMockToolRegistry([]domain.Tool{
 		&tmMockTool{name: "z"},
 		&tmMockTool{name: "a"},
 		&tmMockTool{name: "m"},
 	})
+	executor := newToolExecutor(registry)
 
-	decls := tm.declarations()
+	decls := executor.declarations()
 	var names []string
 	for _, d := range decls {
 		names = append(names, d.Name)
 	}
 	assert.True(t, sort.StringsAreSorted(names))
 }
+

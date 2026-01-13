@@ -115,33 +115,14 @@ func (fs *OSFileSystem) UserHomeDir() (string, error) {
 }
 
 // ListDir lists the contents of a directory.
-// Returns a slice of FileInfo for each entry in the directory.
-func (fs *OSFileSystem) ListDir(path string) ([]os.FileInfo, error) {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return nil, err
-	}
-
-	infos := make([]os.FileInfo, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			return nil, err
-		}
-		infos = append(infos, info)
-	}
-
-	return infos, nil
+// Returns a slice of DirEntry for each entry in the directory.
+func (fs *OSFileSystem) ListDir(path string) ([]os.DirEntry, error) {
+	return os.ReadDir(path)
 }
 
 // Stat returns the FileInfo for a file.
 func (fs *OSFileSystem) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
-}
-
-// ReadDir returns directory entries.
-func (fs *OSFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
-	return os.ReadDir(path)
 }
 
 // Remove deletes a file.

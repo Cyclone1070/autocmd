@@ -77,7 +77,7 @@ func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func (m *mockFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
+func (m *mockFileSystem) ListDir(path string) ([]os.DirEntry, error) {
 	if m.dirErr != nil {
 		return nil, m.dirErr
 	}

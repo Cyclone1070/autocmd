@@ -97,9 +97,10 @@ func (m *mockSessionStore) Delete(id string) error {
 
 // --- Helper to create test workflow ---
 
-func newTestWorkflow(t *testing.T, mp llmProvider, tools []Tool, events chan Event) *Workflow {
+func newTestWorkflow(t *testing.T, mp llmProvider, tools []domain.Tool, events chan Event) *Workflow {
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
-	return NewWorkflow(mp, newMockSessionStore(), cfg, events, tools)
+	registry := newMockToolRegistry(tools)
+	return NewWorkflow(mp, registry, newMockSessionStore(), cfg, events)
 }
 
 // --- Tests ---
@@ -114,7 +115,7 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 		},
 	}
 
-	w := newTestWorkflow(t, mp, []Tool{}, events)
+	w := newTestWorkflow(t, mp, []domain.Tool{}, events)
 	err := w.Run(ctx, "Hi")
 
 	assert.NoError(t, err)
@@ -157,7 +158,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 		},
 	}
 
-	w := newTestWorkflow(t, mp, []Tool{mt}, events)
+	w := newTestWorkflow(t, mp, []domain.Tool{mt}, events)
 	err := w.Run(ctx, "Weather?")
 
 	assert.NoError(t, err)
@@ -195,7 +196,8 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 	}
 
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
-	w := NewWorkflow(mp, newMockSessionStore(), cfg, nil, []Tool{mt})
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	w := NewWorkflow(mp, registry, newMockSessionStore(), cfg, nil)
 
 	err := w.Run(context.Background(), "go")
 
@@ -214,7 +216,7 @@ func TestRun_ProviderError_ReturnsError(t *testing.T) {
 		},
 	}
 
-	w := newTestWorkflow(t, mp, []Tool{}, make(chan Event, 10))
+	w := newTestWorkflow(t, mp, []domain.Tool{}, make(chan Event, 10))
 	err := w.Run(context.Background(), "hi")
 
 	assert.Error(t, err)
@@ -250,7 +252,7 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 	}
 
 	// Use nil events to avoid channel overflow
-	w := newTestWorkflow(t, mp, []Tool{mt}, nil)
+	w := newTestWorkflow(t, mp, []domain.Tool{mt}, nil)
 	err := w.Run(ctx, "hi")
 
 	// Tool errors are NOT propagated as Run() errors in new design
@@ -268,7 +270,7 @@ func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	w := newTestWorkflow(t, mp, []Tool{}, nil)
+	w := newTestWorkflow(t, mp, []domain.Tool{}, nil)
 	err := w.Run(ctx, "hi")
 
 	assert.ErrorIs(t, err, context.Canceled)

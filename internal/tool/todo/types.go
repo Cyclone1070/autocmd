@@ -1,17 +1,17 @@
 package todo
 
-// TodoStatus represents the status of a todo item.
-type TodoStatus string
+// todoStatus represents the status of a todo item.
+type todoStatus string
 
 const (
-	TodoStatusPending    TodoStatus = "pending"
-	TodoStatusInProgress TodoStatus = "in_progress"
-	TodoStatusCompleted  TodoStatus = "completed"
-	TodoStatusCancelled  TodoStatus = "cancelled"
+	todoStatusPending    todoStatus = "pending"
+	todoStatusInProgress todoStatus = "in_progress"
+	todoStatusCompleted  todoStatus = "completed"
+	todoStatusCancelled  todoStatus = "cancelled"
 )
 
-// Todo represents a single todo item.
-type Todo struct {
+// todo represents a single todo item.
+type todo struct {
 	Description string     `json:"description"`
-	Status      TodoStatus `json:"status"`
+	Status      todoStatus `json:"status"`
 }

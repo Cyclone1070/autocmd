@@ -56,7 +56,7 @@ func (t *WriteTodosTool) Declaration() domain.Declaration {
 
 // WriteTodosRequest is the input for WriteTodosTool.
 type WriteTodosRequest struct {
-	Todos []Todo `json:"todos"`
+	Todos []todo `json:"todos"`
 }
 
 // Prepare validates the request and returns an Invocation.
@@ -75,7 +75,7 @@ func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (d
 
 		// Validate status
 		switch todo.Status {
-		case TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted, TodoStatusCancelled:
+		case todoStatusPending, todoStatusInProgress, todoStatusCompleted, todoStatusCancelled:
 			// Valid
 		default:
 			return nil, fmt.Errorf("todo[%d]: invalid status %q", i, todo.Status)
@@ -91,7 +91,7 @@ func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (d
 
 type writeTodosInvocation struct {
 	store   todoStore
-	todos   []Todo
+	todos   []todo
 	display domain.ToolDisplay
 }
 

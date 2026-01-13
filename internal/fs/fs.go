@@ -138,3 +138,13 @@ func (fs *OSFileSystem) ListDir(path string) ([]os.FileInfo, error) {
 func (fs *OSFileSystem) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
 }
+
+// ReadDir returns directory entries.
+func (fs *OSFileSystem) ReadDir(path string) ([]os.DirEntry, error) {
+	return os.ReadDir(path)
+}
+
+// Remove deletes a file.
+func (fs *OSFileSystem) Remove(path string) error {
+	return os.Remove(path)
+}

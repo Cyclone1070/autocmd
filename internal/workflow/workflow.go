@@ -84,7 +84,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	sess := w.currentSession
 	model := w.currentModel
 
-	sess.Add(domain.Message{
+	sess.Messages = append(sess.Messages, domain.Message{
 		Role:    domain.RoleUser,
 		Content: input,
 	})
@@ -103,7 +103,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	maxIterations := w.cfg.Tools.MaxIterations
 	for range maxIterations {
 		if err := runCtx.Err(); err != nil {
-			sess.Add(domain.Message{
+			sess.Messages = append(sess.Messages, domain.Message{
 				Role:    domain.RoleUser,
 				Content: "[Session cancelled by user]",
 			})
@@ -115,7 +115,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- ThinkingEvent{}
 		}
 
-		resp, err := w.provider.Generate(runCtx, model, sess.GetMessages(), w.toolManager.declarations())
+		resp, err := w.provider.Generate(runCtx, model, sess.Messages, w.toolManager.declarations())
 		if err != nil {
 			_ = w.sessionStore.Save(sess)
 			return fmt.Errorf("provider.Generate: %w", err)
@@ -125,7 +125,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			return fmt.Errorf("provider.Generate returned nil response")
 		}
 
-		sess.Add(*resp)
+		sess.Messages = append(sess.Messages, *resp)
 
 		if resp.Content != "" && w.events != nil {
 			w.events <- TextEvent{Text: resp.Content}
@@ -142,11 +142,11 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 				_ = w.sessionStore.Save(sess)
 				return fmt.Errorf("tools.Execute (%s): %w", tc.Function.Name, err)
 			}
-			sess.Add(toolResp)
+			sess.Messages = append(sess.Messages, toolResp)
 		}
 	}
 
-	sess.Add(domain.Message{
+	sess.Messages = append(sess.Messages, domain.Message{
 		Role:    domain.RoleUser,
 		Content: "[Max iterations reached]",
 	})

@@ -120,9 +120,9 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	assert.NoError(t, err)
 
 	sess := w.CurrentSession()
-	assert.Equal(t, 2, len(sess.GetMessages()))
-	assert.Equal(t, "Hi", sess.GetMessages()[0].Content)
-	assert.Equal(t, "Hello!", sess.GetMessages()[1].Content)
+	assert.Equal(t, 2, len(sess.Messages))
+	assert.Equal(t, "Hi", sess.Messages[0].Content)
+	assert.Equal(t, "Hello!", sess.Messages[1].Content)
 
 	assert.IsType(t, ThinkingEvent{}, <-events)
 	assert.Equal(t, TextEvent{Text: "Hello!"}, <-events)
@@ -164,7 +164,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 	assert.Equal(t, 2, callCount)
 
 	sess := w.CurrentSession()
-	assert.Equal(t, 4, len(sess.GetMessages())) // User, Assist(ToolCall), ToolResp, Assist(Text)
+	assert.Equal(t, 4, len(sess.Messages)) // User, Assist(ToolCall), ToolResp, Assist(Text)
 
 	// Consume events
 	assert.IsType(t, ThinkingEvent{}, <-events)  // First thinking
@@ -203,7 +203,7 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "max iterations (3) reached")
 
 	sess := w.CurrentSession()
-	messages := sess.GetMessages()
+	messages := sess.Messages
 	assert.Equal(t, "[Max iterations reached]", messages[len(messages)-1].Content)
 }
 
@@ -274,6 +274,6 @@ func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 
 	sess := w.CurrentSession()
-	messages := sess.GetMessages()
+	messages := sess.Messages
 	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
 }

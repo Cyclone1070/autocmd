@@ -18,6 +18,9 @@ import (
 type fileSystem interface {
 	WriteFileAtomic(path string, content []byte, perm os.FileMode) error
 	EnsureDirs(path string) error
+	ReadFile(path string) ([]byte, error)
+	ReadDir(path string) ([]os.DirEntry, error)
+	Remove(path string) error
 }
 
 // sessionInfoDTO is used for the .json file (metadata only).
@@ -68,7 +71,7 @@ func (st *Store) Create() (*domain.Session, error) {
 func (st *Store) Get(id string) (*domain.Session, error) {
 	// Read info file
 	infoPath := filepath.Join(st.storageDir, id+".json")
-	infoData, err := os.ReadFile(infoPath)
+	infoData, err := st.fs.ReadFile(infoPath)
 	if err != nil {
 		return nil, fmt.Errorf("read session info: %w", err)
 	}
@@ -81,7 +84,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 	// Read messages file
 	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
 	var messages []domain.Message
-	messagesData, err := os.ReadFile(messagesPath)
+	messagesData, err := st.fs.ReadFile(messagesPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("read session messages: %w", err)
@@ -146,7 +149,7 @@ func (st *Store) Save(s *domain.Session) error {
 // List returns summaries of all sessions sorted by update time (newest first).
 // Only loads metadata, NOT messages. Use Get() for full session data.
 func (st *Store) List() ([]domain.SessionSummary, error) {
-	entries, err := os.ReadDir(st.storageDir)
+	entries, err := st.fs.ReadDir(st.storageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []domain.SessionSummary{}, nil
@@ -168,7 +171,7 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 
 		// Read only the info file
 		infoPath := filepath.Join(st.storageDir, name)
-		infoData, err := os.ReadFile(infoPath)
+		infoData, err := st.fs.ReadFile(infoPath)
 		if err != nil {
 			continue // skip corrupted
 		}
@@ -201,10 +204,10 @@ func (st *Store) Delete(id string) error {
 	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
 
 	// Remove both files, ignore "not exist" errors
-	if err := os.Remove(infoPath); err != nil && !os.IsNotExist(err) {
+	if err := st.fs.Remove(infoPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.Remove(messagesPath); err != nil && !os.IsNotExist(err) {
+	if err := st.fs.Remove(messagesPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

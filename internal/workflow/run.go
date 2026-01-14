@@ -92,8 +92,6 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)
-			case domain.UsageChunk:
-				// Usage metadata (optional)
 			}
 		}
 

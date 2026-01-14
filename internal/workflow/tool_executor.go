@@ -33,6 +33,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		return domain.Message{
 			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
 			Content:    errMsg,
 		}, nil
 	}
@@ -48,6 +49,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		return domain.Message{
 			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
 			Content:    errMsg,
 		}, nil
 	}
@@ -103,6 +105,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		return domain.Message{
 			Role:       domain.RoleTool,
 			ToolCallID: tc.ID,
+			ToolName:   tc.Name,
 			Content:    llmContent,
 		}, nil
 	}
@@ -119,6 +122,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 	return domain.Message{
 		Role:       domain.RoleTool,
 		ToolCallID: tc.ID,
+		ToolName:   tc.Name,
 		Content:    llmContent,
 	}, nil
 }

@@ -15,15 +15,13 @@ import (
 // --- Mocks for Workflow tests ---
 
 type mockProvider struct {
-	name        string
-	displayName string
-	models      []domain.Model
-	streams     []*mockStream
-	streamErr   error // Error starting stream
+	name      string
+	models    []domain.Model
+	streams   []*mockStream
+	streamErr error // Error starting stream
 }
 
-func (m *mockProvider) Name() string        { return m.name }
-func (m *mockProvider) DisplayName() string { return m.displayName }
+func (m *mockProvider) Name() string { return m.name }
 func (m *mockProvider) ListModels(ctx context.Context) ([]domain.Model, error) {
 	return m.models, nil
 }

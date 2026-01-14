@@ -1,15 +1,13 @@
 package workflow
 
 import (
-	"context"
-
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// llmProvider communicates with an LLM.
-type llmProvider interface {
-	Generate(ctx context.Context, model string, msgs []domain.Message, tools []domain.Declaration) (*domain.Message, error)
-	ListModels(ctx context.Context) ([]string, error)
+// providerRegistry manages multiple LLM providers.
+type providerRegistry interface {
+	Get(name string) (domain.Provider, bool)
+	List() []string
 }
 
 // sessionStore manages session persistence.

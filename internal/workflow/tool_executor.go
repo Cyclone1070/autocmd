@@ -24,11 +24,11 @@ func (e *toolExecutor) declarations() []domain.Declaration {
 }
 
 func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events chan<- Event) (domain.Message, error) {
-	t, ok := e.registry.Get(tc.Function.Name)
+	t, ok := e.registry.Get(tc.Name)
 	if !ok {
 		decls := e.declarations()
 		declsJSON, _ := json.MarshalIndent(decls, "", "  ")
-		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, declsJSON)
+		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Name, declsJSON)
 
 		return domain.Message{
 			Role:       domain.RoleTool,
@@ -37,13 +37,13 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		}, nil
 	}
 
-	inv, err := t.Prepare(ctx, tc.Function.Arguments)
+	inv, err := t.Prepare(ctx, tc.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
 			return domain.Message{}, ctx.Err()
 		}
 		declJSON, _ := json.MarshalIndent(t.Declaration(), "", "  ")
-		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, declJSON)
+		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Name, err, declJSON)
 
 		return domain.Message{
 			Role:       domain.RoleTool,
@@ -57,7 +57,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 	if events != nil {
 		events <- ToolStartEvent{
 			CallID:   tc.ID,
-			ToolName: tc.Function.Name,
+			ToolName: tc.Name,
 			Display:  display,
 		}
 	}
@@ -122,4 +122,3 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		Content:    llmContent,
 	}, nil
 }
-

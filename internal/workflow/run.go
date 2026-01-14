@@ -70,35 +70,54 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- ThinkingEvent{}
 		}
 
-		resp, err := w.provider.Generate(runCtx, model, sess.Messages, w.toolExecutor.declarations())
+		if w.currentProvider == nil {
+			return fmt.Errorf("no provider selected")
+		}
+
+		stream, err := w.currentProvider.Stream(runCtx, model, sess.Messages, w.toolExecutor.declarations())
 		if err != nil {
 			_ = w.sessionStore.Save(sess)
-			return fmt.Errorf("provider.Generate: %w", err)
+			return fmt.Errorf("provider.Stream: %w", err)
 		}
-		if resp == nil {
+
+		var msg domain.Message
+		msg.Role = domain.RoleAssistant
+
+		for stream.Next() {
+			switch c := stream.Chunk().(type) {
+			case domain.TextChunk:
+				msg.Content += c.Text
+				if w.events != nil {
+					w.events <- TextEvent{Text: c.Text}
+				}
+			case domain.ToolCall:
+				msg.ToolCalls = append(msg.ToolCalls, c)
+			case domain.UsageChunk:
+				// Usage metadata (optional)
+			}
+		}
+
+		if err := stream.Err(); err != nil {
 			_ = w.sessionStore.Save(sess)
-			return fmt.Errorf("provider.Generate returned nil response")
+			return fmt.Errorf("stream.Err: %w", err)
 		}
 
-		sess.Messages = append(sess.Messages, *resp)
+		sess.Messages = append(sess.Messages, msg)
 
-		if resp.Content != "" && w.events != nil {
-			w.events <- TextEvent{Text: resp.Content}
-		}
-
-		if len(resp.ToolCalls) == 0 {
+		if len(msg.ToolCalls) == 0 {
 			_ = w.sessionStore.Save(sess)
 			return nil
 		}
 
-		for _, tc := range resp.ToolCalls {
+		for _, tc := range msg.ToolCalls {
 			toolResp, err := w.toolExecutor.execute(runCtx, tc, w.events)
 			if err != nil {
 				_ = w.sessionStore.Save(sess)
-				return fmt.Errorf("tools.Execute (%s): %w", tc.Function.Name, err)
+				return fmt.Errorf("tools.Execute (%s): %w", tc.Name, err)
 			}
 			sess.Messages = append(sess.Messages, toolResp)
 		}
+
 	}
 
 	sess.Messages = append(sess.Messages, domain.Message{
@@ -109,4 +128,3 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	_ = w.sessionStore.Save(sess)
 	return fmt.Errorf("max iterations (%d) reached", maxIterations)
 }
-

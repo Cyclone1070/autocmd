@@ -103,8 +103,8 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{})
 	executor := newToolExecutor(registry)
 	res, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:       "tc-123",
-		Function: domain.FunctionCall{Name: "unknown"},
+		ID:   "tc-123",
+		Name: "unknown",
 	}, nil)
 
 	assert.NoError(t, err)
@@ -125,11 +125,9 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	executor := newToolExecutor(registry)
 
 	_, err := executor.execute(context.Background(), domain.ToolCall{
-		ID: "tc-456",
-		Function: domain.FunctionCall{
-			Name:      "test",
-			Arguments: json.RawMessage(`{"value": "hello"}`),
-		},
+		ID:        "tc-456",
+		Name:      "test",
+		Arguments: json.RawMessage(`{"value": "hello"}`),
 	}, nil)
 
 	assert.NoError(t, err)
@@ -147,10 +145,8 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	executor := newToolExecutor(registry)
 
 	res, err := executor.execute(context.Background(), domain.ToolCall{
-		ID: "tc-789",
-		Function: domain.FunctionCall{
-			Name: "test",
-		},
+		ID:   "tc-789",
+		Name: "test",
 	}, nil)
 
 	assert.NoError(t, err)
@@ -172,10 +168,8 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 
 	events := make(chan Event, 10)
 	_, err := executor.execute(context.Background(), domain.ToolCall{
-		ID: "tc-1",
-		Function: domain.FunctionCall{
-			Name: "test",
-		},
+		ID:   "tc-1",
+		Name: "test",
 	}, events)
 
 	assert.NoError(t, err)
@@ -213,10 +207,8 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 
 	events := make(chan Event, 10)
 	_, err := executor.execute(context.Background(), domain.ToolCall{
-		ID: "tc-shell",
-		Function: domain.FunctionCall{
-			Name: "shell",
-		},
+		ID:   "tc-shell",
+		Name: "shell",
 	}, events)
 
 	assert.NoError(t, err)
@@ -257,8 +249,8 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 
 	events := make(chan Event, 10)
 	res, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:       "tc-fail",
-		Function: domain.FunctionCall{Name: "fail"},
+		ID:   "tc-fail",
+		Name: "fail",
 	}, events)
 
 	assert.NoError(t, err)
@@ -283,8 +275,9 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	for i := range 10 {
 		go func(id int) {
 			_, err := executor.execute(context.Background(), domain.ToolCall{
-				ID:       fmt.Sprintf("tc-%d", id),
-				Function: domain.FunctionCall{Name: "tool", Arguments: json.RawMessage(`{}`)},
+				ID:        fmt.Sprintf("tc-%d", id),
+				Name:      "tool",
+				Arguments: json.RawMessage(`{}`),
 			}, nil)
 			results <- (err == nil)
 		}(i)
@@ -310,4 +303,3 @@ func TestDeclarations_Sorted(t *testing.T) {
 	}
 	assert.True(t, sort.StringsAreSorted(names))
 }
-

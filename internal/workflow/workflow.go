@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -17,13 +18,14 @@ import (
 // the events channel. If the channel fills up, Run() will block.
 // Pass nil if events are not needed.
 type Workflow struct {
-	provider       llmProvider
-	toolExecutor   *toolExecutor
-	sessionStore   sessionStore
-	currentSession *domain.Session
-	currentModel   string
-	events         chan<- Event
-	cfg            *config.Config
+	providerRegistry providerRegistry
+	currentProvider  domain.Provider
+	toolExecutor     *toolExecutor
+	sessionStore     sessionStore
+	currentSession   *domain.Session
+	currentModel     string
+	events           chan<- Event
+	cfg              *config.Config
 
 	// Run lifecycle management
 	runCancel context.CancelFunc
@@ -33,7 +35,7 @@ type Workflow struct {
 
 // NewWorkflow creates a new Workflow with all dependencies.
 func NewWorkflow(
-	provider llmProvider,
+	providerRegistry providerRegistry,
 	toolRegistry toolRegistry,
 	sessionStore sessionStore,
 	cfg *config.Config,
@@ -43,10 +45,28 @@ func NewWorkflow(
 		panic("cfg is required")
 	}
 	return &Workflow{
-		provider:     provider,
-		toolExecutor: newToolExecutor(toolRegistry),
-		sessionStore: sessionStore,
-		events:       events,
-		cfg:          cfg,
+		providerRegistry: providerRegistry,
+		toolExecutor:     newToolExecutor(toolRegistry),
+		sessionStore:     sessionStore,
+		events:           events,
+		cfg:              cfg,
 	}
+}
+
+// SetProvider sets the current provider by name.
+func (w *Workflow) SetProvider(name string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	p, ok := w.providerRegistry.Get(name)
+	if !ok {
+		return fmt.Errorf("unknown provider: %s", name)
+	}
+	w.currentProvider = p
+	return nil
+}
+
+// ListProviders returns all registered provider names.
+func (w *Workflow) ListProviders() []string {
+	return w.providerRegistry.List()
 }

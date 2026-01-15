@@ -3,6 +3,7 @@
 /node_modules
 /build
 /bin
+iav
 
 # Go build artifacts
 *.test

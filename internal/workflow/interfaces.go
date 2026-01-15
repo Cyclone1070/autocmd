@@ -1,13 +1,15 @@
 package workflow
 
 import (
+	"context"
+
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// providerRegistry manages multiple LLM providers.
-type providerRegistry interface {
-	Get(name string) (domain.Provider, bool)
-	List() []string
+// modelRegistry resolves model IDs to Model instances.
+type modelRegistry interface {
+	Get(ctx context.Context, id string) (domain.Model, error)
+	List(ctx context.Context) ([]domain.ModelInfo, error)
 }
 
 // sessionStore manages session persistence.

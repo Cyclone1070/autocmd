@@ -14,19 +14,23 @@ import (
 
 // --- Mocks for Workflow tests ---
 
-type mockProvider struct {
-	name      string
-	models    []domain.Model
-	streams   []*mockStream
-	streamErr error // Error starting stream
+type mockModel struct {
+	id            string
+	displayName   string
+	contextWindow int
+	streams       []*mockStream
+	streamErr     error // Error starting stream
 }
 
-func (m *mockProvider) Name() string { return m.name }
-func (m *mockProvider) ListModels(ctx context.Context) ([]domain.Model, error) {
-	return m.models, nil
+func (m *mockModel) ID() string          { return m.id }
+func (m *mockModel) DisplayName() string { return m.displayName }
+func (m *mockModel) ContextWindow() int  { return m.contextWindow }
+
+func (m *mockModel) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+	return 100, nil
 }
 
-func (m *mockProvider) Stream(ctx context.Context, model string, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *mockModel) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
 	if m.streamErr != nil && len(m.streams) == 0 {
 		return nil, m.streamErr
 	}
@@ -60,21 +64,27 @@ func (m *mockStream) Err() error {
 	return m.err
 }
 
-type mockProviderRegistry struct {
-	providers map[string]domain.Provider
+type mockModelRegistry struct {
+	models map[string]domain.Model
 }
 
-func (m *mockProviderRegistry) Get(name string) (domain.Provider, bool) {
-	p, ok := m.providers[name]
-	return p, ok
-}
-
-func (m *mockProviderRegistry) List() []string {
-	var names []string
-	for n := range m.providers {
-		names = append(names, n)
+func (m *mockModelRegistry) Get(ctx context.Context, id string) (domain.Model, error) {
+	model, ok := m.models[id]
+	if !ok {
+		return nil, fmt.Errorf("model not found: %s", id)
 	}
-	return names
+	return model, nil
+}
+
+func (m *mockModelRegistry) List(ctx context.Context) ([]domain.ModelInfo, error) {
+	var infos []domain.ModelInfo
+	for id, model := range m.models {
+		infos = append(infos, domain.ModelInfo{
+			ID:          id,
+			DisplayName: model.DisplayName(),
+		})
+	}
+	return infos, nil
 }
 
 type mockTool struct {
@@ -145,16 +155,17 @@ func (m *mockSessionStore) Delete(id string) error {
 
 // --- Helper to create test workflow ---
 
-func newTestWorkflow(t *testing.T, p domain.Provider, tools []domain.Tool, events chan Event) *Workflow {
+func newTestWorkflow(t *testing.T, m domain.Model, tools []domain.Tool, events chan Event) *Workflow {
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
 	registry := newMockToolRegistry(tools)
-	provRegistry := &mockProviderRegistry{
-		providers: map[string]domain.Provider{
-			p.Name(): p,
+	modelRegistry := &mockModelRegistry{
+		models: map[string]domain.Model{
+			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(provRegistry, registry, newMockSessionStore(), cfg, events)
-	w.SetProvider(p.Name())
+	w := NewWorkflow(modelRegistry, registry, newMockSessionStore(), cfg, events)
+	err := w.SetModel(context.Background(), m.ID())
+	assert.NoError(t, err)
 	return w
 }
 
@@ -164,14 +175,14 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	ctx := context.Background()
 	events := make(chan Event, 10)
 
-	p := &mockProvider{
-		name: "test",
+	m := &mockModel{
+		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Hello!"}}},
 		},
 	}
 
-	w := newTestWorkflow(t, p, []domain.Tool{}, events)
+	w := newTestWorkflow(t, m, []domain.Tool{}, events)
 	err := w.Run(ctx, "Hi")
 
 	assert.NoError(t, err)
@@ -190,8 +201,8 @@ func TestRun_SingleToolCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	events := make(chan Event, 10)
-	p := &mockProvider{
-		name: "test",
+	m := &mockModel{
+		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
 				domain.ToolCall{ID: "tc-1", Name: "get_weather"},
@@ -209,7 +220,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 		},
 	}
 
-	w := newTestWorkflow(t, p, []domain.Tool{mt}, events)
+	w := newTestWorkflow(t, m, []domain.Tool{mt}, events)
 	err := w.Run(ctx, "Weather?")
 
 	assert.NoError(t, err)
@@ -227,8 +238,8 @@ func TestRun_SingleToolCall(t *testing.T) {
 }
 
 func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
-	p := &mockProvider{
-		name: "infinite",
+	m := &mockModel{
+		id: "infinite",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
 			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
@@ -245,15 +256,16 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	provRegistry := &mockProviderRegistry{
-		providers: map[string]domain.Provider{
-			p.Name(): p,
+	modelRegistry := &mockModelRegistry{
+		models: map[string]domain.Model{
+			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(provRegistry, registry, newMockSessionStore(), cfg, nil)
-	w.SetProvider(p.Name())
+	w := NewWorkflow(modelRegistry, registry, newMockSessionStore(), cfg, nil)
+	err := w.SetModel(context.Background(), m.ID())
+	assert.NoError(t, err)
 
-	err := w.Run(context.Background(), "go")
+	err = w.Run(context.Background(), "go")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "max iterations (3) reached")
@@ -263,24 +275,24 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 	assert.Equal(t, "[Max iterations reached]", messages[len(messages)-1].Content)
 }
 
-func TestRun_ProviderError_ReturnsError(t *testing.T) {
-	p := &mockProvider{
-		name:      "err",
-		streamErr: fmt.Errorf("provider fail"),
+func TestRun_ModelError_ReturnsError(t *testing.T) {
+	m := &mockModel{
+		id:        "err",
+		streamErr: fmt.Errorf("model fail"),
 	}
 
-	w := newTestWorkflow(t, p, []domain.Tool{}, make(chan Event, 10))
+	w := newTestWorkflow(t, m, []domain.Tool{}, make(chan Event, 10))
 	err := w.Run(context.Background(), "hi")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "provider.Stream")
+	assert.Contains(t, err.Error(), "model.Stream")
 }
 
 func TestRun_ToolError_ReturnsError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	p := &mockProvider{
-		name: "test",
+	m := &mockModel{
+		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
 				domain.ToolCall{ID: "tc-err", Name: "tool"},
@@ -299,7 +311,7 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 	}
 
 	// Use nil events to avoid channel overflow
-	w := newTestWorkflow(t, p, []domain.Tool{mt}, nil)
+	w := newTestWorkflow(t, m, []domain.Tool{mt}, nil)
 	err := w.Run(ctx, "hi")
 
 	// Tool errors are NOT propagated as Run() errors in new design
@@ -308,8 +320,8 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 }
 
 func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
-	p := &mockProvider{
-		name: "test",
+	m := &mockModel{
+		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "ok"}}},
 		},
@@ -318,7 +330,7 @@ func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	w := newTestWorkflow(t, p, []domain.Tool{}, nil)
+	w := newTestWorkflow(t, m, []domain.Tool{}, nil)
 	err := w.Run(ctx, "hi")
 
 	assert.ErrorIs(t, err, context.Canceled)

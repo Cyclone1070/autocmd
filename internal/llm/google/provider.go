@@ -8,7 +8,7 @@ import (
 	"google.golang.org/genai"
 )
 
-// Provider implements domain.Provider for Google Gemini.
+// Provider implements the internal provider interface for Google Gemini.
 type Provider struct {
 	client *genai.Client
 }
@@ -28,8 +28,8 @@ func (p *Provider) Name() string {
 	return "google"
 }
 
-func (p *Provider) ListModels(ctx context.Context) ([]domain.Model, error) {
-	return []domain.Model{
+func (p *Provider) ListModels(ctx context.Context) ([]domain.ModelInfo, error) {
+	return []domain.ModelInfo{
 		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash Lite"},
 		{ID: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash"},
 		{ID: "gemini-3.0-flash", DisplayName: "Gemini 3.0 Flash"},
@@ -38,28 +38,17 @@ func (p *Provider) ListModels(ctx context.Context) ([]domain.Model, error) {
 	}, nil
 }
 
-func (p *Provider) Stream(ctx context.Context, model string, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
-	// The SDK uses "model" role for assistant and handles system instructions via config.
-	hist, err := toHistory(msgs)
+func (p *Provider) GetModel(ctx context.Context, id string) (domain.Model, error) {
+	// Get model info from API for context window
+	info, err := p.client.Models.Get(ctx, id, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get model info: %w", err)
 	}
 
-	config := &genai.GenerateContentConfig{
-		Tools: toTools(tools),
-	}
-	if hist.SystemPrompt != "" {
-		config.SystemInstruction = &genai.Content{
-			Parts: []*genai.Part{{Text: hist.SystemPrompt}},
-		}
-	}
-
-	// Combine history + last message into one contents slice
-	contents := hist.Contents
-
-	iter := p.client.Models.GenerateContentStream(ctx, model, contents, config)
-
-	return &googleStream{
-		iter: iter,
+	return &googleModel{
+		client:        p.client,
+		id:            id,
+		displayName:   info.DisplayName,
+		contextWindow: int(info.InputTokenLimit),
 	}, nil
 }

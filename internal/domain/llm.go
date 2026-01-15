@@ -5,20 +5,17 @@ import (
 	"encoding/json"
 )
 
-// Provider is an LLM backend service (Gemini, OpenAI, etc).
-type Provider interface {
-	// Name returns the provider identifier (e.g., "gemini").
-	Name() string
-
-	// ListModels returns available models from this provider.
-	ListModels(ctx context.Context) ([]Model, error)
-
-	// Stream starts a streaming completion request.
-	Stream(ctx context.Context, model string, msgs []Message, tools []Declaration) (Stream, error)
+// Model is a self-contained LLM instance.
+type Model interface {
+	ID() string
+	DisplayName() string
+	ContextWindow() int
+	ComputeTokens(ctx context.Context, msgs []Message) (int, error)
+	Stream(ctx context.Context, msgs []Message, tools []Declaration) (Stream, error)
 }
 
-// Model represents a model available from a provider.
-type Model struct {
+// ModelInfo is metadata for listing models.
+type ModelInfo struct {
 	ID          string
 	DisplayName string
 }

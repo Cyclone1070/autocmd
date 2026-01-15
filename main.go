@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/llm"
+	"github.com/Cyclone1070/iav/internal/llm/google"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
@@ -61,15 +65,16 @@ func main() {
 	store := session.NewStore(cfg, fileSystem)
 	events := make(chan workflow.Event, 100)
 
-	// TODO: Provider implementation is deferred.
-	// Once implemented, uncomment the following:
-	// provider := google.NewClient(os.Getenv("GEMINI_API_KEY"))
-	// wf := workflow.NewWorkflow(provider, toolRegistry, store, cfg, events)
-	// _ = wf
+	// Create model registry
+	googleProvider, err := google.NewProvider(context.Background(), os.Getenv("GEMINI_API_KEY"))
+	if err != nil {
+		log.Fatalf("Failed to create google provider: %v", err)
+	}
 
-	_ = toolRegistry
-	_ = store
-	_ = events
+	modelRegistry := llm.NewRegistry(googleProvider)
+	wf := workflow.NewWorkflow(modelRegistry, toolRegistry, store, cfg, events)
+
+	_ = wf
 
 	log.Println("All tools wired successfully!")
 }

@@ -2,18 +2,20 @@
 
 ## Responsibility
 
-The `tool` package defines tool types and display data structures. It is the foundational layer that other packages import for type definitions.
+The `tool` package contains the concrete implementations of tools and the registry that holds them.
 
 **Owns:**
-- `Declaration` — Tool schema (name, description, parameters) sent to LLM
-- `Schema` — JSON Schema type definitions for parameters
-- `Invocation` — Interface for prepared tool calls
-- `ToolDisplay` — Interface for UI display types
-- `StringDisplay`, `DiffDisplay`, `ShellDisplay` — Concrete display types
+- `Registry` — Implementation of the `toolRegistry` interface used by `workflow`.
+- Subpackages for each tool area:
+    - `file/` — File system operations (read, write, edit)
+    - `directory/` — Directory listing
+    - `search/` — File and content search
+    - `shell/` — Command execution
+    - `todo/` — Todo list management
 
 **Does NOT own:**
-- Tool execution logic (individual tools in subpackages)
-- Tool registry or orchestration
+- `Tool`, `Invocation`, `Declaration` interfaces (in `domain`)
+- Workflow orchestration
 
 ---
 

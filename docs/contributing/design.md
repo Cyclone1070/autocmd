@@ -32,8 +32,8 @@
     *   **Why**: The consumer knows what it needs. The implementer should not dictate the contract.
     *   **Benefit**: You can swap implementations without touching the consumer. You can mock easily in tests.
 
-*   **Return Types From Provider**: Interface methods should return concrete types from the implementation package, not consumer-defined types.
-    *   **Why**: Provider logically owns the return types. Defining them in provider is often simpler and offers high cohesion.
+*   **Return Types From Domain**: Interface methods should return types from the `domain` package, not consumer-defined structs. 
+    *   **Why**: Kinda like dependency inversion. This approach prevents circular dependencies while maintains good decoupling.
 
 > [!CAUTION]
 > **ANTI-PATTERN**: Copy Exact Interface Methods

@@ -25,20 +25,20 @@ func (m *model) viewTool(t *toolState) string {
 	var content string
 	switch d := t.display.(type) {
 	case domain.StringDisplay:
-		content = m.viewStringDisplay(d, t, prefix)
+		content = renderString(m.width, m.theme, d, t.status, t.err, prefix)
 	case domain.DiffDisplay:
-		content = m.viewDiffDisplay(d, t, prefix)
+		content = renderDiff(m.width, m.theme, d, t.status, t.err, prefix)
 	case domain.ShellDisplay:
-		content = m.viewShellDisplay(d, t, prefix)
+		content = renderShell(m.width, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
 	default:
-		content = m.pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
+		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}
 
 	return m.theme.box.Width(m.width).Render(content)
 }
 
 // pad adds the status prefix to the first line and standard indentation to others.
-func (m *model) pad(s string, prefix string) string {
+func pad(s string, prefix string) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		if i == 0 && prefix != "" {
@@ -50,11 +50,11 @@ func (m *model) pad(s string, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m *model) viewStringDisplay(d domain.StringDisplay, t *toolState, prefix string) string {
+func renderString(width int, theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
 	s := string(d)
-	if t.status == statusError {
-		sep := m.theme.separator.Render(strings.Repeat("─", m.width-2)) // -2 for borders
-		return m.pad(fmt.Sprintf("%s\n%s\n%s", s, sep, m.theme.errorSt.Render(t.err)), prefix)
+	if status == statusError {
+		sep := theme.separator.Render(strings.Repeat("\u2500", width))
+		return pad(fmt.Sprintf("%s\n%s\n%s", s, sep, theme.errorSt.Render(err)), prefix)
 	}
-	return m.pad(s, prefix)
+	return pad(s, prefix)
 }

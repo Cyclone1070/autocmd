@@ -138,7 +138,7 @@
 *   **Local Mocks**: Define mocks inside the `*_test.go` file that uses them. No shared `mock/` package.
     *   **Why**: Consumer-defined interfaces mean each test defines its own interface. The mock implements THAT interface. Mocks can't drift. No import cycles.
 
-*   **Local Helpers**: Test helper functions should be defined in the test file that uses them.
+*   **Local Helpers**: Test helper functions should be defined in the package that uses them.
     *   **Why**: Keeps tests self-contained and readable.
 
 > [!CAUTION]
@@ -175,4 +175,4 @@ Before submitting code, verify **every** item.
 
 ### Testing
 - [ ] All mocks defined locally in `*_test.go` files (no shared `mock/` package)
-- [ ] All test helpers defined locally in test files
+- [ ] All test helpers defined locally in package

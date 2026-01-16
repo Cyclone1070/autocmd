@@ -20,10 +20,9 @@ type model struct {
 	// State
 	width         int
 	thinking      bool
-	currentTool   *toolState
-	streamingText string // Accumulated text for live streaming
-
-	err error
+	activeTools   map[string]*toolState // Keyed by CallID
+	toolOrder     []string              // CallIDs in order of creation (for stable rendering)
+	streamingText string                // Accumulated text for live streaming
 }
 
 type toolState struct {
@@ -59,11 +58,12 @@ func newModel(cfg *config.Config) *model {
 	)
 
 	return &model{
-		spinner: s,
-		glamour: r,
-		theme:   th,
-		config:  cfg,
-		width:   cfg.UI.ChatWindowWidth, // Initial default
+		spinner:     s,
+		glamour:     r,
+		theme:       th,
+		config:      cfg,
+		width:       cfg.UI.ChatWindowWidth,
+		activeTools: make(map[string]*toolState),
 	}
 }
 
@@ -71,32 +71,30 @@ func (m *model) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
-	case Msg:
-		return m.handleEvent(msg.Event)
+	switch ev := teaMsg.(type) {
+	case msg:
+		return m.handleEvent(ev.Event)
 
 	case spinner.TickMsg:
-		if m.thinking || (m.currentTool != nil && m.currentTool.status == statusRunning) {
+		// Tick if thinking OR any tool is active
+		if m.thinking || len(m.activeTools) > 0 {
 			var newSpinner spinner.Model
-			newSpinner, cmd = m.spinner.Update(msg)
+			newSpinner, cmd = m.spinner.Update(ev)
 			m.spinner = newSpinner
 			return m, cmd
 		}
 
 	case tea.KeyMsg:
-		switch msg.String() {
+		switch ev.String() {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
 
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		if m.width > m.config.UI.ChatWindowWidth {
-			m.width = m.config.UI.ChatWindowWidth
-		}
+		m.width = min(ev.Width, m.config.UI.ChatWindowWidth)
 		// Re-initialize glamour with new width
 		r, _ := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
@@ -134,33 +132,52 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 			m.streamingText = ""
 		}
 
-		m.currentTool = &toolState{
+		// Initialize new tool state
+		ts := &toolState{
 			callID:  e.CallID,
 			name:    e.ToolName,
 			display: e.Display,
 			status:  statusRunning,
 		}
+		m.activeTools[e.CallID] = ts
+		m.toolOrder = append(m.toolOrder, e.CallID)
 
-		cmds = append(cmds, m.spinner.Tick)
+		// Ensure spinner is ticking
+		if len(m.activeTools) == 1 {
+			cmds = append(cmds, m.spinner.Tick)
+		}
 		return m, tea.Batch(cmds...)
 
 	case domain.ToolStreamEvent:
-		if m.currentTool != nil && m.currentTool.callID == e.CallID {
-			m.currentTool.shellOutput.WriteString(e.Chunk)
+		if ts, ok := m.activeTools[e.CallID]; ok {
+			ts.shellOutput.WriteString(e.Chunk)
 		}
 		return m, nil
 
 	case domain.ToolEndEvent:
-		if m.currentTool != nil && m.currentTool.callID == e.CallID {
+		if ts, ok := m.activeTools[e.CallID]; ok {
 			if e.Error != "" {
-				m.currentTool.status = statusError
-				m.currentTool.err = e.Error
+				ts.status = statusError
+				ts.err = e.Error
 			} else {
-				m.currentTool.status = statusSuccess
+				ts.status = statusSuccess
 			}
-			// Print persistently above the TUI
-			output := m.viewTool(m.currentTool)
-			m.currentTool = nil
+
+			// Render final output
+			output := m.viewTool(ts)
+
+			// Remove from active state
+			delete(m.activeTools, e.CallID)
+
+			// Remove from order slice (careful implementation)
+			newOrder := make([]string, 0, len(m.toolOrder)-1)
+			for _, id := range m.toolOrder {
+				if id != e.CallID {
+					newOrder = append(newOrder, id)
+				}
+			}
+			m.toolOrder = newOrder
+
 			return m, tea.Println(output)
 		}
 		return m, nil
@@ -192,9 +209,15 @@ func (m *model) View() string {
 		return out
 	}
 
-	// 2. Then current tool
-	if m.currentTool != nil {
-		return m.viewTool(m.currentTool)
+	// 2. Then active tools (stacked)
+	if len(m.activeTools) > 0 {
+		var toolViews []string
+		for _, id := range m.toolOrder {
+			if ts, ok := m.activeTools[id]; ok {
+				toolViews = append(toolViews, m.viewTool(ts))
+			}
+		}
+		return strings.Join(toolViews, "\n")
 	}
 
 	// 3. Then thinking spinner

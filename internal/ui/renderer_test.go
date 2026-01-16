@@ -18,7 +18,7 @@ func TestModel_ThinkingEvent(t *testing.T) {
 	m := newTestModel()
 
 	// Send ThinkingEvent
-	updatedM, cmd := m.Update(Msg{Event: domain.ThinkingEvent{}})
+	updatedM, cmd := m.Update(msg{Event: domain.ThinkingEvent{}})
 
 	// Check state
 	newM := updatedM.(*model)
@@ -31,7 +31,7 @@ func TestModel_ThinkingEvent(t *testing.T) {
 
 	// Reset
 	m = newTestModel()
-	m.Update(Msg{Event: domain.TextEvent{Text: "Done"}})
+	m.Update(msg{Event: domain.TextEvent{Text: "Done"}})
 	newM = m
 	assert.False(t, newM.thinking)
 }
@@ -40,7 +40,7 @@ func TestModel_TextEvent(t *testing.T) {
 	m := newTestModel()
 
 	// Send TextEvent
-	updatedM, _ := m.Update(Msg{Event: domain.TextEvent{Text: "**Bold** text"}})
+	updatedM, _ := m.Update(msg{Event: domain.TextEvent{Text: "**Bold** text"}})
 	newM := updatedM.(*model)
 
 	assert.False(t, newM.thinking)
@@ -48,7 +48,7 @@ func TestModel_TextEvent(t *testing.T) {
 
 	// Flush it by starting a tool
 	startEv := domain.ToolStartEvent{CallID: "c1", ToolName: "t1"}
-	updatedM, _ = newM.Update(Msg{Event: startEv})
+	updatedM, _ = newM.Update(msg{Event: startEv})
 	newM = updatedM.(*model)
 
 	assert.Equal(t, "", newM.streamingText)
@@ -64,32 +64,31 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 		ToolName: "read_file",
 		Display:  domain.StringDisplay("Reading file.txt"),
 	}
-	updatedM, _ := m.Update(Msg{Event: startEv})
+	updatedM, _ := m.Update(msg{Event: startEv})
 	newM := updatedM.(*model)
 
-	assert.NotNil(t, newM.currentTool)
-	assert.Equal(t, "call-1", newM.currentTool.callID)
-	assert.Equal(t, statusRunning, newM.currentTool.status)
+	assert.Contains(t, newM.activeTools, "call-1")
+	assert.Equal(t, statusRunning, newM.activeTools["call-1"].status)
 	assert.Contains(t, newM.View(), "Reading file.txt")
 	assert.Contains(t, newM.View(), "⣾") // partial check for spinner stuff
 
 	// 2. ToolEnd (Success)
 	endEv := domain.ToolEndEvent{CallID: "call-1"}
-	updatedM, _ = newM.Update(Msg{Event: endEv})
+	updatedM, _ = newM.Update(msg{Event: endEv})
 	newM = updatedM.(*model)
 
-	assert.Nil(t, newM.currentTool)
+	assert.NotContains(t, newM.activeTools, "call-1")
 
 	// 3. ToolEnd (Error)
 	m = newTestModel()
-	m.Update(Msg{Event: startEv})
+	m.Update(msg{Event: startEv})
 	newM = m
 
 	errEv := domain.ToolEndEvent{CallID: "call-1", Error: "permission denied"}
-	updatedM, _ = newM.Update(Msg{Event: errEv})
+	updatedM, _ = newM.Update(msg{Event: errEv})
 	newM = updatedM.(*model)
 
-	assert.Nil(t, newM.currentTool)
+	assert.NotContains(t, newM.activeTools, "call-1")
 }
 
 func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
@@ -104,7 +103,7 @@ func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
 			Command: "ls -la",
 		},
 	}
-	updatedM, _ := m.Update(Msg{Event: startEv})
+	updatedM, _ := m.Update(msg{Event: startEv})
 	newM := updatedM.(*model)
 
 	assert.Contains(t, newM.View(), "$ ls -la")
@@ -115,17 +114,17 @@ func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
 		CallID: "call-shell",
 		Chunk:  "file1\n",
 	}
-	updatedM, _ = newM.Update(Msg{Event: streamEv})
+	updatedM, _ = newM.Update(msg{Event: streamEv})
 	newM = updatedM.(*model)
 
 	assert.Contains(t, newM.View(), "file1")
 
 	// 3. End
 	endEv := domain.ToolEndEvent{CallID: "call-shell"}
-	updatedM, _ = newM.Update(Msg{Event: endEv})
+	updatedM, _ = newM.Update(msg{Event: endEv})
 	newM = updatedM.(*model)
 
-	assert.Nil(t, newM.currentTool)
+	assert.NotContains(t, newM.activeTools, "call-shell")
 }
 
 func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
@@ -133,7 +132,7 @@ func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
 	// We just test logic transitions
 	m := newTestModel()
 
-	m.Update(Msg{Event: domain.ThinkingEvent{}})
+	m.Update(msg{Event: domain.ThinkingEvent{}})
 	newM := m
 
 	assert.True(t, newM.thinking)

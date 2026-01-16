@@ -78,9 +78,18 @@ func main() {
 		}
 		time.Sleep(500 * time.Millisecond)
 
-		// 5. Tool: Edit file
+		// 5. PARALLEL TOOLS: Start two tools at the same time
+		// Tool A: Reading a file
 		events <- domain.ToolStartEvent{
-			CallID:   "t2",
+			CallID:   "t2a",
+			ToolName: "read_file",
+			Display:  domain.StringDisplay("Reading middleware/auth.go"),
+		}
+		time.Sleep(100 * time.Millisecond)
+
+		// Tool B: Edit file (starts while tool A is still running)
+		events <- domain.ToolStartEvent{
+			CallID:   "t2b",
 			ToolName: "edit_file",
 			Display: domain.DiffDisplay{
 				Header:  "Edit middleware/auth.go",
@@ -101,8 +110,14 @@ func main() {
  }`,
 			},
 		}
-		time.Sleep(800 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "t2"}
+		time.Sleep(600 * time.Millisecond)
+
+		// Tool A completes first
+		events <- domain.ToolEndEvent{CallID: "t2a"}
+		time.Sleep(400 * time.Millisecond)
+
+		// Tool B completes after
+		events <- domain.ToolEndEvent{CallID: "t2b"}
 		time.Sleep(300 * time.Millisecond)
 
 		// 6. Text

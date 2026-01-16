@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 )
 
-// Model is a self-contained LLM instance.
-type Model interface {
+// LLM is a self-contained language model instance.
+type LLM interface {
 	ID() string
 	DisplayName() string
 	ContextWindow() int
@@ -14,8 +14,8 @@ type Model interface {
 	Stream(ctx context.Context, msgs []Message, tools []Declaration) (Stream, error)
 }
 
-// ModelInfo is metadata for listing models.
-type ModelInfo struct {
+// LLMInfo is metadata for listing language models.
+type LLMInfo struct {
 	ID          string
 	DisplayName string
 }

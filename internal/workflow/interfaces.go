@@ -6,10 +6,10 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// modelRegistry resolves model IDs to Model instances.
-type modelRegistry interface {
-	Get(ctx context.Context, id string) (domain.Model, error)
-	List(ctx context.Context) ([]domain.ModelInfo, error)
+// llmRegistry resolves LLM IDs to LLM instances.
+type llmRegistry interface {
+	Get(ctx context.Context, id string) (domain.LLM, error)
+	List(ctx context.Context) ([]domain.LLMInfo, error)
 }
 
 // sessionStore manages session persistence.

@@ -11,11 +11,11 @@ import (
 // provider is the private contract for backends.
 type provider interface {
 	Name() string
-	ListModels(ctx context.Context) ([]domain.ModelInfo, error)
-	GetModel(ctx context.Context, id string) (domain.Model, error)
+	ListLLMs(ctx context.Context) ([]domain.LLMInfo, error)
+	GetLLM(ctx context.Context, id string) (domain.LLM, error)
 }
 
-// Registry resolves model IDs to Model instances.
+// Registry resolves LLM IDs to LLM instances.
 type Registry struct {
 	providers map[string]provider
 }
@@ -33,29 +33,29 @@ func NewRegistry(providers ...provider) *Registry {
 	return r
 }
 
-// Get resolves "google/gemini-2.5-flash" to a Model.
-func (r *Registry) Get(ctx context.Context, id string) (domain.Model, error) {
+// Get resolves "google/gemini-2.5-flash" to an LLM.
+func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 	parts := strings.SplitN(id, "/", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid model ID format: %s (expected provider/model)", id)
+		return nil, fmt.Errorf("invalid LLM ID format: %s (expected provider/model)", id)
 	}
 	p, ok := r.providers[parts[0]]
 	if !ok {
 		return nil, fmt.Errorf("unknown provider: %s", parts[0])
 	}
-	return p.GetModel(ctx, parts[1])
+	return p.GetLLM(ctx, parts[1])
 }
 
-// List returns all models from all providers.
-func (r *Registry) List(ctx context.Context) ([]domain.ModelInfo, error) {
-	var all []domain.ModelInfo
+// List returns all LLMs from all providers.
+func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
+	var all []domain.LLMInfo
 	for name, p := range r.providers {
-		models, err := p.ListModels(ctx)
+		llms, err := p.ListLLMs(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list models from %s: %w", name, err)
+			return nil, fmt.Errorf("list LLMs from %s: %w", name, err)
 		}
-		for _, m := range models {
-			all = append(all, domain.ModelInfo{
+		for _, m := range llms {
+			all = append(all, domain.LLMInfo{
 				ID:          name + "/" + m.ID,
 				DisplayName: m.DisplayName,
 			})

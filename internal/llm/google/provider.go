@@ -28,8 +28,8 @@ func (p *Provider) Name() string {
 	return "google"
 }
 
-func (p *Provider) ListModels(ctx context.Context) ([]domain.ModelInfo, error) {
-	return []domain.ModelInfo{
+func (p *Provider) ListLLMs(ctx context.Context) ([]domain.LLMInfo, error) {
+	return []domain.LLMInfo{
 		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash Lite"},
 		{ID: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash"},
 		{ID: "gemini-3.0-flash", DisplayName: "Gemini 3.0 Flash"},
@@ -38,14 +38,14 @@ func (p *Provider) ListModels(ctx context.Context) ([]domain.ModelInfo, error) {
 	}, nil
 }
 
-func (p *Provider) GetModel(ctx context.Context, id string) (domain.Model, error) {
-	// Get model info from API for context window
+func (p *Provider) GetLLM(ctx context.Context, id string) (domain.LLM, error) {
+	// Get LLM info from API for context window
 	info, err := p.client.Models.Get(ctx, id, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get model info: %w", err)
+		return nil, fmt.Errorf("get LLM info: %w", err)
 	}
 
-	return &googleModel{
+	return &geminiLLM{
 		client:        p.client,
 		id:            id,
 		displayName:   info.DisplayName,

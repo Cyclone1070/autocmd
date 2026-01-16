@@ -14,7 +14,7 @@ import (
 
 // --- Mocks for Workflow tests ---
 
-type mockModel struct {
+type mockLLM struct {
 	id            string
 	displayName   string
 	contextWindow int
@@ -22,15 +22,15 @@ type mockModel struct {
 	streamErr     error // Error starting stream
 }
 
-func (m *mockModel) ID() string          { return m.id }
-func (m *mockModel) DisplayName() string { return m.displayName }
-func (m *mockModel) ContextWindow() int  { return m.contextWindow }
+func (m *mockLLM) ID() string          { return m.id }
+func (m *mockLLM) DisplayName() string { return m.displayName }
+func (m *mockLLM) ContextWindow() int  { return m.contextWindow }
 
-func (m *mockModel) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
 	return 100, nil
 }
 
-func (m *mockModel) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *mockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
 	if m.streamErr != nil && len(m.streams) == 0 {
 		return nil, m.streamErr
 	}
@@ -64,11 +64,11 @@ func (m *mockStream) Err() error {
 	return m.err
 }
 
-type mockModelRegistry struct {
-	models map[string]domain.Model
+type mockLLMRegistry struct {
+	models map[string]domain.LLM
 }
 
-func (m *mockModelRegistry) Get(ctx context.Context, id string) (domain.Model, error) {
+func (m *mockLLMRegistry) Get(ctx context.Context, id string) (domain.LLM, error) {
 	model, ok := m.models[id]
 	if !ok {
 		return nil, fmt.Errorf("model not found: %s", id)
@@ -76,10 +76,10 @@ func (m *mockModelRegistry) Get(ctx context.Context, id string) (domain.Model, e
 	return model, nil
 }
 
-func (m *mockModelRegistry) List(ctx context.Context) ([]domain.ModelInfo, error) {
-	var infos []domain.ModelInfo
+func (m *mockLLMRegistry) List(ctx context.Context) ([]domain.LLMInfo, error) {
+	var infos []domain.LLMInfo
 	for id, model := range m.models {
-		infos = append(infos, domain.ModelInfo{
+		infos = append(infos, domain.LLMInfo{
 			ID:          id,
 			DisplayName: model.DisplayName(),
 		})
@@ -155,16 +155,16 @@ func (m *mockSessionStore) Delete(id string) error {
 
 // --- Helper to create test workflow ---
 
-func newTestWorkflow(t *testing.T, m domain.Model, tools []domain.Tool, events chan domain.Event) *Workflow {
+func newTestWorkflow(t *testing.T, m domain.LLM, tools []domain.Tool, events chan domain.Event) *Workflow {
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
 	registry := newMockToolRegistry(tools)
-	modelRegistry := &mockModelRegistry{
-		models: map[string]domain.Model{
+	llmRegistry := &mockLLMRegistry{
+		models: map[string]domain.LLM{
 			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(modelRegistry, registry, newMockSessionStore(), cfg, events)
-	err := w.SetModel(context.Background(), m.ID())
+	w := NewWorkflow(llmRegistry, registry, newMockSessionStore(), cfg, events)
+	err := w.SetLLM(context.Background(), m.ID())
 	assert.NoError(t, err)
 	return w
 }
@@ -175,7 +175,7 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	ctx := context.Background()
 	events := make(chan domain.Event, 10)
 
-	m := &mockModel{
+	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Hello!"}}},
@@ -201,7 +201,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	events := make(chan domain.Event, 10)
-	m := &mockModel{
+	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
@@ -238,7 +238,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 }
 
 func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
-	m := &mockModel{
+	m := &mockLLM{
 		id: "infinite",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
@@ -256,13 +256,13 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	modelRegistry := &mockModelRegistry{
-		models: map[string]domain.Model{
+	llmRegistry := &mockLLMRegistry{
+		models: map[string]domain.LLM{
 			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(modelRegistry, registry, newMockSessionStore(), cfg, nil)
-	err := w.SetModel(context.Background(), m.ID())
+	w := NewWorkflow(llmRegistry, registry, newMockSessionStore(), cfg, nil)
+	err := w.SetLLM(context.Background(), m.ID())
 	assert.NoError(t, err)
 
 	err = w.Run(context.Background(), "go")
@@ -276,7 +276,7 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 }
 
 func TestRun_ModelError_ReturnsError(t *testing.T) {
-	m := &mockModel{
+	m := &mockLLM{
 		id:        "err",
 		streamErr: fmt.Errorf("model fail"),
 	}
@@ -285,13 +285,13 @@ func TestRun_ModelError_ReturnsError(t *testing.T) {
 	err := w.Run(context.Background(), "hi")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "model.Stream")
+	assert.Contains(t, err.Error(), "LLM.Stream")
 }
 
 func TestRun_ToolError_ReturnsError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	m := &mockModel{
+	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
@@ -320,7 +320,7 @@ func TestRun_ToolError_ReturnsError(t *testing.T) {
 }
 
 func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
-	m := &mockModel{
+	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "ok"}}},

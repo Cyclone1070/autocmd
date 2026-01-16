@@ -8,27 +8,27 @@ import (
 	"google.golang.org/genai"
 )
 
-// googleModel implements domain.Model for Google Gemini models.
-type googleModel struct {
+// geminiLLM implements domain.LLM for Google Gemini models.
+type geminiLLM struct {
 	client        *genai.Client
 	id            string
 	displayName   string
 	contextWindow int
 }
 
-func (m *googleModel) ID() string {
+func (m *geminiLLM) ID() string {
 	return "google/" + m.id
 }
 
-func (m *googleModel) DisplayName() string {
+func (m *geminiLLM) DisplayName() string {
 	return m.displayName
 }
 
-func (m *googleModel) ContextWindow() int {
+func (m *geminiLLM) ContextWindow() int {
 	return m.contextWindow
 }
 
-func (m *googleModel) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+func (m *geminiLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
 	hist, err := toHistory(msgs)
 	if err != nil {
 		return 0, fmt.Errorf("convert history: %w", err)
@@ -42,7 +42,7 @@ func (m *googleModel) ComputeTokens(ctx context.Context, msgs []domain.Message) 
 	return int(result.TotalTokens), nil
 }
 
-func (m *googleModel) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *geminiLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
 	hist, err := toHistory(msgs)
 	if err != nil {
 		return nil, fmt.Errorf("convert history: %w", err)

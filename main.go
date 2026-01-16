@@ -72,7 +72,7 @@ func main() {
 		log.Fatalf("Failed to create google provider: %v", err)
 	}
 
-	modelRegistry := llm.NewRegistry(googleProvider)
+	llmRegistry := llm.NewRegistry(googleProvider)
 
 	// Create UI Renderer
 	renderer := ui.NewRenderer(os.Stdout, cfg)
@@ -84,7 +84,7 @@ func main() {
 		}
 	}()
 
-	wf := workflow.NewWorkflow(modelRegistry, toolRegistry, store, cfg, events)
+	wf := workflow.NewWorkflow(llmRegistry, toolRegistry, store, cfg, events)
 
 	// Run application
 	// Note: We need a sample input for now as main() args aren't fully spec'd yet

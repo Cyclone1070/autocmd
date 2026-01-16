@@ -7,8 +7,8 @@ import (
 
 // Workflow is the central orchestrator for the application.
 type Workflow struct {
-	modelRegistry  modelRegistry
-	currentModel   domain.Model
+	llmRegistry    llmRegistry
+	currentLLM     domain.LLM
 	toolExecutor   *toolExecutor
 	sessionStore   sessionStore
 	currentSession *domain.Session
@@ -18,7 +18,7 @@ type Workflow struct {
 
 // NewWorkflow creates a new Workflow with all dependencies.
 func NewWorkflow(
-	modelRegistry modelRegistry,
+	llmRegistry llmRegistry,
 	toolRegistry toolRegistry,
 	sessionStore sessionStore,
 	cfg *config.Config,
@@ -28,10 +28,10 @@ func NewWorkflow(
 		panic("cfg is required")
 	}
 	return &Workflow{
-		modelRegistry: modelRegistry,
-		toolExecutor:  newToolExecutor(toolRegistry),
-		sessionStore:  sessionStore,
-		events:        events,
-		cfg:           cfg,
+		llmRegistry:  llmRegistry,
+		toolExecutor: newToolExecutor(toolRegistry),
+		sessionStore: sessionStore,
+		events:       events,
+		cfg:          cfg,
 	}
 }

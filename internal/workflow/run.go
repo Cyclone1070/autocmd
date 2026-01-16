@@ -47,14 +47,14 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- domain.ThinkingEvent{}
 		}
 
-		if w.currentModel == nil {
-			return fmt.Errorf("no model selected")
+		if w.currentLLM == nil {
+			return fmt.Errorf("no LLM selected")
 		}
 
-		stream, err := w.currentModel.Stream(ctx, w.currentSession.Messages, w.toolExecutor.declarations())
+		stream, err := w.currentLLM.Stream(ctx, w.currentSession.Messages, w.toolExecutor.declarations())
 		if err != nil {
 			_ = w.sessionStore.Save(w.currentSession)
-			return fmt.Errorf("model.Stream: %w", err)
+			return fmt.Errorf("LLM.Stream: %w", err)
 		}
 
 		var msg domain.Message

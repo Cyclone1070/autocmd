@@ -21,10 +21,12 @@ type model struct {
 
 	// State
 	width         int
-	thinking      bool
-	activeTools   map[string]*toolState // Keyed by CallID
-	toolOrder     []string              // CallIDs in order of creation (for stable rendering)
-	streamingText string                // Accumulated text for live streaming
+	activeTools   map[string]*toolState // active tool executions
+	toolOrder     []string              // order of active tools for stable rendering
+	thinking      bool                  // true if waiting for LLM response
+	streamingText string                // current markdown text
+	renderedText  string                // cached rendered markdown
+	textDirty     bool                  // true if streamingText or width changed
 }
 
 type toolState struct {
@@ -109,17 +111,25 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 			glamour.WithWordWrap(m.width),
 		)
 		m.glamour = r
+		m.textDirty = true
 		return m, nil
 	}
 	return m, nil
 }
 
-func (m *model) renderMarkdown(text string) string {
-	out, err := m.glamour.Render(text)
-	if err != nil {
-		return text
+func (m *model) renderStreamingText() string {
+	// Only re-render if text or width has changed
+	if m.textDirty {
+		out, err := m.glamour.Render(m.streamingText)
+		if err != nil {
+			m.renderedText = m.streamingText
+		} else {
+			m.renderedText = out
+		}
+		m.textDirty = false
 	}
-	return out
+	// Return cached version
+	return m.renderedText
 }
 
 func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
@@ -131,6 +141,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 	case domain.TextEvent:
 		m.thinking = false
 		m.streamingText += e.Text
+		m.textDirty = true
 		return m, nil
 
 	case domain.ToolStartEvent:
@@ -139,7 +150,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 		// Flush streaming text if any
 		if m.streamingText != "" {
-			out := m.renderMarkdown(m.streamingText)
+			out := m.renderStreamingText()
 			cmds = append(cmds, tea.Println(out))
 			m.streamingText = ""
 		}
@@ -196,7 +207,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.DoneEvent:
 		if m.streamingText != "" {
-			out := m.renderMarkdown(m.streamingText)
+			out := m.renderStreamingText()
 			return m, tea.Sequence(tea.Println(out), tea.Quit)
 		}
 		return m, tea.Quit
@@ -211,7 +222,7 @@ func (m *model) View() string {
 
 	// 1. Streaming text takes priority for visibility
 	if m.streamingText != "" {
-		out := m.renderMarkdown(m.streamingText)
+		out := m.renderStreamingText()
 		return out
 	}
 

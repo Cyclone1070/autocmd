@@ -15,9 +15,10 @@ type model struct {
 	glamour *glamour.TermRenderer
 
 	// State
-	thinking    bool
-	currentTool *toolState
-	history     []string // Rendered strings of past events
+	thinking      bool
+	currentTool   *toolState
+	history       []string // Rendered strings of past events
+	streamingText string   // Accumulated text for live streaming
 
 	err error
 }
@@ -96,16 +97,23 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.TextEvent:
 		m.thinking = false
-		// Render markdown
-		out, err := m.glamour.Render(e.Text)
-		if err != nil {
-			out = e.Text // Fallback
-		}
-		// Print persistently above the TUI
-		return m, tea.Println(out)
+		m.streamingText += e.Text
+		return m, nil
 
 	case domain.ToolStartEvent:
+		var cmds []tea.Cmd
 		m.thinking = false
+
+		// Flush streaming text if any
+		if m.streamingText != "" {
+			out, err := m.glamour.Render(m.streamingText)
+			if err != nil {
+				out = m.streamingText
+			}
+			cmds = append(cmds, tea.Println(out))
+			m.streamingText = ""
+		}
+
 		m.currentTool = &toolState{
 			callID:  e.CallID,
 			name:    e.ToolName,
@@ -113,9 +121,8 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 			status:  statusRunning,
 		}
 
-		// If it's a diff, we might want to pre-render it?
-		// For shell, we start with empty output.
-		return m, m.spinner.Tick
+		cmds = append(cmds, m.spinner.Tick)
+		return m, tea.Batch(cmds...)
 
 	case domain.ToolStreamEvent:
 		if m.currentTool != nil && m.currentTool.callID == e.CallID {
@@ -139,6 +146,13 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case domain.DoneEvent:
+		if m.streamingText != "" {
+			out, err := m.glamour.Render(m.streamingText)
+			if err != nil {
+				out = m.streamingText
+			}
+			return m, tea.Sequence(tea.Println(out), tea.Quit)
+		}
 		return m, tea.Quit
 	}
 
@@ -146,13 +160,27 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) View() string {
-	// Only show current active state (thinking or running tool)
+	// Only show current active state (streaming text, tool, or thinking)
 	// Completed items are printed via tea.Println and persist above this
-	if m.thinking {
-		return fmt.Sprintf("%s Thinking...", m.spinner.View())
+
+	// 1. Streaming text takes priority for visibility
+	if m.streamingText != "" {
+		out, err := m.glamour.Render(m.streamingText)
+		if err != nil {
+			out = m.streamingText
+		}
+		return out
 	}
+
+	// 2. Then current tool
 	if m.currentTool != nil {
 		return m.viewTool(m.currentTool)
 	}
+
+	// 3. Then thinking spinner
+	if m.thinking {
+		return fmt.Sprintf("%s Thinking...", m.spinner.View())
+	}
+
 	return ""
 }

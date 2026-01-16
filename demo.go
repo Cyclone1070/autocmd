@@ -27,8 +27,28 @@ func main() {
 		events <- domain.ThinkingEvent{}
 		time.Sleep(1200 * time.Millisecond)
 
-		// 2. Text
-		events <- domain.TextEvent{Text: `I'll help you set up the authentication system. Let me check the existing configuration first.`}
+		// 2. Fragmented Text (Streaming)
+		textChunks := []string{
+			"I'll help you ",
+			"set up the ",
+			"authentication system.\n\n",
+			"Let me check the ",
+			"**existing config",
+			"** ",
+			"first:\n\n",
+			"```yaml\n",
+			"auth:\n",
+			"  enabled: ",
+			"true\n",
+			"  timeout: 30s",
+			"\n```\n\n",
+			"Okay, that looks ",
+			"correct.",
+		}
+		for _, c := range textChunks {
+			events <- domain.TextEvent{Text: c}
+			time.Sleep(150 * time.Millisecond)
+		}
 		time.Sleep(600 * time.Millisecond)
 
 		// 3. Tool: Read file
@@ -41,8 +61,18 @@ func main() {
 		events <- domain.ToolEndEvent{CallID: "t1"}
 		time.Sleep(300 * time.Millisecond)
 
-		// 4. More text
-		events <- domain.TextEvent{Text: `The config looks good. Now I'll update the middleware to add proper token validation.`}
+		// 4. More fragmented text
+		moreChunks := []string{
+			"The config looks ",
+			"good. Now I'll ",
+			"update the ",
+			"*middleware", "* to add ",
+			"proper token validation.",
+		}
+		for _, c := range moreChunks {
+			events <- domain.TextEvent{Text: c}
+			time.Sleep(100 * time.Millisecond)
+		}
 		time.Sleep(500 * time.Millisecond)
 
 		// 5. Tool: Edit file

@@ -7,8 +7,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-func (m *model) viewDiffDisplay(d domain.DiffDisplay, t *toolState) string {
-	sep := m.theme.separator.Render(strings.Repeat("─", boxWidth))
+func (m *model) viewDiffDisplay(d domain.DiffDisplay, t *toolState, prefix string) string {
+	sep := m.theme.separator.Render(strings.Repeat("─", m.width-2)) // -2 for borders
 	header := d.Header
 	if d.Added != 0 || d.Removed != 0 {
 		header = fmt.Sprintf("%s (%s, %s)",
@@ -18,14 +18,15 @@ func (m *model) viewDiffDisplay(d domain.DiffDisplay, t *toolState) string {
 	}
 
 	if t.status == statusError {
-		return fmt.Sprintf("%s\n%s\n%s", header, sep, m.theme.errorSt.Render(t.err))
+		return fmt.Sprintf(" %s %s \n%s\n   %s",
+			prefix, header, sep, m.theme.errorSt.Render(t.err))
 	}
 
-	diffContent := d.Diff
-	// Simple colorization for diff (green +, red -)
-	diffContent = m.commonDiffColorize(diffContent)
+	diffContent := m.commonDiffColorize(d.Diff)
+	paddedDiff := m.pad(diffContent, "") // Just indent, no prefix for diff body
 
-	return fmt.Sprintf("%s\n%s\n%s", header, sep, diffContent)
+	return fmt.Sprintf(" %s %s \n%s\n%s",
+		prefix, header, sep, paddedDiff)
 }
 
 func (m *model) commonDiffColorize(diff string) string {

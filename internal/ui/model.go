@@ -15,8 +15,10 @@ type model struct {
 	spinner spinner.Model
 	glamour *glamour.TermRenderer
 	theme   *theme
+	config  *config.Config
 
 	// State
+	width         int
 	thinking      bool
 	currentTool   *toolState
 	streamingText string // Accumulated text for live streaming
@@ -60,6 +62,8 @@ func newModel(cfg *config.Config) *model {
 		spinner: s,
 		glamour: r,
 		theme:   th,
+		config:  cfg,
+		width:   cfg.UI.ChatWindowWidth, // Initial default
 	}
 }
 
@@ -87,6 +91,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		if m.width > m.config.UI.ChatWindowWidth {
+			m.width = m.config.UI.ChatWindowWidth
+		}
+		// Re-initialize glamour with new width
+		r, _ := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(m.width),
+		)
+		m.glamour = r
+		return m, nil
 	}
 
 	return m, nil

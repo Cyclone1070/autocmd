@@ -8,8 +8,9 @@ type ColorConfig struct {
 
 // UIConfig holds styling configuration for the terminal UI.
 type UIConfig struct {
-	PrimaryColor ColorConfig `json:"primary_color"` // Default: Purple
-	SuccessColor ColorConfig `json:"success_color"` // Default: Green
-	ErrorColor   ColorConfig `json:"error_color"`   // Default: Red
-	MutedColor   ColorConfig `json:"muted_color"`   // Default: Gray (borders, metadata)
+	PrimaryColor    ColorConfig `json:"primary_color"` // Default: Purple
+	SuccessColor    ColorConfig `json:"success_color"` // Default: Green
+	ErrorColor      ColorConfig `json:"error_color"`   // Default: Red
+	MutedColor      ColorConfig `json:"muted_color"`   // Default: Gray (borders, metadata)
+	ChatWindowWidth int         `json:"chat_window_width"`
 }

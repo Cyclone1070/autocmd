@@ -102,6 +102,10 @@ func (c *Config) Validate() error {
 	validateColor("error_color", c.UI.ErrorColor)
 	validateColor("muted_color", c.UI.MutedColor)
 
+	if c.UI.ChatWindowWidth < 1 {
+		errs = append(errs, "ui.chat_window_width must be >= 1")
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %v", errs)
 	}

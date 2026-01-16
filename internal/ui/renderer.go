@@ -16,7 +16,6 @@ type msg struct {
 // Renderer is the main entry point for the UI.
 type Renderer struct {
 	program *tea.Program
-	output  io.Writer
 }
 
 // NewRenderer creates a new Renderer writing to the given output.
@@ -25,7 +24,6 @@ func NewRenderer(output io.Writer, cfg *config.Config) *Renderer {
 	p := tea.NewProgram(m, tea.WithOutput(output))
 	return &Renderer{
 		program: p,
-		output:  output,
 	}
 }
 

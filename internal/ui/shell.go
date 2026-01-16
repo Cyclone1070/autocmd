@@ -11,10 +11,10 @@ import (
 const shellOutputHeight = 8
 
 func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, status toolStatus, err string, prefix string) string {
-	sep := theme.separator.Render(strings.Repeat("\u2500", width))
+	sep := theme.Separator(width)
 	header := d.Header
 	if status == statusError {
-		header = fmt.Sprintf("%s — %s", header, err)
+		header = fmt.Sprintf("%s — %s", header, theme.Error(err))
 	}
 
 	cmdLine := fmt.Sprintf("$ %s", d.Command)

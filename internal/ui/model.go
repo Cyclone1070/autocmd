@@ -50,7 +50,7 @@ func newModel(cfg *config.Config) *model {
 	th := newTheme(cfg.UI)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = th.spinner
+	s.Style = th.SpinnerStyle()
 
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),

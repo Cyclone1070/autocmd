@@ -16,9 +16,9 @@ func (m *model) viewTool(t *toolState) string {
 	case statusRunning:
 		prefix = m.spinner.View()
 	case statusSuccess:
-		prefix = m.theme.successSt.Render("✓")
+		prefix = m.theme.Success("✓")
 	case statusError:
-		prefix = m.theme.errorSt.Render("✗")
+		prefix = m.theme.Error("✗")
 	}
 
 	// Content
@@ -34,7 +34,7 @@ func (m *model) viewTool(t *toolState) string {
 		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}
 
-	return m.theme.box.Width(m.width).Render(content)
+	return m.theme.Box(content, m.width)
 }
 
 // pad adds the status prefix to the first line and standard indentation to others.
@@ -53,8 +53,8 @@ func pad(s string, prefix string) string {
 func renderString(width int, theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
 	s := string(d)
 	if status == statusError {
-		sep := theme.separator.Render(strings.Repeat("\u2500", width))
-		return pad(fmt.Sprintf("%s\n%s\n%s", s, sep, theme.errorSt.Render(err)), prefix)
+		sep := theme.Separator(width)
+		return pad(fmt.Sprintf("%s\n%s\n%s", s, sep, theme.Error(err)), prefix)
 	}
 	return pad(s, prefix)
 }

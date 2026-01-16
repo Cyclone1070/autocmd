@@ -469,14 +469,14 @@ func TestEditFile(t *testing.T) {
 			t.Fatalf("expected DiffDisplay, got %T", display)
 		}
 
-		if diffDisplay.Filename != "test.txt" {
-			t.Errorf("expected Filename 'test.txt', got %q", diffDisplay.Filename)
+		if diffDisplay.Header == "" {
+			t.Error("expected non-empty Header")
+		}
+		if diffDisplay.Added == 0 && diffDisplay.Removed == 0 {
+			t.Error("expected non-zero Added or Removed count")
 		}
 		if diffDisplay.Diff == "" {
 			t.Error("expected non-empty Diff")
-		}
-		if diffDisplay.AddedLines == 0 && diffDisplay.RemovedLines == 0 {
-			t.Error("expected non-zero added or removed lines")
 		}
 	})
 }

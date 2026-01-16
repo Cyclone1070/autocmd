@@ -26,7 +26,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	defer func() {
 		if w.events != nil {
 			select {
-			case w.events <- DoneEvent{}:
+			case w.events <- domain.DoneEvent{}:
 			default:
 			}
 		}
@@ -44,7 +44,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		}
 
 		if w.events != nil {
-			w.events <- ThinkingEvent{}
+			w.events <- domain.ThinkingEvent{}
 		}
 
 		if w.currentModel == nil {
@@ -65,7 +65,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			case domain.TextChunk:
 				msg.Content += c.Text
 				if w.events != nil {
-					w.events <- TextEvent{Text: c.Text}
+					w.events <- domain.TextEvent{Text: c.Text}
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)

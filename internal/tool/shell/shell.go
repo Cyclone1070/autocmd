@@ -126,10 +126,6 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 	if err != nil {
 		return nil, err
 	}
-	wdRel, err := t.pathResolver.Rel(wdAbs)
-	if err != nil {
-		return nil, err
-	}
 
 	// 4. Prepare Environment
 	env := os.Environ()
@@ -164,7 +160,6 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 
 	return &shellInvocation{
 		streamCmd:   streamCmd,
-		workingDir:  wdRel,
 		commandStr:  fmt.Sprintf("%v", req.Command),
 		description: req.Description,
 	}, nil
@@ -172,17 +167,15 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 
 type shellInvocation struct {
 	streamCmd   *executor.StreamingCmd
-	workingDir  string
 	commandStr  string
 	description string
 }
 
 func (i *shellInvocation) Display() domain.ToolDisplay {
 	return domain.ShellDisplay{
-		Command:     i.commandStr,
-		Description: i.description,
-		WorkingDir:  i.workingDir,
-		Output:      i.streamCmd.Output(),
+		Header:  i.description,
+		Command: i.commandStr,
+		Output:  i.streamCmd.Output(),
 		Wait: func() {
 			// Block until command completes by calling Wait (result discarded here)
 			_, _ = i.streamCmd.Wait()

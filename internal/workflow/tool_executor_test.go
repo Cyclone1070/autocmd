@@ -166,7 +166,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan Event, 10)
+	events := make(chan domain.Event, 10)
 	_, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-1",
 		Name: "test",
@@ -175,14 +175,14 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	assert.NoError(t, err)
 
 	e1 := <-events
-	start, ok := e1.(ToolStartEvent)
+	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", start.CallID)
 	assert.Equal(t, "test", start.ToolName)
 	assert.Equal(t, domain.StringDisplay("display output"), start.Display)
 
 	e2 := <-events
-	end, ok := e2.(ToolEndEvent)
+	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", end.CallID)
 	assert.Empty(t, end.Error)
@@ -205,7 +205,7 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan Event, 10)
+	events := make(chan domain.Event, 10)
 	_, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-shell",
 		Name: "shell",
@@ -221,10 +221,10 @@ loop:
 	for {
 		e := <-events
 		switch ev := e.(type) {
-		case ToolStreamEvent:
+		case domain.ToolStreamEvent:
 			assert.Equal(t, "tc-shell", ev.CallID)
 			streamOutput.WriteString(ev.Chunk)
-		case ToolEndEvent:
+		case domain.ToolEndEvent:
 			assert.Equal(t, "tc-shell", ev.CallID)
 			assert.Empty(t, ev.Error)
 			break loop
@@ -247,7 +247,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan Event, 10)
+	events := make(chan domain.Event, 10)
 	res, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-fail",
 		Name: "fail",
@@ -261,7 +261,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 
 	// ToolEndEvent
 	e2 := <-events
-	end, ok := e2.(ToolEndEvent)
+	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
 	assert.Equal(t, "Execution failed", end.Error)

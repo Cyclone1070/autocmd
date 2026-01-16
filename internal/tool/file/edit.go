@@ -216,10 +216,10 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		originalPerm:     info.Mode(),
 		expectedChecksum: currentChecksum,
 		display: domain.DiffDisplay{
-			Filename:     filepath.Base(abs),
-			Diff:         diff,
-			AddedLines:   added,
-			RemovedLines: removed,
+			Header:  fmt.Sprintf("Edit %s", filepath.Base(abs)),
+			Added:   added,
+			Removed: removed,
+			Diff:    diff,
 		},
 	}, nil
 }
@@ -282,7 +282,7 @@ func computeUnifiedDiff(oldContent, newContent string) (diff string, added, remo
 	// Strip the --- and +++ header lines, keep only hunks
 	var lines []string
 	for line := range strings.SplitSeq(rawDiff, "\n") {
-		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") {
+		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "@@") {
 			continue
 		}
 		if strings.HasPrefix(line, "+") {

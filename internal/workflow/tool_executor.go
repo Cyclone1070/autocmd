@@ -23,7 +23,7 @@ func (e *toolExecutor) declarations() []domain.Declaration {
 	return e.registry.Declarations()
 }
 
-func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events chan<- Event) (domain.Message, error) {
+func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events chan<- domain.Event) (domain.Message, error) {
 	t, ok := e.registry.Get(tc.Name)
 	if !ok {
 		decls := e.declarations()
@@ -57,7 +57,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 	display := inv.Display()
 
 	if events != nil {
-		events <- ToolStartEvent{
+		events <- domain.ToolStartEvent{
 			CallID:   tc.ID,
 			ToolName: tc.Name,
 			Display:  display,
@@ -75,7 +75,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 			for {
 				n, err := sh.Output.Read(buf)
 				if n > 0 {
-					events <- ToolStreamEvent{
+					events <- domain.ToolStreamEvent{
 						CallID: tc.ID,
 						Chunk:  string(buf[:n]),
 					}
@@ -96,7 +96,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		}
 
 		if events != nil {
-			events <- ToolEndEvent{
+			events <- domain.ToolEndEvent{
 				CallID: tc.ID,
 				Error:  "Execution failed",
 			}
@@ -114,7 +114,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 	streamWg.Wait()
 
 	if events != nil {
-		events <- ToolEndEvent{
+		events <- domain.ToolEndEvent{
 			CallID: tc.ID,
 		}
 	}

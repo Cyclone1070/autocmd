@@ -156,8 +156,7 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	shellDisp, ok := disp.(domain.ShellDisplay)
 	require.True(t, ok)
 	assert.Equal(t, "[echo hello]", shellDisp.Command)
-	assert.Equal(t, "say hello", shellDisp.Description)
-	assert.Equal(t, ".", shellDisp.WorkingDir)
+	assert.Equal(t, "say hello", shellDisp.Header)
 	assert.NotNil(t, shellDisp.Output)
 	assert.NotNil(t, shellDisp.Wait)
 
@@ -184,12 +183,10 @@ func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["ls"], "working_dir": "/custom/path", "description": "list"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, json.RawMessage(params))
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
-	assert.Equal(t, "custom/path", disp.WorkingDir)
-
+	// custom/path is passed to executor in mocks, but not exposed in Display anymore
 	mockCE.AssertExpectations(t)
 }
 

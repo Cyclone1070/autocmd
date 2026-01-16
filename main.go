@@ -21,6 +21,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/workflow"
 )
 
@@ -63,7 +64,7 @@ func main() {
 
 	// Create dependencies
 	store := session.NewStore(cfg, fileSystem)
-	events := make(chan workflow.Event, 100)
+	events := make(chan domain.Event, 100)
 
 	// Create model registry
 	googleProvider, err := google.NewProvider(context.Background(), os.Getenv("GEMINI_API_KEY"))
@@ -72,9 +73,34 @@ func main() {
 	}
 
 	modelRegistry := llm.NewRegistry(googleProvider)
+
+	// Create UI Renderer
+	renderer := ui.NewRenderer(os.Stdout)
+
+	// Start event consumer
+	go func() {
+		for ev := range events {
+			renderer.Send(ev)
+		}
+	}()
+
 	wf := workflow.NewWorkflow(modelRegistry, toolRegistry, store, cfg, events)
 
-	_ = wf
+	// Run application
+	// Note: We need a sample input for now as main() args aren't fully spec'd yet
+	ctx := context.Background()
+	input := "Hello, list the current directory"
+	if len(os.Args) > 1 {
+		input = os.Args[1]
+	}
 
-	log.Println("All tools wired successfully!")
+	if err := wf.Run(ctx, input); err != nil {
+		log.Printf("Workflow failed: %v", err)
+	}
+
+	// Cleanup
+	close(events)
+	if err := renderer.Wait(); err != nil {
+		log.Printf("Renderer failed: %v", err)
+	}
 }

@@ -155,7 +155,7 @@ func (m *mockSessionStore) Delete(id string) error {
 
 // --- Helper to create test workflow ---
 
-func newTestWorkflow(t *testing.T, m domain.Model, tools []domain.Tool, events chan Event) *Workflow {
+func newTestWorkflow(t *testing.T, m domain.Model, tools []domain.Tool, events chan domain.Event) *Workflow {
 	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
 	registry := newMockToolRegistry(tools)
 	modelRegistry := &mockModelRegistry{
@@ -173,7 +173,7 @@ func newTestWorkflow(t *testing.T, m domain.Model, tools []domain.Tool, events c
 
 func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	ctx := context.Background()
-	events := make(chan Event, 10)
+	events := make(chan domain.Event, 10)
 
 	m := &mockModel{
 		id: "test",
@@ -192,15 +192,15 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	assert.Equal(t, "Hi", sess.Messages[0].Content)
 	assert.Equal(t, "Hello!", sess.Messages[1].Content)
 
-	assert.IsType(t, ThinkingEvent{}, <-events)
-	assert.Equal(t, TextEvent{Text: "Hello!"}, <-events)
-	assert.IsType(t, DoneEvent{}, <-events)
+	assert.IsType(t, domain.ThinkingEvent{}, <-events)
+	assert.Equal(t, domain.TextEvent{Text: "Hello!"}, <-events)
+	assert.IsType(t, domain.DoneEvent{}, <-events)
 }
 
 func TestRun_SingleToolCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	events := make(chan Event, 10)
+	events := make(chan domain.Event, 10)
 	m := &mockModel{
 		id: "test",
 		streams: []*mockStream{
@@ -229,12 +229,12 @@ func TestRun_SingleToolCall(t *testing.T) {
 	assert.Equal(t, 4, len(sess.Messages)) // User, Assist(ToolCall), ToolResp, Assist(Text)
 
 	// Consume events
-	assert.IsType(t, ThinkingEvent{}, <-events)  // First thinking
-	assert.IsType(t, ToolStartEvent{}, <-events) // Tool start
-	assert.IsType(t, ToolEndEvent{}, <-events)   // Tool end
-	assert.IsType(t, ThinkingEvent{}, <-events)  // Second thinking
-	assert.Equal(t, TextEvent{Text: "It's sunny!"}, <-events)
-	assert.IsType(t, DoneEvent{}, <-events)
+	assert.IsType(t, domain.ThinkingEvent{}, <-events)  // First thinking
+	assert.IsType(t, domain.ToolStartEvent{}, <-events) // Tool start
+	assert.IsType(t, domain.ToolEndEvent{}, <-events)   // Tool end
+	assert.IsType(t, domain.ThinkingEvent{}, <-events)  // Second thinking
+	assert.Equal(t, domain.TextEvent{Text: "It's sunny!"}, <-events)
+	assert.IsType(t, domain.DoneEvent{}, <-events)
 }
 
 func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
@@ -281,7 +281,7 @@ func TestRun_ModelError_ReturnsError(t *testing.T) {
 		streamErr: fmt.Errorf("model fail"),
 	}
 
-	w := newTestWorkflow(t, m, []domain.Tool{}, make(chan Event, 10))
+	w := newTestWorkflow(t, m, []domain.Tool{}, make(chan domain.Event, 10))
 	err := w.Run(context.Background(), "hi")
 
 	assert.Error(t, err)

@@ -61,22 +61,22 @@ type StringDisplay string
 func (StringDisplay) isToolDisplay() {}
 
 // DiffDisplay is for file edit operations with unified diff content.
+// DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
-	Filename     string // File being edited
-	Diff         string // Unified diff content
-	AddedLines   int
-	RemovedLines int
+	Header  string // e.g. "Edit config.yaml"
+	Added   int    // Lines added
+	Removed int    // Lines removed
+	Diff    string // Unified diff content
 }
 
 func (DiffDisplay) isToolDisplay() {}
 
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
-	Command     string
-	Description string // Added for display
-	WorkingDir  string
-	Output      io.Reader // Stream stdout/stderr
-	Wait        func()    // Wait for execution to finish
+	Header  string    // Description from tool (e.g. "Installing dependencies")
+	Command string    // The command being run (e.g. "npm install")
+	Output  io.Reader // Stream stdout/stderr
+	Wait    func()    // Wait for execution to finish
 }
 
 func (ShellDisplay) isToolDisplay() {}
@@ -87,4 +87,3 @@ type Tool interface {
 	Declaration() Declaration
 	Prepare(ctx context.Context, params json.RawMessage) (Invocation, error)
 }
-

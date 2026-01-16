@@ -12,7 +12,7 @@ type Workflow struct {
 	toolExecutor   *toolExecutor
 	sessionStore   sessionStore
 	currentSession *domain.Session
-	events         chan<- Event
+	events         chan<- domain.Event
 	cfg            *config.Config
 }
 
@@ -22,7 +22,7 @@ func NewWorkflow(
 	toolRegistry toolRegistry,
 	sessionStore sessionStore,
 	cfg *config.Config,
-	events chan<- Event,
+	events chan<- domain.Event,
 ) *Workflow {
 	if cfg == nil {
 		panic("cfg is required")

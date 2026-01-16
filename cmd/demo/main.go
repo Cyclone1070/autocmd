@@ -5,12 +5,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 )
 
 func main() {
-	renderer := ui.NewRenderer(os.Stdout)
+	cfg := config.DefaultConfig()
+	renderer := ui.NewRenderer(os.Stdout, cfg)
 	events := make(chan domain.Event, 10)
 
 	go func() {
@@ -66,7 +68,8 @@ func main() {
 			"The config looks ",
 			"good. Now I'll ",
 			"update the ",
-			"*middleware", "* to add ",
+			"*middleware*",
+			" to add ",
 			"proper token validation.",
 		}
 		for _, c := range moreChunks {

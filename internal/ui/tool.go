@@ -16,9 +16,9 @@ func (m *model) viewTool(t *toolState) string {
 	case statusRunning:
 		prefix = m.spinner.View()
 	case statusSuccess:
-		prefix = specialStyle.Render("✓")
+		prefix = m.theme.successSt.Render("✓")
 	case statusError:
-		prefix = errorStyle.Render("✗")
+		prefix = m.theme.errorSt.Render("✗")
 	}
 
 	// Content
@@ -48,14 +48,14 @@ func (m *model) viewTool(t *toolState) string {
 		}
 	}
 
-	return boxStyle.Width(boxWidth).Render(strings.Join(lines, "\n"))
+	return m.theme.box.Width(boxWidth).Render(strings.Join(lines, "\n"))
 }
 
 func (m *model) viewStringDisplay(d domain.StringDisplay, t *toolState) string {
 	s := string(d)
 	if t.status == statusError {
-		sep := separatorStyle.Render(strings.Repeat("─", boxWidth-4))
-		return fmt.Sprintf("%s\n%s\n%s", s, sep, errorStyle.Render(t.err))
+		sep := m.theme.separator.Render(strings.Repeat("─", boxWidth))
+		return fmt.Sprintf("%s\n%s\n%s", s, sep, m.theme.errorSt.Render(t.err))
 	}
 	return s
 }

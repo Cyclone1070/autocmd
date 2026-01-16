@@ -13,7 +13,7 @@ const (
 )
 
 func (m *model) viewShellDisplay(d domain.ShellDisplay, t *toolState) string {
-	sep := separatorStyle.Render(strings.Repeat("─", boxWidth))
+	sep := m.theme.separator.Render(strings.Repeat("─", boxWidth))
 	header := d.Header
 	if t.status == statusError {
 		header = fmt.Sprintf("%s — %s", header, t.err)

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"regexp"
 )
 
 // Validate checks config values for life correctness.
@@ -84,6 +85,22 @@ func (c *Config) Validate() error {
 	if c.Session.StorageDir == "" {
 		errs = append(errs, "session.storage_dir must not be empty")
 	}
+
+	// UI validation
+	hexRegex := regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`)
+	validateColor := func(path string, col ColorConfig) {
+		if !hexRegex.MatchString(col.Light) {
+			errs = append(errs, fmt.Sprintf("ui.%s.light must be a valid hex color", path))
+		}
+		if !hexRegex.MatchString(col.Dark) {
+			errs = append(errs, fmt.Sprintf("ui.%s.dark must be a valid hex color", path))
+		}
+	}
+
+	validateColor("primary_color", c.UI.PrimaryColor)
+	validateColor("success_color", c.UI.SuccessColor)
+	validateColor("error_color", c.UI.ErrorColor)
+	validateColor("muted_color", c.UI.MutedColor)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %v", errs)

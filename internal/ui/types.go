@@ -17,8 +17,3 @@ type Renderer struct {
 	program *tea.Program
 	output  io.Writer
 }
-
-// Config holds UI configuration.
-type Config struct {
-	// Add config fields if needed in future
-}

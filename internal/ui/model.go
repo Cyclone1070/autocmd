@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,12 +14,12 @@ import (
 type model struct {
 	spinner spinner.Model
 	glamour *glamour.TermRenderer
+	theme   *theme
 
 	// State
 	thinking      bool
 	currentTool   *toolState
-	history       []string // Rendered strings of past events
-	streamingText string   // Accumulated text for live streaming
+	streamingText string // Accumulated text for live streaming
 
 	err error
 }
@@ -44,10 +45,11 @@ const (
 	statusError
 )
 
-func newModel() *model {
+func newModel(cfg *config.Config) *model {
+	th := newTheme(cfg.UI)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = spinnerStyle
+	s.Style = th.spinner
 
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -57,6 +59,7 @@ func newModel() *model {
 	return &model{
 		spinner: s,
 		glamour: r,
+		theme:   th,
 	}
 }
 

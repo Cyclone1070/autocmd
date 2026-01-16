@@ -3,13 +3,14 @@ package ui
 import (
 	"io"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // NewRenderer creates a new Renderer writing to the given output.
-func NewRenderer(output io.Writer) *Renderer {
-	m := newModel()
+func NewRenderer(output io.Writer, cfg *config.Config) *Renderer {
+	m := newModel(cfg)
 	p := tea.NewProgram(m, tea.WithOutput(output))
 	return &Renderer{
 		program: p,

@@ -75,7 +75,7 @@ func main() {
 	modelRegistry := llm.NewRegistry(googleProvider)
 
 	// Create UI Renderer
-	renderer := ui.NewRenderer(os.Stdout)
+	renderer := ui.NewRenderer(os.Stdout, cfg)
 
 	// Start event consumer
 	go func() {

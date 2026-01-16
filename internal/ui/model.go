@@ -29,15 +29,12 @@ type model struct {
 
 type toolState struct {
 	callID  string
-	name    string
 	display domain.ToolDisplay
-	// Specific state for shell/diff can be stored here or inside Display structs if they were mutable (they aren't)
-	// We might need to wrap them.
-	// For Shell: output content accumulator
+	status  toolStatus
+	err     string
+
+	// For shell tools, we keep the output buffer
 	shellOutput strings.Builder
-	// Status
-	status toolStatus
-	err    string
 }
 
 type toolStatus int
@@ -146,7 +143,6 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// Initialize new tool state
 		ts := &toolState{
 			callID:  e.CallID,
-			name:    e.ToolName,
 			display: e.Display,
 			status:  statusRunning,
 		}

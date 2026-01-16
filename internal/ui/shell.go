@@ -8,7 +8,7 @@ import (
 )
 
 // Output scrollback height
-const shellOutputHeight = 8
+const shellOutputHeight = 12
 
 func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, status toolStatus, err string, prefix string) string {
 	sep := theme.Separator(width)
@@ -20,7 +20,7 @@ func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, 
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
 	if status == statusError {
-		return fmt.Sprintf(" %s %s \n   %s", prefix, header, cmdLine)
+		return fmt.Sprintf(" %s %s \n%s\n   %s", prefix, header, sep, cmdLine)
 	}
 
 	// 2. Output
@@ -37,9 +37,10 @@ func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, 
 	content := strings.Join(visibleLines, "\n")
 	paddedContent := pad(content, "") // Indent lines, no prefix
 
-	return fmt.Sprintf(" %s %s \n   %s\n%s\n%s",
+	return fmt.Sprintf(" %s %s \n%s\n   %s\n%s\n%s",
 		prefix,
 		header,
+		sep,
 		cmdLine,
 		sep,
 		paddedContent)

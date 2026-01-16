@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"golang.org/x/term"
 )
 
 type model struct {
@@ -52,9 +54,18 @@ func newModel(cfg *config.Config) *model {
 	s.Spinner = spinner.Dot
 	s.Style = th.SpinnerStyle()
 
+	// Detect terminal width
+	width := cfg.UI.ChatWindowWidth
+	if termWidth, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		if termWidth < width {
+			width = termWidth
+		}
+	}
+	// Reserve space for padding/borders if needed, but for now exact width is fine
+
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
+		glamour.WithWordWrap(width),
 	)
 
 	return &model{
@@ -62,7 +73,7 @@ func newModel(cfg *config.Config) *model {
 		glamour:     r,
 		theme:       th,
 		config:      cfg,
-		width:       cfg.UI.ChatWindowWidth,
+		width:       width,
 		activeTools: make(map[string]*toolState),
 	}
 }

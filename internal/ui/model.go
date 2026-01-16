@@ -111,8 +111,15 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 		m.glamour = r
 		return m, nil
 	}
-
 	return m, nil
+}
+
+func (m *model) renderMarkdown(text string) string {
+	out, err := m.glamour.Render(text)
+	if err != nil {
+		return text
+	}
+	return out
 }
 
 func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
@@ -132,10 +139,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 		// Flush streaming text if any
 		if m.streamingText != "" {
-			out, err := m.glamour.Render(m.streamingText)
-			if err != nil {
-				out = m.streamingText
-			}
+			out := m.renderMarkdown(m.streamingText)
 			cmds = append(cmds, tea.Println(out))
 			m.streamingText = ""
 		}
@@ -176,14 +180,15 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 			// Remove from active state
 			delete(m.activeTools, e.CallID)
 
-			// Remove from order slice (careful implementation)
-			newOrder := make([]string, 0, len(m.toolOrder)-1)
+			// Remove from order slice (zero-alloc in-place filter)
+			n := 0
 			for _, id := range m.toolOrder {
 				if id != e.CallID {
-					newOrder = append(newOrder, id)
+					m.toolOrder[n] = id
+					n++
 				}
 			}
-			m.toolOrder = newOrder
+			m.toolOrder = m.toolOrder[:n]
 
 			return m, tea.Println(output)
 		}
@@ -191,10 +196,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.DoneEvent:
 		if m.streamingText != "" {
-			out, err := m.glamour.Render(m.streamingText)
-			if err != nil {
-				out = m.streamingText
-			}
+			out := m.renderMarkdown(m.streamingText)
 			return m, tea.Sequence(tea.Println(out), tea.Quit)
 		}
 		return m, tea.Quit
@@ -209,10 +211,7 @@ func (m *model) View() string {
 
 	// 1. Streaming text takes priority for visibility
 	if m.streamingText != "" {
-		out, err := m.glamour.Render(m.streamingText)
-		if err != nil {
-			out = m.streamingText
-		}
+		out := m.renderMarkdown(m.streamingText)
 		return out
 	}
 

@@ -75,7 +75,10 @@ func main() {
 	llmRegistry := llm.NewRegistry(googleProvider)
 
 	// Create UI Renderer
-	renderer := ui.NewRenderer(os.Stdout, cfg)
+	renderer, err := ui.NewRenderer(os.Stdout, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create renderer: %v", err)
+	}
 
 	// Start event consumer
 	go func() {
@@ -87,20 +90,34 @@ func main() {
 	wf := workflow.NewWorkflow(llmRegistry, toolRegistry, store, cfg, events)
 
 	// Run application
-	// Note: We need a sample input for now as main() args aren't fully spec'd yet
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	input := "Hello, list the current directory"
 	if len(os.Args) > 1 {
 		input = os.Args[1]
 	}
 
-	if err := wf.Run(ctx, input); err != nil {
-		log.Printf("Workflow failed: %v", err)
-	}
+	// Run workflow in background
+	wfDone := make(chan error, 1)
+	go func() {
+		err := wf.Run(ctx, input)
+		// Cleanup
+		close(events)
+		wfDone <- err
+	}()
 
-	// Cleanup
-	close(events)
+	// Block on TUI. This returns when the user quits or an error occurs.
 	if err := renderer.Wait(); err != nil {
 		log.Printf("Renderer failed: %v", err)
+	}
+
+	// Signal workflow to stop. This is necessary (not redundant with defer cancel)
+	// because we must cancel BEFORE waiting on wfDone, otherwise deadlock.
+	cancel()
+
+	// Wait for workflow cleanup
+	if err := <-wfDone; err != nil && err != context.Canceled {
+		log.Printf("Workflow failed: %v", err)
 	}
 }

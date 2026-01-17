@@ -11,7 +11,11 @@ import (
 
 // Helper to create model for testing
 func newTestModel() *model {
-	return newModel(config.DefaultConfig())
+	m, err := newModel(config.DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	return m
 }
 
 func TestModel_ThinkingEvent(t *testing.T) {

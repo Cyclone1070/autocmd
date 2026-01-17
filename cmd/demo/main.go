@@ -12,7 +12,11 @@ import (
 
 func main() {
 	cfg := config.DefaultConfig()
-	renderer := ui.NewRenderer(os.Stdout, cfg)
+	renderer, err := ui.NewRenderer(os.Stdout, cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating renderer: %v\n", err)
+		os.Exit(1)
+	}
 	events := make(chan domain.Event, 10)
 
 	go func() {

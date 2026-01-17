@@ -47,7 +47,7 @@ const (
 	statusError
 )
 
-func newModel(cfg *config.Config) *model {
+func newModel(cfg *config.Config) (*model, error) {
 	th := newTheme(cfg.UI)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -60,12 +60,14 @@ func newModel(cfg *config.Config) *model {
 			width = termWidth
 		}
 	}
-	// Reserve space for padding/borders if needed, but for now exact width is fine
 
-	r, _ := glamour.NewTermRenderer(
+	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize markdown renderer: %w", err)
+	}
 
 	return &model{
 		spinner:     s,
@@ -74,7 +76,7 @@ func newModel(cfg *config.Config) *model {
 		config:      cfg,
 		width:       width,
 		activeTools: make(map[string]*toolState),
-	}
+	}, nil
 }
 
 func (m *model) Init() tea.Cmd {
@@ -105,31 +107,39 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.width = min(ev.Width, m.config.UI.ChatWindowWidth)
-		// Re-initialize glamour with new width
-		r, _ := glamour.NewTermRenderer(
+		r, err := glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
 			glamour.WithWordWrap(m.width),
 		)
+		if err != nil {
+			return m, tea.Sequence(
+				tea.Println(fmt.Sprintf("Fatal: glamour re-init failed: %v", err)),
+				tea.Quit,
+			)
+		}
 		m.glamour = r
 		m.textDirty = true
+		if cmd := m.render(); cmd != nil {
+			return m, cmd
+		}
 		return m, nil
 	}
 	return m, nil
 }
 
-func (m *model) renderStreamingText() string {
-	// Only re-render if text or width has changed
+func (m *model) render() tea.Cmd {
 	if m.textDirty {
 		out, err := m.glamour.Render(m.streamingText)
 		if err != nil {
-			m.renderedText = m.streamingText
-		} else {
-			m.renderedText = out
+			return tea.Sequence(
+				tea.Println(fmt.Sprintf("Fatal: render failed: %v", err)),
+				tea.Quit,
+			)
 		}
+		m.renderedText = out
 		m.textDirty = false
 	}
-	// Return cached version
-	return m.renderedText
+	return nil
 }
 
 func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
@@ -142,6 +152,9 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		m.thinking = false
 		m.streamingText += e.Text
 		m.textDirty = true
+		if cmd := m.render(); cmd != nil {
+			return m, cmd
+		}
 		return m, nil
 
 	case domain.ToolStartEvent:
@@ -150,8 +163,10 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 		// Flush streaming text if any
 		if m.streamingText != "" {
-			out := m.renderStreamingText()
-			cmds = append(cmds, tea.Println(out))
+			if cmd := m.render(); cmd != nil {
+				return m, cmd
+			}
+			cmds = append(cmds, tea.Println(m.renderedText))
 			m.streamingText = ""
 		}
 
@@ -207,8 +222,10 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.DoneEvent:
 		if m.streamingText != "" {
-			out := m.renderStreamingText()
-			return m, tea.Sequence(tea.Println(out), tea.Quit)
+			if cmd := m.render(); cmd != nil {
+				return m, cmd
+			}
+			return m, tea.Sequence(tea.Println(m.renderedText), tea.Quit)
 		}
 		return m, tea.Quit
 	}
@@ -222,8 +239,7 @@ func (m *model) View() string {
 
 	// 1. Streaming text takes priority for visibility
 	if m.streamingText != "" {
-		out := m.renderStreamingText()
-		return out
+		return m.renderedText
 	}
 
 	// 2. Then active tools (stacked)

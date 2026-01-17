@@ -19,12 +19,15 @@ type Renderer struct {
 }
 
 // NewRenderer creates a new Renderer writing to the given output.
-func NewRenderer(output io.Writer, cfg *config.Config) *Renderer {
-	m := newModel(cfg)
+func NewRenderer(output io.Writer, cfg *config.Config) (*Renderer, error) {
+	m, err := newModel(cfg)
+	if err != nil {
+		return nil, err
+	}
 	p := tea.NewProgram(m, tea.WithOutput(output))
 	return &Renderer{
 		program: p,
-	}
+	}, nil
 }
 
 func (r *Renderer) Send(ev domain.Event) {

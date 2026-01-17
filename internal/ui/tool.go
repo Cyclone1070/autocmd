@@ -5,9 +5,8 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/charmbracelet/lipgloss"
 )
-
-// No global indent constant needed, handled by pad helper
 
 func (m *model) viewTool(t *toolState) string {
 	// Status prefix
@@ -40,11 +39,20 @@ func (m *model) viewTool(t *toolState) string {
 // pad adds the status prefix to the first line and standard indentation to others.
 func pad(s string, prefix string) string {
 	lines := strings.Split(s, "\n")
+
+	// Dynamic indentation: Space + Prefix + Space
+	// Standard width for prefix (like spinner) is 1.
+	w := lipgloss.Width(prefix)
+	if w == 0 {
+		w = 1 // Default to 1 char width (like space) for alignment if empty
+	}
+	indent := strings.Repeat(" ", 1+w+1)
+
 	for i, line := range lines {
 		if i == 0 && prefix != "" {
 			lines[i] = fmt.Sprintf(" %s %s ", prefix, line)
 		} else {
-			lines[i] = "   " + line
+			lines[i] = indent + line
 		}
 	}
 	return strings.Join(lines, "\n")

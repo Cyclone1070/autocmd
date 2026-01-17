@@ -11,7 +11,7 @@ import (
 const shellOutputHeight = 12
 
 func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, status toolStatus, err string, prefix string) string {
-	sep := theme.Separator(width)
+	sep := theme.Separator(width, status)
 	header := d.Header
 	if status == statusError {
 		header = fmt.Sprintf("%s — %s", header, theme.Error(err))

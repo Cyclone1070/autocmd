@@ -8,7 +8,7 @@ import (
 )
 
 func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus, err string, prefix string) string {
-	sep := theme.Separator(width)
+	sep := theme.Separator(width, status)
 	header := d.Header
 	if d.Added != 0 || d.Removed != 0 {
 		header = fmt.Sprintf("%s (%s, %s)",

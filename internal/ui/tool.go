@@ -33,7 +33,7 @@ func (m *model) viewTool(t *toolState) string {
 		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}
 
-	return m.theme.Box(content, m.width)
+	return m.theme.Box(content, m.width, t.status)
 }
 
 // pad adds the status prefix to the first line and standard indentation to others.
@@ -61,7 +61,7 @@ func pad(s string, prefix string) string {
 func renderString(width int, theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
 	s := string(d)
 	if status == statusError {
-		sep := theme.Separator(width)
+		sep := theme.Separator(width, status)
 		return pad(fmt.Sprintf("%s\n%s\n%s", s, sep, theme.Error(err)), prefix)
 	}
 	return pad(s, prefix)

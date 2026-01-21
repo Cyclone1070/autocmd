@@ -53,14 +53,14 @@ func main() {
 		events <- domain.ToolStartEvent{
 			CallID:   "s_success",
 			ToolName: "read_file",
-			Display:  domain.StringDisplay("Reading config.yaml (Success)"),
+			Display:  domain.StringDisplay("Reading config.yaml"),
 		}
 		time.Sleep(100 * time.Millisecond)
 
 		events <- domain.ToolStartEvent{
 			CallID:   "s_fail",
 			ToolName: "read_file",
-			Display:  domain.StringDisplay("Reading secret.key (Failure)"),
+			Display:  domain.StringDisplay("Reading secret.key"),
 		}
 
 		time.Sleep(600 * time.Millisecond)
@@ -75,7 +75,7 @@ func main() {
 			CallID:   "d_success",
 			ToolName: "edit_file",
 			Display: domain.DiffDisplay{
-				Header:  "Edit main.go (Success)",
+				Header:  "Edit main.go",
 				Added:   5,
 				Removed: 1,
 				Diff:    "-oldVar := 1\n+newVar := 2\n+addedVar := 3",
@@ -87,7 +87,7 @@ func main() {
 			CallID:   "d_fail",
 			ToolName: "edit_file",
 			Display: domain.DiffDisplay{
-				Header:  "Edit locked.go (Failure)",
+				Header:  "Edit locked.go",
 				Added:   2,
 				Removed: 0,
 				Diff:    "+lockedFunc() {}",
@@ -106,7 +106,7 @@ func main() {
 			CallID:   "sh_success",
 			ToolName: "shell",
 			Display: domain.ShellDisplay{
-				Header:  "Build Project (Success)",
+				Header:  "Build Project",
 				Command: "go build ./...",
 			},
 		}
@@ -116,7 +116,7 @@ func main() {
 			CallID:   "sh_fail",
 			ToolName: "shell",
 			Display: domain.ShellDisplay{
-				Header:  "Run Tests (Failure)",
+				Header:  "Run Tests",
 				Command: "go test ./...",
 			},
 		}

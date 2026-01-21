@@ -24,7 +24,7 @@ func (m *model) viewTool(t *toolState) string {
 	var content string
 	switch d := t.display.(type) {
 	case domain.StringDisplay:
-		content = renderString(m.width, m.theme, d, t.status, t.err, prefix)
+		content = renderString(m.theme, d, t.status, t.err, prefix)
 	case domain.DiffDisplay:
 		content = renderDiff(m.width, m.theme, d, t.status, t.err, prefix)
 	case domain.ShellDisplay:
@@ -58,11 +58,10 @@ func pad(s string, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderString(width int, theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
+func renderString(theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
 	s := string(d)
 	if status == statusError {
-		sep := theme.Separator(width, status)
-		return pad(fmt.Sprintf("%s\n%s\n%s", s, sep, theme.Error(err)), prefix)
+		s = formatError(s, err, theme)
 	}
 	return pad(s, prefix)
 }

@@ -10,7 +10,6 @@ import (
 func TestRenderString(t *testing.T) {
 	cfg := config.DefaultConfig().UI
 	theme := newTheme(cfg)
-	width := 50
 
 	tests := []struct {
 		name    string
@@ -36,7 +35,7 @@ func TestRenderString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := renderString(width, theme, tt.display, tt.status, tt.err, tt.prefix)
+			out := renderString(theme, tt.display, tt.status, tt.err, tt.prefix)
 			assertGolden(t, "RenderString_"+tt.name, out)
 		})
 	}

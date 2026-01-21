@@ -12,14 +12,13 @@ const shellOutputHeight = 12
 
 func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, status toolStatus, err string, prefix string) string {
 	sep := theme.Separator(width, status)
+	// 1. Header (Command)
 	header := d.Header
-	if status == statusError {
-		header = fmt.Sprintf("%s — %s", header, theme.Error(err))
-	}
-
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
 	if status == statusError {
+		header = formatError(header, err, theme)
+		// Early return on error - show header and command, hide output
 		return fmt.Sprintf(" %s %s \n%s\n   %s", prefix, header, sep, cmdLine)
 	}
 

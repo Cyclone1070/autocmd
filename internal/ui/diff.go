@@ -8,7 +8,6 @@ import (
 )
 
 func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus, err string, prefix string) string {
-	sep := theme.Separator(width, status)
 	header := d.Header
 	if d.Added != 0 || d.Removed != 0 {
 		header = fmt.Sprintf("%s (%s, %s)",
@@ -18,12 +17,13 @@ func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus
 	}
 
 	if status == statusError {
-		return fmt.Sprintf(" %s %s \n%s\n   %s",
-			prefix, header, sep, theme.Error(err))
+		header = formatError(header, err, theme)
+		return fmt.Sprintf(" %s %s ", prefix, header)
 	}
 
 	diffContent := commonDiffColorize(d.Diff, theme)
 	paddedDiff := pad(diffContent, "") // Just indent, no prefix for diff body
+	sep := theme.Separator(width, status)
 
 	return fmt.Sprintf(" %s %s \n%s\n%s",
 		prefix, header, sep, paddedDiff)

@@ -55,29 +55,24 @@ func (t *theme) Primary(s string) string {
 }
 
 func (t *theme) Separator(width int, status toolStatus) string {
-	var color lipgloss.AdaptiveColor
-	switch status {
-	case statusSuccess:
-		color = t.success
-	case statusError:
-		color = t.err
-	default:
-		color = t.muted
-	}
+	color := t.colorForStatus(status)
 	return lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("─", width))
 }
 
 func (t *theme) Box(content string, width int, status toolStatus) string {
-	var borderColor lipgloss.AdaptiveColor
+	borderColor := t.colorForStatus(status)
+	return t.box.BorderForeground(borderColor).Width(width).Render(content)
+}
+
+func (t *theme) colorForStatus(status toolStatus) lipgloss.AdaptiveColor {
 	switch status {
 	case statusSuccess:
-		borderColor = t.success
+		return t.success
 	case statusError:
-		borderColor = t.err
+		return t.err
 	default:
-		borderColor = t.muted
+		return t.muted
 	}
-	return t.box.BorderForeground(borderColor).Width(width).Render(content)
 }
 
 func (t *theme) SpinnerStyle() lipgloss.Style {

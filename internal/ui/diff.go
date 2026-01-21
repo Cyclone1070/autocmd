@@ -9,7 +9,8 @@ import (
 
 func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus, err string, prefix string) string {
 	header := d.Header
-	if d.Added != 0 || d.Removed != 0 {
+	// Only show stats on success
+	if status == statusSuccess && (d.Added != 0 || d.Removed != 0) {
 		header = fmt.Sprintf("%s (%s, %s)",
 			d.Header,
 			theme.Success(fmt.Sprintf("+%d", d.Added)),

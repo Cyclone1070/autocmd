@@ -10,16 +10,17 @@ import (
 )
 
 // Helper to create model for testing
-func newTestModel() *model {
+func newTestModel(t *testing.T) *model {
+	t.Helper()
 	m, err := newModel(config.DefaultConfig())
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return m
 }
 
 func TestModel_ThinkingEvent(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	// Send ThinkingEvent
 	updatedM, cmd := m.Update(msg{Event: domain.ThinkingEvent{}})
@@ -34,14 +35,14 @@ func TestModel_ThinkingEvent(t *testing.T) {
 	assert.Contains(t, view, "Thinking")
 
 	// Reset
-	m = newTestModel()
+	m = newTestModel(t)
 	m.Update(msg{Event: domain.TextEvent{Text: "Done"}})
 	newM = m
 	assert.False(t, newM.thinking)
 }
 
 func TestModel_TextEvent(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	// Send TextEvent
 	updatedM, _ := m.Update(msg{Event: domain.TextEvent{Text: "**Bold** text"}})
@@ -59,7 +60,7 @@ func TestModel_TextEvent(t *testing.T) {
 }
 
 func TestModel_ToolEvents_StringDisplay(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	// 1. ToolStart
 	startEv := domain.ToolStartEvent{
@@ -83,7 +84,7 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 	assert.NotContains(t, newM.activeTools, "call-1")
 
 	// 3. ToolEnd (Error)
-	m = newTestModel()
+	m = newTestModel(t)
 	m.Update(msg{Event: startEv})
 	newM = m
 
@@ -95,7 +96,7 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 }
 
 func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	// 1. ToolStart
 	startEv := domain.ToolStartEvent{
@@ -133,7 +134,7 @@ func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
 func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
 	// Bubble Tea processes sequentially in Update loop, so we assume concurrency safety handled by tea.Program
 	// We just test logic transitions
-	m := newTestModel()
+	m := newTestModel(t)
 
 	m.Update(msg{Event: domain.ThinkingEvent{}})
 	newM := m
@@ -142,13 +143,31 @@ func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
 }
 
 func TestModel_Init(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	cmd := m.Init()
 	assert.NotNil(t, cmd)
 }
 
 func TestModel_CtrlC(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	assert.Equal(t, tea.Quit(), cmd())
+}
+
+func TestModel_DoneEvent(t *testing.T) {
+	// Case 1: Done with no pending text -> Quit
+	m := newTestModel(t)
+	_, cmd := m.Update(msg{Event: domain.DoneEvent{}})
+	assert.Equal(t, tea.Quit(), cmd())
+
+	// Case 2: Done with pending text -> Render, Print, Quit
+	m = newTestModel(t)
+	m.Update(msg{Event: domain.TextEvent{Text: "Final Text"}})
+
+	newM, cmd := m.Update(msg{Event: domain.DoneEvent{}})
+
+	// Should produce a Sequence: Render... -> Print... -> Quit
+	// We can't easily inspect the Sequence structure but we can verify it returns a command
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "Final Text", newM.(*model).streamingText)
 }

@@ -14,12 +14,11 @@ func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, 
 	sep := theme.Separator(width, status)
 	// 1. Header (Command)
 	header := d.Header
-	cmdLine := fmt.Sprintf("$ %s", d.Command)
-
+	cmdLine := pad(fmt.Sprintf("$ %s", d.Command), "")
 	if status == statusError {
 		header = formatError(header, err, theme)
 		// Early return on error - show header and command, hide output
-		return fmt.Sprintf(" %s %s \n%s\n   %s", prefix, header, sep, cmdLine)
+		return fmt.Sprintf(" %s %s \n%s\n%s", prefix, header, sep, cmdLine)
 	}
 
 	// 2. Output
@@ -36,7 +35,7 @@ func renderShell(width int, theme *theme, d domain.ShellDisplay, output string, 
 	content := strings.Join(visibleLines, "\n")
 	paddedContent := pad(content, "") // Indent lines, no prefix
 
-	return fmt.Sprintf(" %s %s \n%s\n   %s\n%s\n%s",
+	return fmt.Sprintf(" %s %s \n%s\n%s\n%s\n%s",
 		prefix,
 		header,
 		sep,

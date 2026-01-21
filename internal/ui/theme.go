@@ -31,7 +31,7 @@ func newTheme(cfg config.UIConfig) *theme {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.muted).
 		Padding(0, 0)
-	t.spinner = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	t.spinner = lipgloss.NewStyle().Foreground(t.primary)
 
 	return t
 }

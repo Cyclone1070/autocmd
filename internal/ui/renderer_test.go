@@ -56,7 +56,6 @@ func TestModel_TextEvent(t *testing.T) {
 	newM = updatedM.(*model)
 
 	assert.Equal(t, "", newM.streamingText)
-	// We don't have history anymore in the model struct itself (Wait, let's check model.go)
 }
 
 func TestModel_ToolEvents_StringDisplay(t *testing.T) {
@@ -152,9 +151,4 @@ func TestModel_CtrlC(t *testing.T) {
 	m := newTestModel()
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	assert.Equal(t, tea.Quit(), cmd())
-}
-
-// Dummy wait for coverage
-func (r *Renderer) WaitTest() {
-	// Cannot easily test Wait() as it runs the program
 }

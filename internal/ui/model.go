@@ -84,8 +84,6 @@ func (m *model) Init() tea.Cmd {
 }
 
 func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	switch ev := teaMsg.(type) {
 	case msg:
 		return m.handleEvent(ev.Event)
@@ -93,6 +91,7 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		// Tick if thinking OR any tool is active
 		if m.thinking || len(m.activeTools) > 0 {
+			var cmd tea.Cmd
 			var newSpinner spinner.Model
 			newSpinner, cmd = m.spinner.Update(ev)
 			m.spinner = newSpinner

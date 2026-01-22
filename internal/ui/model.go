@@ -20,13 +20,16 @@ type model struct {
 	config  *config.Config
 
 	// State
-	width         int
-	activeTools   map[string]*toolState // active tool executions
-	toolOrder     []string              // order of active tools for stable rendering
-	thinking      bool                  // true if waiting for LLM response
-	streamingText string                // current markdown text
-	renderedText  string                // cached rendered markdown
-	textDirty     bool                  // true if streamingText or width changed
+	width          int
+	activeTools    map[string]*toolState // active tool executions
+	completedTools []*toolState          // completed tools waiting to be flushed
+	toolOrder      []string              // order of active tools for stable rendering
+	thinking       bool                  // true if waiting for LLM response
+	streamingText  string                // current markdown text
+	renderedText   string                // cached rendered markdown
+	textDirty      bool                  // true if streamingText or width changed
+	maxViewHeight  int                   // high water mark for View() height
+	done           bool                  // true if workflow is finished
 }
 
 type toolState struct {
@@ -89,14 +92,12 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEvent(ev.Event)
 
 	case spinner.TickMsg:
-		// Tick if thinking OR any tool is active
-		if m.thinking || len(m.activeTools) > 0 {
-			var cmd tea.Cmd
-			var newSpinner spinner.Model
-			newSpinner, cmd = m.spinner.Update(ev)
-			m.spinner = newSpinner
-			return m, cmd
-		}
+		// Always tick spinner as bottom bar is always visible
+		var cmd tea.Cmd
+		var newSpinner spinner.Model
+		newSpinner, cmd = m.spinner.Update(ev)
+		m.spinner = newSpinner
+		return m, cmd
 
 	case tea.KeyMsg:
 		switch ev.String() {
@@ -144,15 +145,31 @@ func (m *model) render() tea.Cmd {
 func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 	switch e := ev.(type) {
 	case domain.ThinkingEvent:
+		// Flush completed tools first
+		var cmds []tea.Cmd
+		if flushCmd := m.flushCompleted(); flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+
 		m.thinking = true
-		return m, m.spinner.Tick
+		cmds = append(cmds, m.spinner.Tick)
+		return m, tea.Batch(cmds...)
 
 	case domain.TextEvent:
+		// Flush completed tools first
+		var cmds []tea.Cmd
+		if flushCmd := m.flushCompleted(); flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+
 		m.thinking = false
 		m.streamingText += e.Text
 		m.textDirty = true
 		if cmd := m.render(); cmd != nil {
-			return m, cmd
+			cmds = append(cmds, cmd)
+		}
+		if len(cmds) > 0 {
+			return m, tea.Sequence(cmds...)
 		}
 		return m, nil
 
@@ -160,10 +177,15 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 		m.thinking = false
 
+		// Flush completed tools first
+		if flushCmd := m.flushCompleted(); flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+
 		// Flush streaming text if any
 		if m.streamingText != "" {
 			if cmd := m.render(); cmd != nil {
-				return m, cmd
+				cmds = append(cmds, cmd)
 			}
 			cmds = append(cmds, tea.Println(m.renderedText))
 			m.streamingText = ""
@@ -199,8 +221,8 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 				ts.status = statusSuccess
 			}
 
-			// Render final output
-			output := m.viewTool(ts)
+			// Move to completed tools (stay in View) instead of flushing immediately
+			m.completedTools = append(m.completedTools, ts)
 
 			// Remove from active state
 			delete(m.activeTools, e.CallID)
@@ -214,48 +236,120 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.toolOrder = m.toolOrder[:n]
-
-			return m, tea.Println(output)
 		}
 		return m, nil
 
 	case domain.DoneEvent:
+		m.done = true
+		var cmds []tea.Cmd
+
+		// Flush completed tools
+		if flushCmd := m.flushCompleted(); flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+
 		if m.streamingText != "" {
 			if cmd := m.render(); cmd != nil {
+				// This should not happen, render() only returns tea.Quit on fatal error
+				// If it does, we should return it immediately.
 				return m, cmd
 			}
-			return m, tea.Sequence(tea.Println(m.renderedText), tea.Quit)
+			cmds = append(cmds, tea.Println(m.renderedText))
 		}
-		return m, tea.Quit
+		cmds = append(cmds, tea.Quit)
+		return m, tea.Sequence(cmds...)
 	}
 
 	return m, nil
 }
 
-func (m *model) View() string {
-	// Only show current active state (streaming text, tool, or thinking)
-	// Completed items are printed via tea.Println and persist above this
-
-	// 1. Streaming text takes priority for visibility
-	if m.streamingText != "" {
-		return m.renderedText
+// flushCompleted takes all completed tools and creates tea.Println commands for them.
+// It clears the completedTools slice after processing.
+func (m *model) flushCompleted() tea.Cmd {
+	if len(m.completedTools) == 0 {
+		return nil
 	}
 
-	// 2. Then active tools (stacked)
-	if len(m.activeTools) > 0 {
+	var cmds []tea.Cmd
+	for _, ts := range m.completedTools {
+		output := m.viewTool(ts)
+		cmds = append(cmds, tea.Println(output))
+	}
+	m.completedTools = nil // Clear the slice
+	m.maxViewHeight = 0    // Reset height tracking as content moved to history
+
+	return tea.Batch(cmds...)
+}
+
+func (m *model) View() string {
+	if m.done {
+		return ""
+	}
+
+	// 1. Build main content
+	var mainContent string
+	if m.streamingText != "" {
+		mainContent = strings.TrimRight(m.renderedText, "\n")
+	} else {
+		// Render tools: Completed ones first, then active ones
 		var toolViews []string
+
+		for _, ts := range m.completedTools {
+			toolViews = append(toolViews, m.viewTool(ts))
+		}
+
 		for _, id := range m.toolOrder {
 			if ts, ok := m.activeTools[id]; ok {
 				toolViews = append(toolViews, m.viewTool(ts))
 			}
 		}
-		return strings.Join(toolViews, "\n")
+
+		if len(toolViews) > 0 {
+			mainContent = strings.TrimRight(strings.Join(toolViews, "\n"), "\n")
+		}
 	}
 
-	// 3. Then thinking spinner
+	// 2. Build bottom bar
+	statusText := "Generating"
 	if m.thinking {
-		return fmt.Sprintf("%s Thinking...", m.spinner.View())
+		statusText = "Thinking"
+	}
+	bottomBar := fmt.Sprintf("%s %s", m.spinner.View(), statusText)
+
+	// 3. Calculate Visual Heights and Middle Padding
+	contentHeight := 0
+	if mainContent != "" {
+		// Calculate height of content (including internal newlines)
+		contentHeight = strings.Count(mainContent, "\n") + 1
 	}
 
-	return ""
+	barHeight := 1
+	marginHeight := 0
+	if mainContent != "" {
+		marginHeight = 1 // for the \n\n margin
+	}
+
+	// Calculate current required height
+	currentTotal := contentHeight + marginHeight + barHeight
+
+	// Update High Water Mark
+	if currentTotal > m.maxViewHeight {
+		m.maxViewHeight = currentTotal
+	}
+
+	// Calculate Middle Padding needed to maintain max height
+	padHeight := m.maxViewHeight - currentTotal
+	if padHeight < 0 {
+		padHeight = 0
+	}
+	padding := strings.Repeat("\n", padHeight)
+
+	// 4. Compose: Content + Margin + Padding + Bar
+	// Use explicit newlines for margin logic
+	margin := ""
+	if mainContent != "" {
+		margin = "\n\n"
+	}
+
+	return mainContent + margin + padding + bottomBar
 }

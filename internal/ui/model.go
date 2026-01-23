@@ -155,7 +155,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 		if len(cmds) > 0 {
-			return m, tea.Batch(cmds...)
+			return m, tea.Sequence(cmds...)
 		}
 		return m, nil
 
@@ -169,10 +169,6 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// Note: We do NOT force flush text here. We rely on StreamingMarkdown logic.
 		// If the text block was "Uncertain", it remains "Uncertain" until a new block starts
 		// or we force flush.
-		// Wait... text followed by tool usually implies the text is done (e.g. "I will read the file:")
-		// But strictly speaking, it might not be a complete paragraph.
-		// However, in typical LLM behavior, tool call is a strong break.
-		// We SHOULD force flush pending text on ToolStart.
 
 		textFlush, _ := m.streamingMd.Flush()
 		if textFlush != "" {
@@ -188,7 +184,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		m.tools = append(m.tools, ts)
 
 		cmds = append(cmds, m.spinner.Tick)
-		return m, tea.Batch(cmds...)
+		return m, tea.Sequence(cmds...)
 
 	case domain.ToolStreamEvent:
 		// Find tool in slice
@@ -217,7 +213,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// Attempt flush from front
 		cmds := m.flushCompletedTools()
 		if len(cmds) > 0 {
-			return m, tea.Batch(cmds...)
+			return m, tea.Sequence(cmds...)
 		}
 		return m, nil
 

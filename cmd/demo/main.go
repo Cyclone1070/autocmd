@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
@@ -17,7 +18,27 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error creating renderer: %v\n", err)
 		os.Exit(1)
 	}
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.Event, 100)
+
+	// Helper for natural typing simulation
+	simulateTyping := func(text string) {
+		// Split into small chunks of 1-5 chars
+		runes := []rune(text)
+		cursor := 0
+		for cursor < len(runes) {
+			chunkSize := rand.Intn(5) + 1
+			if cursor+chunkSize > len(runes) {
+				chunkSize = len(runes) - cursor
+			}
+
+			chunk := string(runes[cursor : cursor+chunkSize])
+			events <- domain.TextEvent{Text: chunk}
+			cursor += chunkSize
+
+			// Variable delay 10-50ms
+			time.Sleep(time.Duration(10 * time.Millisecond))
+		}
+	}
 
 	go func() {
 		for ev := range events {
@@ -27,113 +48,122 @@ func main() {
 
 	go func() {
 		defer close(events)
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 
 		// 1. Thinking
 		events <- domain.ThinkingEvent{}
-		time.Sleep(800 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 
-		// 2. Text (Context) with fragmented markdown
-		events <- domain.TextEvent{Text: "Running comprehensive UI consistency check...\n\n"}
+		// 2. Intro with Markdown features (Paragraphs, Bold, List)
+		simulateTyping("# Integrated Architecture Validation\n\n")
 		time.Sleep(300 * time.Millisecond)
 
-		mdChunks := []string{
-			"Checking **bold",
-			" text** rendering...\n",
-			"Also _italic",
-			" text_ support.\n\n",
+		simulateTyping("I will now demonstrate the **new inline UI** capabilities. ")
+		simulateTyping("This system uses a _streaming markdown parser_ to flush content block-by-block.\n\n")
+
+		simulateTyping("Here is the plan:\n")
+		simulateTyping("1. Test fragmentation handling\n")
+		simulateTyping("2. Test code block streaming\n")
+		simulateTyping("3. Test concurrent tool execution\n")
+		simulateTyping("4. Test overflow handling for long blocks\n\n")
+
+		time.Sleep(500 * time.Millisecond)
+
+		// 3. Fragmentation Test (Partial markdown markers)
+		simulateTyping("### Fragmentation Test\n\n")
+		simulateTyping("This sentence has **bro")
+		time.Sleep(500 * time.Millisecond) // Pause mid-bold
+		simulateTyping("ken bold** markers and `split")
+		time.Sleep(500 * time.Millisecond) // Pause mid-code
+		simulateTyping(" code` formatting.\n\n")
+		time.Sleep(800 * time.Millisecond)
+
+		// 4. Code Block Streaming (Unsafe -> Safe transition)
+		simulateTyping("Now writing a Go function:\n\n")
+
+		events <- domain.TextEvent{Text: "```go\n"} // Start block
+		time.Sleep(500 * time.Millisecond)
+
+		codeLines := []string{
+			"package main\n\n",
+			"func hello() {\n",
+			"    fmt.Println(\"Hello World\")\n",
+			"    // Simulating complex logic...\n",
+			"    time.Sleep(1 * time.Second)\n",
+			"}\n",
 		}
-		for _, c := range mdChunks {
-			events <- domain.TextEvent{Text: c}
+
+		for _, line := range codeLines {
+			simulateTyping(line)
 			time.Sleep(200 * time.Millisecond)
 		}
 
-		// SCENARIO 1: String Display (Success vs Failure)
-		// Concurrent execution
-		events <- domain.ToolStartEvent{
-			CallID:   "s_success",
-			ToolName: "read_file",
-			Display:  domain.StringDisplay("Reading config.yaml"),
-		}
-		time.Sleep(100 * time.Millisecond)
+		events <- domain.TextEvent{Text: "```\n\n"} // Close block (should trigger flush)
+		simulateTyping("That block should now be flushed to history.\n\n")
+		time.Sleep(1000 * time.Millisecond)
 
-		events <- domain.ToolStartEvent{
-			CallID:   "s_fail",
-			ToolName: "read_file",
-			Display:  domain.StringDisplay("Reading secret.key"),
-		}
+		// 5. Concurrent Tools & Ordered Flushing
+		simulateTyping("### Tool Execution & Ordering\n\n")
+		simulateTyping("I'll start two tools. Tool B finishes FIRST, but should wait for Tool A.\n\n")
 
-		time.Sleep(600 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "s_success"}
+		// Start A
+		events <- domain.ToolStartEvent{
+			CallID:   "tool-A",
+			ToolName: "long-job",
+			Display:  domain.StringDisplay("Tool A: Long Running Job..."),
+		}
 		time.Sleep(200 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "s_fail", Error: "permission denied"}
+
+		// Start B
+		events <- domain.ToolStartEvent{
+			CallID:   "tool-B",
+			ToolName: "fast-job",
+			Display:  domain.StringDisplay("Tool B: Quick Job"),
+		}
 		time.Sleep(500 * time.Millisecond)
 
-		// SCENARIO 2: Diff Display (Success vs Failure)
-		// Concurrent
-		events <- domain.ToolStartEvent{
-			CallID:   "d_success",
-			ToolName: "edit_file",
-			Display: domain.DiffDisplay{
-				Header:  "Edit main.go",
-				Added:   5,
-				Removed: 1,
-				Diff:    "-oldVar := 1\n+newVar := 2\n+addedVar := 3",
-			},
-		}
-		time.Sleep(100 * time.Millisecond)
+		// Finish B (Success) - Should NOT flush yet
+		events <- domain.ToolEndEvent{CallID: "tool-B"}
+		time.Sleep(1500 * time.Millisecond) // Long pause to verify B waits
 
-		events <- domain.ToolStartEvent{
-			CallID:   "d_fail",
-			ToolName: "edit_file",
-			Display: domain.DiffDisplay{
-				Header:  "Edit locked.go",
-				Added:   2,
-				Removed: 0,
-				Diff:    "+lockedFunc() {}",
-			},
-		}
-
-		time.Sleep(600 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "d_success"}
-		time.Sleep(200 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "d_fail", Error: "file is locked by another process"}
+		// Finish A (Success) - Should flush A then B
+		events <- domain.ToolEndEvent{CallID: "tool-A"}
 		time.Sleep(500 * time.Millisecond)
 
-		// SCENARIO 3: Shell Display (Success vs Failure)
-		// Concurrent
+		// 6. Long Block Overflow Test
+		simulateTyping("\n### Overflow Indicator Test\n\n")
+		simulateTyping("Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n")
+
+		// Generate 30 lines of text (enough to overflow typical terminals)
+		for i := 0; i < 30; i++ {
+			line := fmt.Sprintf("Line %03d: This is a generated line to fill the screen and force the pending block to overflow the viewport.\n", i+1)
+			simulateTyping(line)
+			// Small pause every 10 lines, but much faster
+			if i%10 == 0 {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+		simulateTyping("\nEnd of long block.\n\n")
+		time.Sleep(2000 * time.Millisecond) // 2s pause to read
+
+		// 7. Final Tool with Output
 		events <- domain.ToolStartEvent{
-			CallID:   "sh_success",
+			CallID:   "final-shell",
 			ToolName: "shell",
 			Display: domain.ShellDisplay{
-				Header:  "Build Project",
-				Command: "go build ./...",
-			},
-		}
-		time.Sleep(100 * time.Millisecond)
-
-		events <- domain.ToolStartEvent{
-			CallID:   "sh_fail",
-			ToolName: "shell",
-			Display: domain.ShellDisplay{
-				Header:  "Run Tests",
-				Command: "go test ./...",
+				Header:  "Final Cleanup",
+				Command: "rm -rf /tmp/demo",
 			},
 		}
 
-		// Stream content to both
-		chunks := []string{".", "..", "..."}
+		chunks := []string{"cleaning...", " removing files...", " done.\n"}
 		for _, c := range chunks {
-			events <- domain.ToolStreamEvent{CallID: "sh_success", Chunk: c}
-			events <- domain.ToolStreamEvent{CallID: "sh_fail", Chunk: c}
-			time.Sleep(200 * time.Millisecond)
+			events <- domain.ToolStreamEvent{CallID: "final-shell", Chunk: c}
+			time.Sleep(300 * time.Millisecond)
 		}
+		events <- domain.ToolEndEvent{CallID: "final-shell"}
 
-		events <- domain.ToolEndEvent{CallID: "sh_success"}
-		time.Sleep(200 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "sh_fail", Error: "compilation failed"}
 		time.Sleep(500 * time.Millisecond)
-
 		events <- domain.DoneEvent{}
 	}()
 

@@ -16,6 +16,9 @@ func newTestModel(t *testing.T) *model {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// For testing, mock terminal size to something standard
+	m.width = 80
+	m.termHeight = 24
 	return m
 }
 
@@ -49,14 +52,22 @@ func TestModel_TextEvent(t *testing.T) {
 	newM := updatedM.(*model)
 
 	assert.False(t, newM.thinking)
-	assert.Equal(t, "**Bold** text", newM.streamingText)
+	// StreamingMarkdown pending content should be visible
+	assert.Contains(t, newM.View(), "Bold")
+	assert.NotEmpty(t, newM.streamingMd.Pending())
 
 	// Flush it by starting a tool
+	// Note: In new algo, TextEvent appends are NOT automatically flushed until
+	// 1. A complete block is formed AND another block starts
+	// 2. OR explicit flush call
+	// But ToolStart forces a flush of pending text.
+
 	startEv := domain.ToolStartEvent{CallID: "c1", ToolName: "t1"}
 	updatedM, _ = newM.Update(msg{Event: startEv})
 	newM = updatedM.(*model)
 
-	assert.Equal(t, "", newM.streamingText)
+	// After tool start, pending text should be flushed (empty buffer)
+	assert.Equal(t, "", newM.streamingMd.Pending())
 }
 
 func TestModel_ToolEvents_StringDisplay(t *testing.T) {
@@ -71,8 +82,11 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 	updatedM, _ := m.Update(msg{Event: startEv})
 	newM := updatedM.(*model)
 
-	assert.Contains(t, newM.activeTools, "call-1")
-	assert.Equal(t, statusRunning, newM.activeTools["call-1"].status)
+	// Check tools slice
+	assert.Len(t, newM.tools, 1)
+	assert.Equal(t, "call-1", newM.tools[0].callID)
+	assert.Equal(t, statusRunning, newM.tools[0].status)
+
 	assert.Contains(t, newM.View(), "Reading file.txt")
 	assert.Contains(t, newM.View(), "⣾") // partial check for spinner stuff
 
@@ -81,9 +95,15 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 	updatedM, _ = newM.Update(msg{Event: endEv})
 	newM = updatedM.(*model)
 
-	assert.NotContains(t, newM.activeTools, "call-1")
+	// In new model, completed tools stay in slice until flushed.
+	// But if it's the head of the queue, it tries to flush immediately on ToolEnd.
+	// Since we can't capture tea.Println output easily here,
+	// we just check that the tool was processed.
 
-	// 3. ToolEnd (Error)
+	// If flushed successfully, it should be removed from m.tools
+	assert.Len(t, newM.tools, 0)
+
+	// 3. ToolEnd (Error) - Setup new scenario with error
 	m = newTestModel(t)
 	m.Update(msg{Event: startEv})
 	newM = m
@@ -92,7 +112,8 @@ func TestModel_ToolEvents_StringDisplay(t *testing.T) {
 	updatedM, _ = newM.Update(msg{Event: errEv})
 	newM = updatedM.(*model)
 
-	assert.NotContains(t, newM.activeTools, "call-1")
+	// Should also flush immediately because it's first in line
+	assert.Len(t, newM.tools, 0)
 }
 
 func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
@@ -128,7 +149,8 @@ func TestModel_ToolEvents_ShellDisplay(t *testing.T) {
 	updatedM, _ = newM.Update(msg{Event: endEv})
 	newM = updatedM.(*model)
 
-	assert.NotContains(t, newM.activeTools, "call-shell")
+	// Should be flushed
+	assert.Len(t, newM.tools, 0)
 }
 
 func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
@@ -158,7 +180,8 @@ func TestModel_DoneEvent(t *testing.T) {
 	// Case 1: Done with no pending text -> Quit
 	m := newTestModel(t)
 	_, cmd := m.Update(msg{Event: domain.DoneEvent{}})
-	assert.Equal(t, tea.Quit(), cmd())
+	// Should be sequence containing Quit
+	assert.NotNil(t, cmd)
 
 	// Case 2: Done with pending text -> Render, Print, Quit
 	m = newTestModel(t)
@@ -166,8 +189,37 @@ func TestModel_DoneEvent(t *testing.T) {
 
 	newM, cmd := m.Update(msg{Event: domain.DoneEvent{}})
 
-	// Should produce a Sequence: Render... -> Print... -> Quit
-	// We can't easily inspect the Sequence structure but we can verify it returns a command
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "Final Text", newM.(*model).streamingText)
+	// Pending text should be gone (flushed)
+	assert.Equal(t, "", newM.(*model).streamingMd.Pending())
+	assert.True(t, newM.(*model).done)
+}
+
+func TestModel_OrderedFlushing(t *testing.T) {
+	m := newTestModel(t)
+
+	// Start Tool A
+	m.Update(msg{Event: domain.ToolStartEvent{CallID: "A", ToolName: "A", Display: domain.StringDisplay("A")}})
+
+	// Start Tool B
+	m.Update(msg{Event: domain.ToolStartEvent{CallID: "B", ToolName: "B", Display: domain.StringDisplay("B")}})
+
+	newM := m
+	assert.Len(t, newM.tools, 2)
+	assert.Equal(t, "A", newM.tools[0].callID)
+	assert.Equal(t, "B", newM.tools[1].callID)
+
+	// Finish Tool B (should NOT flush because A is running)
+	updatedM, _ := m.Update(msg{Event: domain.ToolEndEvent{CallID: "B"}})
+	newM = updatedM.(*model)
+
+	assert.Len(t, newM.tools, 2)
+	assert.Equal(t, statusSuccess, newM.tools[1].status) // B is done
+	assert.Equal(t, statusRunning, newM.tools[0].status) // A is running
+
+	// Finish Tool A (should flush A, then B)
+	updatedM, _ = m.Update(msg{Event: domain.ToolEndEvent{CallID: "A"}})
+	newM = updatedM.(*model)
+
+	assert.Len(t, newM.tools, 0) // Both flushed
 }

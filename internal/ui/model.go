@@ -116,7 +116,29 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if ev.Type == tea.KeyCtrlC {
-			return m, tea.Quit
+			m.runState = stateCancelled
+
+			// Build final output with proper padding (same as DoneEvent)
+			var parts []string
+
+			// 1. Flush pending text
+			textFlush, _ := m.streamingMd.Flush()
+			if textFlush != "" {
+				parts = append(parts, strings.TrimRight(textFlush, "\n"))
+			}
+
+			// 2. Flush remaining tools
+			for _, ts := range m.tools {
+				parts = append(parts, m.viewTool(ts))
+			}
+			m.tools = nil
+
+			// 3. Add cancelled status bar
+			parts = append(parts, m.statusBar())
+
+			// Join with double newline for consistent padding
+			finalOutput := "\n" + strings.Join(parts, "\n\n")
+			return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
 		}
 
 	case tea.WindowSizeMsg:
@@ -276,9 +298,9 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 }
 
 func (m *model) View() string {
-	// When done, we've already flushed everything via tea.Println
+	// When done or cancelled, we've already flushed everything via tea.Println
 	// Return empty to prevent duplicate rendering and extra whitespace
-	if m.runState == stateDone {
+	if m.runState == stateDone || m.runState == stateCancelled {
 		return ""
 	}
 

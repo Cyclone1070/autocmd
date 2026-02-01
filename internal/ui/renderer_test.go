@@ -172,8 +172,9 @@ func TestModel_Init(t *testing.T) {
 
 func TestModel_CtrlC(t *testing.T) {
 	m := newTestModel(t)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-	assert.Equal(t, tea.Quit(), cmd())
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	assert.NotNil(t, cmd)
+	assert.Equal(t, stateCancelled, newM.(*model).runState)
 }
 
 func TestModel_DoneEvent(t *testing.T) {

@@ -22,8 +22,9 @@ type model struct {
 	termHeight int // For overflow indicator
 
 	// New State tracking
-	streamingMd *StreamingMarkdown // Handles text buffering strings
-	tools       []*toolState       // Ordered list of all tools (active + waiting flush)
+	streamingMd      *StreamingMarkdown // Handles text buffering strings
+	tools            []*toolState       // Ordered list of all tools (active + waiting flush)
+	maxContentHeight int                // Tracks highest content height to prevent status bar jiggling
 
 	// Keep
 	thinking bool
@@ -292,6 +293,23 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 		// Create flush command
 		output := m.viewTool(tool)
 		cmds = append(cmds, tea.Println(output))
+
+		// Adjust maxContentHeight downwards because this content is moving to history
+		// We count lines in the output (plus 2 for the double-newline join separation that would have been there)
+		lines := strings.Count(output, "\n") + 1
+
+		// Also account for the separation that View() adds between tools (\n\n)
+		// If there were multiple tools, each had separation.
+		// Use a heuristic: just decrement by the tool height for now.
+		if m.maxContentHeight > lines {
+			m.maxContentHeight -= lines
+			// Reduce further for the spacing that was between this tool and others
+			if m.maxContentHeight > 2 {
+				m.maxContentHeight -= 2
+			}
+		} else {
+			m.maxContentHeight = 0
+		}
 	}
 
 	return cmds
@@ -304,28 +322,49 @@ func (m *model) View() string {
 		return ""
 	}
 
-	var parts []string
+	var contentParts []string
 
 	// 1. Pending markdown (last uncertain block)
 	if pending := m.streamingMd.Pending(); pending != "" {
 		pending = m.truncateWithIndicator(pending)
-		parts = append(parts, pending)
+		contentParts = append(contentParts, pending)
 	}
 
 	// 2. All remaining tools (running + waiting-to-flush)
 	for _, t := range m.tools {
-		parts = append(parts, m.viewTool(t))
+		contentParts = append(contentParts, m.viewTool(t))
 	}
 
-	// 3. Status bar
-	// Ensure we have at least one element before status bar to force padding
-	// if we are in "Done" state (where other parts are empty).
-	if len(parts) == 0 && m.runState == stateDone {
-		parts = append(parts, "")
-	}
-	parts = append(parts, m.statusBar())
+	// Join content parts
+	content := strings.Join(contentParts, "\n\n")
 
-	return strings.Join(parts, "\n\n")
+	// Calculate current content height (line count)
+	currentHeight := 0
+	if content != "" {
+		currentHeight = strings.Count(content, "\n") + 1
+	}
+
+	// Update max content height (only grows, never shrinks during session)
+	if currentHeight > m.maxContentHeight {
+		m.maxContentHeight = currentHeight
+	}
+
+	// Add padding to maintain consistent height (prevents status bar jiggling)
+	paddingLines := m.maxContentHeight - currentHeight
+	var padding string
+	if paddingLines > 0 {
+		padding = strings.Repeat("\n", paddingLines)
+	}
+
+	// Build final view: content + padding + status bar
+	statusBar := m.statusBar()
+
+	if content == "" {
+		// No content, just padding + status bar
+		return padding + statusBar
+	}
+
+	return content + "\n\n" + padding + statusBar
 }
 
 // Overflow indicator - show only bottom portion if too tall

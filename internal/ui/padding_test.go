@@ -99,6 +99,73 @@ func TestPaddingLogic(t *testing.T) {
 		// Clear lines usage for linter
 		_ = lines
 	})
+	t.Run("Safe Exit State Machine (Serial Queue)", func(t *testing.T) {
+		m, _ := newModel(cfg)
+		m.Init()
+
+		// 1. Start a tool
+		m.Update(msg{Event: domain.ToolStartEvent{CallID: "t1", ToolName: "test"}})
+
+		// Helper to check state
+		getPending := func() int {
+			c := len(m.printQueue)
+			if m.isPrinting {
+				c++
+			}
+			return c
+		}
+
+		// 2. End the tool
+		// This should queue the tool output and immediately start printing it.
+		// Queue: [], Printing: Tool
+		_, cmd := m.Update(msg{Event: domain.ToolEndEvent{CallID: "t1"}})
+		if cmd == nil {
+			t.Errorf("Expected Tool Print command (ProcessQueue), got nil")
+		}
+		if p := getPending(); p != 1 {
+			t.Errorf("Expected pending=1 (Printing Tool), got %d", p)
+		}
+
+		// 3. Send Done (Simulate User Interrupt/Completion)
+		// This should queue the Status Bar.
+		// Since we are busy printing Tool, it should NOT start printing Status yet.
+		// Queue: [Status], Printing: Tool
+		_, cmd = m.Update(msg{Event: domain.DoneEvent{}})
+		if cmd != nil {
+			// Serial Queue logic: processQueue returns nil if isPrinting is true.
+			// So handleDoneEvent -> Sequence(nil) -> nil.
+			t.Errorf("Expected deferral (nil cmd because busy printing), got %v", cmd)
+		}
+		if p := getPending(); p != 2 {
+			t.Errorf("Expected pending=2 (Printing Tool + Queued Status), got %d", p)
+		}
+		if m.runState != stateDone {
+			t.Errorf("Expected runState=stateDone, got %v", m.runState)
+		}
+
+		// 4. MsgPrintFinished (Tool done)
+		// This should trigger the next item in Queue (Status Bar).
+		// Queue: [], Printing: Status
+		_, cmd = m.Update(msgPrintFinished{})
+		if cmd == nil {
+			t.Errorf("Expected Status Print command (ProcessQueue), got nil")
+		}
+		if p := getPending(); p != 1 {
+			t.Errorf("Expected pending=1 (Printing Status), got %d", p)
+		}
+
+		// 5. MsgPrintFinished (Status done)
+		// Queue: [], Printing: None. State: Done. -> Should Quit.
+		_, cmd = m.Update(msgPrintFinished{})
+
+		// Verify final Quit
+		if cmd == nil {
+			t.Errorf("Expected Quit command, got nil")
+		}
+		if p := getPending(); p != 0 {
+			t.Errorf("Expected pending=0, got %d", p)
+		}
+	})
 }
 
 // msg wrapper to match model.go's private msg type if needed,

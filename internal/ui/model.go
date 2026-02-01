@@ -29,7 +29,14 @@ type model struct {
 	// Keep
 	thinking bool
 	runState runState
+
+	// Serial Print Queue to enforce strict output ordering and safe shutdown
+	printQueue []string
+	isPrinting bool
 }
+
+// msgPrintFinished is sent when a scheduled print command completes.
+type msgPrintFinished struct{}
 
 type toolState struct {
 	callID      string
@@ -50,7 +57,8 @@ const (
 type runState int
 
 const (
-	stateRunning runState = iota
+	stateRunning  runState = iota
+	stateQuitting          // Waiting for prints to finish
 	stateDone
 	stateCancelled
 )
@@ -118,48 +126,8 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if ev.Type == tea.KeyCtrlC {
 			m.runState = stateCancelled
-
-			// Build final output with proper padding (same as DoneEvent)
-			var parts []string
-
-			// 1. Flush pending text
-			textFlush, _ := m.streamingMd.Flush()
-			if textFlush != "" {
-				parts = append(parts, strings.TrimRight(textFlush, "\n"))
-			}
-
-			// 2. Flush remaining tools
-			for _, ts := range m.tools {
-				parts = append(parts, m.viewTool(ts))
-			}
-			m.tools = nil
-
-			// 3. Add cancelled status bar with hardcoded empty line
-			// statusBar now includes \n\n prefix
-			parts = append(parts, m.statusBar())
-
-			// Join with just newlines?
-			// View() joins with nothing because padding does the work.
-			// Here we are creating a static string for passing to Println.
-			// The parts are: [FlushedText, Tool1, Tool2, \n\nStatus]
-			// We want: Text\n\nTool1\n\nTool2\n\n\nStatus
-			// Wait, if we join with \n\n:
-			// Text \n\n Tool1 \n\n \n\nStatus
-			// This puts 4 newlines before status?
-			// statusBar starts with \n\n.
-			// If we join with \n\n: Tool \n\n \n\n Status. -> Tool \n\n\n\n Status.
-			// Before: Tool \n\n Status.
-			// User wants 1 empty line (builtin).
-			// If we join with \n\n, we get 1 empty line between tools.
-			// Between last tool and Status: \n\n + \n\nStatus.
-			// That is 2 empty lines.
-
-			// We should join the content parts with \n\n.
-			// Then append status bar directly?
-
-			content := strings.Join(parts[:len(parts)-1], "\n\n")
-			finalOutput := "\n" + content + parts[len(parts)-1]
-			return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
+			// Enter quitting state, triggers safe exit logic
+			return m.handleDoneEvent()
 		}
 
 	case tea.WindowSizeMsg:
@@ -177,7 +145,20 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 		m.glamour = r
+		m.glamour = r
 		m.streamingMd.SetRenderer(r)
+
+	case msgPrintFinished:
+		m.isPrinting = false
+		// Trigger next item in queue
+		if nextCmd := m.processQueue(); nextCmd != nil {
+			return m, nextCmd
+		}
+
+		// If Queue Empty AND Not Printing AND Done -> Safe Quit
+		if (m.runState == stateDone || m.runState == stateCancelled) && len(m.printQueue) == 0 && !m.isPrinting {
+			return m, tea.Quit
+		}
 	}
 	return m, nil
 }
@@ -198,11 +179,11 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		flushedBlocks, err := m.streamingMd.Append(e.Text)
 		if err != nil {
 			// Log error but continue?
-			cmds = append(cmds, tea.Println(fmt.Sprintf("Error rendering markdown: %v", err)))
+			cmds = append(cmds, m.schedulePrint(fmt.Sprintf("Error rendering markdown: %v", err)))
 		}
 
 		for _, block := range flushedBlocks {
-			cmds = append(cmds, tea.Println(block))
+			cmds = append(cmds, m.schedulePrint(block))
 
 			// Reduce maxContentHeight as content is flushed to history
 			lines := strings.Count(block, "\n") + 1
@@ -231,7 +212,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 		textFlush, _ := m.streamingMd.Flush()
 		if textFlush != "" {
-			cmds = append(cmds, tea.Println(textFlush))
+			cmds = append(cmds, m.schedulePrint(textFlush))
 
 			// Reduce maxContentHeight
 			lines := strings.Count(textFlush, "\n") + 1
@@ -284,39 +265,67 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case domain.DoneEvent:
-		m.runState = stateDone
-
-		// Build final output with proper padding
-		var parts []string
-
-		// 1. Flush pending text
-		textFlush, _ := m.streamingMd.Flush()
-		if textFlush != "" {
-			parts = append(parts, strings.TrimRight(textFlush, "\n"))
-		}
-
-		// 2. Flush remaining tools
-		for _, ts := range m.tools {
-			parts = append(parts, m.viewTool(ts))
-		}
-		m.tools = nil // Clear
-
-		// 3. Add final status bar
-		parts = append(parts, m.statusBar())
-
-		// Join content with \n\n, then append strict status bar
-		var finalOutput string
-		if len(parts) > 1 {
-			content := strings.Join(parts[:len(parts)-1], "\n\n")
-			finalOutput = "\n" + content + parts[len(parts)-1]
-		} else {
-			// Only status bar?
-			finalOutput = "\n" + parts[0]
-		}
-		return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
+		m.runState = stateDone // Start explicit wait, but show DONE status
+		return m.handleDoneEvent()
 	}
 
 	return m, nil
+}
+
+// handleDoneEvent performs final flushes and triggers the safe exit wait logic.
+func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// 1. Flush pending text
+	textFlush, _ := m.streamingMd.Flush()
+	if textFlush != "" {
+		cmds = append(cmds, m.schedulePrint(strings.TrimRight(textFlush, "\n")))
+	}
+
+	// 2. Flush remaining tools
+	for _, ts := range m.tools {
+		cmds = append(cmds, m.schedulePrint(m.viewTool(ts)))
+	}
+	m.tools = nil // Clear state
+
+	// 3. Queue FINAL Status Bar print
+	// We want this to be the very last thing, so we queue it.
+	// The PrintQueue guarantees it appears AFTER the above flushes.
+	finalStatus := strings.TrimPrefix(m.statusBar(), "\n")
+	cmds = append(cmds, m.schedulePrint(finalStatus))
+
+	return m, tea.Sequence(cmds...)
+
+}
+
+// schedulePrint adds content to the queue and attempts to process it.
+func (m *model) schedulePrint(content string) tea.Cmd {
+	if content == "" {
+		return nil
+	}
+	m.printQueue = append(m.printQueue, content)
+	return m.processQueue()
+}
+
+// processQueue checks if we can print the next item.
+func (m *model) processQueue() tea.Cmd {
+	// If already printing or nothing to print, wait.
+	if m.isPrinting || len(m.printQueue) == 0 {
+		return nil
+	}
+
+	// Pop
+	content := m.printQueue[0]
+	m.printQueue = m.printQueue[1:]
+
+	// Lock
+	m.isPrinting = true
+
+	// Exec
+	return tea.Sequence(
+		tea.Println(content),
+		func() tea.Msg { return msgPrintFinished{} },
+	)
 }
 
 // flushCompletedTools checks the front of the tool queue.
@@ -331,9 +340,9 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 		tool := m.tools[0]
 		m.tools = m.tools[1:]
 
-		// Create flush command
+		// Create flush command using tracked helper
 		output := m.viewTool(tool)
-		cmds = append(cmds, tea.Println(output))
+		cmds = append(cmds, m.schedulePrint(output))
 
 		// Adjust maxContentHeight downwards because this content is moving to history
 		// We count lines in the output (plus 2 for the double-newline join separation that would have been there)
@@ -359,7 +368,7 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 func (m *model) View() string {
 	// When done or cancelled, we've already flushed everything via tea.Println
 	// Return empty to prevent duplicate rendering and extra whitespace
-	if m.runState == stateDone || m.runState == stateCancelled {
+	if m.runState == stateDone || m.runState == stateCancelled || m.runState == stateQuitting {
 		return ""
 	}
 
@@ -443,6 +452,8 @@ func (m *model) statusBar() string {
 		left = fmt.Sprintf("%s Done", m.theme.Success("✓"))
 	case stateCancelled:
 		left = fmt.Sprintf("%s Cancelled", m.theme.Error("✗"))
+	case stateQuitting:
+		left = fmt.Sprintf("%s Finishing...", m.spinner.View())
 	default:
 		status := "Generating"
 		if m.thinking {

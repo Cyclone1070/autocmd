@@ -351,16 +351,30 @@ func (m *model) truncateWithIndicator(content string) string {
 }
 
 func (m *model) statusBar() string {
+	// Hardcoded context window info for now
+	contextInfo := m.theme.Muted("Context: 42%")
+
+	var left string
 	switch m.runState {
 	case stateDone:
-		return fmt.Sprintf("%s Done", m.theme.Success("✓"))
+		left = fmt.Sprintf("%s Done", m.theme.Success("✓"))
 	case stateCancelled:
-		return fmt.Sprintf("%s Cancelled", m.theme.Error("✗"))
+		left = fmt.Sprintf("%s Cancelled", m.theme.Error("✗"))
 	default:
 		status := "Generating"
 		if m.thinking {
 			status = "Thinking"
 		}
-		return fmt.Sprintf("%s %s", m.spinner.View(), m.theme.Primary(status))
+		left = fmt.Sprintf("%s %s", m.spinner.View(), m.theme.Primary(status))
 	}
+
+	// Calculate padding to right-align context info
+	// Approximate: width - left length - right length
+	// Since ANSI codes mess up length, use a fixed padding approach
+	padding := m.width - 20 // rough estimate leaving room for both sides
+	if padding < 1 {
+		padding = 1
+	}
+
+	return fmt.Sprintf("%s%*s", left, padding, contextInfo)
 }

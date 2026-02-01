@@ -192,7 +192,7 @@ func TestModel_DoneEvent(t *testing.T) {
 	assert.NotNil(t, cmd)
 	// Pending text should be gone (flushed)
 	assert.Equal(t, "", newM.(*model).streamingMd.Pending())
-	assert.True(t, newM.(*model).done)
+	assert.Equal(t, stateDone, newM.(*model).runState)
 }
 
 func TestModel_OrderedFlushing(t *testing.T) {

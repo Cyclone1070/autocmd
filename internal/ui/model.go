@@ -27,7 +27,7 @@ type model struct {
 
 	// Keep
 	thinking bool
-	done     bool
+	runState runState
 }
 
 type toolState struct {
@@ -44,6 +44,14 @@ const (
 	statusRunning toolStatus = iota
 	statusSuccess
 	statusError
+)
+
+type runState int
+
+const (
+	stateRunning runState = iota
+	stateDone
+	stateCancelled
 )
 
 func newModel(cfg *config.Config) (*model, error) {
@@ -218,29 +226,30 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case domain.DoneEvent:
-		m.done = true
-		var cmds []tea.Cmd
+		m.runState = stateDone
 
-		// Force flush all remaining tools (waiting ones)
-		// We just flush everything remaining in m.tools regardless of order/status?
-		// Ideally they should be done. If not, we flush them as is?
-		// Let's iterate and flush.
+		// Build final output with proper padding
+		var parts []string
 
 		// 1. Flush pending text
 		textFlush, _ := m.streamingMd.Flush()
 		if textFlush != "" {
-			cmds = append(cmds, tea.Println(textFlush))
+			parts = append(parts, strings.TrimRight(textFlush, "\n"))
 		}
 
 		// 2. Flush remaining tools
 		for _, ts := range m.tools {
-			output := m.viewTool(ts)
-			cmds = append(cmds, tea.Println(output))
+			parts = append(parts, m.viewTool(ts))
 		}
 		m.tools = nil // Clear
 
-		cmds = append(cmds, tea.Quit)
-		return m, tea.Sequence(cmds...)
+		// 3. Add final status bar
+		parts = append(parts, m.statusBar())
+
+		// Join with double newline for consistent padding
+		// Prepend \n to ensure padding from previously flushed content (tools, text)
+		finalOutput := "\n" + strings.Join(parts, "\n\n")
+		return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
 	}
 
 	return m, nil
@@ -267,7 +276,9 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 }
 
 func (m *model) View() string {
-	if m.done {
+	// When done, we've already flushed everything via tea.Println
+	// Return empty to prevent duplicate rendering and extra whitespace
+	if m.runState == stateDone {
 		return ""
 	}
 
@@ -285,6 +296,11 @@ func (m *model) View() string {
 	}
 
 	// 3. Status bar
+	// Ensure we have at least one element before status bar to force padding
+	// if we are in "Done" state (where other parts are empty).
+	if len(parts) == 0 && m.runState == stateDone {
+		parts = append(parts, "")
+	}
 	parts = append(parts, m.statusBar())
 
 	return strings.Join(parts, "\n\n")
@@ -313,9 +329,16 @@ func (m *model) truncateWithIndicator(content string) string {
 }
 
 func (m *model) statusBar() string {
-	status := "Generating"
-	if m.thinking {
-		status = "Thinking"
+	switch m.runState {
+	case stateDone:
+		return fmt.Sprintf("%s Done", m.theme.Success("✓"))
+	case stateCancelled:
+		return fmt.Sprintf("%s Cancelled", m.theme.Error("✗"))
+	default:
+		status := "Generating"
+		if m.thinking {
+			status = "Thinking"
+		}
+		return fmt.Sprintf("%s %s", m.spinner.View(), m.theme.Primary(status))
 	}
-	return fmt.Sprintf("%s %s", m.spinner.View(), status)
 }

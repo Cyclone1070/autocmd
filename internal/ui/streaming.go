@@ -95,12 +95,39 @@ func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 		splitIndex = len(src)
 	} else {
 		// Flush up to the start of the last block
-		lastBlock := blocks[len(blocks)-1]
+		// By default, the last top-level block is considered "pending" and unsafe to flush.
+		pendingBlock := blocks[len(blocks)-1]
 
-		// If last block exists and has lines, find its TRUE start (including syntax markers)
-		if lastBlock.Lines().Len() > 0 {
-			contentStart := lastBlock.Lines().At(0).Start
-			splitIndex = adjustBlockStart(src, lastBlock, contentStart)
+		// However, if the pending block is a container (List or Blockquote),
+		// we might be able to flush *part* of it (e.g. the first N-1 items of a list).
+		// We drill down to find the most specific "last child" that is truly pending.
+		for {
+			isContainer := pendingBlock.Kind() == ast.KindList || pendingBlock.Kind() == ast.KindBlockquote
+			if !isContainer {
+				break
+			}
+
+			// Check children
+			var lastChild ast.Node
+			childCount := 0
+			for c := pendingBlock.FirstChild(); c != nil; c = c.NextSibling() {
+				lastChild = c
+				childCount++
+			}
+
+			// If we have multiple children, the earlier ones are safe to flush.
+			// We target the *last* child as the new pending point.
+			if childCount > 1 && lastChild != nil {
+				pendingBlock = lastChild
+				continue
+			}
+			break
+		}
+
+		// If pending block exists and has lines, find its TRUE start (including syntax markers)
+		if pendingBlock.Lines().Len() > 0 {
+			contentStart := pendingBlock.Lines().At(0).Start
+			splitIndex = adjustBlockStart(src, pendingBlock, contentStart)
 		} else {
 			// Weird case (empty block?), safer to not flush anything if we can't find start
 			return nil, nil
@@ -197,6 +224,19 @@ func adjustBlockStart(src []byte, node ast.Node, contentStart int) int {
 			// Scan back to start of THAT line
 			for curr > 0 && src[curr-1] != '\n' {
 				curr--
+			}
+		}
+
+	case ast.KindParagraph:
+		// Paragraphs inside Blockquotes need to scan back over the '>' markers.
+		if node.Parent() != nil && node.Parent().Kind() == ast.KindBlockquote {
+			for curr > 0 {
+				c := src[curr-1]
+				if c == '>' || c == ' ' || c == '\t' {
+					curr--
+				} else {
+					break
+				}
 			}
 		}
 	}

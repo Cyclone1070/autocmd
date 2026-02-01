@@ -89,7 +89,7 @@ func main() {
 			"1. Parent Item\n",
 			"   * Child A\n",
 			"   * Child B\n",
-			"2. Parent Item Two\n\n",
+			"1. Parent Item Two\n\n",
 		}
 		for _, item := range nestedItems {
 			simulateTyping(item)
@@ -121,7 +121,6 @@ func main() {
 		time.Sleep(1 * time.Second)
 		renderer.Send(domain.ToolEndEvent{CallID: "t1"})
 
-		simulateTyping("\nDone.\n")
 		renderer.Send(domain.DoneEvent{})
 	}()
 

@@ -134,11 +134,31 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.tools = nil
 
-			// 3. Add cancelled status bar
+			// 3. Add cancelled status bar with hardcoded empty line
+			// statusBar now includes \n\n prefix
 			parts = append(parts, m.statusBar())
 
-			// Join with double newline for consistent padding
-			finalOutput := "\n" + strings.Join(parts, "\n\n")
+			// Join with just newlines?
+			// View() joins with nothing because padding does the work.
+			// Here we are creating a static string for passing to Println.
+			// The parts are: [FlushedText, Tool1, Tool2, \n\nStatus]
+			// We want: Text\n\nTool1\n\nTool2\n\n\nStatus
+			// Wait, if we join with \n\n:
+			// Text \n\n Tool1 \n\n \n\nStatus
+			// This puts 4 newlines before status?
+			// statusBar starts with \n\n.
+			// If we join with \n\n: Tool \n\n \n\n Status. -> Tool \n\n\n\n Status.
+			// Before: Tool \n\n Status.
+			// User wants 1 empty line (builtin).
+			// If we join with \n\n, we get 1 empty line between tools.
+			// Between last tool and Status: \n\n + \n\nStatus.
+			// That is 2 empty lines.
+
+			// We should join the content parts with \n\n.
+			// Then append status bar directly?
+
+			content := strings.Join(parts[:len(parts)-1], "\n\n")
+			finalOutput := "\n" + content + parts[len(parts)-1]
 			return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
 		}
 
@@ -183,6 +203,14 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 
 		for _, block := range flushedBlocks {
 			cmds = append(cmds, tea.Println(block))
+
+			// Reduce maxContentHeight as content is flushed to history
+			lines := strings.Count(block, "\n") + 1
+			m.maxContentHeight -= lines
+		}
+
+		if m.maxContentHeight < 0 {
+			m.maxContentHeight = 0
 		}
 
 		if len(cmds) > 0 {
@@ -204,6 +232,13 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		textFlush, _ := m.streamingMd.Flush()
 		if textFlush != "" {
 			cmds = append(cmds, tea.Println(textFlush))
+
+			// Reduce maxContentHeight
+			lines := strings.Count(textFlush, "\n") + 1
+			m.maxContentHeight -= lines
+			if m.maxContentHeight < 0 {
+				m.maxContentHeight = 0
+			}
 		}
 
 		// Initialize new tool
@@ -269,9 +304,15 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// 3. Add final status bar
 		parts = append(parts, m.statusBar())
 
-		// Join with double newline for consistent padding
-		// Prepend \n to ensure padding from previously flushed content (tools, text)
-		finalOutput := "\n" + strings.Join(parts, "\n\n")
+		// Join content with \n\n, then append strict status bar
+		var finalOutput string
+		if len(parts) > 1 {
+			content := strings.Join(parts[:len(parts)-1], "\n\n")
+			finalOutput = "\n" + content + parts[len(parts)-1]
+		} else {
+			// Only status bar?
+			finalOutput = "\n" + parts[0]
+		}
 		return m, tea.Sequence(tea.Println(finalOutput), tea.Quit)
 	}
 
@@ -357,6 +398,7 @@ func (m *model) View() string {
 	}
 
 	// Build final view: content + padding + status bar
+	// Status bar now has builtin \n\n prefix
 	statusBar := m.statusBar()
 
 	if content == "" {
@@ -364,7 +406,9 @@ func (m *model) View() string {
 		return padding + statusBar
 	}
 
-	return content + "\n\n" + padding + statusBar
+	// Content + Padding + StatusBar
+	// Note: content usually does not end with \n\n unless multiple tools
+	return content + padding + statusBar
 }
 
 // Overflow indicator - show only bottom portion if too tall
@@ -415,5 +459,6 @@ func (m *model) statusBar() string {
 		padding = 1
 	}
 
-	return fmt.Sprintf("%s%*s", left, padding, contextInfo)
+	// Hardcode 1 empty line (\n\n) above status bar
+	return "\n\n" + fmt.Sprintf("%s%*s", left, padding, contextInfo)
 }

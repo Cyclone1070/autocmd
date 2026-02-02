@@ -145,22 +145,9 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleDoneEvent()
 		}
 
-	case tea.WindowSizeMsg:
-		m.width = min(ev.Width, m.config.UI.ChatWindowWidth)
-		m.termHeight = ev.Height
-
-		r, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(m.width),
-		)
-		if err != nil {
-			return m, tea.Sequence(
-				tea.Println(fmt.Sprintf("Fatal: glamour re-init failed: %v", err)),
-				tea.Quit,
-			)
-		}
-		m.glamour = r
-		m.streamingMd.SetRenderer(r)
+	// NOTE: We intentionally ignore tea.WindowSizeMsg.
+	// Resizing mid-session would cause width inconsistency between flushed
+	// (scrollback) and pending content. Width is locked at startup.
 
 	case msgPrintFinished:
 		m.isPrinting = false

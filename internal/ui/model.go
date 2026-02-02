@@ -309,7 +309,6 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 	cmds = append(cmds, m.schedulePrint(finalStatus))
 
 	return m, tea.Sequence(cmds...)
-
 }
 
 // schedulePrint adds content to the queue and attempts to process it.
@@ -367,7 +366,6 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 		// Use a heuristic: just decrement by the tool height for now.
 		if m.maxContentHeight > lines {
 			m.maxContentHeight -= lines
-
 		} else {
 			m.maxContentHeight = 0
 		}
@@ -455,23 +453,35 @@ func (m *model) truncateWithIndicator(content string) string {
 }
 
 func (m *model) statusBar() string {
+	// Determine theme function based on state
+	var themeFunc func(string) string
+	switch m.runState {
+	case stateDone:
+		themeFunc = m.theme.Success
+	case stateCancelled:
+		themeFunc = m.theme.Error
+	default:
+		themeFunc = m.theme.Primary
+	}
+
 	// Hardcoded context window info for now
-	contextInfo := m.theme.Muted("Context: 42%")
+	contextInfo := themeFunc("Context: 42%")
 
 	var left string
 	switch m.runState {
 	case stateDone:
-		left = fmt.Sprintf("%s Done", m.theme.Success("✓"))
+		left = fmt.Sprintf("%s %s", themeFunc("✓"), themeFunc("Done"))
 	case stateCancelled:
-		left = fmt.Sprintf("%s Cancelled", m.theme.Error("✗"))
-	case stateQuitting:
-		left = fmt.Sprintf("%s Finishing...", m.spinner.View())
+		left = fmt.Sprintf("%s %s", themeFunc("✗"), themeFunc("Cancelled"))
 	default:
 		status := "Generating"
 		if m.thinking {
 			status = "Thinking"
 		}
-		left = fmt.Sprintf("%s %s", m.spinner.View(), m.theme.Primary(status))
+		// Spinner is styled separately in newModel but we can't easily change its color dynamically
+		// without recreating dependencies or updating style.
+		// Providing the status text in theme color.
+		left = fmt.Sprintf("%s %s", m.spinner.View(), themeFunc(status))
 	}
 
 	// Calculate padding to right-align context info

@@ -353,10 +353,7 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 		// Use a heuristic: just decrement by the tool height for now.
 		if m.maxContentHeight > lines {
 			m.maxContentHeight -= lines
-			// Reduce further for the spacing that was between this tool and others
-			if m.maxContentHeight > 2 {
-				m.maxContentHeight -= 2
-			}
+
 		} else {
 			m.maxContentHeight = 0
 		}
@@ -386,7 +383,7 @@ func (m *model) View() string {
 	}
 
 	// Join content parts
-	content := strings.Join(contentParts, "\n\n")
+	content := strings.Join(contentParts, "\n")
 
 	// Calculate current content height (line count)
 	currentHeight := 0

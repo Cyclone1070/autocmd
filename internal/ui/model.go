@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 )
 
@@ -81,7 +82,7 @@ func newModel(cfg *config.Config) (*model, error) {
 
 	// Detect cursor position to setup bottom anchor
 	initialRow, err := GetCursorRow()
-	// Fallback if detention fails (e.g. non-interactive): assume top of screen
+	// Fallback if detection fails (e.g. non-interactive): assume top of screen
 	if err != nil {
 		initialRow = 1
 	}
@@ -158,7 +159,6 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 				tea.Quit,
 			)
 		}
-		m.glamour = r
 		m.glamour = r
 		m.streamingMd.SetRenderer(r)
 
@@ -478,19 +478,20 @@ func (m *model) statusBar() string {
 		if m.thinking {
 			status = "Thinking"
 		}
-		// Spinner is styled separately in newModel but we can't easily change its color dynamically
-		// without recreating dependencies or updating style.
-		// Providing the status text in theme color.
 		left = fmt.Sprintf("%s%s", m.spinner.View(), themeFunc(status))
 	}
 
-	// Calculate padding to right-align context info
-	// Approximate: width - left length - right length
-	// Since ANSI codes mess up length, use a fixed padding approach
-	padding := max(
-		// rough estimate leaving room for both sides
-		m.width-20, 1)
+	// Calculate visual widths (ignores ANSI codes)
+	leftWidth := lipgloss.Width(left)
+	rightWidth := lipgloss.Width(contextInfo)
+	neededWidth := leftWidth + 1 + rightWidth // +1 for minimum gap
 
-	// Hardcode 1 empty line (\n\n) above status bar
-	return "\n\n" + fmt.Sprintf("%s%*s", left, padding, contextInfo)
+	// If terminal too narrow, use two-line layout
+	if m.width < neededWidth {
+		return "\n\n" + left + "\n" + contextInfo
+	}
+
+	// Right-align: fill gap between left and right to push contextInfo to the edge
+	gap := m.width - leftWidth - rightWidth
+	return "\n\n" + left + strings.Repeat(" ", gap) + contextInfo
 }

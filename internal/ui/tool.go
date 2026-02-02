@@ -20,20 +20,24 @@ func (m *model) viewTool(t *toolState) string {
 		prefix = m.theme.Error("✗")
 	}
 
+	// Content width = m.width - 2 (for left/right box borders)
+	// This ensures total visual width = m.width
+	contentWidth := m.width - 2
+
 	// Content
 	var content string
 	switch d := t.display.(type) {
 	case domain.StringDisplay:
 		content = renderString(m.theme, d, t.status, t.err, prefix)
 	case domain.DiffDisplay:
-		content = renderDiff(m.width, m.theme, d, t.status, t.err, prefix)
+		content = renderDiff(contentWidth, m.theme, d, t.status, t.err, prefix)
 	case domain.ShellDisplay:
-		content = renderShell(m.width, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
+		content = renderShell(contentWidth, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
 	default:
 		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}
 
-	return m.theme.Box(content, m.width, t.status)
+	return m.theme.Box(content, contentWidth, t.status)
 }
 
 // pad adds the status prefix to the first line and standard indentation to others.

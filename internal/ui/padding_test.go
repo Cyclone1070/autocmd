@@ -161,14 +161,3 @@ func TestPaddingLogic(t *testing.T) {
 		}
 	})
 }
-
-// msg wrapper to match model.go's private msg type if needed,
-// but model.Update takes tea.Msg.
-// model.go: case msg: return m.handleEvent(ev.Event)
-// We need to construct a 'msg' which is private?
-// Ah, 'msg' struct line 102 is private.
-// But we are in 'package ui', so we can access it!
-// We just need to check if 'msg' is defined in model.go or helpers.go?
-// It's likely in model.go or similar.
-// A quick check of model.go showed: case msg:
-// So yes, we can use it.

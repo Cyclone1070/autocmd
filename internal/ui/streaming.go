@@ -55,10 +55,13 @@ func (s *StreamingMarkdown) Flush() (string, error) {
 }
 
 // Pending returns the current rendered content of the buffer (uncertain block).
+// Called by View() on every render cycle to show in-progress text.
 func (s *StreamingMarkdown) Pending() string {
 	if s.buffer == "" {
 		return ""
 	}
+	// Error intentionally ignored: View() can't propagate errors, and render
+	// failures are rare. On error, returns empty string (silent degradation).
 	out, _ := s.render(s.buffer)
 	return strings.TrimRight(out, "\n")
 }

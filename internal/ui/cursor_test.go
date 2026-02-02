@@ -44,7 +44,6 @@ func TestParseCursorResponse(t *testing.T) {
 		},
 
 		// Unhappy paths - malformed responses
-		// Unhappy paths - malformed responses
 		{
 			name:      "Missing R terminator",
 			input:     "\x1b[24;1",

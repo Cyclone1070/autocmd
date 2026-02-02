@@ -69,3 +69,7 @@ func renderString(theme *theme, d domain.StringDisplay, status toolStatus, err s
 	}
 	return pad(s, prefix)
 }
+
+func formatError(header string, err string, theme *theme) string {
+	return fmt.Sprintf("%s — %s", header, theme.Error(err))
+}

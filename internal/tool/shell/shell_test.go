@@ -138,7 +138,6 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
-	mockPR.On("Rel", "/workspace").Return(".", nil)
 
 	streamCmd := newTestStreamingCmd("hello", &executor.Result{Stdout: "hello", ExitCode: 0}, nil)
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything, mock.Anything).

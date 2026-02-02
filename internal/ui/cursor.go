@@ -30,8 +30,9 @@ func GetCursorRow() (int, error) {
 
 	// Read response with timeout
 	// Response format: \033[<row>;<col>R
-	ch := make(chan string)
-	errCh := make(chan error)
+	// Buffered channels prevent goroutine leak if timeout fires before read completes
+	ch := make(chan string, 1)
+	errCh := make(chan error, 1)
 
 	go func() {
 		reader := bufio.NewReader(os.Stdin)

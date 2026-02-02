@@ -79,6 +79,22 @@ func newModel(cfg *config.Config) (*model, error) {
 		height = h
 	}
 
+	// Detect cursor position to setup bottom anchor
+	initialRow, err := GetCursorRow()
+	// Fallback if detention fails (e.g. non-interactive): assume top of screen
+	if err != nil {
+		initialRow = 1
+	}
+
+	// Calculate initial available space below cursor
+	// height - row = lines below.
+	// We want to force padding matching this space so status bar sits at bottom.
+	// We subtract 2 because the status bar function explicitly adds 2 lines of overhead (\n\n).
+	spaceBelow := height - initialRow - 2
+	if spaceBelow < 0 {
+		spaceBelow = 0
+	}
+
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
@@ -90,14 +106,15 @@ func newModel(cfg *config.Config) (*model, error) {
 	md := NewStreamingMarkdown(r)
 
 	return &model{
-		spinner:     s,
-		glamour:     r,
-		theme:       th,
-		config:      cfg,
-		width:       width,
-		termHeight:  height,
-		streamingMd: md,
-		tools:       make([]*toolState, 0),
+		spinner:          s,
+		glamour:          r,
+		theme:            th,
+		config:           cfg,
+		width:            width,
+		termHeight:       height,
+		streamingMd:      md,
+		tools:            make([]*toolState, 0),
+		maxContentHeight: spaceBelow, // Initialize with available space to pin bottom
 	}, nil
 }
 
@@ -388,7 +405,10 @@ func (m *model) View() string {
 	// Calculate current content height (line count)
 	currentHeight := 0
 	if content != "" {
-		currentHeight = strings.Count(content, "\n") + 1
+		// Fix: Use strictly newline count.
+		// "hello" (0 newlines) occupies 1 visual line but 0 vertical lines relative to start.
+		// "hello\n" (1 newline) occupies 1 vertical line.
+		currentHeight = strings.Count(content, "\n")
 	}
 
 	// Update max content height (only grows, never shrinks during session)

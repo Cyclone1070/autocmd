@@ -26,6 +26,7 @@ func main() {
 		wg1.Add(3)
 
 		// Start Events (Sequential - LOCKS ORDER)
+		renderer.Send(domain.TextEvent{Text: "Starting String Tools...\n"})
 		renderer.Send(domain.ToolStartEvent{CallID: "str-long", ToolName: "String: Long Success", Display: domain.StringDisplay("Processing large dataset...")})
 		renderer.Send(domain.ToolStartEvent{CallID: "str-short", ToolName: "String: Short Success", Display: domain.StringDisplay("Quick check done.")})
 		renderer.Send(domain.ToolStartEvent{CallID: "str-fail", ToolName: "String: Failure", Display: domain.StringDisplay("Validation failed.")})
@@ -64,6 +65,7 @@ func main() {
 		wg2.Add(3)
 
 		// Start Events
+		renderer.Send(domain.TextEvent{Text: "\nStarting Diff Tools...\n"})
 		renderer.Send(domain.ToolStartEvent{CallID: "diff-long", ToolName: "Diff: Long Success", Display: diffSuccess})
 		renderer.Send(domain.ToolStartEvent{CallID: "diff-short", ToolName: "Diff: Short Success", Display: diffSuccess})
 		renderer.Send(domain.ToolStartEvent{CallID: "diff-fail", ToolName: "Diff: Failure", Display: diffFail})
@@ -91,6 +93,7 @@ func main() {
 		wg3.Add(3)
 
 		// Start Events
+		renderer.Send(domain.TextEvent{Text: "\nStarting Shell Tools...\n"})
 		renderer.Send(domain.ToolStartEvent{CallID: "sh-long", ToolName: "Shell: Long Success", Display: domain.ShellDisplay{Header: "Shell: Long Success", Command: "npm install"}})
 		renderer.Send(domain.ToolStartEvent{CallID: "sh-short", ToolName: "Shell: Short Success", Display: domain.ShellDisplay{Header: "Shell: Short Success", Command: "ls -la"}})
 		renderer.Send(domain.ToolStartEvent{CallID: "sh-fail", ToolName: "Shell: Failure", Display: domain.ShellDisplay{Header: "Shell: Failure", Command: "make build"}})

@@ -48,6 +48,7 @@ func TestPaddingLogic(t *testing.T) {
 		// Render once to update maxContentHeight (logic is in View)
 		m.View()
 		t.Logf("Initial Max Height (List): %d", m.maxContentHeight)
+		initialMax := m.maxContentHeight
 
 		// Check internal state: maxContentHeight should be >= 3 (List items are distinct lines)
 		if m.maxContentHeight < 3 {
@@ -89,12 +90,14 @@ func TestPaddingLogic(t *testing.T) {
 		}
 
 		// STRICT CHECK: maxContentHeight should have reduced!
-		// Initial was 5. If bug exists, it stays 5.
-		// It dropped to 0, then grew to 2 (new content height).
-		// So we expect < 5.
-		if m.maxContentHeight >= 5 {
-			t.Errorf("Bug confirmed: maxContentHeight did not reset/reduce after flush. Value: %d", m.maxContentHeight)
+		// Initial was 23 (anchored).
+		// We flushed 4 lines (3 items + newline).
+		// Expect reduction by 4 => 19.
+		// Allow some tolerance for internal representation but it MUST be less than initial.
+		if m.maxContentHeight >= initialMax {
+			t.Errorf("Bug confirmed: maxContentHeight did not reduce after flush. Initial: %d, Now: %d", initialMax, m.maxContentHeight)
 		}
+		t.Logf("Verified reduction: %d -> %d", initialMax, m.maxContentHeight)
 
 		// Clear lines usage for linter
 		_ = lines

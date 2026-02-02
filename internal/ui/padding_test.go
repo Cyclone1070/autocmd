@@ -19,13 +19,6 @@ func TestPaddingLogic(t *testing.T) {
 	}
 	m.Init() // Ensure init runs
 
-	// Helper to get current padding count
-	getPaddingLines := func(view string) int {
-		// Placeholder for debugging
-		return 0
-	}
-	_ = getPaddingLines
-
 	t.Run("Initial State", func(t *testing.T) {
 		view := m.View()
 		if view == "" {
@@ -99,8 +92,6 @@ func TestPaddingLogic(t *testing.T) {
 		}
 		t.Logf("Verified reduction: %d -> %d", initialMax, m.maxContentHeight)
 
-		// Clear lines usage for linter
-		_ = lines
 	})
 	t.Run("Safe Exit State Machine (Serial Queue)", func(t *testing.T) {
 		m, _ := newModel(cfg)

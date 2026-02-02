@@ -55,7 +55,13 @@ func GetCursorRow() (int, error) {
 
 func parseCursorResponse(response string) (int, error) {
 	// Expected format: \x1b[24;1R (where 24 is row, 1 is col)
-	// Strip "R" and "\x1b["
+
+	// Validate response ends with 'R'
+	if !strings.HasSuffix(response, "R") {
+		return 0, fmt.Errorf("invalid cursor response: missing R terminator: %s", response)
+	}
+
+	// Strip "R" and find the bracket
 	content := strings.TrimSuffix(response, "R")
 	idx := strings.LastIndex(content, "[")
 	if idx == -1 {

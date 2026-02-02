@@ -20,14 +20,12 @@ type model struct {
 	theme      *theme
 	config     *config.Config
 	width      int
-	termHeight int // For overflow indicator
+	termHeight int // Terminal height for overflow truncation
 
-	// New State tracking
 	streamingMd      *StreamingMarkdown // Handles text buffering strings
 	tools            []*toolState       // Ordered list of all tools (active + waiting flush)
 	maxContentHeight int                // Tracks highest content height to prevent status bar jiggling
 
-	// Keep
 	thinking bool
 	runState runState
 
@@ -130,11 +128,6 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 		var newSpinner spinner.Model
 		newSpinner, cmd = m.spinner.Update(ev)
 		m.spinner = newSpinner
-
-		// Note: We don't need to force render here for tool spinners because
-		// in inline mode, the View() is reprinted on every update automatically by Bubble Tea framework
-		// assuming standard Update/View cycle. With Altscreen/Viewport we needed it because content was cached.
-		// Wait, View() IS called after every Update. Standard Bubble Tea behavior.
 
 		return m, cmd
 

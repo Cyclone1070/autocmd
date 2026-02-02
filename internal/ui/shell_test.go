@@ -48,8 +48,8 @@ func TestRenderShell(t *testing.T) {
 				Header:  "Log",
 				Command: "cat log.txt",
 			},
-			// Generate 10 lines, should only show last 8
-			output: strings.Repeat("line\n", 10),
+			// Generate 15 lines to test truncation (shellOutputHeight = 12)
+			output: strings.Repeat("line\n", 15),
 			status: statusSuccess,
 			prefix: "✓",
 		},

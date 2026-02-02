@@ -481,7 +481,7 @@ func (m *model) statusBar() string {
 		// Spinner is styled separately in newModel but we can't easily change its color dynamically
 		// without recreating dependencies or updating style.
 		// Providing the status text in theme color.
-		left = fmt.Sprintf("%s %s", m.spinner.View(), themeFunc(status))
+		left = fmt.Sprintf("%s%s", m.spinner.View(), themeFunc(status))
 	}
 
 	// Calculate padding to right-align context info

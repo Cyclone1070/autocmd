@@ -90,10 +90,7 @@ func newModel(cfg *config.Config) (*model, error) {
 	// height - row = lines below.
 	// We want to force padding matching this space so status bar sits at bottom.
 	// We subtract 2 because the status bar function explicitly adds 2 lines of overhead (\n\n).
-	spaceBelow := height - initialRow - 2
-	if spaceBelow < 0 {
-		spaceBelow = 0
-	}
+	spaceBelow := max(height-initialRow-2, 0)
 
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -443,11 +440,9 @@ func (m *model) truncateWithIndicator(content string) string {
 	// Calculate available space: total height - tool buffer - status
 	// But we don't know tool buffer height easily without rendering.
 	// We'll use a conservative heuristic: leave 5 lines.
-	maxLines := m.termHeight - 5
-
-	if maxLines < 5 {
-		maxLines = 5 // Minimum visibility
-	}
+	maxLines := max(m.termHeight-5,
+		// Minimum visibility
+		5)
 
 	if len(lines) <= maxLines {
 		return content
@@ -482,10 +477,9 @@ func (m *model) statusBar() string {
 	// Calculate padding to right-align context info
 	// Approximate: width - left length - right length
 	// Since ANSI codes mess up length, use a fixed padding approach
-	padding := m.width - 20 // rough estimate leaving room for both sides
-	if padding < 1 {
-		padding = 1
-	}
+	padding := max(
+		// rough estimate leaving room for both sides
+		m.width-20, 1)
 
 	// Hardcode 1 empty line (\n\n) above status bar
 	return "\n\n" + fmt.Sprintf("%s%*s", left, padding, contextInfo)

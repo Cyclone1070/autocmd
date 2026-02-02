@@ -135,7 +135,7 @@ func main() {
 		simulateTyping("Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n")
 
 		// Generate 30 lines of text (enough to overflow typical terminals)
-		for i := 0; i < 30; i++ {
+		for i := range 30 {
 			line := fmt.Sprintf("Line %03d: This is a generated line to fill the screen and force the pending block to overflow the viewport.\n", i+1)
 			simulateTyping(line)
 			// Small pause every 10 lines, but much faster

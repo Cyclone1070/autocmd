@@ -21,7 +21,7 @@ type model struct {
 	width      int
 	termHeight int // Terminal height for overflow truncation
 
-	streamingMd      *StreamingMarkdown // Handles text buffering strings
+	streamingMd      *streamingMarkdown // Handles text buffering strings
 	tools            []*toolState       // Ordered list of all tools (active + waiting flush)
 	maxContentHeight int                // Tracks highest content height to prevent status bar jiggling
 
@@ -84,7 +84,7 @@ func newModel(cfg *config.Config) (*model, error) {
 	}
 
 	// Detect cursor position to setup bottom anchor
-	initialRow, err := GetCursorRow()
+	initialRow, err := getCursorRow()
 	// Fallback if detection fails (e.g. non-interactive): assume top of screen
 	if err != nil {
 		initialRow = 1
@@ -103,7 +103,7 @@ func newModel(cfg *config.Config) (*model, error) {
 		return nil, fmt.Errorf("failed to initialize markdown renderer: %w", err)
 	}
 
-	md := NewStreamingMarkdown(r)
+	md := newStreamingMarkdown(r)
 
 	return &model{
 		spinner:          s,

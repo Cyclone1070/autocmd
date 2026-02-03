@@ -17,7 +17,7 @@ func (m *model) View() string {
 	var contentParts []string
 
 	// 1. Pending markdown (last uncertain block)
-	if pending := m.streamingMd.Pending(); pending != "" {
+	if pending := m.streamingMd.pending(); pending != "" {
 		pending = truncateWithIndicator(pending, m.termHeight)
 		contentParts = append(contentParts, pending)
 	}

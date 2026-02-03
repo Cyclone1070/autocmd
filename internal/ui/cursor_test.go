@@ -114,9 +114,9 @@ func TestParseCursorResponse(t *testing.T) {
 	}
 }
 
-// TestGetCursorRow_Untestable documents why GetCursorRow cannot be unit tested.
+// TestGetCursorRow_Untestable documents why getCursorRow cannot be unit tested.
 // It relies on direct terminal I/O (os.Stdin, os.Stdout, raw mode).
 // Integration testing would require a PTY or mock terminal.
 func TestGetCursorRow_Untestable(t *testing.T) {
-	t.Skip("GetCursorRow requires terminal I/O and cannot be unit tested without a PTY")
+	t.Skip("getCursorRow requires terminal I/O and cannot be unit tested without a PTY")
 }

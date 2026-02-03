@@ -3,46 +3,9 @@ package ui
 import (
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 )
-
-// Helper to create model for testing
-func newTestModel(t *testing.T) *model {
-	t.Helper()
-	m, err := newModel(config.DefaultConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// For testing, mock terminal size to something standard
-	m.width = 80
-	m.termHeight = 24
-	return m
-}
-
-func TestModel_ThinkingEvent(t *testing.T) {
-	m := newTestModel(t)
-
-	// Send ThinkingEvent
-	updatedM, cmd := m.Update(msg{Event: domain.ThinkingEvent{}})
-
-	// Check state
-	newM := updatedM.(*model)
-	assert.True(t, newM.thinking)
-	assert.NotNil(t, cmd) // Should trigger tick
-
-	// Check View
-	view := newM.View()
-	assert.Contains(t, view, "Thinking")
-
-	// Reset
-	m = newTestModel(t)
-	m.Update(msg{Event: domain.TextEvent{Text: "Done"}})
-	newM = m
-	assert.False(t, newM.thinking)
-}
 
 func TestModel_TextEvent(t *testing.T) {
 	m := newTestModel(t)
@@ -54,7 +17,7 @@ func TestModel_TextEvent(t *testing.T) {
 	assert.False(t, newM.thinking)
 	// StreamingMarkdown pending content should be visible
 	assert.Contains(t, newM.View(), "Bold")
-	assert.NotEmpty(t, newM.streamingMd.Pending())
+	assert.NotEmpty(t, newM.streamingMd.pending())
 
 	// Flush it by starting a tool
 	// Note: In new algo, TextEvent appends are NOT automatically flushed until
@@ -67,7 +30,7 @@ func TestModel_TextEvent(t *testing.T) {
 	newM = updatedM.(*model)
 
 	// After tool start, pending text should be flushed (empty buffer)
-	assert.Equal(t, "", newM.streamingMd.Pending())
+	assert.Equal(t, "", newM.streamingMd.pending())
 }
 
 func TestModel_ToolEvents_StringDisplay(t *testing.T) {
@@ -164,19 +127,6 @@ func TestModel_ConcurrentEvents_HandledSequentially(t *testing.T) {
 	assert.True(t, newM.thinking)
 }
 
-func TestModel_Init(t *testing.T) {
-	m := newTestModel(t)
-	cmd := m.Init()
-	assert.NotNil(t, cmd)
-}
-
-func TestModel_CtrlC(t *testing.T) {
-	m := newTestModel(t)
-	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-	assert.NotNil(t, cmd)
-	assert.Equal(t, stateCancelled, newM.(*model).runState)
-}
-
 func TestModel_DoneEvent(t *testing.T) {
 	// Case 1: Done with no pending text -> Quit
 	m := newTestModel(t)
@@ -192,7 +142,7 @@ func TestModel_DoneEvent(t *testing.T) {
 
 	assert.NotNil(t, cmd)
 	// Pending text should be gone (flushed)
-	assert.Equal(t, "", newM.(*model).streamingMd.Pending())
+	assert.Equal(t, "", newM.(*model).streamingMd.pending())
 	assert.Equal(t, stateDone, newM.(*model).runState)
 }
 

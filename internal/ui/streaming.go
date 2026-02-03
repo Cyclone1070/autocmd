@@ -9,40 +9,31 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// StreamingMarkdown handles buffering and safe block separation for streaming content.
-type StreamingMarkdown struct {
+// streamingMarkdown handles buffering and safe block separation for streaming content.
+type streamingMarkdown struct {
 	buffer          string
 	pendingRendered string // Cached render of the buffer
 	parser          goldmark.Markdown
 	glamour         *glamour.TermRenderer
 }
 
-// NewStreamingMarkdown creates a new instance.
-func NewStreamingMarkdown(renderer *glamour.TermRenderer) *StreamingMarkdown {
-	return &StreamingMarkdown{
+// newStreamingMarkdown creates a new instance.
+func newStreamingMarkdown(renderer *glamour.TermRenderer) *streamingMarkdown {
+	return &streamingMarkdown{
 		parser:  goldmark.New(),
 		glamour: renderer,
 	}
 }
 
-// SetRenderer updates the glamour renderer and refreshes the cache.
-func (s *StreamingMarkdown) SetRenderer(renderer *glamour.TermRenderer) {
-	s.glamour = renderer
-	// Re-render the pending buffer with the new renderer
-	if s.buffer != "" {
-		s.pendingRendered, _ = s.render(s.buffer)
-	}
-}
-
-// Append adds a chunk of text, updates the cache, and returns any complete blocks that are safe to flush.
+// append adds a chunk of text, updates the cache, and returns any complete blocks that are safe to flush.
 // The last incomplete block is kept in the buffer.
-func (s *StreamingMarkdown) Append(chunk string) ([]string, error) {
+func (s *streamingMarkdown) append(chunk string) ([]string, error) {
 	s.buffer += chunk
 	return s.process(false)
 }
 
-// Flush returns any remaining content in the buffer as a single block.
-func (s *StreamingMarkdown) Flush() (string, error) {
+// flush returns any remaining content in the buffer as a single block.
+func (s *streamingMarkdown) flush() (string, error) {
 	flushed, err := s.process(true)
 	if err != nil {
 		return "", err
@@ -60,13 +51,13 @@ func (s *StreamingMarkdown) Flush() (string, error) {
 	return "", nil
 }
 
-// Pending returns the cached rendered content of the buffer (uncertain block).
+// pending returns the cached rendered content of the buffer (uncertain block).
 // Called by View() on every render cycle. INFALLIBLE.
-func (s *StreamingMarkdown) Pending() string {
+func (s *streamingMarkdown) pending() string {
 	return strings.TrimRight(s.pendingRendered, "\n")
 }
 
-func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
+func (s *streamingMarkdown) process(forceFlush bool) ([]string, error) {
 	if s.buffer == "" {
 		s.pendingRendered = ""
 		return nil, nil
@@ -173,7 +164,7 @@ func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 	return []string{output}, nil
 }
 
-func (s *StreamingMarkdown) render(markdown string) (string, error) {
+func (s *streamingMarkdown) render(markdown string) (string, error) {
 	if strings.TrimSpace(markdown) == "" {
 		return "", nil
 	}

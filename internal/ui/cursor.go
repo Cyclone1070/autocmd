@@ -15,10 +15,10 @@ import (
 // 100ms is sufficient for local terminals; only fails on broken/non-responsive terminals.
 const cursorResponseTimeout = 100 * time.Millisecond
 
-// GetCursorRow returns the current 1-based row of the cursor.
+// getCursorRow returns the current 1-based row of the cursor.
 // It uses VT100 escape codes to query the terminal.
 // Helper uses direct terminal I/O (not Bubble Tea) because it runs before the model starts.
-func GetCursorRow() (int, error) {
+func getCursorRow() (int, error) {
 	// Enable raw mode to read response without Enter
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {

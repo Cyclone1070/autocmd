@@ -21,7 +21,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		cmds := m.flushCompletedTools()
 
 		// Append text and get flushable blocks
-		flushedBlocks, err := m.streamingMd.Append(e.Text)
+		flushedBlocks, err := m.streamingMd.append(e.Text)
 		if err != nil {
 			// Rendering failed. This is catastrophic. Clean shutdown.
 			return m, tea.Sequence(
@@ -58,7 +58,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// If the text block was "Uncertain", it remains "Uncertain" until a new block starts
 		// or we force flush.
 
-		textFlush, err := m.streamingMd.Flush()
+		textFlush, err := m.streamingMd.flush()
 		if err != nil {
 			return m, tea.Sequence(
 				m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)),
@@ -131,7 +131,7 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// 1. Flush pending text
-	textFlush, err := m.streamingMd.Flush()
+	textFlush, err := m.streamingMd.flush()
 	if err != nil {
 		cmds = append(cmds, m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)))
 		// We are already quitting (handleDoneEvent is part of shutdown or leads to it),

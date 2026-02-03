@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/glamour"
 )
 
-func newTestStreamingMarkdown(t *testing.T) *StreamingMarkdown {
+func newTestStreamingMarkdown(t *testing.T) *streamingMarkdown {
 	t.Helper()
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
@@ -16,7 +16,7 @@ func newTestStreamingMarkdown(t *testing.T) *StreamingMarkdown {
 	if err != nil {
 		t.Fatalf("failed to create renderer: %v", err)
 	}
-	return NewStreamingMarkdown(r)
+	return newStreamingMarkdown(r)
 }
 
 func TestStreamingMarkdown_Append(t *testing.T) {
@@ -24,7 +24,7 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
 		// Single paragraph, incomplete - should NOT flush
-		flushed, err := sm.Append("Hello world")
+		flushed, err := sm.append("Hello world")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -32,7 +32,7 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 			t.Errorf("expected no flush for incomplete block, got %d blocks", len(flushed))
 		}
 		// Should be in pending
-		if sm.Pending() == "" {
+		if sm.pending() == "" {
 			t.Error("expected content in Pending()")
 		}
 	})
@@ -41,10 +41,10 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
 		// First paragraph
-		sm.Append("First paragraph.")
+		sm.append("First paragraph.")
 
 		// New paragraph (blank line creates new block)
-		flushed, err := sm.Append("\n\nSecond paragraph.")
+		flushed, err := sm.append("\n\nSecond paragraph.")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -55,7 +55,7 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		}
 
 		// Second should be pending
-		pending := sm.Pending()
+		pending := sm.pending()
 		if !strings.Contains(pending, "Second") {
 			t.Errorf("expected 'Second' in pending, got: %s", pending)
 		}
@@ -66,14 +66,14 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 
 		words := []string{"Hello", " ", "world", ".", " ", "More", " ", "text."}
 		for _, word := range words {
-			flushed, _ := sm.Append(word)
+			flushed, _ := sm.append(word)
 			if len(flushed) != 0 {
 				t.Errorf("unexpected flush during word-by-word streaming: %v", flushed)
 			}
 		}
 
 		// All content should be pending
-		pending := sm.Pending()
+		pending := sm.pending()
 		if !strings.Contains(pending, "Hello") || !strings.Contains(pending, "text") {
 			t.Errorf("expected all words in pending, got: %s", pending)
 		}
@@ -82,10 +82,10 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 	t.Run("Empty chunk - no effect", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Initial content")
-		before := sm.Pending()
+		sm.append("Initial content")
+		before := sm.pending()
 
-		flushed, err := sm.Append("")
+		flushed, err := sm.append("")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -93,7 +93,7 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 			t.Error("empty chunk should not cause flush")
 		}
 
-		after := sm.Pending()
+		after := sm.pending()
 		if before != after {
 			t.Error("empty chunk should not change pending content")
 		}
@@ -104,9 +104,9 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 	t.Run("Flush with content", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Some content here")
+		sm.append("Some content here")
 
-		flushed, err := sm.Flush()
+		flushed, err := sm.flush()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -116,7 +116,7 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 		}
 
 		// After flush, pending should be empty
-		if sm.Pending() != "" {
+		if sm.pending() != "" {
 			t.Error("Pending() should be empty after Flush()")
 		}
 	})
@@ -124,7 +124,7 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 	t.Run("Flush with empty buffer", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		flushed, err := sm.Flush()
+		flushed, err := sm.flush()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -137,11 +137,11 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 	t.Run("Double flush returns nothing second time", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Content")
-		sm.Flush()
+		sm.append("Content")
+		sm.flush()
 
 		// Second flush should return nothing
-		second, err := sm.Flush()
+		second, err := sm.flush()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -155,7 +155,7 @@ func TestStreamingMarkdown_Pending(t *testing.T) {
 	t.Run("Empty buffer returns empty string", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		if sm.Pending() != "" {
+		if sm.pending() != "" {
 			t.Error("empty buffer should return empty Pending()")
 		}
 	})
@@ -163,9 +163,9 @@ func TestStreamingMarkdown_Pending(t *testing.T) {
 	t.Run("Pending returns rendered content", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("**Bold text**")
+		sm.append("**Bold text**")
 
-		pending := sm.Pending()
+		pending := sm.pending()
 		// Glamour should render bold (may have ANSI codes)
 		if pending == "" {
 			t.Error("Pending() should return rendered content")
@@ -175,10 +175,10 @@ func TestStreamingMarkdown_Pending(t *testing.T) {
 	t.Run("Pending is idempotent", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Some text")
+		sm.append("Some text")
 
-		first := sm.Pending()
-		second := sm.Pending()
+		first := sm.pending()
+		second := sm.pending()
 
 		if first != second {
 			t.Error("Pending() should be idempotent")
@@ -188,11 +188,11 @@ func TestStreamingMarkdown_Pending(t *testing.T) {
 	t.Run("Pending does not consume buffer", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Content")
-		sm.Pending()
+		sm.append("Content")
+		sm.pending()
 
 		// Flush should still return content
-		flushed, _ := sm.Flush()
+		flushed, _ := sm.flush()
 		if flushed == "" {
 			t.Error("Pending() should not consume buffer")
 		}
@@ -203,8 +203,8 @@ func TestStreamingMarkdown_BlockTypes(t *testing.T) {
 	t.Run("Heading block", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("# Heading\n\nParagraph")
-		pending := sm.Pending()
+		sm.append("# Heading\n\nParagraph")
+		pending := sm.pending()
 
 		// Both should be rendered
 		if pending == "" {
@@ -215,8 +215,8 @@ func TestStreamingMarkdown_BlockTypes(t *testing.T) {
 	t.Run("List block", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("- Item 1\n- Item 2\n- Item 3")
-		pending := sm.Pending()
+		sm.append("- Item 1\n- Item 2\n- Item 3")
+		pending := sm.pending()
 
 		if pending == "" {
 			t.Error("expected rendered list")
@@ -226,8 +226,8 @@ func TestStreamingMarkdown_BlockTypes(t *testing.T) {
 	t.Run("Code block", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("```go\nfunc main() {}\n```")
-		pending := sm.Pending()
+		sm.append("```go\nfunc main() {}\n```")
+		pending := sm.pending()
 
 		if pending == "" {
 			t.Error("expected rendered code block")
@@ -237,35 +237,13 @@ func TestStreamingMarkdown_BlockTypes(t *testing.T) {
 	t.Run("Blockquote", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("> Quote line 1\n> Quote line 2")
-		pending := sm.Pending()
+		sm.append("> Quote line 1\n> Quote line 2")
+		pending := sm.pending()
 
 		if pending == "" {
 			t.Error("expected rendered blockquote")
 		}
 	})
-}
-
-func TestStreamingMarkdown_SetRenderer(t *testing.T) {
-	sm := newTestStreamingMarkdown(t)
-	sm.Append("Initial content")
-
-	// Create new renderer with different width
-	newRenderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(40),
-	)
-	if err != nil {
-		t.Fatalf("failed to create new renderer: %v", err)
-	}
-
-	sm.SetRenderer(newRenderer)
-
-	// Pending should still work with new renderer
-	pending := sm.Pending()
-	if pending == "" {
-		t.Error("SetRenderer should allow continued operation")
-	}
 }
 
 func TestStreamingMarkdown_ComplexScenario(t *testing.T) {
@@ -287,7 +265,7 @@ func TestStreamingMarkdown_ComplexScenario(t *testing.T) {
 
 		var totalFlushed int
 		for _, chunk := range chunks {
-			flushed, err := sm.Append(chunk)
+			flushed, err := sm.append(chunk)
 			if err != nil {
 				t.Fatalf("error appending chunk '%s': %v", chunk, err)
 			}
@@ -301,12 +279,12 @@ func TestStreamingMarkdown_ComplexScenario(t *testing.T) {
 		}
 
 		// Final flush should get remaining content
-		final, err := sm.Flush()
+		final, err := sm.flush()
 		if err != nil {
 			t.Fatalf("error on final flush: %v", err)
 		}
 
-		if final == "" && sm.Pending() == "" && totalFlushed == 0 {
+		if final == "" && sm.pending() == "" && totalFlushed == 0 {
 			t.Error("expected some output from streaming scenario")
 		}
 	})
@@ -316,8 +294,8 @@ func TestStreamingMarkdown_WhitespaceHandling(t *testing.T) {
 	t.Run("Only whitespace", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("   \n\n   \t\t   ")
-		pending := sm.Pending()
+		sm.append("   \n\n   \t\t   ")
+		pending := sm.pending()
 
 		// Whitespace-only should render to empty
 		if pending != "" {
@@ -328,8 +306,8 @@ func TestStreamingMarkdown_WhitespaceHandling(t *testing.T) {
 	t.Run("Trailing newlines trimmed in Pending", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		sm.Append("Content\n\n\n")
-		pending := sm.Pending()
+		sm.append("Content\n\n\n")
+		pending := sm.pending()
 
 		// Should not end with multiple newlines
 		if strings.HasSuffix(pending, "\n\n") {

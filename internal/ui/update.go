@@ -58,7 +58,13 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// If the text block was "Uncertain", it remains "Uncertain" until a new block starts
 		// or we force flush.
 
-		textFlush, _ := m.streamingMd.Flush()
+		textFlush, err := m.streamingMd.Flush()
+		if err != nil {
+			return m, tea.Sequence(
+				m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)),
+				tea.Quit,
+			)
+		}
 		if textFlush != "" {
 			cmds = append(cmds, m.schedulePrint(textFlush))
 
@@ -125,8 +131,12 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// 1. Flush pending text
-	textFlush, _ := m.streamingMd.Flush()
-	if textFlush != "" {
+	textFlush, err := m.streamingMd.Flush()
+	if err != nil {
+		cmds = append(cmds, m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)))
+		// We are already quitting (handleDoneEvent is part of shutdown or leads to it),
+		// but let's ensure the error is seen.
+	} else if textFlush != "" {
 		cmds = append(cmds, m.schedulePrint(strings.TrimRight(textFlush, "\n")))
 	}
 

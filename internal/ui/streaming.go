@@ -11,9 +11,10 @@ import (
 
 // StreamingMarkdown handles buffering and safe block separation for streaming content.
 type StreamingMarkdown struct {
-	buffer  string
-	parser  goldmark.Markdown
-	glamour *glamour.TermRenderer
+	buffer          string
+	pendingRendered string // Cached render of the buffer
+	parser          goldmark.Markdown
+	glamour         *glamour.TermRenderer
 }
 
 // NewStreamingMarkdown creates a new instance.
@@ -24,12 +25,16 @@ func NewStreamingMarkdown(renderer *glamour.TermRenderer) *StreamingMarkdown {
 	}
 }
 
-// SetRenderer updates the glamour renderer (e.g. on resize)
+// SetRenderer updates the glamour renderer and refreshes the cache.
 func (s *StreamingMarkdown) SetRenderer(renderer *glamour.TermRenderer) {
 	s.glamour = renderer
+	// Re-render the pending buffer with the new renderer
+	if s.buffer != "" {
+		s.pendingRendered, _ = s.render(s.buffer)
+	}
 }
 
-// Append adds a chunk of text and returns any complete blocks that are safe to flush.
+// Append adds a chunk of text, updates the cache, and returns any complete blocks that are safe to flush.
 // The last incomplete block is kept in the buffer.
 func (s *StreamingMarkdown) Append(chunk string) ([]string, error) {
 	s.buffer += chunk
@@ -46,6 +51,7 @@ func (s *StreamingMarkdown) Flush() (string, error) {
 	if s.buffer != "" {
 		out, err := s.render(s.buffer)
 		s.buffer = ""
+		s.pendingRendered = "" // Clear cache
 		return out, err
 	}
 	if len(flushed) > 0 {
@@ -54,20 +60,15 @@ func (s *StreamingMarkdown) Flush() (string, error) {
 	return "", nil
 }
 
-// Pending returns the current rendered content of the buffer (uncertain block).
-// Called by View() on every render cycle to show in-progress text.
+// Pending returns the cached rendered content of the buffer (uncertain block).
+// Called by View() on every render cycle. INFALLIBLE.
 func (s *StreamingMarkdown) Pending() string {
-	if s.buffer == "" {
-		return ""
-	}
-	// Error intentionally ignored: View() can't propagate errors, and render
-	// failures are rare. On error, returns empty string (silent degradation).
-	out, _ := s.render(s.buffer)
-	return strings.TrimRight(out, "\n")
+	return strings.TrimRight(s.pendingRendered, "\n")
 }
 
 func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 	if s.buffer == "" {
+		s.pendingRendered = ""
 		return nil, nil
 	}
 
@@ -82,13 +83,17 @@ func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 	}
 
 	if len(blocks) == 0 {
-		return nil, nil
+		out, err := s.render(s.buffer)
+		s.pendingRendered = out
+		return nil, err
 	}
 
 	// We only flush blocks if we have more than one (meaning earlier ones are closed),
 	// OR if forceFlush is true.
 	if len(blocks) <= 1 && !forceFlush {
-		return nil, nil
+		out, err := s.render(s.buffer)
+		s.pendingRendered = out
+		return nil, err
 	}
 
 	// Determine where to split the buffer
@@ -133,7 +138,9 @@ func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 			splitIndex = adjustBlockStart(src, pendingBlock, contentStart)
 		} else {
 			// Weird case (empty block?), safer to not flush anything if we can't find start
-			return nil, nil
+			out, err := s.render(s.buffer)
+			s.pendingRendered = out
+			return nil, err
 		}
 	}
 
@@ -143,10 +150,22 @@ func (s *StreamingMarkdown) process(forceFlush bool) ([]string, error) {
 	// Update buffer to keep only the remainder
 	s.buffer = string(src[splitIndex:])
 
+	// Update cached render for the remainder
+	var cacheErr error
+	if s.buffer != "" {
+		s.pendingRendered, cacheErr = s.render(s.buffer)
+	} else {
+		s.pendingRendered = ""
+	}
+
 	// Now we need to render the flushed content.
 	output, err := s.render(toFlush)
 	if err != nil {
 		return nil, err
+	}
+	// If streaming cache failed, we still returning the valid flushed block, but return the error
+	if cacheErr != nil {
+		return nil, cacheErr
 	}
 
 	output = strings.TrimRight(output, "\n")

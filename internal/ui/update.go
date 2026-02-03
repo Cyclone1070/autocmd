@@ -23,8 +23,11 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// Append text and get flushable blocks
 		flushedBlocks, err := m.streamingMd.Append(e.Text)
 		if err != nil {
-			// Log error but continue?
-			cmds = append(cmds, m.schedulePrint(fmt.Sprintf("Error rendering markdown: %v", err)))
+			// Rendering failed. This is catastrophic. Clean shutdown.
+			return m, tea.Sequence(
+				m.schedulePrint(fmt.Sprintf("\nFatal: markdown rendering failed: %v", err)),
+				tea.Quit,
+			)
 		}
 
 		for _, block := range flushedBlocks {

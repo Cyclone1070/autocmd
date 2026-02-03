@@ -78,11 +78,12 @@ func DefaultConfig() *Config {
 			StorageDir: filepath.Join(os.Getenv("HOME"), ".iav", "sessions"),
 		},
 		UI: UIConfig{
-			PrimaryColor:    ColorConfig{Light: "#0EA5E9", Dark: "#38BDF8"}, // Sky Blue (Tailwind 500/400)
-			SuccessColor:    ColorConfig{Light: "#43BF6D", Dark: "#73F59F"},
-			ErrorColor:      ColorConfig{Light: "#F05D5E", Dark: "#FF6666"},
-			MutedColor:      ColorConfig{Light: "#D9DCCF", Dark: "#888888"},
-			ChatWindowWidth: 80,
+			PrimaryColor:      ColorConfig{Light: "#0EA5E9", Dark: "#38BDF8"}, // Sky Blue (Tailwind 500/400)
+			SuccessColor:      ColorConfig{Light: "#43BF6D", Dark: "#73F59F"},
+			ErrorColor:        ColorConfig{Light: "#F05D5E", Dark: "#FF6666"},
+			MutedColor:        ColorConfig{Light: "#D9DCCF", Dark: "#888888"},
+			ChatWindowWidth:   80,
+			ShellOutputHeight: 12,
 		},
 	}
 }

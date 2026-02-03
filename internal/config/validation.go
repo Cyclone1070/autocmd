@@ -105,6 +105,9 @@ func (c *Config) Validate() error {
 	if c.UI.ChatWindowWidth < 1 {
 		errs = append(errs, "ui.chat_window_width must be >= 1")
 	}
+	if c.UI.ShellOutputHeight < 1 {
+		errs = append(errs, "ui.shell_output_height must be >= 1")
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %v", errs)

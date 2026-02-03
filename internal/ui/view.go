@@ -65,16 +65,21 @@ func (m *model) View() string {
 	return content + padding + statusBar
 }
 
+const (
+	// truncationBuffer is reserved lines for tools + status bar during overflow truncation.
+	// This is a conservative heuristic since we don't know exact tool heights without rendering.
+	truncationBuffer = 5
+
+	// minVisibleLines ensures at least this many lines are shown even when truncating.
+	minVisibleLines = 5
+)
+
 // truncateWithIndicator shows only the bottom portion if content is too tall.
 // This is a pure function that takes explicit arguments for testability.
 func truncateWithIndicator(content string, termHeight int) string {
 	lines := strings.Split(content, "\n")
-	// Calculate available space: total height - tool buffer - status
-	// But we don't know tool buffer height easily without rendering.
-	// We'll use a conservative heuristic: leave 5 lines.
-	maxLines := max(termHeight-5,
-		// Minimum visibility
-		5)
+	// Calculate available space: total height - reserved buffer for tools + status
+	maxLines := max(termHeight-truncationBuffer, minVisibleLines)
 
 	if len(lines) <= maxLines {
 		return content

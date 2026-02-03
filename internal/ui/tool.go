@@ -32,7 +32,7 @@ func (m *model) viewTool(t *toolState) string {
 	case domain.DiffDisplay:
 		content = renderDiff(contentWidth, m.theme, d, t.status, t.err, prefix)
 	case domain.ShellDisplay:
-		content = renderShell(contentWidth, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
+		content = renderShell(contentWidth, m.config.UI.ShellOutputHeight, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
 	default:
 		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}

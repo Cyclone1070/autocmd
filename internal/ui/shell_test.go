@@ -57,7 +57,7 @@ func TestRenderShell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := renderShell(width, theme, tt.display, tt.output, tt.status, tt.err, tt.prefix)
+			out := renderShell(width, cfg.ShellOutputHeight, theme, tt.display, tt.output, tt.status, tt.err, tt.prefix)
 			assertGolden(t, "RenderShell_"+tt.name, out)
 		})
 	}

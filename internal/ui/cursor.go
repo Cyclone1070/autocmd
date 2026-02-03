@@ -11,6 +11,10 @@ import (
 	"golang.org/x/term"
 )
 
+// cursorResponseTimeout is the deadline for receiving VT100 Device Status Report.
+// 100ms is sufficient for local terminals; only fails on broken/non-responsive terminals.
+const cursorResponseTimeout = 100 * time.Millisecond
+
 // GetCursorRow returns the current 1-based row of the cursor.
 // It uses VT100 escape codes to query the terminal.
 // Helper uses direct terminal I/O (not Bubble Tea) because it runs before the model starts.
@@ -49,7 +53,7 @@ func GetCursorRow() (int, error) {
 		return parseCursorResponse(response)
 	case err := <-errCh:
 		return 0, fmt.Errorf("failed to read cursor response: %w", err)
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(cursorResponseTimeout):
 		return 0, fmt.Errorf("timeout waiting for cursor response")
 	}
 }

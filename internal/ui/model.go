@@ -58,6 +58,15 @@ const (
 	stateCancelled
 )
 
+const (
+	// defaultTerminalHeight is used when term.GetSize() fails (e.g., non-TTY environment).
+	defaultTerminalHeight = 24
+
+	// statusBarOverhead accounts for the \n\n prefix added by statusBar().
+	// This must stay in sync with the statusBar() implementation.
+	statusBarOverhead = 2
+)
+
 func newModel(cfg *config.Config) (*model, error) {
 	th := newTheme(cfg.UI)
 	s := spinner.New()
@@ -66,7 +75,7 @@ func newModel(cfg *config.Config) (*model, error) {
 
 	// Detect terminal size
 	width := cfg.UI.ChatWindowWidth
-	height := 24 // default fallback
+	height := defaultTerminalHeight
 	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
 		if w < width {
 			width = w
@@ -84,8 +93,7 @@ func newModel(cfg *config.Config) (*model, error) {
 	// Calculate initial available space below cursor
 	// height - row = lines below.
 	// We want to force padding matching this space so status bar sits at bottom.
-	// We subtract 2 because the status bar function explicitly adds 2 lines of overhead (\n\n).
-	spaceBelow := max(height-initialRow-2, 0)
+	spaceBelow := max(height-initialRow-statusBarOverhead, 0)
 
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),

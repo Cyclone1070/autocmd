@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 func newTestStreamingMarkdown(t *testing.T) *streamingMarkdown {
@@ -314,4 +317,146 @@ func TestStreamingMarkdown_WhitespaceHandling(t *testing.T) {
 			t.Error("Pending() should trim trailing newlines")
 		}
 	})
+}
+
+func TestStreamingMarkdown_adjustBlockStart(t *testing.T) {
+	tests := []struct {
+		name         string
+		src          string
+		expectedByte byte                        // The byte at the expected adjust index
+		expectedOff  int                         // Offset from start (optional, calculated if 0)
+		targetNode   func(doc ast.Node) ast.Node // Helper to pick the node we want to test
+	}{
+		{
+			name: "Heading ATX",
+			src:  "# Hello\n",
+			// Normal content starts at 'H'. We want to back up to '#' (index 0).
+			expectedByte: '#',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild() // Heading
+			},
+		},
+		{
+			name: "Heading ATX with space",
+			src:  "   ## Level 2\n",
+			// Content 'L'. Back up to first '#' at index 3.
+			expectedByte: '#',
+			expectedOff:  3,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild()
+			},
+		},
+		{
+			name: "Blockquote Simple",
+			src:  "> Quote\n",
+			// Content 'Q'. Back up to '>' (index 0).
+			expectedByte: '>',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild() // Blockquote
+			},
+		},
+		{
+			name: "List Item Dash",
+			src:  "- Item\n",
+			// Content 'I'. Back up to '-' (index 0).
+			expectedByte: '-',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				// List -> ListItem
+				return doc.FirstChild().FirstChild()
+			},
+		},
+		{
+			name: "List Item Numbered",
+			src:  "123. Item\n",
+			// Content 'I'. Back up to '1' (index 0).
+			expectedByte: '1',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild().FirstChild()
+			},
+		},
+		// Fenced Code Block is a bit unique. Content usually starts on the line AFTER the fence.
+		{
+			name: "Fenced Code Block",
+			src:  "```go\ncode\n```",
+			// Content start is usually start of 'code' line.
+			// We want to skip back to start of "```go".
+			expectedByte: '`',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild()
+			},
+		},
+		{
+			name:         "Paragraph",
+			src:          "Just text\n",
+			expectedByte: 'J',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				return doc.FirstChild()
+			},
+		},
+		{
+			name: "Paragraph inside Blockquote",
+			src:  "> Inner text\n",
+			// Paragraph inside blockquote. Content 'I'.
+			// We want to capture the '>' as part of the paragraph context if flushing?
+			// The current logic scans back for '>', ' '.
+			expectedByte: '>',
+			expectedOff:  0,
+			targetNode: func(doc ast.Node) ast.Node {
+				// Blockquote -> Paragraph
+				return doc.FirstChild().FirstChild()
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := []byte(tt.src)
+			parser := goldmark.New().Parser()
+			doc := parser.Parse(text.NewReader(src))
+
+			node := tt.targetNode(doc)
+			if node == nil {
+				t.Fatalf("Target node not found in src: %q", tt.src)
+			}
+
+			// Goldmark lines can be tricky. Containers (List, Blockquote) don't own lines, their children do.
+			// But adjustBlockStart logic handles these types. To test that logic, we simulate the node having lines
+			// by borrowing from the child if necessary.
+			if node.Lines().Len() == 0 && node.FirstChild() != nil && node.FirstChild().Lines().Len() > 0 {
+				node.SetLines(node.FirstChild().Lines())
+			}
+
+			// The "Content Start" is usually the start of the text *inside* the markers.
+			lines := node.Lines()
+			if lines.Len() == 0 {
+				t.Fatalf("Node has no lines")
+			}
+			contentStart := lines.At(0).Start
+
+			// Call the function under test
+			adjusted := adjustBlockStart(src, node, contentStart)
+
+			if adjusted >= len(src) {
+				t.Fatalf("Adjusted out of bounds: %d (len %d)", adjusted, len(src))
+			}
+
+			gotByte := src[adjusted]
+			if gotByte != tt.expectedByte {
+				t.Errorf("Expected byte %q at index %d, got %q at index %d", tt.expectedByte, tt.expectedOff, gotByte, adjusted)
+			}
+
+			// If expectedOff is non-zero (or explicit check needed), verify exact index
+			if tt.name == "Heading ATX with space" {
+				if adjusted != 3 {
+					t.Errorf("Expected adjusted index 3, got %d", adjusted)
+				}
+			}
+		})
+	}
 }

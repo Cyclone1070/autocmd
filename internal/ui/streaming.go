@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -79,60 +80,16 @@ func (s *streamingMarkdown) process(forceFlush bool) ([]string, error) {
 		return nil, err
 	}
 
-	// We only flush blocks if we have more than one (meaning earlier ones are closed),
-	// OR if forceFlush is true.
-	if len(blocks) <= 1 && !forceFlush {
-		out, err := s.render(s.buffer)
+	// Determine split index using helper
+	splitIndex, err := s.findFlushSplit(src, blocks, forceFlush)
+	if err != nil {
+		// If error (e.g. can't find safe split), treat as nothing to flush
+		out, renderErr := s.render(s.buffer)
 		s.pendingRendered = out
-		return nil, err
-	}
-
-	// Determine where to split the buffer
-	splitIndex := 0
-
-	if forceFlush {
-		splitIndex = len(src)
-	} else {
-		// Flush up to the start of the last block
-		// By default, the last top-level block is considered "pending" and unsafe to flush.
-		pendingBlock := blocks[len(blocks)-1]
-
-		// However, if the pending block is a container (List or Blockquote),
-		// we might be able to flush *part* of it (e.g. the first N-1 items of a list).
-		// We drill down to find the most specific "last child" that is truly pending.
-		for {
-			isContainer := pendingBlock.Kind() == ast.KindList || pendingBlock.Kind() == ast.KindBlockquote
-			if !isContainer {
-				break
-			}
-
-			// Check children
-			var lastChild ast.Node
-			childCount := 0
-			for c := pendingBlock.FirstChild(); c != nil; c = c.NextSibling() {
-				lastChild = c
-				childCount++
-			}
-
-			// If we have multiple children, the earlier ones are safe to flush.
-			// We target the *last* child as the new pending point.
-			if childCount > 1 && lastChild != nil {
-				pendingBlock = lastChild
-				continue
-			}
-			break
+		if renderErr != nil {
+			return nil, renderErr
 		}
-
-		// If pending block exists and has lines, find its TRUE start (including syntax markers)
-		if pendingBlock.Lines().Len() > 0 {
-			contentStart := pendingBlock.Lines().At(0).Start
-			splitIndex = adjustBlockStart(src, pendingBlock, contentStart)
-		} else {
-			// Weird case (empty block?), safer to not flush anything if we can't find start
-			out, err := s.render(s.buffer)
-			s.pendingRendered = out
-			return nil, err
-		}
+		return nil, nil // Return nil error to keep waiting
 	}
 
 	// Content to flush is src[:splitIndex]
@@ -149,19 +106,65 @@ func (s *streamingMarkdown) process(forceFlush bool) ([]string, error) {
 		s.pendingRendered = ""
 	}
 
-	// Now we need to render the flushed content.
+	// Render flushed content
 	output, err := s.render(toFlush)
 	if err != nil {
 		return nil, err
 	}
-	// If streaming cache failed, we still returning the valid flushed block, but return the error
 	if cacheErr != nil {
 		return nil, cacheErr
 	}
 
 	output = strings.TrimRight(output, "\n")
-
 	return []string{output}, nil
+}
+
+// findFlushSplit determines the index to split the buffer for safe flushing.
+// Returns splitIndex and nil error on success.
+// Returns 0 and error if no safe split point is found.
+func (s *streamingMarkdown) findFlushSplit(src []byte, blocks []ast.Node, forceFlush bool) (int, error) {
+	if forceFlush {
+		return len(src), nil
+	}
+
+	if len(blocks) <= 1 {
+		return 0, fmt.Errorf("not enough blocks to flush")
+	}
+
+	// Flush up to the start of the last block
+	// By default, the last top-level block is considered "pending" and unsafe to flush.
+	pendingBlock := blocks[len(blocks)-1]
+
+	// Drill down into containers (List, Blockquote)
+	for {
+		isContainer := pendingBlock.Kind() == ast.KindList || pendingBlock.Kind() == ast.KindBlockquote
+		if !isContainer {
+			break
+		}
+
+		// Check children
+		var lastChild ast.Node
+		childCount := 0
+		for c := pendingBlock.FirstChild(); c != nil; c = c.NextSibling() {
+			lastChild = c
+			childCount++
+		}
+
+		// If multiple children, we can flush earlier ones. Target last child as new pending.
+		if childCount > 1 && lastChild != nil {
+			pendingBlock = lastChild
+			continue
+		}
+		break
+	}
+
+	// Find TRUE start of the pending block
+	if pendingBlock.Lines().Len() > 0 {
+		contentStart := pendingBlock.Lines().At(0).Start
+		return adjustBlockStart(src, pendingBlock, contentStart), nil
+	}
+
+	return 0, fmt.Errorf("pending block has no lines")
 }
 
 func (s *streamingMarkdown) render(markdown string) (string, error) {

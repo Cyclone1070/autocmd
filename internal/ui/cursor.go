@@ -36,15 +36,21 @@ func NewTerminalCursorDetector(in io.Reader, out io.Writer) *TerminalCursorDetec
 func (d *TerminalCursorDetector) GetCursorRow() (int, error) {
 	// Enable raw mode to read response without Enter
 	file, ok := d.In.(*os.File)
-	if !ok {
-		// If input is not a file (e.g. mock), we can't switch to raw mode.
-		// In tests, we rely on the input stream simply containing the response.
-	} else {
+	if ok {
+		// Use raw mode if possible
 		oldState, err := term.MakeRaw(int(file.Fd()))
 		if err != nil {
 			return 0, fmt.Errorf("failed to enable raw mode: %w", err)
 		}
 		defer term.Restore(int(file.Fd()), oldState)
+
+		// Set read deadline to avoid hanging forever
+		if err := file.SetReadDeadline(time.Now().Add(cursorResponseTimeout)); err != nil {
+			return 0, fmt.Errorf("failed to set read deadline: %w", err)
+		}
+		// Ensure we clear the deadline (though we are done reading anyway/file is deferred)
+		// It's good practice.
+		defer file.SetReadDeadline(time.Time{})
 	}
 
 	// Send cursor position request
@@ -53,29 +59,17 @@ func (d *TerminalCursorDetector) GetCursorRow() (int, error) {
 		return 0, fmt.Errorf("failed to write cursor request: %w", err)
 	}
 
-	// Read response with timeout
-	// Response format: \033[<row>;<col>R
-	ch := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	go func() {
-		reader := bufio.NewReader(d.In)
-		response, err := reader.ReadString('R')
-		if err != nil {
-			errCh <- err
-			return
+	// Read response directly (blocking but with timeout if file)
+	reader := bufio.NewReader(d.In)
+	response, err := reader.ReadString('R')
+	if err != nil {
+		if os.IsTimeout(err) {
+			return 0, fmt.Errorf("timeout waiting for cursor response")
 		}
-		ch <- response
-	}()
-
-	select {
-	case response := <-ch:
-		return parseCursorResponse(response)
-	case err := <-errCh:
 		return 0, fmt.Errorf("failed to read cursor response: %w", err)
-	case <-time.After(cursorResponseTimeout):
-		return 0, fmt.Errorf("timeout waiting for cursor response")
 	}
+
+	return parseCursorResponse(response)
 }
 
 func parseCursorResponse(response string) (int, error) {

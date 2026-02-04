@@ -78,7 +78,7 @@ func TestPaddingLogic(t *testing.T) {
 		// We WANT maxContentHeight to reset to 0 relative to the new cursor!
 
 		if lines > 3 {
-			t.Logf("Detected potential unwanted padding. View has %d lines.", lines)
+			t.Errorf("Detected potential unwanted padding. View has %d lines.", lines)
 			// This confirms the "Text Flush" issue likely exists.
 		}
 

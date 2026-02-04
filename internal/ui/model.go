@@ -65,6 +65,12 @@ const (
 	// statusBarOverhead accounts for the \n\n prefix added by statusBar().
 	// This must stay in sync with the statusBar() implementation.
 	statusBarOverhead = 2
+
+	// Status display text
+	textGenerating = "Generating"
+	textThinking   = "Thinking"
+	textDone       = "Done"
+	textCancelled  = "Cancelled"
 )
 
 func newModel(cfg *config.Config, cd CursorDetector) (*model, error) {

@@ -109,13 +109,13 @@ func (m *model) statusBar() string {
 	var left string
 	switch m.runState {
 	case stateDone:
-		left = fmt.Sprintf("%s %s", themeFunc("✓"), themeFunc("Done"))
+		left = fmt.Sprintf("%s %s", themeFunc("✓"), themeFunc(textDone))
 	case stateCancelled:
-		left = fmt.Sprintf("%s %s", themeFunc("✗"), themeFunc("Cancelled"))
+		left = fmt.Sprintf("%s %s", themeFunc("✗"), themeFunc(textCancelled))
 	default:
-		status := "Generating"
+		status := textGenerating
 		if m.thinking {
-			status = "Thinking"
+			status = textThinking
 		}
 		left = fmt.Sprintf("%s%s", m.spinner.View(), themeFunc(status))
 	}

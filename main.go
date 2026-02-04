@@ -75,7 +75,8 @@ func main() {
 	llmRegistry := llm.NewRegistry(googleProvider)
 
 	// Create UI Renderer
-	renderer, err := ui.NewRenderer(os.Stdout, cfg)
+	cursorDetector := ui.NewTerminalCursorDetector(os.Stdin, os.Stdout)
+	renderer, err := ui.NewRenderer(os.Stdout, cfg, cursorDetector)
 	if err != nil {
 		log.Fatalf("Failed to create renderer: %v", err)
 	}

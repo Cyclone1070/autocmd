@@ -23,7 +23,11 @@ func newHarness(t *testing.T) *harness {
 	// but newModel uses defaultTerminalHeight=24 if GetSize fails (which it likely will in test).
 	// Let's assume 80x24 for now.
 
-	m, err := newModel(cfg)
+	// Inject mock cursor detector
+	// cd := &TerminalCursorDetector{In: bytes.NewBuffer(nil), Out: io.Discard}
+	// Use mock instead for controlled testing.
+
+	m, err := newModel(cfg, mockCursorDetector{row: 1})
 	if err != nil {
 		t.Fatalf("failed to create model: %v", err)
 	}

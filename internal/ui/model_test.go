@@ -10,11 +10,24 @@ import (
 )
 
 // Helper to create model for testing
+// MockCursorDetector implements CursorDetector for testing
+type mockCursorDetector struct {
+	row int
+	err error
+}
+
+func (m mockCursorDetector) GetCursorRow() (int, error) {
+	return m.row, m.err
+}
+
 func newTestModel(t *testing.T) *model {
 	t.Helper()
-	m, err := newModel(config.DefaultConfig())
+	cfg := config.DefaultConfig()
+	// Inject mock detector returning row 1
+	cd := mockCursorDetector{row: 1}
+	m, err := newModel(cfg, cd)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Failed to create test model: %v", err)
 	}
 	// For testing, mock terminal size to something standard
 	m.width = 80

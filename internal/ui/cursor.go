@@ -3,6 +3,7 @@ package ui
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -15,31 +16,50 @@ import (
 // 100ms is sufficient for local terminals; only fails on broken/non-responsive terminals.
 const cursorResponseTimeout = 100 * time.Millisecond
 
-// getCursorRow returns the current 1-based row of the cursor.
-// It uses VT100 escape codes to query the terminal.
-// Helper uses direct terminal I/O (not Bubble Tea) because it runs before the model starts.
-func getCursorRow() (int, error) {
-	// Enable raw mode to read response without Enter
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return 0, fmt.Errorf("failed to enable raw mode: %w", err)
+// TerminalCursorDetector implements CursorDetector using VT100 escape codes.
+type TerminalCursorDetector struct {
+	In  io.Reader
+	Out io.Writer
+}
+
+// NewTerminalCursorDetector creates a new detector using the given I/O.
+// Typically In is os.Stdin and Out is os.Stdout.
+func NewTerminalCursorDetector(in io.Reader, out io.Writer) *TerminalCursorDetector {
+	return &TerminalCursorDetector{
+		In:  in,
+		Out: out,
 	}
-	defer term.Restore(int(os.Stdin.Fd()), oldState)
+}
+
+// GetCursorRow returns the current 1-based row of the cursor.
+// It uses VT100 escape codes to query the terminal.
+func (d *TerminalCursorDetector) GetCursorRow() (int, error) {
+	// Enable raw mode to read response without Enter
+	file, ok := d.In.(*os.File)
+	if !ok {
+		// If input is not a file (e.g. mock), we can't switch to raw mode.
+		// In tests, we rely on the input stream simply containing the response.
+	} else {
+		oldState, err := term.MakeRaw(int(file.Fd()))
+		if err != nil {
+			return 0, fmt.Errorf("failed to enable raw mode: %w", err)
+		}
+		defer term.Restore(int(file.Fd()), oldState)
+	}
 
 	// Send cursor position request
 	// \033[6n requests "Device Status Report" specifically for cursor position
-	if _, err := os.Stdout.Write([]byte("\033[6n")); err != nil {
+	if _, err := d.Out.Write([]byte("\033[6n")); err != nil {
 		return 0, fmt.Errorf("failed to write cursor request: %w", err)
 	}
 
 	// Read response with timeout
 	// Response format: \033[<row>;<col>R
-	// Buffered channels prevent goroutine leak if timeout fires before read completes
 	ch := make(chan string, 1)
 	errCh := make(chan error, 1)
 
 	go func() {
-		reader := bufio.NewReader(os.Stdin)
+		reader := bufio.NewReader(d.In)
 		response, err := reader.ReadString('R')
 		if err != nil {
 			errCh <- err

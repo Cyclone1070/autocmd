@@ -13,7 +13,7 @@ func TestPaddingLogic(t *testing.T) {
 	cfg := config.DefaultConfig()
 	// Disable animations/spinners for deterministic output
 
-	m, err := newModel(cfg)
+	m, err := newModel(cfg, mockCursorDetector{row: 20})
 	if err != nil {
 		t.Fatalf("Failed to create model: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestPaddingLogic(t *testing.T) {
 
 	})
 	t.Run("Safe Exit State Machine (Serial Queue)", func(t *testing.T) {
-		m, _ := newModel(cfg)
+		m, _ := newModel(cfg, mockCursorDetector{row: 20})
 		m.Init()
 
 		// 1. Start a tool

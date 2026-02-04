@@ -13,14 +13,19 @@ type msg struct {
 	Event domain.Event
 }
 
+// CursorDetector abstracts the ability to query the current cursor position.
+type CursorDetector interface {
+	GetCursorRow() (int, error)
+}
+
 // Renderer is the main entry point for the UI.
 type Renderer struct {
 	program *tea.Program
 }
 
 // NewRenderer creates a new Renderer writing to the given output.
-func NewRenderer(output io.Writer, cfg *config.Config) (*Renderer, error) {
-	m, err := newModel(cfg)
+func NewRenderer(output io.Writer, cfg *config.Config, cd CursorDetector) (*Renderer, error) {
+	m, err := newModel(cfg, cd)
 	if err != nil {
 		return nil, err
 	}

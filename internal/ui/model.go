@@ -67,7 +67,7 @@ const (
 	statusBarOverhead = 2
 )
 
-func newModel(cfg *config.Config) (*model, error) {
+func newModel(cfg *config.Config, cd CursorDetector) (*model, error) {
 	th := newTheme(cfg.UI)
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -84,7 +84,7 @@ func newModel(cfg *config.Config) (*model, error) {
 	}
 
 	// Detect cursor position to setup bottom anchor
-	initialRow, err := getCursorRow()
+	initialRow, err := cd.GetCursorRow()
 	// Fallback if detection fails (e.g. non-interactive): assume top of screen
 	if err != nil {
 		initialRow = 1

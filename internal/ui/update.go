@@ -45,6 +45,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		if len(cmds) > 0 {
 			return m, tea.Sequence(cmds...)
 		}
+		m.updateMaxContentHeight()
 		return m, nil
 
 	case domain.ToolStartEvent:
@@ -85,6 +86,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		m.tools = append(m.tools, ts)
 
 		cmds = append(cmds, m.spinner.Tick)
+		m.updateMaxContentHeight()
 		return m, tea.Sequence(cmds...)
 
 	case domain.ToolStreamEvent:
@@ -95,6 +97,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		m.updateMaxContentHeight()
 		return m, nil
 
 	case domain.ToolEndEvent:
@@ -116,6 +119,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		if len(cmds) > 0 {
 			return m, tea.Sequence(cmds...)
 		}
+		m.updateMaxContentHeight()
 		return m, nil
 
 	case domain.DoneEvent:

@@ -14,35 +14,16 @@ func (m *model) View() string {
 		return ""
 	}
 
-	var contentParts []string
-
-	// 1. Pending markdown (last uncertain block)
-	if pending := m.streamingMd.pending(); pending != "" {
-		pending = truncateWithIndicator(pending, m.termHeight)
-		contentParts = append(contentParts, pending)
-	}
-
-	// 2. All remaining tools (running + waiting-to-flush)
-	for _, t := range m.tools {
-		contentParts = append(contentParts, m.viewTool(t))
-	}
-
-	// Join content parts
-	content := strings.Join(contentParts, "\n")
+	content := m.renderContent()
 
 	// Calculate current content height (line count)
 	currentHeight := 0
 	if content != "" {
-		// Fix: Use strictly newline count.
-		// "hello" (0 newlines) occupies 1 visual line but 0 vertical lines relative to start.
-		// "hello\n" (1 newline) occupies 1 vertical line.
+		// Strictly count newlines for height
 		currentHeight = strings.Count(content, "\n")
 	}
-
-	// Update max content height (only grows, never shrinks during session)
-	if currentHeight > m.maxContentHeight {
-		m.maxContentHeight = currentHeight
-	}
+	// NOTE: m.maxContentHeight is now updated in Update() via updateMaxContentHeight()
+	// to keep View() pure.
 
 	// Add padding to maintain consistent height (prevents status bar jiggling)
 	paddingLines := m.maxContentHeight - currentHeight
@@ -61,8 +42,27 @@ func (m *model) View() string {
 	}
 
 	// Content + Padding + StatusBar
-	// Note: content usually does not end with \n\n unless multiple tools
 	return content + padding + statusBar
+}
+
+// renderContent generates the main output content (markdown + tools) without padding/status bar.
+// This is used by View() and by updateMaxContentHeight() in Update().
+func (m *model) renderContent() string {
+	var contentParts []string
+
+	// 1. Pending markdown (last uncertain block)
+	if pending := m.streamingMd.pending(); pending != "" {
+		pending = truncateWithIndicator(pending, m.termHeight)
+		contentParts = append(contentParts, pending)
+	}
+
+	// 2. All remaining tools (running + waiting-to-flush)
+	for _, t := range m.tools {
+		contentParts = append(contentParts, m.viewTool(t))
+	}
+
+	// Join content parts
+	return strings.Join(contentParts, "\n")
 }
 
 const (

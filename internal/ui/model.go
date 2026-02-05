@@ -166,21 +166,3 @@ func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
-// updateMaxContentHeight calculates the visual height of the current content
-// and updates the model's maxContentHeight if it has grown.
-// This must be called in Update() whenever content changes to ensure padding consistency.
-func (m *model) updateMaxContentHeight() {
-	content := m.renderContent()
-	if content == "" {
-		return
-	}
-	// Strictly count newlines for height
-	// "hello" (0 newlines) occupies 1 visual line but 0 vertical lines relative to start.
-	// "hello\n" (1 newline) occupies 1 vertical line.
-	currentHeight := strings.Count(content, "\n")
-
-	if currentHeight > m.maxContentHeight {
-		m.maxContentHeight = currentHeight
-	}
-}

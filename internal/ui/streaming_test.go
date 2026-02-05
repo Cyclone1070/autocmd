@@ -23,16 +23,16 @@ func newTestStreamingMarkdown(t *testing.T) *streamingMarkdown {
 }
 
 func TestStreamingMarkdown_Append(t *testing.T) {
-	t.Run("Single incomplete block - no flush", func(t *testing.T) {
+	t.Run("Single incomplete block - no RenderRemaining", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		// Single paragraph, incomplete - should NOT flush
-		flushed, err := sm.append("Hello world")
+		// Single paragraph, incomplete - should NOT RenderRemaining
+		RenderRemaininged, err := sm.append("Hello world")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(flushed) != 0 {
-			t.Errorf("expected no flush for incomplete block, got %d blocks", len(flushed))
+		if len(RenderRemaininged) != 0 {
+			t.Errorf("expected no RenderRemaining for incomplete block, got %d blocks", len(RenderRemaininged))
 		}
 		// Should be in pending
 		if sm.pending() == "" {
@@ -40,21 +40,21 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		}
 	})
 
-	t.Run("Two paragraphs - first should flush", func(t *testing.T) {
+	t.Run("Two paragraphs - first should RenderRemaining", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
 		// First paragraph
 		sm.append("First paragraph.")
 
 		// New paragraph (blank line creates new block)
-		flushed, err := sm.append("\n\nSecond paragraph.")
+		RenderRemaininged, err := sm.append("\n\nSecond paragraph.")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// First paragraph should have flushed
-		if len(flushed) == 0 {
-			t.Error("expected first paragraph to flush when second starts")
+		// First paragraph should have RenderRemaininged
+		if len(RenderRemaininged) == 0 {
+			t.Error("expected first paragraph to RenderRemaining when second starts")
 		}
 
 		// Second should be pending
@@ -64,14 +64,14 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		}
 	})
 
-	t.Run("Streaming word by word - no premature flush", func(t *testing.T) {
+	t.Run("Streaming word by word - no premature RenderRemaining", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
 		words := []string{"Hello", " ", "world", ".", " ", "More", " ", "text."}
 		for _, word := range words {
-			flushed, _ := sm.append(word)
-			if len(flushed) != 0 {
-				t.Errorf("unexpected flush during word-by-word streaming: %v", flushed)
+			RenderRemaininged, _ := sm.append(word)
+			if len(RenderRemaininged) != 0 {
+				t.Errorf("unexpected RenderRemaining during word-by-word streaming: %v", RenderRemaininged)
 			}
 		}
 
@@ -88,12 +88,12 @@ func TestStreamingMarkdown_Append(t *testing.T) {
 		sm.append("Initial content")
 		before := sm.pending()
 
-		flushed, err := sm.append("")
+		RenderRemaininged, err := sm.append("")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(flushed) != 0 {
-			t.Error("empty chunk should not cause flush")
+		if len(RenderRemaininged) != 0 {
+			t.Error("empty chunk should not cause RenderRemaining")
 		}
 
 		after := sm.pending()
@@ -109,16 +109,16 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 
 		sm.append("Some content here")
 
-		flushed, err := sm.flush()
+		RenderRemaininged, err := sm.RenderRemaining()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if flushed == "" {
+		if RenderRemaininged == "" {
 			t.Error("expected content from Flush()")
 		}
 
-		// After flush, pending should be empty
+		// After RenderRemaining, pending should be empty
 		if sm.pending() != "" {
 			t.Error("Pending() should be empty after Flush()")
 		}
@@ -127,29 +127,29 @@ func TestStreamingMarkdown_Flush(t *testing.T) {
 	t.Run("Flush with empty buffer", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
-		flushed, err := sm.flush()
+		RenderRemaininged, err := sm.RenderRemaining()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if flushed != "" {
-			t.Errorf("expected empty flush from empty buffer, got: %s", flushed)
+		if RenderRemaininged != "" {
+			t.Errorf("expected empty RenderRemaining from empty buffer, got: %s", RenderRemaininged)
 		}
 	})
 
-	t.Run("Double flush returns nothing second time", func(t *testing.T) {
+	t.Run("Double RenderRemaining returns nothing second time", func(t *testing.T) {
 		sm := newTestStreamingMarkdown(t)
 
 		sm.append("Content")
-		sm.flush()
+		sm.RenderRemaining()
 
-		// Second flush should return nothing
-		second, err := sm.flush()
+		// Second RenderRemaining should return nothing
+		second, err := sm.RenderRemaining()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if second != "" {
-			t.Errorf("double flush should return empty, got: %s", second)
+			t.Errorf("double RenderRemaining should return empty, got: %s", second)
 		}
 	})
 }
@@ -195,8 +195,8 @@ func TestStreamingMarkdown_Pending(t *testing.T) {
 		sm.pending()
 
 		// Flush should still return content
-		flushed, _ := sm.flush()
-		if flushed == "" {
+		RenderRemaininged, _ := sm.RenderRemaining()
+		if RenderRemaininged == "" {
 			t.Error("Pending() should not consume buffer")
 		}
 	})
@@ -268,23 +268,23 @@ func TestStreamingMarkdown_ComplexScenario(t *testing.T) {
 
 		var totalFlushed int
 		for _, chunk := range chunks {
-			flushed, err := sm.append(chunk)
+			RenderRemaininged, err := sm.append(chunk)
 			if err != nil {
 				t.Fatalf("error appending chunk '%s': %v", chunk, err)
 			}
-			totalFlushed += len(flushed)
+			totalFlushed += len(RenderRemaininged)
 		}
 
-		// Should have flushed some blocks
-		// (the first paragraph and code block should flush when new paragraph starts)
+		// Should have RenderRemaininged some blocks
+		// (the first paragraph and code block should RenderRemaining when new paragraph starts)
 		if totalFlushed == 0 {
-			t.Log("Warning: no blocks flushed during streaming (may be expected)")
+			t.Log("Warning: no blocks RenderRemaininged during streaming (may be expected)")
 		}
 
-		// Final flush should get remaining content
-		final, err := sm.flush()
+		// Final RenderRemaining should get remaining content
+		final, err := sm.RenderRemaining()
 		if err != nil {
-			t.Fatalf("error on final flush: %v", err)
+			t.Fatalf("error on final RenderRemaining: %v", err)
 		}
 
 		if final == "" && sm.pending() == "" && totalFlushed == 0 {
@@ -403,7 +403,7 @@ func TestStreamingMarkdown_adjustBlockStart(t *testing.T) {
 			name: "Paragraph inside Blockquote",
 			src:  "> Inner text\n",
 			// Paragraph inside blockquote. Content 'I'.
-			// We want to capture the '>' as part of the paragraph context if flushing?
+			// We want to capture the '>' as part of the paragraph context if RenderRemaininging?
 			// The current logic scans back for '>', ' '.
 			expectedByte: '>',
 			expectedOff:  0,

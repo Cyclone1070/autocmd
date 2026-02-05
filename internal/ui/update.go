@@ -31,11 +31,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 		for _, block := range flushedBlocks {
-			cmds = append(cmds, m.schedulePrint(block))
-
-			// Reduce maxContentHeight as content is flushed to history
-			lines := strings.Count(block, "\n") + 1
-			m.maxContentHeight -= lines
+			cmds = append(cmds, m.flushContent(block))
 		}
 
 		if m.maxContentHeight < 0 {
@@ -59,7 +55,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		// If the text block was "Uncertain", it remains "Uncertain" until a new block starts
 		// or we force flush.
 
-		textFlush, err := m.streamingMd.flush()
+		textFlush, err := m.streamingMd.RenderRemaining()
 		if err != nil {
 			return m, tea.Sequence(
 				m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)),
@@ -67,14 +63,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 			)
 		}
 		if textFlush != "" {
-			cmds = append(cmds, m.schedulePrint(textFlush))
-
-			// Reduce maxContentHeight
-			lines := strings.Count(textFlush, "\n") + 1
-			m.maxContentHeight -= lines
-			if m.maxContentHeight < 0 {
-				m.maxContentHeight = 0
-			}
+			cmds = append(cmds, m.flushContent(textFlush))
 		}
 
 		// Initialize new tool
@@ -135,18 +124,18 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// 1. Flush pending text
-	textFlush, err := m.streamingMd.flush()
+	textFlush, err := m.streamingMd.RenderRemaining()
 	if err != nil {
 		cmds = append(cmds, m.schedulePrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)))
 		// We are already quitting (handleDoneEvent is part of shutdown or leads to it),
 		// but let's ensure the error is seen.
 	} else if textFlush != "" {
-		cmds = append(cmds, m.schedulePrint(strings.TrimRight(textFlush, "\n")))
+		cmds = append(cmds, m.flushContent(strings.TrimRight(textFlush, "\n")))
 	}
 
 	// 2. Flush remaining tools
 	for _, ts := range m.tools {
-		cmds = append(cmds, m.schedulePrint(m.viewTool(ts)))
+		cmds = append(cmds, m.flushContent(m.viewTool(ts)))
 	}
 	m.tools = nil // Clear state
 
@@ -154,7 +143,7 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 	// We want this to be the very last thing, so we queue it.
 	// The PrintQueue guarantees it appears AFTER the above flushes.
 	finalStatus := strings.TrimPrefix(m.statusBar(), "\n")
-	cmds = append(cmds, m.schedulePrint(finalStatus))
+	cmds = append(cmds, m.flushContent(finalStatus))
 
 	return m, tea.Sequence(cmds...)
 }
@@ -173,21 +162,49 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 
 		// Create flush command using tracked helper
 		output := m.viewTool(tool)
-		cmds = append(cmds, m.schedulePrint(output))
-
-		// Adjust maxContentHeight downwards because this content is moving to history
-		// We count lines in the output (plus 2 for the double-newline join separation that would have been there)
-		lines := strings.Count(output, "\n") + 1
-
-		// Also account for the separation that View() adds between tools (\n\n)
-		// If there were multiple tools, each had separation.
-		// Use a heuristic: just decrement by the tool height for now.
-		if m.maxContentHeight > lines {
-			m.maxContentHeight -= lines
-		} else {
-			m.maxContentHeight = 0
-		}
+		cmds = append(cmds, m.flushContent(output))
 	}
 
 	return cmds
+}
+
+// updateMaxContentHeight calculates the visual height of the current content
+// and updates the model's maxContentHeight if it has grown.
+// This must be called in Update() whenever content changes to ensure padding consistency.
+func (m *model) updateMaxContentHeight() {
+	content := m.renderContent()
+	if content == "" {
+		return
+	}
+	// Strictly count newlines for height
+	// "hello" (0 newlines) occupies 1 visual line but 0 vertical lines relative to start.
+	// "hello\n" (1 newline) occupies 1 vertical line.
+	currentHeight := strings.Count(content, "\n")
+
+	if currentHeight > m.maxContentHeight {
+		m.maxContentHeight = currentHeight
+	}
+}
+
+// flushContent atomically handles the transition of content from "Active/Pending" to "History".
+//
+// 1. It calculates the vertical height of the content.
+// 2. It decrements m.maxContentHeight by that amount (clamped to 0).
+// 3. It returns a tea.Cmd to print the content to the release queue.
+func (m *model) flushContent(content string) tea.Cmd {
+	if content == "" {
+		return nil
+	}
+
+	// Strictly count newlines for height reduction
+	// We add 1 because a string with N newlines occupies N+1 lines
+	lines := strings.Count(content, "\n") + 1
+
+	if m.maxContentHeight > lines {
+		m.maxContentHeight -= lines
+	} else {
+		m.maxContentHeight = 0
+	}
+
+	return m.schedulePrint(content)
 }

@@ -33,8 +33,8 @@ func (s *streamingMarkdown) append(chunk string) ([]string, error) {
 	return s.process(false)
 }
 
-// flush returns any remaining content in the buffer as a single block.
-func (s *streamingMarkdown) flush() (string, error) {
+// RenderRemaining returns any remaining content in the buffer as a single block.
+func (s *streamingMarkdown) RenderRemaining() (string, error) {
 	flushed, err := s.process(true)
 	if err != nil {
 		return "", err

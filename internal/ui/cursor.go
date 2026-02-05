@@ -44,13 +44,6 @@ func (d *TerminalCursorDetector) GetCursorRow() (int, error) {
 		}
 		defer term.Restore(int(file.Fd()), oldState)
 
-		// Set read deadline to avoid hanging forever
-		if err := file.SetReadDeadline(time.Now().Add(cursorResponseTimeout)); err != nil {
-			return 0, fmt.Errorf("failed to set read deadline: %w", err)
-		}
-		// Ensure we clear the deadline (though we are done reading anyway/file is deferred)
-		// It's good practice.
-		defer file.SetReadDeadline(time.Time{})
 	}
 
 	// Send cursor position request
@@ -59,17 +52,29 @@ func (d *TerminalCursorDetector) GetCursorRow() (int, error) {
 		return 0, fmt.Errorf("failed to write cursor request: %w", err)
 	}
 
-	// Read response directly (blocking but with timeout if file)
-	reader := bufio.NewReader(d.In)
-	response, err := reader.ReadString('R')
-	if err != nil {
-		if os.IsTimeout(err) {
-			return 0, fmt.Errorf("timeout waiting for cursor response")
-		}
-		return 0, fmt.Errorf("failed to read cursor response: %w", err)
-	}
+	// Read response with timeout
+	// Response format: \033[<row>;<col>R
+	ch := make(chan string, 1)
+	errCh := make(chan error, 1)
 
-	return parseCursorResponse(response)
+	go func() {
+		reader := bufio.NewReader(d.In)
+		response, err := reader.ReadString('R')
+		if err != nil {
+			errCh <- err
+			return
+		}
+		ch <- response
+	}()
+
+	select {
+	case response := <-ch:
+		return parseCursorResponse(response)
+	case err := <-errCh:
+		return 0, fmt.Errorf("failed to read cursor response: %w", err)
+	case <-time.After(cursorResponseTimeout):
+		return 0, fmt.Errorf("timeout waiting for cursor response")
+	}
 }
 
 func parseCursorResponse(response string) (int, error) {

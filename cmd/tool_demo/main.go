@@ -51,6 +51,8 @@ func main() {
 		}()
 		wg1.Wait()
 
+		time.Sleep(500 * time.Millisecond)
+
 		// 2. Batch Two: Diff Tools
 		diffSuccess := domain.DiffDisplay{
 			Header:  "Update config.yaml",
@@ -89,6 +91,8 @@ func main() {
 			renderer.Send(domain.ToolEndEvent{CallID: "diff-fail", Error: "Merge conflict"})
 		}()
 		wg2.Wait()
+
+		time.Sleep(500 * time.Millisecond)
 
 		// 3. Batch Three: Shell Tools
 		var wg3 sync.WaitGroup

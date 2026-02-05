@@ -77,8 +77,11 @@ func main() {
 		time.Sleep(500 * time.Millisecond) // Pause mid-bold
 		simulateTyping("ken bold** markers and `split")
 		time.Sleep(500 * time.Millisecond) // Pause mid-code
-		simulateTyping(" code` formatting.\n\n")
-		time.Sleep(800 * time.Millisecond)
+		simulateTyping(" code` formatting. ")
+		time.Sleep(500 * time.Millisecond)
+		simulateTyping("this is ```inline ")
+		time.Sleep(500 * time.Millisecond)
+		simulateTyping("code block```\n\n")
 
 		// 4. Code Block Streaming (Unsafe -> Safe transition)
 		simulateTyping("Now writing a Go function:\n\n")

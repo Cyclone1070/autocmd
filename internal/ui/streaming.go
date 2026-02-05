@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/yuin/goldmark"
@@ -83,6 +84,10 @@ func (s *streamingMarkdown) process(forceFlush bool) ([]string, error) {
 	// Determine split index using helper
 	splitIndex, err := s.findFlushSplit(src, blocks, forceFlush)
 	if err != nil {
+		// ...
+	}
+	// Debug
+	if err != nil {
 		// If error (e.g. can't find safe split), treat as nothing to flush
 		out, renderErr := s.render(s.buffer)
 		s.pendingRendered = out
@@ -120,8 +125,9 @@ func (s *streamingMarkdown) process(forceFlush bool) ([]string, error) {
 }
 
 // findFlushSplit determines the index to split the buffer for safe flushing.
-// Returns splitIndex and nil error on success.
-// Returns 0 and error if no safe split point is found.
+// It uses "Gap Analysis" to ensure structural syntax (fences, underlines) is flushed
+// with the Previous Block. It ONLY extends the split for block types that are known
+// to have trailing structure excluded from Lines() (FencedCode, Setext).
 func (s *streamingMarkdown) findFlushSplit(src []byte, blocks []ast.Node, forceFlush bool) (int, error) {
 	if forceFlush {
 		return len(src), nil
@@ -131,40 +137,167 @@ func (s *streamingMarkdown) findFlushSplit(src []byte, blocks []ast.Node, forceF
 		return 0, fmt.Errorf("not enough blocks to flush")
 	}
 
-	// Flush up to the start of the last block
-	// By default, the last top-level block is considered "pending" and unsafe to flush.
-	pendingBlock := blocks[len(blocks)-1]
+	safeBlock := blocks[len(blocks)-2]
 
-	// Drill down into containers (List, Blockquote)
-	for {
-		isContainer := pendingBlock.Kind() == ast.KindList || pendingBlock.Kind() == ast.KindBlockquote
-		if !isContainer {
-			break
+	// Helper to find the LAST content end of a node
+	var getLastStop func(node ast.Node) (int, error)
+	getLastStop = func(node ast.Node) (int, error) {
+		lines := node.Lines()
+		if lines.Len() > 0 {
+			lastLine := lines.At(lines.Len() - 1)
+			return lastLine.Stop, nil
 		}
-
-		// Check children
-		var lastChild ast.Node
-		childCount := 0
-		for c := pendingBlock.FirstChild(); c != nil; c = c.NextSibling() {
-			lastChild = c
-			childCount++
+		if node.HasChildren() {
+			var lastChild ast.Node
+			for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+				lastChild = c
+			}
+			if lastChild != nil {
+				return getLastStop(lastChild)
+			}
 		}
-
-		// If multiple children, we can flush earlier ones. Target last child as new pending.
-		if childCount > 1 && lastChild != nil {
-			pendingBlock = lastChild
-			continue
+		// Thematic break might have no lines
+		if node.Kind() == ast.KindThematicBreak {
+			// We handle this via Kind check below, but we need a valid 'start point'
+			// If it has no lines, we can't find it in src easily without parent info.
+			// However, usually thematic break has lines in Goldmark if parser found it.
+			// If not, we error.
+			return 0, fmt.Errorf("node has no lines or children")
 		}
-		break
+		return 0, fmt.Errorf("node has no lines or children")
 	}
 
-	// Find TRUE start of the pending block
-	if pendingBlock.Lines().Len() > 0 {
-		contentStart := pendingBlock.Lines().At(0).Start
-		return adjustBlockStart(src, pendingBlock, contentStart), nil
+	// 1. End of Safe Block Content
+	safeEnd, err := getLastStop(safeBlock)
+	if err != nil {
+		return 0, err
 	}
 
-	return 0, fmt.Errorf("pending block has no lines")
+	// 2. Kind-Guarded Gap Analysis
+	// We only scan forward if the block type likely has "Postfix Structure"
+	// that was stripped by the parser.
+	// - FencedCodeBlock: closing "```"
+	// - Heading (Setext): underlining "==="
+	// - ThematicBreak: "---" (sometimes)
+
+	shouldScan := false
+	switch safeBlock.Kind() {
+	case ast.KindFencedCodeBlock:
+		shouldScan = true
+	case ast.KindHeading:
+		// Check if Setext (heuristic: ATX starts with #)
+		// We can just scan for everyone; ATX trailing "#" is harmless to include.
+		// But we must NOT consume NextBlock's leading structure.
+		// Since we scan to "Next Newline", ATX trailing is safe.
+		// BUT Setext underline is on the NEXT line.
+		shouldScan = true
+	case ast.KindThematicBreak:
+		shouldScan = true
+	}
+
+	if !shouldScan {
+		// For Paragraphs, Lists, Quotes, etc., we assume Lines() includes everything
+		// (or everything relevant).
+		return safeEnd, nil
+	}
+
+	// 3. Perform Gap Analysis (Scan forward)
+	// We scan from safeEnd forward. We stop at:
+	// - EOF
+	// - Start of Next Block (if we could detect it reliably?)
+	// - A reasonable limit (struct + newline)
+
+	// Define expected characters for structure based on Kind
+	isExpectedChar := func(r rune) bool { return false }
+	switch safeBlock.Kind() {
+	case ast.KindFencedCodeBlock:
+		isExpectedChar = func(r rune) bool { return r == '`' || r == '~' }
+	case ast.KindHeading:
+		isExpectedChar = func(r rune) bool { return r == '=' || r == '-' }
+	case ast.KindThematicBreak:
+		isExpectedChar = func(r rune) bool { return r == '-' || r == '_' || r == '*' }
+	}
+
+	splitIndex := safeEnd
+
+	// Scan the "Gap" until we find a newline that terminates the structure
+	// or we hit something that looks like the start of a next block?
+	// Actually, simpler:
+	// We just scan until the NEXT newline.
+	// Check if that line contains non-whitespace.
+	// If so, include it.
+
+	// Loop to consume ONE line of structure (plus optional newlines?)
+	// FencedCode closing fence is 1 line.
+	// Setext underline is 1 line.
+
+	current := safeEnd
+
+	for current < len(src) {
+		// Scan line
+		lineStart := current
+		var lineEnd int
+		for i := current; i < len(src); i++ {
+			if src[i] == '\n' {
+				lineEnd = i + 1
+				break
+			}
+			lineEnd = i + 1
+		}
+
+		// Check if this line is structure
+		lineContent := src[lineStart:lineEnd]
+		isBlank := true
+		firstNonWs := rune(0)
+		for _, b := range lineContent {
+			r := rune(b)
+			if !unicode.IsSpace(r) {
+				isBlank = false
+				firstNonWs = r
+				break
+			}
+		}
+
+		if !isBlank {
+			// Found non-blank line.
+			// Is it OUR structure?
+			if isExpectedChar(firstNonWs) {
+				// Yes. Include it.
+				splitIndex = lineEnd
+				break // We assume only 1 line of structure (Fence or Underline)
+			} else {
+				// No. It's some other content (e.g. Next Block Starts).
+				// Stop scanning. Split at previous accumulated point (safeEnd or previous blank lines).
+				// We do NOT include this line.
+				// We also do not include preceding blank lines if we want to be strict?
+				// Actually, blank lines are harmless to include in previous block usually.
+				// But to be consistent with "Buffering", we should probably leave them?
+				// But our splitIndex wasn't updated for blank lines.
+				// So we implicitly leave blank lines in buffer. Correct.
+				break
+			}
+		} else {
+			// Blank line.
+			// Could be spacing between content and fence?
+			// `code\n\n``` `
+			// We skip it, but do NOT update splitIndex yet.
+			// If we find structure later, we will likely include this blank line?
+			// No, currently we jump splitIndex to lineEnd.
+			// But if we skipped intermediate blank lines, splitIndex would jump over them?
+			// Logic hole: If `current` advances, but `splitIndex` stays behind...
+			// If we find structure at line 3, and lines 1-2 were blank.
+			// We set splitIndex = lineEnd (of line 3).
+			// This includes lines 1-2. Correct.
+			current = lineEnd
+		}
+	}
+
+	// If we found NO structure (e.g. hit EOF), we stick to safeEnd?
+	// Or we keep the 'blank lines' if we found structure after?
+	// Using splitIndex update implies we include blank lines IF followed by structure.
+	// If loop finishes and hasStructure is false, splitIndex remains safeEnd (correct).
+
+	return splitIndex, nil
 }
 
 func (s *streamingMarkdown) render(markdown string) (string, error) {
@@ -172,90 +305,4 @@ func (s *streamingMarkdown) render(markdown string) (string, error) {
 		return "", nil
 	}
 	return s.glamour.Render(markdown)
-}
-
-// adjustBlockStart walks backwards from contentStart to find the syntactic start of the block.
-// Goldmark's Lines().Start points to the text content, often skipping markers like '### ', '> ', '1. '.
-func adjustBlockStart(src []byte, node ast.Node, contentStart int) int {
-	// 1. Scan back through safe whitespace (spaces/tabs) on the same line
-	// We want to be careful not to cross newlines yet unless the block type warrants it
-	curr := contentStart
-	for curr > 0 {
-		c := src[curr-1]
-		if c == ' ' || c == '\t' {
-			curr--
-		} else {
-			break
-		}
-	}
-
-	// 2. Handle specific block types structure
-	switch node.Kind() {
-	case ast.KindHeading:
-		// ATX Heading: expect '#' chars
-		// Scan back over hash marks
-		for curr > 0 && src[curr-1] == '#' {
-			curr--
-		}
-	case ast.KindBlockquote:
-		// Blockquote: expect '>' chars
-		for curr > 0 && src[curr-1] == '>' {
-			curr--
-		}
-	case ast.KindListItem:
-		// List Item: expect '-', '*', '+', or digits + '.'/'('
-		// This is tricky because it could be "123. "
-		// We scan back for the marker.
-		scan := curr
-		// Scan back over digits and dots/parens
-		for scan > 0 {
-			c := src[scan-1]
-			if (c >= '0' && c <= '9') || c == '.' || c == ')' || c == '-' || c == '*' || c == '+' {
-				scan--
-			} else {
-				break
-			}
-		}
-		// If we moved, update curr
-		if scan < curr {
-			curr = scan
-		}
-	case ast.KindFencedCodeBlock:
-		// Fenced Code Block: content starts after the fence line + newline
-		// We need to find the specific fence line start.
-		// Scan back until we find the newline that precedes the fence line
-		// or start of doc.
-		// The contentStart for fenced code usually starts AFTER the first newline.
-		// So we just need to include the line before it.
-
-		// Scan back to find newline
-		for curr > 0 && src[curr-1] != '\n' {
-			curr--
-		}
-		// If we found newline, that's the start of the content line.
-		// But the fence is on the PREVIOUS line.
-		// So we need to go back one more line.
-		if curr > 0 && src[curr-1] == '\n' {
-			curr--
-			// Scan back to start of THAT line
-			for curr > 0 && src[curr-1] != '\n' {
-				curr--
-			}
-		}
-
-	case ast.KindParagraph:
-		// Paragraphs inside Blockquotes need to scan back over the '>' markers.
-		if node.Parent() != nil && node.Parent().Kind() == ast.KindBlockquote {
-			for curr > 0 {
-				c := src[curr-1]
-				if c == '>' || c == ' ' || c == '\t' {
-					curr--
-				} else {
-					break
-				}
-			}
-		}
-	}
-
-	return curr
 }

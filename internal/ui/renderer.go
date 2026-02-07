@@ -4,14 +4,8 @@ import (
 	"io"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-// msg wraps domain.Event for Bubble Tea
-type msg struct {
-	Event domain.Event
-}
 
 // CursorDetector abstracts the ability to query the current cursor position.
 type CursorDetector interface {
@@ -24,20 +18,25 @@ type Renderer struct {
 }
 
 // NewRenderer creates a new Renderer writing to the given output.
-func NewRenderer(output io.Writer, cfg *config.Config, cd CursorDetector) (*Renderer, error) {
+func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Renderer, error) {
+	cd := NewTerminalCursorDetector(input, output)
 	m, err := newModel(cfg, cd)
 	if err != nil {
 		return nil, err
 	}
-	p := tea.NewProgram(m, tea.WithOutput(output))
+	p := tea.NewProgram(m, tea.WithOutput(output), tea.WithInput(input))
 	return &Renderer{
 		program: p,
 	}, nil
 }
 
-func (r *Renderer) Send(ev domain.Event) {
-	// Program.Send is thread-safe
-	r.program.Send(msg{Event: ev})
+// Send sends a message to the UI program.
+// Accepts any tea.Msg, including domain.Event types (TextEvent, ToolStartEvent, etc.)
+// and Bubble Tea built-in messages (tea.KeyMsg, etc.).
+// Note: tea.WindowSizeMsg is intentionally ignored by the model (width is locked at startup).
+// Program.Send is thread-safe.
+func (r *Renderer) Send(m tea.Msg) {
+	r.program.Send(m)
 }
 
 func (r *Renderer) Wait() error {

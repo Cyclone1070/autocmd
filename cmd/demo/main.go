@@ -14,8 +14,8 @@ import (
 func main() {
 	cfg := config.DefaultConfig()
 	// Create UI Renderer
-	cursorDetector := ui.NewTerminalCursorDetector(os.Stdin, os.Stdout)
-	renderer, err := ui.NewRenderer(os.Stdout, cfg, cursorDetector)
+	renderer, err := ui.NewRenderer(os.Stdout, os.Stdin, cfg)
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating renderer: %v\n", err)
 		os.Exit(1)

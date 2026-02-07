@@ -4,119 +4,108 @@ import (
 	"testing"
 )
 
-func TestParseCursorResponse(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     string
-		wantRow   int
-		wantError bool
-	}{
-		// Happy paths
-		{
-			name:      "Standard response row 1",
-			input:     "\x1b[1;1R",
-			wantRow:   1,
-			wantError: false,
-		},
-		{
-			name:      "Standard response row 24",
-			input:     "\x1b[24;1R",
-			wantRow:   24,
-			wantError: false,
-		},
-		{
-			name:      "Large row number",
-			input:     "\x1b[999;50R",
-			wantRow:   999,
-			wantError: false,
-		},
-		{
-			name:      "Different column values",
-			input:     "\x1b[10;80R",
-			wantRow:   10,
-			wantError: false,
-		},
-		{
-			name:      "Response with extra prefix characters",
-			input:     "garbage\x1b[5;1R",
-			wantRow:   5,
-			wantError: false,
-		},
-
-		// Unhappy paths - malformed responses
-		{
-			name:      "Missing R terminator",
-			input:     "\x1b[24;1",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Missing bracket",
-			input:     "24;1R",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Missing semicolon",
-			input:     "\x1b[241R",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Empty string",
-			input:     "",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Only R",
-			input:     "R",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Non-numeric row",
-			input:     "\x1b[abc;1R",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Too many parts",
-			input:     "\x1b[1;2;3R",
-			wantRow:   0,
-			wantError: true,
-		},
-		{
-			name:      "Only bracket and R",
-			input:     "\x1b[R",
-			wantRow:   0,
-			wantError: true,
-		},
+func TestParseCursorResponse_StandardResponseRow1(t *testing.T) {
+	row, err := parseCursorResponse("\x1b[1;1R")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			row, err := parseCursorResponse(tt.input)
-
-			if tt.wantError {
-				if err == nil {
-					t.Errorf("expected error, got nil (row=%d)", row)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if row != tt.wantRow {
-					t.Errorf("got row %d, want %d", row, tt.wantRow)
-				}
-			}
-		})
+	if row != 1 {
+		t.Errorf("got row %d, want 1", row)
 	}
 }
 
-// TestGetCursorRow_Untestable documents why getCursorRow cannot be unit tested.
-// It relies on direct terminal I/O (os.Stdin, os.Stdout, raw mode).
-// Integration testing would require a PTY or mock terminal.
-func TestGetCursorRow_Untestable(t *testing.T) {
-	t.Skip("getCursorRow requires terminal I/O and cannot be unit tested without a PTY")
+func TestParseCursorResponse_StandardResponseRow24(t *testing.T) {
+	row, err := parseCursorResponse("\x1b[24;1R")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if row != 24 {
+		t.Errorf("got row %d, want 24", row)
+	}
+}
+
+func TestParseCursorResponse_LargeRowNumber(t *testing.T) {
+	row, err := parseCursorResponse("\x1b[999;50R")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if row != 999 {
+		t.Errorf("got row %d, want 999", row)
+	}
+}
+
+func TestParseCursorResponse_DifferentColumnValues(t *testing.T) {
+	row, err := parseCursorResponse("\x1b[10;80R")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if row != 10 {
+		t.Errorf("got row %d, want 10", row)
+	}
+}
+
+func TestParseCursorResponse_WithExtraPrefix(t *testing.T) {
+	row, err := parseCursorResponse("garbage\x1b[5;1R")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if row != 5 {
+		t.Errorf("got row %d, want 5", row)
+	}
+}
+
+func TestParseCursorResponse_MissingRTerminator(t *testing.T) {
+	_, err := parseCursorResponse("\x1b[24;1")
+	if err == nil {
+		t.Error("expected error for missing R terminator")
+	}
+}
+
+func TestParseCursorResponse_MissingBracket(t *testing.T) {
+	_, err := parseCursorResponse("24;1R")
+	if err == nil {
+		t.Error("expected error for missing bracket")
+	}
+}
+
+func TestParseCursorResponse_MissingSemicolon(t *testing.T) {
+	_, err := parseCursorResponse("\x1b[241R")
+	if err == nil {
+		t.Error("expected error for missing semicolon")
+	}
+}
+
+func TestParseCursorResponse_EmptyString(t *testing.T) {
+	_, err := parseCursorResponse("")
+	if err == nil {
+		t.Error("expected error for empty string")
+	}
+}
+
+func TestParseCursorResponse_OnlyR(t *testing.T) {
+	_, err := parseCursorResponse("R")
+	if err == nil {
+		t.Error("expected error for only R")
+	}
+}
+
+func TestParseCursorResponse_NonNumericRow(t *testing.T) {
+	_, err := parseCursorResponse("\x1b[abc;1R")
+	if err == nil {
+		t.Error("expected error for non-numeric row")
+	}
+}
+
+func TestParseCursorResponse_TooManyParts(t *testing.T) {
+	_, err := parseCursorResponse("\x1b[1;2;3R")
+	if err == nil {
+		t.Error("expected error for too many parts")
+	}
+}
+
+func TestParseCursorResponse_OnlyBracketAndR(t *testing.T) {
+	_, err := parseCursorResponse("\x1b[R")
+	if err == nil {
+		t.Error("expected error for only bracket and R")
+	}
 }

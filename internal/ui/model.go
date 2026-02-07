@@ -130,8 +130,8 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 	switch ev := teaMsg.(type) {
-	case msg:
-		return m.handleEvent(ev.Event)
+	case domain.Event:
+		return m.handleEvent(ev)
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd

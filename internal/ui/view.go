@@ -16,11 +16,11 @@ func (m *model) View() string {
 	view := m.renderView()
 
 	// Capture frame for regression tests if in debug mode
+	m.frameMu.Lock()
 	if m.debugMode {
-		m.frameMu.Lock()
 		m.frameLog = append(m.frameLog, view)
-		m.frameMu.Unlock()
 	}
+	m.frameMu.Unlock()
 
 	return view
 }

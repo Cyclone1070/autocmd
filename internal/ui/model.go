@@ -59,7 +59,9 @@ type model struct {
 
 // SetDebugMode enables frame logging for regression tests.
 func (m *model) SetDebugMode(enabled bool) {
+	m.frameMu.Lock()
 	m.debugMode = enabled
+	m.frameMu.Unlock()
 }
 
 // GetFrameLog returns the captured frames.

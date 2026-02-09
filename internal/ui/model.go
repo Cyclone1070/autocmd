@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -13,24 +14,62 @@ import (
 	"golang.org/x/term"
 )
 
+// noopCursorDetector is a trivial implementation for testing.
+type noopCursorDetector struct{}
+
+func (d *noopCursorDetector) GetCursorRow() (int, error) {
+	return 1, nil
+}
+
+// NewTestableModel creates a model for testing purposes.
+// It uses a no-op cursor detector.
+func NewTestableModel(cfg *config.Config) (tea.Model, error) {
+	cd := &noopCursorDetector{}
+	return newModel(cfg, cd)
+}
+
 type model struct {
-	spinner    spinner.Model
-	glamour    *glamour.TermRenderer
-	theme      *theme
-	config     *config.Config
-	width      int
-	termHeight int // Terminal height for overflow truncation
+	spinner        spinner.Model
+	glamour        *glamour.TermRenderer
+	theme          *theme
+	config         *config.Config
+	width          int
+	termHeight     int // Terminal height for overflow truncation
+	cursorDetector CursorDetector
 
 	streamingMd      *streamingMarkdown // Handles text buffering strings
 	tools            []*toolState       // Ordered list of all tools (active + waiting flush)
 	maxContentHeight int                // Tracks highest content height to prevent status bar jiggling
 
-	thinking bool
-	runState runState
+	thinking       bool
+	runState       runState
+	err            error
+	errDetails     string
+	flushedContent bool
 
 	// Serial Print Queue to enforce strict output ordering and safe shutdown
 	printQueue []printItem
 	isPrinting bool
+
+	// Debug / Test state
+	debugMode bool
+	frameLog  []string
+	frameMu   sync.Mutex
+}
+
+// SetDebugMode enables frame logging for regression tests.
+func (m *model) SetDebugMode(enabled bool) {
+	m.debugMode = enabled
+}
+
+// GetFrameLog returns the captured frames.
+func (m *model) GetFrameLog() []string {
+	m.frameMu.Lock()
+	defer m.frameMu.Unlock()
+	// Return a copy to avoid races
+	log := make([]string, len(m.frameLog))
+	copy(log, m.frameLog)
+	return log
 }
 
 type toolState struct {

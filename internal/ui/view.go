@@ -8,6 +8,25 @@ import (
 )
 
 func (m *model) View() string {
+	// View is the main rendering function for the Bubble Tea model.
+	// It handles:
+	// 1. Current pending content (streaming markdown)
+	// 2. Active tool displays
+	// 3. Status bar with dynamic state
+	view := m.renderView()
+
+	// Capture frame for regression tests if in debug mode
+	if m.debugMode {
+		m.frameMu.Lock()
+		m.frameLog = append(m.frameLog, view)
+		m.frameMu.Unlock()
+	}
+
+	return view
+}
+
+// renderView contains the actual rendering logic
+func (m *model) renderView() string {
 	// When done or cancelled, we've already flushed everything via tea.Println
 	// Return empty to prevent duplicate rendering and extra whitespace
 	if m.runState == stateDone || m.runState == stateCancelled || m.runState == stateQuitting {

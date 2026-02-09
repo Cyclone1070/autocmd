@@ -31,7 +31,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 		for _, block := range flushedBlocks {
-			cmds = append(cmds, m.flushContent(block))
+			cmds = append(cmds, m.flushContentRaw(block))
 		}
 
 		if m.maxContentHeight < 0 {
@@ -130,7 +130,7 @@ func (m *model) handleDoneEvent() (tea.Model, tea.Cmd) {
 		// We are already quitting (handleDoneEvent is part of shutdown or leads to it),
 		// but let's ensure the error is seen.
 	} else if textFlush != "" {
-		cmds = append(cmds, m.flushContent(strings.TrimRight(textFlush, "\n")))
+		cmds = append(cmds, m.flushContentRaw(strings.TrimRight(textFlush, "\n")))
 	}
 
 	// 2. Flush remaining tools
@@ -207,4 +207,29 @@ func (m *model) flushContent(content string) tea.Cmd {
 	}
 
 	return m.schedulePrint(content)
+}
+
+// flushContentRaw handles raw printing of content to the terminal.
+// It uses tea.Printf (via schedulePrintRaw) to avoid implicit newlines, allowing for correct
+// handling of partial lines and precise scrolling.
+func (m *model) flushContentRaw(content string) tea.Cmd {
+	if content == "" {
+		return nil
+	}
+
+	// Strictly count newlines for height reduction AND partial lines.
+	// If content does not end in a newline, it implies text on the current line,
+	// which effectively consumes vertical space relative to the previous cursor position.
+	lines := strings.Count(content, "\n")
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		lines++
+	}
+
+	if m.maxContentHeight > lines {
+		m.maxContentHeight -= lines
+	} else {
+		m.maxContentHeight = 0
+	}
+
+	return m.schedulePrintRaw(content)
 }

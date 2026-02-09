@@ -29,7 +29,7 @@ type model struct {
 	runState runState
 
 	// Serial Print Queue to enforce strict output ordering and safe shutdown
-	printQueue []string
+	printQueue []printItem
 	isPrinting bool
 }
 

@@ -69,7 +69,7 @@ func renderStreamed(t *testing.T, md string, chunker func(string) []string) stri
 	var result strings.Builder
 	for _, block := range flushedBlocks {
 		result.WriteString(block)
-		result.WriteString("\n")
+		// No newline added here because we simulate tea.Print (raw output)
 	}
 	return normalize(result.String())
 }

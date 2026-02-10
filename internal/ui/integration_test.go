@@ -715,3 +715,86 @@ func TestRegression_RapidEvents(t *testing.T) {
 		t.Error("Lost chunks during rapid sending")
 	}
 }
+
+// TestRegression_StatusBarStable_CodeBlockClose verifies that the status bar never jumps UP
+// when a code block is closed. This catches the flash bug where maxContentHeight
+// is miscalculated during the flush transition.
+// STRICT: This test MUST fail if the bug exists.
+func TestRegression_StatusBarStable_CodeBlockClose(t *testing.T) {
+	tm, m := newTeatestHarnessWithFrameLog(t)
+
+	// 1. Establish baseline
+	tm.Send(domain.TextEvent{Text: "Intro text...\n\n"})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Intro text")
+	}, teatest.WithDuration(1*time.Second))
+
+	// 2. Open code block (grows the pending area)
+	tm.Send(domain.TextEvent{Text: "```go\n"})
+	codeLines := []string{
+		"package main\n",
+		"func main() {\n",
+		"    fmt.Println(\"Hello\")\n",
+		"}\n",
+	}
+	for _, line := range codeLines {
+		tm.Send(domain.TextEvent{Text: line})
+	}
+
+	// 3. Wait for full render of open block
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "fmt.Println")
+	}, teatest.WithDuration(1*time.Second))
+
+	// 4. Close code block (THIS triggers the flash)
+	tm.Send(domain.TextEvent{Text: "```\n\n"})
+
+	// 5. Send text after to ensure we capture frames *during* the transition
+	tm.Send(domain.TextEvent{Text: "After code block.\n"})
+
+	// Wait for final state
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "After code block")
+	}, teatest.WithDuration(1*time.Second))
+
+	// 6. Analyze frames for stability
+	frames := m.GetFrameLog()
+
+	// Spinner characters from bubbles/spinner.Dot
+	spinnerChars := "⣾⣽⣻⢿⡿⣟⣯⣷"
+
+	var lastStatusRow int = -1
+	for i, frame := range frames {
+		// Find status bar row
+		lines := strings.Split(frame, "\n")
+		statusRow := -1
+		for r, line := range lines {
+			if strings.Contains(line, "Generating") {
+				statusRow = r
+				break
+			}
+		}
+
+		// Handle missing status bar
+		if statusRow == -1 {
+			if strings.ContainsAny(frame, spinnerChars) {
+				// Spinner present but no "Generating" -> malformed status bar, fail
+				t.Errorf("Frame %d: Spinner present but status text missing", i)
+			}
+			// Else: likely early partial render, ignore
+			continue
+		}
+
+		// Check for stability
+		// Ignore updates where we haven't established a baseline yet (first few frames)
+		if lastStatusRow != -1 {
+			// STRICT ASSERTION: Status bar row must NEVER decrease
+			// (Allowing for slight movement if content actually shrunk, but code block close shouldn't shrink view drastically)
+			if statusRow < lastStatusRow {
+				t.Errorf("Frame %d: Status bar jumped UP from row %d to %d (FLASH DETECTED)\nFrame content:\n%s",
+					i, lastStatusRow, statusRow, frame)
+			}
+		}
+		lastStatusRow = statusRow
+	}
+}

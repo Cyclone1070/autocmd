@@ -37,9 +37,10 @@ type model struct {
 	termHeight     int // Terminal height for overflow truncation
 	cursorDetector CursorDetector
 
-	streamingMd      *streamingMarkdown // Handles text buffering strings
-	tools            []*toolState       // Ordered list of all tools (active + waiting flush)
-	maxContentHeight int                // Tracks highest content height to prevent status bar jiggling
+	streamingMd       *streamingMarkdown // Handles text buffering strings
+	tools             []*toolState       // Ordered list of all tools (active + waiting flush)
+	maxAbsoluteHeight int                // High water mark of session (History + View). Monotonic.
+	totalFlushedLines int                // Tracks total lines flushed to history (for invariant testing)
 
 	thinking       bool
 	runState       runState
@@ -72,6 +73,18 @@ func (m *model) GetFrameLog() []string {
 	log := make([]string, len(m.frameLog))
 	copy(log, m.frameLog)
 	return log
+}
+
+// GetTotalFlushedLines returns the total lines flushed to history.
+// Used for white-box invariant testing.
+func (m *model) GetTotalFlushedLines() int {
+	return m.totalFlushedLines
+}
+
+// GetMaxAbsoluteHeight returns the current session high water mark.
+// Used for white-box invariant testing.
+func (m *model) GetMaxAbsoluteHeight() int {
+	return m.maxAbsoluteHeight
 }
 
 type toolState struct {
@@ -153,15 +166,15 @@ func newModel(cfg *config.Config, cd CursorDetector) (*model, error) {
 	md := newStreamingMarkdown(r)
 
 	return &model{
-		spinner:          s,
-		glamour:          r,
-		theme:            th,
-		config:           cfg,
-		width:            width,
-		termHeight:       height,
-		streamingMd:      md,
-		tools:            make([]*toolState, 0),
-		maxContentHeight: spaceBelow, // Initialize with available space to pin bottom
+		spinner:           s,
+		glamour:           r,
+		theme:             th,
+		config:            cfg,
+		width:             width,
+		termHeight:        height,
+		streamingMd:       md,
+		tools:             make([]*toolState, 0),
+		maxAbsoluteHeight: spaceBelow, // Initialize with 'floor' relative to session start
 	}, nil
 }
 

@@ -41,11 +41,12 @@ func (m *model) renderView() string {
 		// Strictly count newlines for height
 		currentHeight = strings.Count(content, "\n")
 	}
-	// NOTE: m.maxContentHeight is now updated in Update() via updateMaxContentHeight()
+	// NOTE: m.maxAbsoluteHeight is now updated in Update() via updateMaxAbsoluteHeight()
 	// to keep View() pure.
 
 	// Add padding to maintain consistent height (prevents status bar jiggling)
-	paddingLines := m.maxContentHeight - currentHeight
+	// Formula: Total Space Needed - (Space in History + Space in View)
+	paddingLines := m.maxAbsoluteHeight - (m.totalFlushedLines + currentHeight)
 	var padding string
 	if paddingLines > 0 {
 		padding = strings.Repeat("\n", paddingLines)

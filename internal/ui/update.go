@@ -34,14 +34,10 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.flushContentRaw(block))
 		}
 
-		if m.maxContentHeight < 0 {
-			m.maxContentHeight = 0
-		}
-
 		if len(cmds) > 0 {
 			return m, tea.Sequence(cmds...)
 		}
-		m.updateMaxContentHeight()
+		m.updateMaxAbsoluteHeight()
 		return m, nil
 
 	case domain.ToolStartEvent:
@@ -75,7 +71,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		m.tools = append(m.tools, ts)
 
 		cmds = append(cmds, m.spinner.Tick)
-		m.updateMaxContentHeight()
+		m.updateMaxAbsoluteHeight()
 		return m, tea.Sequence(cmds...)
 
 	case domain.ToolStreamEvent:
@@ -86,7 +82,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		m.updateMaxContentHeight()
+		m.updateMaxAbsoluteHeight()
 		return m, nil
 
 	case domain.ToolEndEvent:
@@ -108,7 +104,7 @@ func (m *model) handleEvent(ev domain.Event) (tea.Model, tea.Cmd) {
 		if len(cmds) > 0 {
 			return m, tea.Sequence(cmds...)
 		}
-		m.updateMaxContentHeight()
+		m.updateMaxAbsoluteHeight()
 		return m, nil
 
 	case domain.DoneEvent:
@@ -168,10 +164,10 @@ func (m *model) flushCompletedTools() []tea.Cmd {
 	return cmds
 }
 
-// updateMaxContentHeight calculates the visual height of the current content
-// and updates the model's maxContentHeight if it has grown.
-// This must be called in Update() whenever content changes to ensure padding consistency.
-func (m *model) updateMaxContentHeight() {
+// updateMaxAbsoluteHeight calculates the total vertical footprint (History + View)
+// and updates the high-water mark (maxAbsoluteHeight) if it has grown.
+// This is monotonic: it only grows, never shrinks.
+func (m *model) updateMaxAbsoluteHeight() {
 	content := m.renderContent()
 	if content == "" {
 		return
@@ -181,16 +177,20 @@ func (m *model) updateMaxContentHeight() {
 	// "hello\n" (1 newline) occupies 1 vertical line.
 	currentHeight := strings.Count(content, "\n")
 
-	if currentHeight > m.maxContentHeight {
-		m.maxContentHeight = currentHeight
+	// Total Vertical Footprint = History (Flushed) + View (Current)
+	totalFootprint := m.totalFlushedLines + currentHeight
+
+	if totalFootprint > m.maxAbsoluteHeight {
+		m.maxAbsoluteHeight = totalFootprint
 	}
 }
 
 // flushContent atomically handles the transition of content from "Active/Pending" to "History".
 //
 // 1. It calculates the vertical height of the content.
-// 2. It decrements m.maxContentHeight by that amount (clamped to 0).
-// 3. It returns a tea.Cmd to print the content to the release queue.
+// 2. It increments totalFlushedLines (History grows).
+// 3. It DOES NOT touch maxAbsoluteHeight (High water mark remains or grows via update).
+// 4. It returns a tea.Cmd to print the content to the release queue.
 func (m *model) flushContent(content string) tea.Cmd {
 	if content == "" {
 		return nil
@@ -200,11 +200,7 @@ func (m *model) flushContent(content string) tea.Cmd {
 	// We add 1 because a string with N newlines occupies N+1 lines
 	lines := strings.Count(content, "\n") + 1
 
-	if m.maxContentHeight > lines {
-		m.maxContentHeight -= lines
-	} else {
-		m.maxContentHeight = 0
-	}
+	m.totalFlushedLines += lines // Track history growth
 
 	return m.schedulePrint(content)
 }
@@ -225,11 +221,7 @@ func (m *model) flushContentRaw(content string) tea.Cmd {
 		lines++
 	}
 
-	if m.maxContentHeight > lines {
-		m.maxContentHeight -= lines
-	} else {
-		m.maxContentHeight = 0
-	}
+	m.totalFlushedLines += lines // Track history growth
 
 	return m.schedulePrintRaw(content)
 }

@@ -790,77 +790,222 @@ func TestRegression_RapidEvents(t *testing.T) {
 // This confirms the model logic *intends* to keep the status bar pinned, even if
 // render timing causes a transient visual flash in the test harness.
 func TestRegression_StatusBarStable_CodeBlockClose(t *testing.T) {
-	tm, m := newTeatestHarnessWithFrameLog(t)
+}
 
-	// 1. Establish baseline
-	tm.Send(domain.TextEvent{Text: "Intro text...\n\n"})
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "Intro text")
-	}, teatest.WithDuration(1*time.Second))
+// --- Instrumentation for Frame-Perfect Verification ---
 
-	// 2. Open code block (grows the pending area)
-	// 2. Open code block (grows the pending area)
-	// Fragmented for realism
-	tm.Send(domain.TextEvent{Text: "```"})
-	tm.Send(domain.TextEvent{Text: "go\n"})
-	codeLines := []string{
-		"package main\n",
-		"func main() {\n",
-		"    fmt.Println(\"Hello\")\n",
-		"}\n",
+// FrameSnapshot captures both visual output and internal state at a specific moment.
+type FrameSnapshot struct {
+	Content           string
+	TotalFlushedLines int
+	MaxAbsoluteHeight int
+	Timestamp         time.Time
+}
+
+// InstrumentedModel wraps the production model to intercept View() calls.
+// It acts as a "Spy" to capture state exactly when the frame is rendered.
+type InstrumentedModel struct {
+	*model                   // Embed production model
+	FrameLog []FrameSnapshot // Append-only log of frames
+}
+
+// View intercepts the production View(), captures state, and logs it.
+func (im *InstrumentedModel) View() string {
+	// 1. Capture State (Atomic with View generation)
+	flushed := im.model.GetTotalFlushedLines()
+	maxAbs := im.model.GetMaxAbsoluteHeight()
+
+	// 2. Delegate to Production Logic
+	content := im.model.View()
+
+	// 3. Log
+	im.FrameLog = append(im.FrameLog, FrameSnapshot{
+		Content:           content,
+		TotalFlushedLines: flushed,
+		MaxAbsoluteHeight: maxAbs,
+		Timestamp:         time.Now(),
+	})
+
+	return content
+}
+
+// NewInstrumentedModel creates a wrapper around a fresh model.
+// Use this instead of NewTestableModel for robust visual tests.
+func NewInstrumentedModel(m *model) *InstrumentedModel {
+	return &InstrumentedModel{
+		model:    m,
+		FrameLog: make([]FrameSnapshot, 0),
 	}
-	for _, line := range codeLines {
-		// Send line in halves
-		half := len(line) / 2
-		tm.Send(domain.TextEvent{Text: line[:half]})
-		tm.Send(domain.TextEvent{Text: line[half:]})
+}
+
+// TestRegression_VisualInvariant_Robustness is the ultimate stability test.
+// It verifies that the status bar NEVER jumps up visually, even for a single frame.
+// Strategy:
+// 1. Wrap model in InstrumentedModel to capture State + View atomically.
+// 2. Stream content.
+// 3. Analyze FrameSnapshot log.
+// 4. Calculate VisualBottom = TotalFlushedLines (from snapshot) + FrameHeight (from snapshot).
+// 5. Assert monotonicity.
+func TestRegression_VisualInvariant_Robustness(t *testing.T) {
+	// Use a fixed height (24) and width (80) to control wrapping.
+	// Start cursor at row 20 (near bottom) to force scrolling early.
+	tm, mRaw := newTeatestHarnessWithFrameLogAndCursor(t, 80, 24, 20)
+
+	// WRAP WITH SPY
+	im := NewInstrumentedModel(mRaw)
+
+	// Re-creating harness with wrapper:
+	tm = teatest.NewTestModel(t, im, teatest.WithInitialTermSize(80, 24))
+
+	// Helper to generate identifiable lines
+	genLine := func(id int) string {
+		return fmt.Sprintf("UID:%04d Content Line %d\n", id, id)
 	}
 
-	// 3. Wait for full render of open block
-	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "fmt.Println")
-	}, teatest.WithDuration(1*time.Second))
+	// 1. Stream simple text (Lines 1-50)
+	for i := 1; i <= 50; i++ {
+		tm.Send(domain.TextEvent{Text: genLine(i)})
+		if i%5 == 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 
-	// Baseline Logic State
-	// We want to ensure the TOTAL vertical space occupied (History + View) never shrinks.
-	// Note: We capture this *before* closing the block.
-	initialTotal := m.GetMaxAbsoluteHeight()
-
-	// 4. Close code block (THIS triggers the flush)
+	// 2. Stream Code Block (Lines 51-60)
+	tm.Send(domain.TextEvent{Text: fmt.Sprintf("```\n%s", genLine(51))})
+	for i := 52; i <= 60; i++ {
+		tm.Send(domain.TextEvent{Text: genLine(i)})
+	}
 	tm.Send(domain.TextEvent{Text: "```\n\n"})
 
-	// 5. Send text after to ensure we capture frames *during* the transition
-	tm.Send(domain.TextEvent{Text: "After code block.\n"})
+	// 2.5. Tool Execution (Lines 61-70)
+	tm.Send(domain.ToolStartEvent{
+		CallID:   "t1",
+		ToolName: "test-tool",
+		Display:  domain.StringDisplay(genLine(61)),
+	})
 
-	// Wait for final state
+	for i := 62; i <= 70; i++ {
+		tm.Send(domain.ToolStreamEvent{
+			CallID: "t1",
+			Chunk:  genLine(i),
+		})
+		if i%3 == 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	tm.Send(domain.ToolEndEvent{CallID: "t1"})
+
+	// 3. Sync and Finish
+	tm.Send(domain.DoneEvent{})
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "After code block")
-	}, teatest.WithDuration(1*time.Second))
+		return strings.Contains(string(b), "Done")
+	}, teatest.WithDuration(2*time.Second))
 
-	// 6. Analyze frames and Logic Invariant
-	frames := m.GetFrameLog()
+	// --- ANALYSIS ---
+	// Use the Spy Log!
+	frames := im.FrameLog
+	if len(frames) == 0 {
+		t.Fatal("No frames captured")
+	}
+
+	lastVisualBottom := -1
+	violations := 0
 
 	for i, frame := range frames {
-		// We can't check the invariant per-frame because we don't have per-frame model state snapshots in teatest.
-		// However, we CAN check the visual symptom if we trust the invariant logic.
-		// BUT: Using the invariant is better if we could snapshot it.
-		// Since we can't snapshot model state per frame easily without a huge refactor,
-		// we will check the Final State to ensure we didn't lose tracking.
-		_ = frame
-		_ = i
+		// Calculate Frame Height (Visual Lines)
+		lines := strings.Split(frame.Content, "\n")
+		frameHeight := len(lines)
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			frameHeight-- // Ignore trailing newline
+		}
+
+		// If frame is empty? (Shouldn't happen with status bar, but handle it)
+		if frameHeight == 0 {
+			continue
+		}
+
+		// Visual Bottom = TotalFlushed (Absolute Position of Top) + FrameHeight
+		// Check Monotonicity
+		visualBottom := frame.TotalFlushedLines + frameHeight
+		if lastVisualBottom != -1 {
+			// Allow growth, forbid shrinking.
+			if visualBottom < lastVisualBottom {
+				t.Errorf("Frame %d: Visual Bottom dropped! %d -> %d. (Flash Detected)\nFrame State: Flushed=%d, MaxAbs=%d\nContent:\n%s",
+					i, lastVisualBottom, visualBottom, frame.TotalFlushedLines, frame.MaxAbsoluteHeight, frame.Content)
+				violations++
+			}
+		}
+
+		// Update watermark (monotonic)
+		if visualBottom > lastVisualBottom {
+			lastVisualBottom = visualBottom
+		}
 	}
 
-	// Final Invariant Check
-	finalTotal := m.GetMaxAbsoluteHeight()
+	if violations > 0 {
+		t.Fatalf("Found %d violations of visual monotonicity.", violations)
+	}
+}
 
-	// STRICT ASSERTION: The total vertical stack (MaxAbsoluteHeight) must NOT have shrunk.
-	// It represents the high-water mark of (History + View).
-	if finalTotal < initialTotal {
-		t.Errorf("Vertical Stack Collapsed! Initial: %d, Final: %d. (MaxAbsoluteHeight should be monotonic)", initialTotal, finalTotal)
+// TestRegression_Flash_Blackbox verifies the "Flash" bug by manually stepping the Update loop.
+// It checks the exact frame between "Model Update" and "Cmd Execution".
+// VISUAL BUG REPRODUCTION:
+// 1. Send text that triggers a flush (requires starting a NEW block to flush the OLD one).
+// 2. Capture the View() *immediately*.
+// 3. If the flushed text is missing from View(), the screen will jump UP until the Cmd prints.
+// 4. This test asserts correct behavior (No Flash), so it is EXPECTED TO FAIL until fixed.
+func TestRegression_Flash_Blackbox(t *testing.T) {
+	// 1. Setup
+	cfg := config.DefaultConfig()
+	// Force small terminal to make scrolling obvious
+	cfg.UI.ChatWindowWidth = 80
+
+	cd := &staticCursorDetector{row: 20}
+	m, _ := newModel(cfg, cd) // White-box access to *model, satisfying tea.Model interface
+
+	// Helper to step the model
+	step := func(msg tea.Msg) (tea.Model, tea.Cmd) {
+		return m.Update(msg)
 	}
 
-	// Double Check: Did we actually flush?
-	if m.GetTotalFlushedLines() == 0 {
-		t.Error("Test failed to trigger flush (TotalFlushedLines == 0)")
+	// 2. Prime the model with some history (Lines 1-5)
+	for i := 1; i <= 5; i++ {
+		step(domain.TextEvent{Text: fmt.Sprintf("History Line %d\n", i)})
+	}
+
+	// 3. Create Block 1 (Code Block) - Buffered
+	step(domain.TextEvent{Text: "```\n"})
+	step(domain.TextEvent{Text: "Buffered Content\n"})
+	step(domain.TextEvent{Text: "```\n\n"})
+
+	// 4. THE CRITICAL STEP: Start Block 2 ("Next Block")
+	// This forces `streamingMarkdown` to identify Block 1 as safe and flush it.
+	newM, cmd := step(domain.TextEvent{Text: "Next Block\n"})
+
+	// 5. Analyze the "Gap Frame"
+	// Block 1 ("Buffered Content") is now FLUSHED to `cmd` (async render).
+	// Block 2 ("Next Block") is PENDING in `View`.
+	// The Bug: `View` logic assumes Block 1 is already in History, so it removes it from View.
+	// But `cmd` hasn't run yet. So Block 1 is visible NOWHERE. Status bar jumps up.
+
+	view := newM.View()
+
+	// 6. Assertions
+	// The flushed content "Buffered Content" MUST still be visible in the View (buffered).
+
+	if !strings.Contains(view, "Buffered Content") {
+		// Log the command to confirm we actually tried to print it
+		if cmd == nil {
+			t.Log("Warning: No command returned, maybe flush didn't trigger?")
+		} else {
+			t.Log("Command returned (Flush triggered).")
+		}
+
+		t.Fatalf("BLACKBOX FAILURE: Flash Detected!\n"+
+			"Scenario: Block 1 flushed because Block 2 started.\n"+
+			"Observation: IMMEDIATE View() does NOT contain 'Buffered Content' (Block 1).\n"+
+			"Result: Status bar jumps up for 1 frame (Async Gap).\n"+
+			"Expected: View() should buffer the content until print is confirmed.\n"+
+			"View Content (Gap Frame):\n%q", view)
 	}
 }

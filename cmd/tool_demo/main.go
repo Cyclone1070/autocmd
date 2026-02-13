@@ -8,13 +8,13 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/compose"
 )
 
 func main() {
 	cfg := config.DefaultConfig()
 	// Create UI Renderer
-	renderer, err := ui.NewRenderer(os.Stdout, os.Stdin, cfg)
+	renderer, err := compose.NewRenderer(os.Stdout, os.Stdin, cfg)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating renderer: %v\n", err)
@@ -132,7 +132,7 @@ func main() {
 	}
 }
 
-func simulateTool(r *ui.Renderer, id, name string, display domain.ToolDisplay, duration time.Duration, errStr string) {
+func simulateTool(r *compose.Renderer, id, name string, display domain.ToolDisplay, duration time.Duration, errStr string) {
 	r.Send(domain.ToolStartEvent{
 		CallID:   id,
 		ToolName: name,
@@ -145,7 +145,7 @@ func simulateTool(r *ui.Renderer, id, name string, display domain.ToolDisplay, d
 	})
 }
 
-func streamShellOutput(r *ui.Renderer, id string, durationSec int) {
+func streamShellOutput(r *compose.Renderer, id string, durationSec int) {
 	for i := 0; i < durationSec*2; i++ {
 		time.Sleep(500 * time.Millisecond)
 		r.Send(domain.ToolStreamEvent{

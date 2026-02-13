@@ -7,7 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type theme struct {
+// Theme provides styling for the UI.
+type Theme struct {
 	// Private colors (from config)
 	muted   lipgloss.AdaptiveColor
 	primary lipgloss.AdaptiveColor
@@ -19,8 +20,13 @@ type theme struct {
 	spinner lipgloss.Style
 }
 
-func newTheme(cfg config.UIConfig) *theme {
-	t := &theme{
+// NewTheme creates a theme from config. Exported for compose/engine deps.
+func NewTheme(cfg config.UIConfig) *Theme {
+	return newTheme(cfg)
+}
+
+func newTheme(cfg config.UIConfig) *Theme {
+	t := &Theme{
 		muted:   lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark},
 		primary: lipgloss.AdaptiveColor{Light: cfg.PrimaryColor.Light, Dark: cfg.PrimaryColor.Dark},
 		success: lipgloss.AdaptiveColor{Light: cfg.SuccessColor.Light, Dark: cfg.SuccessColor.Dark},
@@ -38,43 +44,43 @@ func newTheme(cfg config.UIConfig) *theme {
 
 // Semantic API - callers say WHAT they mean, theme decides HOW it looks
 
-func (t *theme) Success(s string) string {
+func (t *Theme) Success(s string) string {
 	return lipgloss.NewStyle().Foreground(t.success).Render(s)
 }
 
-func (t *theme) Error(s string) string {
+func (t *Theme) Error(s string) string {
 	return lipgloss.NewStyle().Foreground(t.err).Render(s)
 }
 
-func (t *theme) Muted(s string) string {
+func (t *Theme) Muted(s string) string {
 	return lipgloss.NewStyle().Foreground(t.muted).Render(s)
 }
 
-func (t *theme) Primary(s string) string {
+func (t *Theme) Primary(s string) string {
 	return lipgloss.NewStyle().Foreground(t.primary).Render(s)
 }
 
-func (t *theme) Separator(width int, status toolStatus) string {
+func (t *Theme) Separator(width int, status ToolStatus) string {
 	color := t.colorForStatus(status)
 	return lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("─", width))
 }
 
-func (t *theme) Box(content string, width int, status toolStatus) string {
+func (t *Theme) Box(content string, width int, status ToolStatus) string {
 	borderColor := t.colorForStatus(status)
 	return t.box.BorderForeground(borderColor).Width(width).Render(content)
 }
 
-func (t *theme) colorForStatus(status toolStatus) lipgloss.AdaptiveColor {
+func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	switch status {
-	case statusSuccess:
+	case StatusSuccess:
 		return t.success
-	case statusError:
+	case StatusError:
 		return t.err
 	default:
 		return t.muted
 	}
 }
 
-func (t *theme) SpinnerStyle() lipgloss.Style {
+func (t *Theme) SpinnerStyle() lipgloss.Style {
 	return t.spinner
 }

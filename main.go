@@ -21,7 +21,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/compose"
 	"github.com/Cyclone1070/iav/internal/workflow"
 )
 
@@ -75,7 +75,7 @@ func main() {
 	llmRegistry := llm.NewRegistry(googleProvider)
 
 	// Create UI Renderer
-	renderer, err := ui.NewRenderer(os.Stdout, os.Stdin, cfg)
+	renderer, err := compose.NewRenderer(os.Stdout, os.Stdin, cfg)
 
 	if err != nil {
 		log.Fatalf("Failed to create renderer: %v", err)

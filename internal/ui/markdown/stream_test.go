@@ -1,4 +1,4 @@
-package ui
+package markdown
 
 import (
 	"strings"
@@ -9,9 +9,7 @@ import (
 	"github.com/muesli/termenv"
 )
 
-// Test helpers (inlined, no shared file)
-
-func newTestRenderer(t *testing.T) *glamour.TermRenderer {
+func newTestRenderer(t *testing.T) Renderer {
 	t.Helper()
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.DarkStyle),
@@ -21,7 +19,7 @@ func newTestRenderer(t *testing.T) *glamour.TermRenderer {
 	if err != nil {
 		t.Fatalf("failed to create test renderer: %v", err)
 	}
-	return r
+	return WrapGlamour(r)
 }
 
 func normalize(s string) string {
@@ -43,12 +41,12 @@ func renderOneShot(t *testing.T, md string) string {
 func renderStreamed(t *testing.T, md string, chunker func(string) []string) string {
 	t.Helper()
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	var flushedBlocks []string
 	chunks := chunker(md)
 	for _, chunk := range chunks {
-		flushed, err := sm.append(chunk)
+		flushed, err := sm.Append(chunk)
 		if err != nil {
 			t.Fatalf("append failed: %v", err)
 		}
@@ -63,18 +61,12 @@ func renderStreamed(t *testing.T, md string, chunker func(string) []string) stri
 		flushedBlocks = append(flushedBlocks, tail)
 	}
 
-	// Simulate tea.Println behavior: each print adds exactly one trailing newline
-	// Blocks are already trimmed of trailing newlines by process()
-	// So we just concatenate blocks, each followed by a newline
 	var result strings.Builder
 	for _, block := range flushedBlocks {
 		result.WriteString(block)
-		// No newline added here because we simulate tea.Print (raw output)
 	}
 	return normalize(result.String())
 }
-
-// Chunking strategies
 
 func chunkOneShot(md string) []string {
 	return []string{md}
@@ -97,19 +89,16 @@ func chunkBoundarySplits(md string) []string {
 	var chunks []string
 	remaining := md
 
-	// Split at first \n\n
 	if idx := strings.Index(remaining, "\n\n"); idx != -1 {
 		chunks = append(chunks, remaining[:idx+2])
 		remaining = remaining[idx+2:]
 	}
 
-	// Split inside **bold** (between asterisks)
 	if idx := strings.Index(remaining, "**"); idx != -1 && idx+2 < len(remaining) {
 		chunks = append(chunks, remaining[:idx+1])
 		remaining = remaining[idx+1:]
 	}
 
-	// Split inside fenced code opener
 	if idx := strings.Index(remaining, "```"); idx != -1 {
 		if idx+3 < len(remaining) {
 			chunks = append(chunks, remaining[:idx+3])
@@ -126,8 +115,6 @@ func chunkBoundarySplits(md string) []string {
 	}
 	return chunks
 }
-
-// Test fixtures (exact strings from plan)
 
 var testFixtures = map[string]string{
 	"F01": "Para1\n\nPara2",
@@ -149,8 +136,6 @@ var testFixtures = map[string]string{
 	"F17": "Unicode: 你好 👋\n\nNext",
 	"F18": "Long line " + strings.Repeat("word ", 40) + "\n\nNext",
 }
-
-// Metamorphic equivalence tests
 
 func TestStreamingEquivalence_OneShot(t *testing.T) {
 	for name, fixture := range testFixtures {
@@ -260,14 +245,12 @@ func TestStreamingEquivalence_BoundarySplits(t *testing.T) {
 	}
 }
 
-// Flush boundary correctness tests
-
 func TestFlush_FencedCode_IncludesClosingFence(t *testing.T) {
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	input := "```\ncode\n```\n\nNext"
-	flushed, err := sm.append(input)
+	flushed, err := sm.Append(input)
 	if err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
@@ -276,7 +259,7 @@ func TestFlush_FencedCode_IncludesClosingFence(t *testing.T) {
 		t.Fatalf("expected 1 flushed block, got %d", len(flushed))
 	}
 
-	pending := sm.pending()
+	pending := sm.Pending()
 	if strings.Contains(pending, "```") {
 		t.Errorf("pending buffer should not contain closing fence, got: %q", pending)
 	}
@@ -287,10 +270,10 @@ func TestFlush_FencedCode_IncludesClosingFence(t *testing.T) {
 
 func TestFlush_SetextUnderline_Included(t *testing.T) {
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	input := "Heading\n===\n\nNext"
-	flushed, err := sm.append(input)
+	flushed, err := sm.Append(input)
 	if err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
@@ -299,7 +282,7 @@ func TestFlush_SetextUnderline_Included(t *testing.T) {
 		t.Fatalf("expected 1 flushed block, got %d", len(flushed))
 	}
 
-	pending := sm.pending()
+	pending := sm.Pending()
 	if strings.Contains(pending, "===") {
 		t.Errorf("pending buffer should not contain underline, got: %q", pending)
 	}
@@ -310,10 +293,10 @@ func TestFlush_SetextUnderline_Included(t *testing.T) {
 
 func TestFlush_ParagraphToFence_DoesNotStealFence(t *testing.T) {
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	input := "Para\n\n```go\ncode"
-	flushed, err := sm.append(input)
+	flushed, err := sm.Append(input)
 	if err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
@@ -327,21 +310,18 @@ func TestFlush_ParagraphToFence_DoesNotStealFence(t *testing.T) {
 		t.Errorf("flushed content should not contain opening fence, got: %q", flushedContent)
 	}
 
-	pending := sm.pending()
-	// pending() returns rendered ANSI, so check for rendered code block content
-	// The code block should still be pending (not flushed), so it should contain "code"
+	pending := sm.Pending()
 	if !strings.Contains(pending, "code") {
 		t.Errorf("pending buffer should contain code content, got: %q", pending)
 	}
-	// The fence itself won't appear in rendered output, but the code content should
 }
 
 func TestFlush_UnclosedFence_ConsumesAll(t *testing.T) {
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	input := "```go\ncode\n\n# NotAHeading"
-	flushed, err := sm.append(input)
+	flushed, err := sm.Append(input)
 	if err != nil {
 		t.Fatalf("append failed: %v", err)
 	}
@@ -350,7 +330,7 @@ func TestFlush_UnclosedFence_ConsumesAll(t *testing.T) {
 		t.Errorf("unclosed fence should not flush, got %d flushed blocks", len(flushed))
 	}
 
-	pending := sm.pending()
+	pending := sm.Pending()
 	if !strings.Contains(pending, "NotAHeading") {
 		t.Errorf("pending buffer should contain 'NotAHeading' (consumed by code block), got: %q", pending)
 	}
@@ -358,17 +338,15 @@ func TestFlush_UnclosedFence_ConsumesAll(t *testing.T) {
 
 func TestFlush_ThematicBreak_NoPanic(t *testing.T) {
 	renderer := newTestRenderer(t)
-	sm := newStreamingMarkdown(renderer)
+	sm := NewStream(renderer)
 
 	input := "---\n\nNext"
-	flushed, err := sm.append(input)
-	// Thematic break might not flush if Lines() is empty, which is acceptable
+	flushed, err := sm.Append(input)
 	if err != nil {
 		t.Logf("thematic break append returned error (acceptable): %v", err)
 	}
 
-	// Just verify no panic and pending is non-empty
-	pending := sm.pending()
+	pending := sm.Pending()
 	if pending == "" && len(flushed) == 0 {
 		t.Log("thematic break did not flush and pending is empty (acceptable behavior)")
 	}

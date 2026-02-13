@@ -8,13 +8,13 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/compose"
 )
 
 func main() {
 	cfg := config.DefaultConfig()
 	// Create UI Renderer
-	renderer, err := ui.NewRenderer(os.Stdout, os.Stdin, cfg)
+	renderer, err := compose.NewRenderer(os.Stdout, os.Stdin, cfg)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating renderer: %v\n", err)

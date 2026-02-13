@@ -14,10 +14,10 @@ import (
 
 // Test helpers (inlined)
 
-func newTestTheme(t *testing.T) *theme {
+func newTestTheme(t *testing.T) *Theme {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	return newTheme(cfg.UI)
+	return NewTheme(cfg.UI)
 }
 
 func assertGolden(t *testing.T, name string, actual string) {
@@ -46,14 +46,14 @@ func assertGolden(t *testing.T, name string, actual string) {
 func TestRenderString_Running(t *testing.T) {
 	theme := newTestTheme(t)
 	display := domain.StringDisplay("Reading massive_file.txt...")
-	output := renderString(theme, display, statusRunning, "", "⣾")
+	output := renderString(theme, display, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderString_Running", output)
 }
 
 func TestRenderString_ErrorWrap(t *testing.T) {
 	theme := newTestTheme(t)
 	display := domain.StringDisplay("Reading file")
-	output := renderString(theme, display, statusError, "permission denied", "✗")
+	output := renderString(theme, display, StatusError, "permission denied", "✗")
 	assertGolden(t, "RenderString_Error_Wrap", output)
 }
 
@@ -65,7 +65,7 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 		Header: "align.go",
 		Diff:   "\n-line1\n+line2",
 	}
-	output := renderDiff(60, theme, diff, statusRunning, "", "⣾")
+	output := renderDiff(60, theme, diff, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderDiff_DiffBody_Alignment", output)
 }
 
@@ -77,7 +77,7 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 		Removed: 2,
 		Diff:    " @@ -1,2 +1,2 @@\n-old\n+new",
 	}
-	output := renderDiff(60, theme, diff, statusSuccess, "", "✓")
+	output := renderDiff(60, theme, diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Success_WithStats", output)
 }
 
@@ -86,7 +86,7 @@ func TestRenderDiff_Error(t *testing.T) {
 	diff := domain.DiffDisplay{
 		Header: "file.go",
 	}
-	output := renderDiff(60, theme, diff, statusError, "file not found", "✗")
+	output := renderDiff(60, theme, diff, StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", output)
 }
 
@@ -98,7 +98,7 @@ func TestRenderShell_Running_Command(t *testing.T) {
 		Header:  "List Files",
 		Command: "ls -la",
 	}
-	output := renderShell(40, 12, theme, display, "file1.txt\nfile2.txt", statusRunning, "", "⣾")
+	output := renderShell(40, 12, theme, display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
 	assertGolden(t, "RenderShell_Running_Command", output)
 }
 
@@ -109,7 +109,7 @@ func TestRenderShell_LongOutputTruncation(t *testing.T) {
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
-	output := renderShell(40, 12, theme, display, longOutput, statusSuccess, "", "✓")
+	output := renderShell(40, 12, theme, display, longOutput, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderShell_Long_Output_Truncation", output)
 }
 
@@ -119,7 +119,7 @@ func TestRenderShell_Error(t *testing.T) {
 		Header:  "List Files",
 		Command: "ls -la",
 	}
-	output := renderShell(40, 12, theme, display, "", statusError, "exit status 1", "✗")
+	output := renderShell(40, 12, theme, display, "", StatusError, "exit status 1", "✗")
 	assertGolden(t, "RenderShell_Error", output)
 }
 

@@ -2,6 +2,8 @@
 
 This document provides the definitive source of truth for the `internal/ui` package's architecture, rendering stack, and flushing behavior.
 
+**Implementation note:** The UI is implemented via `internal/ui/engine` (pure state/transitions), `internal/ui/runtime` (Bubble Tea adapter), `internal/ui/markdown` (streaming markdown), `internal/ui/deps` (engine.Deps from config/theme/display), and `internal/ui/compose` (entrypoint wiring). Entrypoints use `compose.NewRenderer` exclusively. No legacy model/update/view path remains.
+
 ## 1. High-Level Concept: The "Split View" Model
 
 The application UI is fundamentally a **Split View** system composed of two distinct areas:
@@ -20,9 +22,9 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
 | Layer                  | Component         | Description                                                             | Management         |
 | :--------------------- | :---------------- | :---------------------------------------------------------------------- | :----------------- |
 | **4. History**         | `stdout`          | Old content. Invisible to `View()`. Visible in terminal scrollback.     | Terminal           |
-| **3. Pending Content** | `renderContent()` | Unfinished/Unsafe markdown blocks + Active Code Blocks + Running Tools. | `streaming.go`     |
-| **2. Padding**         | `renderView()`    | Whitespace (`\n` * N) used to pin the Status Bar to the bottom.         | `maxContentHeight` |
-| **1. Status Bar**      | `statusBar()`     | The bottom anchor (`\n\n` + Spinner + text). Always present.            | `model.go`         |
+| **3. Pending Content** | `engine.Render`   | Unfinished/Unsafe markdown blocks + Active Code Blocks + Running Tools. | `internal/ui/markdown` |
+| **2. Padding**         | `engine.Render`   | Whitespace (`\n` * N) used to pin the Status Bar to the bottom.         | `engine` |
+| **1. Status Bar**      | `engine.Render`   | The bottom anchor (`\n\n` + Spinner + text). Always present.            | `engine` / `runtime` |
 
 **Visual Stack:**
 ```text
@@ -37,7 +39,7 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
 
 ## 3. Component Details
 
-### A. Pending View (`streaming.go`)
+### A. Pending View (`internal/ui/markdown`)
 *   **Purpose:** buffers partial markdown and incomplete blocks (e.g., an open code fence `` ```go ``).
 *   **Behavior:**
     *   Appends new tokens as they arrive.
@@ -64,7 +66,7 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
 **"Flushing"** is the process of moving content from the dynamic `View` to the static `History`.
 
 *   **Direction:** Top-Down (Oldest content flushes first).
-*   **Trigger:** When `streaming.go` detects ≥2 top-level markdown blocks. The second-to-last block is considered "Safe" and is flushed.
+*   **Trigger:** When `internal/ui/markdown` detects ≥2 top-level markdown blocks. The second-to-last block is considered "Safe" and is flushed.
 *   **Mechanism:**
     1.  **Extract:** The safe block is removed from the `streaming` buffer.
     2.  **Print:** The block is sent to `stdout` via `tea.Println` (or `tea.Printf`).

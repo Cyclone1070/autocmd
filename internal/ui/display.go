@@ -8,40 +8,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// viewTool renders a tool display box with status indicator.
-func (m *model) viewTool(t *toolState) string {
-	// Status prefix
-	var prefix string
-	switch t.status {
-	case statusRunning:
-		prefix = m.spinner.View()
-	case statusSuccess:
-		prefix = m.theme.Success("✓")
-	case statusError:
-		prefix = m.theme.Error("✗")
-	}
-
-	// Content width = m.width - 2 (for left/right box borders)
-	// This ensures total visual width = m.width
-	contentWidth := m.width - 2
-
-	// Content
-	var content string
-	switch d := t.display.(type) {
-	case domain.StringDisplay:
-		content = renderString(m.theme, d, t.status, t.err, prefix)
-	case domain.DiffDisplay:
-		content = renderDiff(contentWidth, m.theme, d, t.status, t.err, prefix)
-	case domain.ShellDisplay:
-		content = renderShell(contentWidth, m.config.UI.ShellOutputHeight, m.theme, d, t.shellOutput.String(), t.status, t.err, prefix)
-	default:
-		content = pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
-	}
-
-	return m.theme.Box(content, contentWidth, t.status)
+// Pad adds the status prefix to the first line and standard indentation to others.
+// Exported for compose/engine deps.
+func Pad(s string, prefix string) string {
+	return pad(s, prefix)
 }
 
-// pad adds the status prefix to the first line and standard indentation to others.
+// pad is the internal implementation.
 func pad(s string, prefix string) string {
 	lines := strings.Split(s, "\n")
 
@@ -63,15 +36,20 @@ func pad(s string, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatError(header string, err string, theme *theme) string {
+func formatError(header string, err string, theme *Theme) string {
 	return fmt.Sprintf("%s — %s", header, theme.Error(err))
 }
 
 // --- StringDisplay ---
 
-func renderString(theme *theme, d domain.StringDisplay, status toolStatus, err string, prefix string) string {
+// RenderString renders StringDisplay for compose/engine deps.
+func RenderString(theme *Theme, d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
+	return renderString(theme, d, status, err, prefix)
+}
+
+func renderString(theme *Theme, d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
 	s := string(d)
-	if status == statusError {
+	if status == StatusError {
 		s = formatError(s, err, theme)
 	}
 	return pad(s, prefix)
@@ -79,17 +57,22 @@ func renderString(theme *theme, d domain.StringDisplay, status toolStatus, err s
 
 // --- DiffDisplay ---
 
-func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus, err string, prefix string) string {
+// RenderDiff renders DiffDisplay for compose/engine deps.
+func RenderDiff(width int, theme *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
+	return renderDiff(width, theme, d, status, err, prefix)
+}
+
+func renderDiff(width int, theme *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
 	header := d.Header
 	// Only show stats on success
-	if status == statusSuccess && (d.Added != 0 || d.Removed != 0) {
+	if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
 		header = fmt.Sprintf("%s (%s, %s)",
 			d.Header,
 			theme.Success(fmt.Sprintf("+%d", d.Added)),
 			theme.Error(fmt.Sprintf("-%d", d.Removed)))
 	}
 
-	if status == statusError {
+	if status == StatusError {
 		header = formatError(header, err, theme)
 		return fmt.Sprintf(" %s %s ", prefix, header)
 	}
@@ -102,7 +85,7 @@ func renderDiff(width int, theme *theme, d domain.DiffDisplay, status toolStatus
 		prefix, header, sep, paddedDiff)
 }
 
-func colorizeDiff(diff string, theme *theme) string {
+func colorizeDiff(diff string, theme *Theme) string {
 	lines := strings.Split(diff, "\n")
 	for i, line := range lines {
 		if strings.HasPrefix(line, "+") {
@@ -116,11 +99,16 @@ func colorizeDiff(diff string, theme *theme) string {
 
 // --- ShellDisplay ---
 
-func renderShell(width int, shellOutputHeight int, theme *theme, d domain.ShellDisplay, output string, status toolStatus, err string, prefix string) string {
+// RenderShell renders ShellDisplay for compose/engine deps.
+func RenderShell(width, shellOutputHeight int, theme *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
+	return renderShell(width, shellOutputHeight, theme, d, output, status, err, prefix)
+}
+
+func renderShell(width int, shellOutputHeight int, theme *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
 	sep := theme.Separator(width, status)
 	header := d.Header
 	cmdLine := pad(fmt.Sprintf("$ %s", d.Command), "")
-	if status == statusError {
+	if status == StatusError {
 		header = formatError(header, err, theme)
 		// Early return on error - show header and command, hide output
 		return fmt.Sprintf(" %s %s \n%s\n%s", prefix, header, sep, cmdLine)

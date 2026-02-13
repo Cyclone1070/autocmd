@@ -12,6 +12,11 @@ import (
 	"golang.org/x/term"
 )
 
+// CursorDetector abstracts the ability to query the current cursor position.
+type CursorDetector interface {
+	GetCursorRow() (int, error)
+}
+
 // cursorResponseTimeout is the deadline for receiving VT100 Device Status Report.
 // 100ms is sufficient for local terminals; only fails on broken/non-responsive terminals.
 const cursorResponseTimeout = 100 * time.Millisecond

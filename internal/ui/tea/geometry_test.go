@@ -1,4 +1,4 @@
-package runtime
+package tea
 
 import (
 	"testing"
@@ -30,7 +30,6 @@ func TestResolveGeometry(t *testing.T) {
 	if geom.TermHeight != 24 {
 		t.Errorf("TermHeight = %d, want 24", geom.TermHeight)
 	}
-	// spaceBelow = 24 - 5 - 2 = 17
 	if geom.SpaceBelow != 17 {
 		t.Errorf("SpaceBelow = %d, want 17", geom.SpaceBelow)
 	}

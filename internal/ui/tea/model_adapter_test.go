@@ -1,4 +1,4 @@
-package runtime
+package tea
 
 import (
 	"strings"
@@ -55,7 +55,6 @@ func TestAdapter_View_UsesEngineRender(t *testing.T) {
 	}
 }
 
-// Mocks for adapter test
 type mockMarkdownStream struct {
 	buf string
 }
@@ -79,9 +78,9 @@ func (mockTheme) Success(s string) string  { return s }
 func (mockTheme) Error(s string) string    { return s }
 func (mockTheme) Muted(s string) string    { return s }
 func (mockTheme) Primary(s string) string  { return s }
-func (mockTheme) SpinnerStyle() string      { return "" }
+func (mockTheme) SpinnerStyle() string     { return "" }
 func (mockTheme) Box(c string, w int, s engine.ToolStatus) string { return c }
-func (mockTheme) Separator(w int, s engine.ToolStatus) string      { return "" }
+func (mockTheme) Separator(w int, s engine.ToolStatus) string    { return "" }
 
 type mockLayout struct{}
 

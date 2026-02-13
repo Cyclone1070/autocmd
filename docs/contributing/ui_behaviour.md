@@ -2,7 +2,7 @@
 
 This document provides the definitive source of truth for the `internal/ui` package's architecture, rendering stack, and flushing behavior.
 
-**Implementation note:** The UI is implemented via `internal/ui/engine` (pure state/transitions), `internal/ui/runtime` (Bubble Tea adapter), `internal/ui/markdown` (streaming markdown), `internal/ui/deps` (engine.Deps from config/theme/display), and `internal/ui/compose` (entrypoint wiring). Entrypoints use `compose.NewRenderer` exclusively. No legacy model/update/view path remains.
+**Implementation note:** The UI is implemented via `internal/ui/engine` (pure state/transitions), `internal/ui/tea` (Bubble Tea adapter), `internal/ui/markdown` (streaming markdown), `internal/ui/compose` (entrypoint wiring + engine DI), `internal/ui/theme` (styling), `internal/ui/tool` (tool output display), `internal/ui/layout` (viewport truncation), and `internal/ui/cursor` (terminal cursor detection). Entrypoints use `compose.NewRenderer` exclusively. No legacy model/update/view path remains.
 
 ## 1. High-Level Concept: The "Split View" Model
 
@@ -24,7 +24,7 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
 | **4. History**         | `stdout`          | Old content. Invisible to `View()`. Visible in terminal scrollback.     | Terminal           |
 | **3. Pending Content** | `engine.Render`   | Unfinished/Unsafe markdown blocks + Active Code Blocks + Running Tools. | `internal/ui/markdown` |
 | **2. Padding**         | `engine.Render`   | Whitespace (`\n` * N) used to pin the Status Bar to the bottom.         | `engine` |
-| **1. Status Bar**      | `engine.Render`   | The bottom anchor (`\n\n` + Spinner + text). Always present.            | `engine` / `runtime` |
+| **1. Status Bar**      | `engine.Render`   | The bottom anchor (`\n\n` + Spinner + text). Always present.            | `engine` / `tea` |
 
 **Visual Stack:**
 ```text

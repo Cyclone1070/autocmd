@@ -1,4 +1,4 @@
-package runtime
+package compose
 
 import (
 	"strings"
@@ -8,12 +8,21 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	uideps "github.com/Cyclone1070/iav/internal/ui/deps"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
+	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
 )
 
-// --- New-path frame harness (engine + runtime + markdown) ---
+// staticCursorDetector for harness tests.
+type staticCursorDetector struct {
+	row int
+}
+
+func (d *staticCursorDetector) GetCursorRow() (int, error) {
+	return d.row, nil
+}
+
+// --- New-path frame harness (engine + tea + markdown) ---
 
 type harnessFramePhase string
 
@@ -34,7 +43,7 @@ type harnessFrame struct {
 }
 
 type harnessFrameHarness struct {
-	adapter *TeaModelAdapter
+	adapter *teapkg.TeaModelAdapter
 	frames  []harnessFrame
 }
 
@@ -43,7 +52,7 @@ func newHarnessFrameHarness(t *testing.T, width, height, cursorRow int) *harness
 	cfg := config.DefaultConfig()
 	cfg.UI.ChatWindowWidth = width
 	cd := &staticCursorDetector{row: cursorRow}
-	geom, err := ResolveGeometry(cfg, cd, height)
+	geom, err := teapkg.ResolveGeometry(cfg, cd, height)
 	if err != nil {
 		t.Fatalf("ResolveGeometry: %v", err)
 	}
@@ -54,11 +63,11 @@ func newHarnessFrameHarness(t *testing.T, width, height, cursorRow int) *harness
 	sm := markdown.NewStream(mdRenderer)
 	state := engine.NewInitialState(geom)
 	factory := func(s *spinner.Model) engine.Deps {
-		deps := uideps.NewEngineDeps(cfg, sm, width, func() string { return s.View() })
+		deps := NewEngineDeps(cfg, sm, width, func() string { return s.View() })
 		deps.Spinner = nil
 		return deps
 	}
-	adapter := NewTeaModelAdapter(state, factory)
+	adapter := teapkg.NewTeaModelAdapter(state, factory)
 	return &harnessFrameHarness{adapter: adapter, frames: nil}
 }
 
@@ -99,7 +108,7 @@ func (h *harnessFrameHarness) ApplyEvent(ev domain.Event, eventLabel string) {
 
 func (h *harnessFrameHarness) Frames() []harnessFrame { return h.frames }
 
-// --- Assertion helpers (same as legacy integration_test) ---
+// --- Assertion helpers ---
 
 func getStatusBarRow(frame string) int {
 	lines := strings.Split(frame, "\n")
@@ -209,7 +218,7 @@ func assertNoFlushVisibilityGap(t harnessAssertTB, frames []harnessFrame, conten
 	}
 }
 
-// --- Phase A Red: Invariant tests for new path ---
+// --- Invariant tests for new path ---
 
 func TestNewPath_StatusBarNeverJumpsUp(t *testing.T) {
 	h := newHarnessFrameHarness(t, 80, 24, 20)
@@ -255,7 +264,6 @@ func TestNewPath_OrderingParity(t *testing.T) {
 	h.ApplyEvent(domain.ToolStartEvent{CallID: "b", ToolName: "y", Display: domain.StringDisplay("Tool B")}, "toolB")
 	h.ApplyEvent(domain.ToolEndEvent{CallID: "a"}, "endA")
 	h.ApplyEvent(domain.ToolEndEvent{CallID: "b"}, "endB")
-	// Do not send DoneEvent - engine returns empty View when Done. Use last frame with content.
 	h.ApplyEvent(domain.TextEvent{Text: "trailer\n\n"}, "trailer")
 	frames := h.Frames()
 	var lastView string

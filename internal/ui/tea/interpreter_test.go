@@ -1,4 +1,4 @@
-package runtime
+package tea
 
 import (
 	"testing"
@@ -12,7 +12,6 @@ func TestInterpret_Print(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected non-nil cmd for EffectPrint")
 	}
-	// Run the cmd - tea.Sequence may produce internal msgs; we just verify it runs
 	_ = cmd()
 }
 

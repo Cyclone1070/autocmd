@@ -1,4 +1,7 @@
-package ui
+// Package theme provides styling and status types for the UI.
+// Theme and ToolStatus are used by tool display, status bar, and compose wiring.
+
+package theme
 
 import (
 	"strings"
@@ -7,25 +10,28 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// ToolStatus represents tool lifecycle state for display rendering.
+type ToolStatus int
+
+const (
+	StatusRunning ToolStatus = iota
+	StatusSuccess
+	StatusError
+)
+
 // Theme provides styling for the UI.
 type Theme struct {
-	// Private colors (from config)
 	muted   lipgloss.AdaptiveColor
 	primary lipgloss.AdaptiveColor
 	success lipgloss.AdaptiveColor
-	err     lipgloss.AdaptiveColor // renamed from 'error' to avoid shadowing
+	err     lipgloss.AdaptiveColor
 
-	// Private styles
 	box     lipgloss.Style
 	spinner lipgloss.Style
 }
 
-// NewTheme creates a theme from config. Exported for compose/engine deps.
+// NewTheme creates a theme from config.
 func NewTheme(cfg config.UIConfig) *Theme {
-	return newTheme(cfg)
-}
-
-func newTheme(cfg config.UIConfig) *Theme {
 	t := &Theme{
 		muted:   lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark},
 		primary: lipgloss.AdaptiveColor{Light: cfg.PrimaryColor.Light, Dark: cfg.PrimaryColor.Dark},
@@ -41,8 +47,6 @@ func newTheme(cfg config.UIConfig) *Theme {
 
 	return t
 }
-
-// Semantic API - callers say WHAT they mean, theme decides HOW it looks
 
 func (t *Theme) Success(s string) string {
 	return lipgloss.NewStyle().Foreground(t.success).Render(s)
@@ -81,6 +85,7 @@ func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	}
 }
 
+// SpinnerStyle returns the lipgloss style for spinner.
 func (t *Theme) SpinnerStyle() lipgloss.Style {
 	return t.spinner
 }

@@ -1,4 +1,4 @@
-package runtime
+package tea
 
 import (
 	"github.com/Cyclone1070/iav/internal/config"

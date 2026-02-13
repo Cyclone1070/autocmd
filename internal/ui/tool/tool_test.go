@@ -1,4 +1,4 @@
-package ui
+package tool
 
 import (
 	"os"
@@ -8,16 +8,15 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Test helpers (inlined)
-
-func newTestTheme(t *testing.T) *Theme {
+func newTestTheme(t *testing.T) *theme.Theme {
 	t.Helper()
 	cfg := config.DefaultConfig()
-	return NewTheme(cfg.UI)
+	return theme.NewTheme(cfg.UI)
 }
 
 func assertGolden(t *testing.T, name string, actual string) {
@@ -41,89 +40,81 @@ func assertGolden(t *testing.T, name string, actual string) {
 	assert.Equal(t, string(expected), actual, "snapshot mismatch for %s", name)
 }
 
-// RenderString tests
-
 func TestRenderString_Running(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	display := domain.StringDisplay("Reading massive_file.txt...")
-	output := renderString(theme, display, StatusRunning, "", "⣾")
+	output := RenderString(th, display, theme.StatusRunning, "", "⣾")
 	assertGolden(t, "RenderString_Running", output)
 }
 
 func TestRenderString_ErrorWrap(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	display := domain.StringDisplay("Reading file")
-	output := renderString(theme, display, StatusError, "permission denied", "✗")
+	output := RenderString(th, display, theme.StatusError, "permission denied", "✗")
 	assertGolden(t, "RenderString_Error_Wrap", output)
 }
 
-// RenderDiff tests
-
 func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Header: "align.go",
 		Diff:   "\n-line1\n+line2",
 	}
-	output := renderDiff(60, theme, diff, StatusRunning, "", "⣾")
+	output := RenderDiff(60, th, diff, theme.StatusRunning, "", "⣾")
 	assertGolden(t, "RenderDiff_DiffBody_Alignment", output)
 }
 
 func TestRenderDiff_SuccessWithStats(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Header:  "file.go",
 		Added:   5,
 		Removed: 2,
 		Diff:    " @@ -1,2 +1,2 @@\n-old\n+new",
 	}
-	output := renderDiff(60, theme, diff, StatusSuccess, "", "✓")
+	output := RenderDiff(60, th, diff, theme.StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Success_WithStats", output)
 }
 
 func TestRenderDiff_Error(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Header: "file.go",
 	}
-	output := renderDiff(60, theme, diff, StatusError, "file not found", "✗")
+	output := RenderDiff(60, th, diff, theme.StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", output)
 }
 
-// RenderShell tests
-
 func TestRenderShell_Running_Command(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	display := domain.ShellDisplay{
 		Header:  "List Files",
 		Command: "ls -la",
 	}
-	output := renderShell(40, 12, theme, display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
+	output := RenderShell(40, 12, th, display, "file1.txt\nfile2.txt", theme.StatusRunning, "", "⣾")
 	assertGolden(t, "RenderShell_Running_Command", output)
 }
 
 func TestRenderShell_LongOutputTruncation(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	display := domain.ShellDisplay{
 		Header:  "Log",
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
-	output := renderShell(40, 12, theme, display, longOutput, StatusSuccess, "", "✓")
+	output := RenderShell(40, 12, th, display, longOutput, theme.StatusSuccess, "", "✓")
 	assertGolden(t, "RenderShell_Long_Output_Truncation", output)
 }
 
 func TestRenderShell_Error(t *testing.T) {
-	theme := newTestTheme(t)
+	th := newTestTheme(t)
 	display := domain.ShellDisplay{
 		Header:  "List Files",
 		Command: "ls -la",
 	}
-	output := renderShell(40, 12, theme, display, "", StatusError, "exit status 1", "✗")
+	output := RenderShell(40, 12, th, display, "", theme.StatusError, "exit status 1", "✗")
 	assertGolden(t, "RenderShell_Error", output)
 }
-
-// Pad tests
 
 func TestPad_WithPrefix(t *testing.T) {
 	output := pad("Line1\nLine2", "->")

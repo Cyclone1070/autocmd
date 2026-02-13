@@ -1,9 +1,9 @@
-package runtime
+package tea
 
 import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
-	tea "github.com/charmbracelet/bubbletea"
+	bubbletea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
 )
 
@@ -31,13 +31,12 @@ func NewTeaModelAdapter(state *engine.State, factory DepsFactory) *TeaModelAdapt
 }
 
 // Init returns the initial command (spinner tick).
-func (a *TeaModelAdapter) Init() tea.Cmd {
+func (a *TeaModelAdapter) Init() bubbletea.Cmd {
 	return a.Spinner.Tick
 }
 
 // Update processes messages and returns updated model and command.
-func (a *TeaModelAdapter) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
-	// Wire spinner into deps for View
+func (a *TeaModelAdapter) Update(teaMsg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
 	deps := a.Deps
 	deps.Spinner = &spinnerProvider{m: &a.Spinner}
 
@@ -48,9 +47,8 @@ func (a *TeaModelAdapter) Update(teaMsg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 
-	// Handle spinner tick
 	if _, ok := teaMsg.(spinner.TickMsg); ok {
-		var cmd tea.Cmd
+		var cmd bubbletea.Cmd
 		a.Spinner, cmd = a.Spinner.Update(teaMsg)
 		return a, cmd
 	}
@@ -65,7 +63,6 @@ func (a *TeaModelAdapter) View() string {
 	return engine.Render(a.State, deps)
 }
 
-// spinnerProvider adapts spinner.Model to engine.SpinnerViewProvider.
 type spinnerProvider struct {
 	m *spinner.Model
 }
@@ -74,8 +71,7 @@ func (s *spinnerProvider) SpinnerView() string {
 	return s.m.View()
 }
 
-// toEngineMsg converts tea.Msg to engine.Msg.
-func toEngineMsg(teaMsg tea.Msg) (engine.Msg, bool) {
+func toEngineMsg(teaMsg bubbletea.Msg) (engine.Msg, bool) {
 	switch ev := teaMsg.(type) {
 	case domain.ThinkingEvent:
 		return engine.MsgThinking{}, true
@@ -91,25 +87,23 @@ func toEngineMsg(teaMsg tea.Msg) (engine.Msg, bool) {
 		return engine.MsgDone{}, true
 	case msgPrintFinished:
 		return engine.MsgPrintFinished{}, true
-	case tea.KeyMsg:
-		if ev.Type == tea.KeyCtrlC {
+	case bubbletea.KeyMsg:
+		if ev.Type == bubbletea.KeyCtrlC {
 			return engine.MsgCtrlC{}, true
 		}
 	}
 	return nil, false
 }
 
-// toTeaCmd converts engine effects to a single tea.Cmd.
-func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) tea.Cmd {
-	var cmds []tea.Cmd
+func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) bubbletea.Cmd {
+	var cmds []bubbletea.Cmd
 	for _, e := range effects {
 		switch eff := e.(type) {
 		case engine.PrintPayload:
 			cmds = append(cmds, interpretPrint(eff))
 		case engine.QuitPayload:
-			cmds = append(cmds, tea.Quit)
+			cmds = append(cmds, bubbletea.Quit)
 		default:
-			// effectScheduleTick or other - Interpret returns nil for tick, so use spinner
 			if cmd := Interpret(e); cmd != nil {
 				cmds = append(cmds, cmd)
 			} else {
@@ -123,18 +117,18 @@ func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) tea.Cmd {
 	if len(cmds) == 1 {
 		return cmds[0]
 	}
-	return tea.Sequence(cmds...)
+	return bubbletea.Sequence(cmds...)
 }
 
-func interpretPrint(eff engine.PrintPayload) tea.Cmd {
+func interpretPrint(eff engine.PrintPayload) bubbletea.Cmd {
 	if eff.Raw {
-		return tea.Sequence(
-			tea.Printf("%s", eff.Content),
-			func() tea.Msg { return msgPrintFinished{} },
+		return bubbletea.Sequence(
+			bubbletea.Printf("%s", eff.Content),
+			func() bubbletea.Msg { return msgPrintFinished{} },
 		)
 	}
-	return tea.Sequence(
-		tea.Println(eff.Content),
-		func() tea.Msg { return msgPrintFinished{} },
+	return bubbletea.Sequence(
+		bubbletea.Println(eff.Content),
+		func() bubbletea.Msg { return msgPrintFinished{} },
 	)
 }

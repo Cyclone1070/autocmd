@@ -15,11 +15,16 @@ type TeaModelAdapter struct {
 	State   *engine.State
 	Deps    engine.Deps
 	Spinner spinner.Model
+	Sink    FrameSink
 }
 
 // NewTeaModelAdapter creates an adapter with the given state and deps factory.
 // The factory receives the spinner so ViewTool can render with the current spinner frame.
-func NewTeaModelAdapter(state *engine.State, factory DepsFactory) *TeaModelAdapter {
+// sink must be non-nil; use NoopSink{} if observability is not needed.
+func NewTeaModelAdapter(state *engine.State, factory DepsFactory, sink FrameSink) *TeaModelAdapter {
+	if sink == nil {
+		panic("tea: FrameSink must be non-nil for 100% frame observability")
+	}
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	deps := factory(&s)
@@ -27,6 +32,7 @@ func NewTeaModelAdapter(state *engine.State, factory DepsFactory) *TeaModelAdapt
 		State:   state,
 		Deps:    deps,
 		Spinner: s,
+		Sink:    sink,
 	}
 }
 
@@ -56,11 +62,23 @@ func (a *TeaModelAdapter) Update(teaMsg bubbletea.Msg) (bubbletea.Model, bubblet
 	return a, nil
 }
 
-// View delegates to engine.Render.
+// View delegates to engine.Render and emits ViewRendered to the sink.
 func (a *TeaModelAdapter) View() string {
 	deps := a.Deps
 	deps.Spinner = &spinnerProvider{m: &a.Spinner}
-	return engine.Render(a.State, deps)
+	view := engine.Render(a.State, deps)
+	s := a.State
+	a.Sink.OnFrameEvent(FrameEvent{
+		Type:     FrameEventViewRendered,
+		View:     view,
+		Snapshot: &RenderSnapshot{
+			TotalFlushedLines: s.TotalFlushedLines,
+			MaxAbsoluteHeight: s.MaxAbsoluteHeight,
+			PrintQueueLen:     len(s.PrintQueue),
+			IsPrinting:        s.IsPrinting,
+		},
+	})
+	return view
 }
 
 type spinnerProvider struct {
@@ -100,8 +118,14 @@ func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) bubbletea.Cmd {
 	for _, e := range effects {
 		switch eff := e.(type) {
 		case engine.PrintPayload:
-			cmds = append(cmds, interpretPrint(eff))
+			a.Sink.OnFrameEvent(FrameEvent{
+				Type:    FrameEventHistoryFlushed,
+				Content: eff.Content,
+				Raw:     eff.Raw,
+			})
+			cmds = append(cmds, a.Sink.PrintCmd(eff.Content, eff.Raw))
 		case engine.QuitPayload:
+			a.Sink.OnFrameEvent(FrameEvent{Type: FrameEventQuitRequested})
 			cmds = append(cmds, bubbletea.Quit)
 		default:
 			if cmd := Interpret(e); cmd != nil {
@@ -118,17 +142,4 @@ func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) bubbletea.Cmd {
 		return cmds[0]
 	}
 	return bubbletea.Sequence(cmds...)
-}
-
-func interpretPrint(eff engine.PrintPayload) bubbletea.Cmd {
-	if eff.Raw {
-		return bubbletea.Sequence(
-			bubbletea.Printf("%s", eff.Content),
-			func() bubbletea.Msg { return msgPrintFinished{} },
-		)
-	}
-	return bubbletea.Sequence(
-		bubbletea.Println(eff.Content),
-		func() bubbletea.Msg { return msgPrintFinished{} },
-	)
 }

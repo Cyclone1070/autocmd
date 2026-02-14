@@ -48,7 +48,7 @@ func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Render
 		return deps
 	}
 
-	adapter := teapkg.NewTeaModelAdapter(state, factory)
+	adapter := teapkg.NewTeaModelAdapter(state, factory, teapkg.ProductionSink{})
 	p := tea.NewProgram(adapter, tea.WithOutput(output), tea.WithInput(input))
 	return &Renderer{program: p}, nil
 }

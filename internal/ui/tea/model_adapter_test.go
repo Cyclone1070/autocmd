@@ -9,6 +9,18 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 )
 
+func TestNewTeaModelAdapter_PanicsOnNilSink(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic when sink is nil")
+		}
+	}()
+	geom := engine.Geometry{Width: 80, TermHeight: 24, SpaceBelow: 20}
+	state := engine.NewInitialState(geom)
+	factory := func(_ *spinner.Model) engine.Deps { return engine.Deps{} }
+	_ = NewTeaModelAdapter(state, factory, nil)
+}
+
 func TestToEngineMsg_DomainEvents(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -47,7 +59,7 @@ func TestAdapter_View_UsesEngineRender(t *testing.T) {
 		}
 	}
 
-	adapter := NewTeaModelAdapter(state, factory)
+	adapter := NewTeaModelAdapter(state, factory, NoopSink{})
 	out := adapter.View()
 
 	if !strings.Contains(out, "Context:") {

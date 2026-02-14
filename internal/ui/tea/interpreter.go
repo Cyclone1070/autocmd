@@ -9,21 +9,14 @@ import (
 type msgPrintFinished struct{}
 
 // Interpret converts an engine Effect into a tea.Cmd.
+// PrintPayload and QuitPayload are handled by the adapter via FrameSink; this only handles other effects.
 func Interpret(e engine.Effect) bubbletea.Cmd {
 	if e == nil {
 		return nil
 	}
-	switch eff := e.(type) {
-	case engine.PrintPayload:
-		if eff.Raw {
-			return bubbletea.Printf("%s", eff.Content)
-		}
-		return bubbletea.Sequence(
-			bubbletea.Println(eff.Content),
-			func() bubbletea.Msg { return msgPrintFinished{} },
-		)
-	case engine.QuitPayload:
-		return bubbletea.Quit
+	switch e.(type) {
+	case engine.PrintPayload, engine.QuitPayload:
+		return nil // Handled by adapter via sink
 	default:
 		return nil
 	}

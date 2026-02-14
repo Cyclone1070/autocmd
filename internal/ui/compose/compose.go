@@ -14,8 +14,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
 	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
 
@@ -43,7 +43,7 @@ func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Render
 	state := engine.NewInitialState(geom)
 
 	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, width, func() string { return s.View() })
+		deps := NewEngineDeps(cfg, sm, width)
 		deps.Spinner = nil
 		return deps
 	}

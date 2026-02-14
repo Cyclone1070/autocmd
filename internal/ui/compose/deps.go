@@ -16,16 +16,13 @@ import (
 )
 
 // NewEngineDeps builds engine.Deps from config and markdown stream.
-func NewEngineDeps(cfg *config.Config, sm *markdown.Stream, width int, getSpinnerView func() string) engine.Deps {
-	th := theme.NewTheme(cfg.UI)
-	shellHeight := cfg.UI.ShellOutputHeight
+func NewEngineDeps(cfg *config.Config, sm *markdown.Stream, width int) engine.Deps {
 	return engine.Deps{
-		Markdown: sm,
-		Theme:    &themeAdapter{t: th},
-		Layout:   layoutAdapter{},
-		ViewTool: func(t *engine.ToolState) string {
-			return viewTool(th, shellHeight, width, getSpinnerView, t)
-		},
+		Markdown:     sm,
+		Theme:        &themeAdapter{t: theme.NewTheme(cfg.UI)},
+		Layout:       layoutAdapter{},
+		ToolRenderer: newToolRenderer(cfg, width),
+		Spinner:      nil, // Set at runtime
 	}
 }
 
@@ -33,11 +30,11 @@ type themeAdapter struct {
 	t *theme.Theme
 }
 
-func (a *themeAdapter) Success(s string) string   { return a.t.Success(s) }
-func (a *themeAdapter) Error(s string) string      { return a.t.Error(s) }
-func (a *themeAdapter) Muted(s string) string      { return a.t.Muted(s) }
-func (a *themeAdapter) Primary(s string) string    { return a.t.Primary(s) }
-func (a *themeAdapter) SpinnerStyle() string       { return "" }
+func (a *themeAdapter) Success(s string) string { return a.t.Success(s) }
+func (a *themeAdapter) Error(s string) string   { return a.t.Error(s) }
+func (a *themeAdapter) Muted(s string) string   { return a.t.Muted(s) }
+func (a *themeAdapter) Primary(s string) string { return a.t.Primary(s) }
+func (a *themeAdapter) SpinnerStyle() string    { return "" }
 
 func (a *themeAdapter) Box(content string, width int, status engine.ToolStatus) string {
 	return a.t.Box(content, width, toToolStatus(status))
@@ -66,28 +63,50 @@ func (layoutAdapter) TruncateWithIndicator(content string, termHeight int) strin
 	return layout.TruncateWithIndicator(content, termHeight)
 }
 
-func viewTool(th *theme.Theme, shellHeight, width int, getSpinnerView func() string, t *engine.ToolState) string {
+// toolRenderer implements engine.ToolRenderer.
+type toolRenderer struct {
+	theme       *theme.Theme
+	shellHeight int
+	width       int
+}
+
+// newToolRenderer creates a new tool renderer with injected dependencies.
+func newToolRenderer(cfg *config.Config, width int) *toolRenderer {
+	return &toolRenderer{
+		theme:       theme.NewTheme(cfg.UI),
+		shellHeight: cfg.UI.ShellOutputHeight,
+		width:       width,
+	}
+}
+
+// Render implements engine.ToolRenderer.Render.
+func (r *toolRenderer) Render(t *engine.ToolState, spinner engine.SpinnerViewProvider) string {
 	status := toToolStatus(t.Status)
+
+	// Get spinner view at render time (not at creation time!)
 	var prefix string
 	switch status {
 	case theme.StatusRunning:
-		prefix = getSpinnerView()
+		if spinner != nil {
+			prefix = spinner.SpinnerView()
+		}
 	case theme.StatusSuccess:
-		prefix = th.Success("✓")
+		prefix = r.theme.Success("✓")
 	case theme.StatusError:
-		prefix = th.Error("✗")
+		prefix = r.theme.Error("✗")
 	}
-	contentWidth := width - 2
+
+	contentWidth := r.width - 2
 	var content string
 	switch d := t.Display.(type) {
 	case domain.StringDisplay:
-		content = tool.RenderString(th, d, status, t.Err, prefix)
+		content = tool.RenderString(r.theme, d, status, t.Err, prefix)
 	case domain.DiffDisplay:
-		content = tool.RenderDiff(contentWidth, th, d, status, t.Err, prefix)
+		content = tool.RenderDiff(contentWidth, r.theme, d, status, t.Err, prefix)
 	case domain.ShellDisplay:
-		content = tool.RenderShell(contentWidth, shellHeight, th, d, t.ShellOutput, status, t.Err, prefix)
+		content = tool.RenderShell(contentWidth, r.shellHeight, r.theme, d, t.ShellOutput, status, t.Err, prefix)
 	default:
 		content = tool.Pad(fmt.Sprintf("Unknown display type: %T", d), prefix)
 	}
-	return th.Box(content, contentWidth, status)
+	return r.theme.Box(content, contentWidth, status)
 }

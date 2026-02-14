@@ -29,3 +29,9 @@ type LayoutAdapter interface {
 type SpinnerViewProvider interface {
 	SpinnerView() string
 }
+
+// ToolRenderer renders tool displays for the UI.
+// Consumer-defined; implemented by compose package.
+type ToolRenderer interface {
+	Render(t *ToolState, spinner SpinnerViewProvider) string
+}

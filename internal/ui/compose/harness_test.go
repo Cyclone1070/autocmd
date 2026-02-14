@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
 	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // staticCursorDetector for harness tests.
@@ -73,7 +73,7 @@ func newHarnessFrameHarness(t *testing.T, width, height, cursorRow int) *harness
 	sm := markdown.NewStream(mdRenderer)
 	state := engine.NewInitialState(geom)
 	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, width, func() string { return s.View() })
+		deps := NewEngineDeps(cfg, sm, width)
 		deps.Spinner = nil
 		return deps
 	}

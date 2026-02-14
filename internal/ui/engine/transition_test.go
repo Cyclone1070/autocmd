@@ -38,11 +38,11 @@ func (m *mockMarkdown) RenderRemaining() (string, error) {
 // noopTheme implements ThemeAdapter with passthrough.
 type noopTheme struct{}
 
-func (noopTheme) Success(s string) string   { return s }
-func (noopTheme) Error(s string) string    { return s }
-func (noopTheme) Muted(s string) string    { return s }
-func (noopTheme) Primary(s string) string  { return s }
-func (noopTheme) SpinnerStyle() string     { return "" }
+func (noopTheme) Success(s string) string                  { return s }
+func (noopTheme) Error(s string) string                    { return s }
+func (noopTheme) Muted(s string) string                    { return s }
+func (noopTheme) Primary(s string) string                  { return s }
+func (noopTheme) SpinnerStyle() string                     { return "" }
 func (noopTheme) Box(c string, w int, s ToolStatus) string { return c }
 func (noopTheme) Separator(w int, s ToolStatus) string     { return "" }
 
@@ -58,13 +58,20 @@ type noopSpinner struct{}
 
 func (noopSpinner) SpinnerView() string { return "" }
 
+// noopToolRenderer returns simple string representation.
+type noopToolRenderer struct{}
+
+func (noopToolRenderer) Render(t *ToolState, spinner SpinnerViewProvider) string {
+	return string(t.Display.(domain.StringDisplay))
+}
+
 func testDeps(md *mockMarkdown) Deps {
 	return Deps{
-		Markdown: md,
-		Theme:    noopTheme{},
-		Layout:   noopLayout{},
-		Spinner:  noopSpinner{},
-		ViewTool: func(t *ToolState) string { return string(t.Display.(domain.StringDisplay)) },
+		Markdown:     md,
+		Theme:        noopTheme{},
+		Layout:       noopLayout{},
+		Spinner:      noopSpinner{},
+		ToolRenderer: noopToolRenderer{},
 	}
 }
 

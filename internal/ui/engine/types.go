@@ -6,9 +6,9 @@ import (
 
 // Geometry holds terminal/viewport dimensions for layout.
 type Geometry struct {
-	Width       int
-	TermHeight  int
-	SpaceBelow  int // Initial space below cursor (height - row - statusBarOverhead)
+	Width      int
+	TermHeight int
+	SpaceBelow int // Initial space below cursor (height - row - statusBarOverhead)
 }
 
 // ToolStatus represents tool lifecycle state.
@@ -47,11 +47,11 @@ type PrintItem struct {
 
 // Deps holds engine dependencies (injected).
 type Deps struct {
-	Markdown  MarkdownStream
-	Theme     ThemeAdapter
-	Layout    LayoutAdapter
-	ViewTool  func(*ToolState) string // Renders a tool for display
-	Spinner   SpinnerViewProvider     // Current spinner frame (runtime provides)
+	Markdown     MarkdownStream
+	Theme        ThemeAdapter
+	Layout       LayoutAdapter
+	ToolRenderer ToolRenderer        // Renders a tool for display
+	Spinner      SpinnerViewProvider // Current spinner frame (runtime provides)
 }
 
 // State is the full UI engine state.
@@ -61,11 +61,11 @@ type State struct {
 	Tools []*ToolState
 
 	// Layout tracking
-	MaxAbsoluteHeight  int
-	TotalFlushedLines  int
+	MaxAbsoluteHeight   int
+	TotalFlushedLines   int
 	ContentBeingPrinted string
-	PrintQueue         []PrintItem
-	IsPrinting         bool
+	PrintQueue          []PrintItem
+	IsPrinting          bool
 
 	// Session state
 	Thinking bool

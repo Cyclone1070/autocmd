@@ -15,6 +15,7 @@ func TestHistoryFlush_TotalFlushedLinesGrows(t *testing.T) {
 
 	// Flush first block
 	state, _ = Transition(state, MsgText{Text: "Block 1\n\n"}, deps)
+	drainPrintQueue(state, deps)
 	if state.TotalFlushedLines == 0 {
 		t.Error("expected TotalFlushedLines > 0 after first flush")
 	}
@@ -22,8 +23,16 @@ func TestHistoryFlush_TotalFlushedLinesGrows(t *testing.T) {
 
 	// Flush second block
 	state, _ = Transition(state, MsgText{Text: "Block 2\n\n"}, deps)
+	drainPrintQueue(state, deps)
 	if state.TotalFlushedLines <= first {
 		t.Errorf("expected TotalFlushedLines to grow, got %d <= %d", state.TotalFlushedLines, first)
+	}
+}
+
+// drainPrintQueue simulates all pending prints completing.
+func drainPrintQueue(state *State, deps Deps) {
+	for state.IsPrinting || len(state.PrintQueue) > 0 {
+		state, _ = Transition(state, MsgPrintFinished{}, deps)
 	}
 }
 

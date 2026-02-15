@@ -247,6 +247,10 @@ func runAllAssertions(t *testing.T, frames []viewFrame, geom engine.Geometry) {
 	t.Run("Settled_View_Consistent", func(t *testing.T) {
 		assertSettledViewConsistent(t, frames)
 	})
+
+	t.Run("Visual_Bottom_Monotonic", func(t *testing.T) {
+		assertVisualBottomMonotonic(t, frames)
+	})
 }
 
 // =========================================================================

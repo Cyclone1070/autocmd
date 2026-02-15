@@ -97,8 +97,20 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 		effects = append(effects, doneEffects...)
 
 	case MsgPrintFinished:
+		if state.ContentBeingPrinted != "" {
+			if state.ContentBeingPrintedRaw {
+				lines := strings.Count(state.ContentBeingPrinted, "\n")
+				if !strings.HasSuffix(state.ContentBeingPrinted, "\n") {
+					lines++
+				}
+				state.TotalFlushedLines += lines
+			} else {
+				state.TotalFlushedLines += strings.Count(state.ContentBeingPrinted, "\n") + 1
+			}
+		}
 		state.IsPrinting = false
 		state.ContentBeingPrinted = ""
+		state.ContentBeingPrintedRaw = false
 		nextEff := startNextPrint(state)
 		if nextEff != nil {
 			effects = append(effects, nextEff)
@@ -162,8 +174,6 @@ func enqueuePrint(state *State, content string) Effect {
 	if content == "" {
 		return nil
 	}
-	lines := strings.Count(content, "\n") + 1
-	state.TotalFlushedLines += lines
 	state.PrintQueue = append(state.PrintQueue, PrintItem{Content: content, Raw: false})
 	return startNextPrint(state)
 }
@@ -172,11 +182,6 @@ func enqueuePrintRaw(state *State, content string) Effect {
 	if content == "" {
 		return nil
 	}
-	lines := strings.Count(content, "\n")
-	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
-		lines++
-	}
-	state.TotalFlushedLines += lines
 	state.PrintQueue = append(state.PrintQueue, PrintItem{Content: content, Raw: true})
 	return startNextPrint(state)
 }
@@ -188,6 +193,7 @@ func startNextPrint(state *State) Effect {
 	item := state.PrintQueue[0]
 	state.PrintQueue = state.PrintQueue[1:]
 	state.ContentBeingPrinted = item.Content
+	state.ContentBeingPrintedRaw = item.Raw
 	state.IsPrinting = true
 	if item.Raw {
 		return EffectPrintRaw(item.Content)

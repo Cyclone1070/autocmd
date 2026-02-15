@@ -63,9 +63,10 @@ type State struct {
 	// Layout tracking
 	MaxAbsoluteHeight   int
 	TotalFlushedLines   int
-	ContentBeingPrinted string
-	PrintQueue          []PrintItem
-	IsPrinting          bool
+	ContentBeingPrinted    string
+	ContentBeingPrintedRaw bool
+	PrintQueue             []PrintItem
+	IsPrinting             bool
 
 	// Session state
 	Thinking bool

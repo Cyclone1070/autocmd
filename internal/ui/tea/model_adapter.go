@@ -3,8 +3,9 @@ package tea
 import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
-	bubbletea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
+	bubbletea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // DepsFactory returns engine.Deps given the spinner (so ViewTool can use spinner.View()).
@@ -27,6 +28,7 @@ func NewTeaModelAdapter(state *engine.State, factory DepsFactory, sink FrameSink
 	}
 	s := spinner.New()
 	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	deps := factory(&s)
 	return &TeaModelAdapter{
 		State:   state,
@@ -69,8 +71,8 @@ func (a *TeaModelAdapter) View() string {
 	view := engine.Render(a.State, deps)
 	s := a.State
 	a.Sink.OnFrameEvent(FrameEvent{
-		Type:     FrameEventViewRendered,
-		View:     view,
+		Type: FrameEventViewRendered,
+		View: view,
 		Snapshot: &RenderSnapshot{
 			TotalFlushedLines: s.TotalFlushedLines,
 			MaxAbsoluteHeight: s.MaxAbsoluteHeight,

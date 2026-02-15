@@ -3,6 +3,8 @@ package engine
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Transition processes a message and returns updated state and effects.
@@ -255,9 +257,9 @@ func statusBar(state *State, deps Deps) string {
 	}
 
 	width := state.Geometry.Width
-	// Simplified: assume single line for now (lipgloss.Width would need import)
-	leftLen := len(left)
-	rightLen := len(contextInfo)
+	// Measure visible width (ignoring ANSI escape codes from styled spinner)
+	leftLen := lipgloss.Width(left)
+	rightLen := lipgloss.Width(contextInfo)
 	neededWidth := leftLen + 1 + rightLen
 	if width < neededWidth {
 		return "\n\n" + left + "\n" + contextInfo

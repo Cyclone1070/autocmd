@@ -47,6 +47,15 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
     *   Identifies "Safe Blocks" (fully closed paragraphs, completed lists) vs "Unsafe Blocks" (the last growing element).
     *   **Only** "Safe Blocks" are eligible for flushing.
 
+> [!IMPORTANT]
+> **The "Always One Unsafe Block" Invariant**
+>
+> During streaming, the View **always** contains at least the last top-level markdown block as a live preview. The markdown stream uses a "hold one back" design: it only flushes a block when a **newer** block arrives to confirm the previous one is complete. The last block is never flushed by `Append()` because it might still be growing.
+>
+> This means that after every flush, the View is never empty — it contains the next paragraph's live preview (`Pending()`) plus the status bar.
+>
+> **Exception — Done / Cancel:** When the session ends (`DoneEvent` or `Ctrl+C`), `RenderRemaining()` is called, which flushes **everything** in the buffer including the last unsafe block. After this final flush the View is empty and the engine quits.
+
 ### B. Padding Area (`maxContentHeight`)
 *   **Purpose:** Ensures the Status Bar remains visually pinned to the bottom of the viewport, even when the pending content is small.
 *   **Calculation:** `Padding = maxContentHeight - currentContentHeight`.
@@ -66,11 +75,12 @@ The UI is constructed from the bottom up. The `View()` method renders the follow
 **"Flushing"** is the process of moving content from the dynamic `View` to the static `History`.
 
 *   **Direction:** Top-Down (Oldest content flushes first).
-*   **Trigger:** When `internal/ui/markdown` detects ≥2 top-level markdown blocks. The second-to-last block is considered "Safe" and is flushed.
+*   **Trigger:** When `internal/ui/markdown` detects ≥2 top-level markdown blocks. The second-to-last block is considered "Safe" and is flushed. The last block is **kept** as a live preview (see the "Always One Unsafe Block" invariant above).
 *   **Mechanism:**
     1.  **Extract:** The safe block is removed from the `streaming` buffer.
     2.  **Print:** The block is sent to `stdout` via `tea.Println` (or `tea.Printf`).
     3.  **Resize:** The `maxContentHeight` is **decremented** by the height of the flushed block. This is critical to keep the View stable.
+    4.  **After flush:** The View still contains the last unsafe block (via `Pending()`) plus the status bar. It is **never** empty during streaming.
 
 **Why Flush?**
 *   To prevent the `View` from growing infinitely (which causes flickering and memory issues).
@@ -89,6 +99,7 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 *   Content starts on Row 2 (leaving Row 1 initially empty).
 *   User streams 8 lines.
 *   **Flush Threshold:** 3 lines (Lines 1-3 flush, then Lines 4-6 flush, then Lines 7-8 remain pending).
+*   **Note:** After each flush the last streamed line stays in the View as the unsafe `Pending()` block.
 
 ### Frame 1: Stream Line 1
 *Content starts at Row 2.*
@@ -140,14 +151,14 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 
 ### Frame 4: FLUSH TRIGGERED (Lines 1-3 Safe)
 *Lines 1-3 move to History (Filling Rows 2, 3, 4).*
-*View clears. `maxContentHeight` drops. NO VISUAL MOVEMENT.*
+*`maxContentHeight` drops. Line 4 was already buffered as the unsafe block, so it stays in the View as `Pending()`. NO VISUAL MOVEMENT.*
 ```text
 +------------------------------+
 |                              |
 | Line 1 (History)             | <--- Flushed! (Stayed put)
 | Line 2 (History)             |
 | Line 3 (History)             |
-|                              | <--- View is momentarily empty (Row 5)
+| Line 4 (Pending)             | <--- Unsafe block kept in View
 |                              | <--- Padding matches new height
 |                              | <--- Padding
 |                              | <--- Padding
@@ -155,23 +166,8 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 +------------------------------+
 ```
 
-### Frame 5: Stream Line 4
-*New content starts filling the cleared View (Row 5).*
-```text
-+------------------------------+
-|                              |
-| Line 1 (History)             |
-| Line 2 (History)             |
-| Line 3 (History)             |
-| Line 4 (Pending)             | <--- New View Content (Row 5)
-|                              | <--- Padding
-|                              | <--- Padding
-|                              | <--- Padding
-| [STATUS BAR]                 | <--- Status Bar (2 lines)
-+------------------------------+
-```
-
-### Frame 6: Stream Line 5
+### Frame 5: Stream Line 5
+*New content grows the pending block (Row 6).*
 ```text
 +------------------------------+
 |                              |
@@ -186,7 +182,7 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 +------------------------------+
 ```
 
-### Frame 7: Stream Line 6
+### Frame 6: Stream Line 6
 *Content reaches Row 7.*
 ```text
 +------------------------------+
@@ -202,9 +198,9 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 +------------------------------+
 ```
 
-### Frame 8: FLUSH TRIGGERED (Lines 4-6 Safe)
+### Frame 7: FLUSH TRIGGERED (Lines 4-6 Safe)
 *Lines 4-6 move to History (Filling Rows 5, 6, 7).*
-*View clears. `maxContentHeight` drops. NO VISUAL MOVEMENT.*
+*Line 7 was already buffered as the unsafe block, so it stays in the View as `Pending()`. NO VISUAL MOVEMENT.*
 ```text
 +------------------------------+
 |                              |
@@ -214,28 +210,12 @@ Here is the exact frame-by-frame behavior of flushing 8 lines where the flush th
 | Line 4 (History)             | <--- Flushed! (Stayed put)
 | Line 5 (History)             |
 | Line 6 (History)             |
-|                              | <--- View is momentarily empty (Row 8)
+| Line 7 (Pending)             | <--- Unsafe block kept in View
 | [STATUS BAR]                 | <--- Status Bar (2 lines)
 +------------------------------+
 ```
 
-### Frame 9: Stream Line 7
-*New content fills remaining View space (Row 8).*
-```text
-+------------------------------+
-|                              |
-| Line 1 (History)             |
-| Line 2 (History)             |
-| Line 3 (History)             |
-| Line 4 (History)             |
-| Line 5 (History)             |
-| Line 6 (History)             |
-| Line 7 (Pending)             | <--- New View Content (Row 8)
-| [STATUS BAR]                 | <--- Status Bar (2 lines)
-+------------------------------+
-```
-
-### Frame 10: Stream Line 8 (SCROLLING!)
+### Frame 8: Stream Line 8 (SCROLLING!)
 *Content needs Row 9. Row 9 is Status Bar. Pushes everything UP 1 line.*
 *Row 1 (Empty) moves off-screen. Line 1 moves to Row 1.*
 ```text

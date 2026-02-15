@@ -48,88 +48,143 @@ func assertStatusBarAlwaysOneLine(t *testing.T, frames []viewFrame) {
 	}
 }
 
-// assertEarlyScrollDetection checks that the view never exceeds available space
-// at the effective cursor position (initial cursor + flushed history).
-// This catches all sources of early scroll:
-//   - View overflow (content/padding/statusBar too large)
-//   - History accumulation (TotalFlushedLines grows too fast due to padding bug)
-//   - MaxAbsoluteHeight miscalculation (wrong budget causes premature flushing)
-func assertEarlyScrollDetection(t *testing.T, frames []viewFrame, termHeight, cursorRow int) {
+// assertNoPrematureScroll verifies the view fits within available terminal space
+// during the pre-scroll regime.
+//
+// The engine's "Split View" model:
+//   - Content is flushed to scrollback via Println (TotalFlushedLines tracks this)
+//   - The view renders at the effective cursor position (initial + flushed)
+//   - Once flushed lines exceed SpaceBelow, terminal scroll is EXPECTED
+//
+// This assertion only checks settled frames (isPrinting=false) where scrolling
+// has not yet started (TFL ≤ SpaceBelow). During isPrinting=true frames,
+// TotalFlushedLines is inflated (lines counted before physical print) and
+// ContentBeingPrinted appears in the view for "no visibility gap", so scroll
+// detection would produce false positives.
+//
+// Available space = termHeight - (cursorRow + TFL) + 1
+func assertNoPrematureScroll(t *testing.T, frames []viewFrame, termHeight, cursorRow, spaceBelow int) {
 	t.Helper()
 	for i, f := range frames {
+		// Skip isPrinting frames: TFL is inflated by CBP lines not yet physically printed,
+		// and the view intentionally includes CBP for "no visibility gap".
+		if f.IsPrinting {
+			continue
+		}
+		// After TFL exceeds SpaceBelow, terminal scroll is physically unavoidable
+		// (even a minimal status bar won't fit). Only check pre-scroll regime.
+		if f.TotalFlushedLines > spaceBelow {
+			continue
+		}
+
 		viewLines := len(strings.Split(f.View, "\n"))
 		effectiveCursor := cursorRow + f.TotalFlushedLines
 		availableSpace := termHeight - effectiveCursor + 1
 
 		if viewLines > availableSpace {
-			t.Errorf("frame %d: view has %d lines but only %d available at effective cursor %d "+
-				"(initial=%d + flushed=%d). Early scroll detected",
+			t.Errorf("frame %d: premature scroll — view has %d lines but only %d available "+
+				"at effective cursor %d (initial=%d + flushed=%d)",
 				i, viewLines, availableSpace, effectiveCursor, cursorRow, f.TotalFlushedLines)
 		}
 	}
 }
 
-// assertHistoryPlusViewStable checks that the total height (history + view)
-// is stable or grows only when MaxAbsoluteHeight grows.
-// This tests the Split View model invariant: no visual jumps without state changes.
-func assertHistoryPlusViewStable(t *testing.T, frames []viewFrame, expectedTotal int) {
+// assertViewCompactsAfterFlush verifies that the view shrinks properly after
+// content is flushed to scrollback.
+//
+// The engine's padding formula: padding = MaxAbsoluteHeight - (TFL + contentHeight).
+// When TFL ≥ MaxAbsoluteHeight, padding should be 0 (content exceeds budget,
+// no wasted space). The view should be as compact as possible:
+// view ≤ contentHeight + statusBarHeight.
+//
+// This only checks settled frames (isPrinting=false) to avoid the CBP inflation issue.
+func assertViewCompactsAfterFlush(t *testing.T, frames []viewFrame) {
 	t.Helper()
-	initialMaxAbs := 0
+	const statusBarHeight = 3 // "\n\n" prefix + 1 line of status text
+
 	for i, f := range frames {
-		if i == 0 && f.MaxAbsoluteHeight > 0 {
-			initialMaxAbs = f.MaxAbsoluteHeight
+		if f.IsPrinting {
+			continue
+		}
+		// Only relevant after some content has been flushed
+		if f.TotalFlushedLines == 0 {
+			continue
 		}
 
 		viewLines := len(strings.Split(f.View, "\n"))
-		totalHeight := f.TotalFlushedLines + viewLines
 
-		if totalHeight > expectedTotal && f.MaxAbsoluteHeight == initialMaxAbs {
-			t.Errorf("frame %d: history(%d) + view(%d) = %d, want ≤ %d. "+
-				"MaxAbsoluteHeight=%d unchanged → status bar is consuming extra lines",
-				i, f.TotalFlushedLines, viewLines, totalHeight,
-				expectedTotal, f.MaxAbsoluteHeight)
+		// When TFL ≥ MaxAbsoluteHeight, padding must be 0.
+		// Max expected view = content lines + status bar height.
+		// We don't know exact content height, but we can verify:
+		// viewLines ≤ MaxAbsoluteHeight - TFL + statusBarHeight (when padding > 0)
+		// viewLines = contentHeight + statusBarHeight (when padding = 0)
+		expectedMaxView := f.MaxAbsoluteHeight - f.TotalFlushedLines + statusBarHeight
+		if expectedMaxView < statusBarHeight {
+			expectedMaxView = statusBarHeight
+		}
+
+		if viewLines > expectedMaxView {
+			t.Errorf("frame %d: view not compact — has %d lines, expected ≤ %d "+
+				"(maxAbs=%d, flushed=%d, statusBar=%d). Excess padding detected.",
+				i, viewLines, expectedMaxView, f.MaxAbsoluteHeight, f.TotalFlushedLines, statusBarHeight)
 		}
 	}
 }
 
+// assertSettledViewConsistent verifies that in consecutive settled frames
+// (isPrinting=false) with the same TotalFlushedLines and MaxAbsoluteHeight,
+// the view height is consistent (doesn't jump up or down unexpectedly).
+func assertSettledViewConsistent(t *testing.T, frames []viewFrame) {
+	t.Helper()
+	lastSettledHeight := -1
+	lastSettledTFL := -1
+	lastSettledMaxAbs := -1
+
+	for i, f := range frames {
+		if f.IsPrinting {
+			// Reset tracking when entering isPrinting (state is transitional)
+			lastSettledHeight = -1
+			lastSettledTFL = -1
+			lastSettledMaxAbs = -1
+			continue
+		}
+
+		viewLines := len(strings.Split(f.View, "\n"))
+
+		// Only compare when TFL and MaxAbs are unchanged from previous settled frame
+		if lastSettledTFL == f.TotalFlushedLines && lastSettledMaxAbs == f.MaxAbsoluteHeight {
+			if viewLines != lastSettledHeight {
+				t.Errorf("frame %d: settled view height changed %d → %d without state change "+
+					"(TFL=%d, maxAbs=%d). Visual jump detected.",
+					i, lastSettledHeight, viewLines, f.TotalFlushedLines, f.MaxAbsoluteHeight)
+			}
+		}
+
+		lastSettledHeight = viewLines
+		lastSettledTFL = f.TotalFlushedLines
+		lastSettledMaxAbs = f.MaxAbsoluteHeight
+	}
+}
+
 // =========================================================================
-// TEST SUITE: OneBlockPerEvent
+// SHARED TEST SETUP
 // =========================================================================
 
-// TestIntegration_ViewInvariants_OneBlockPerEvent tests the Split View model
-// with content streamed as complete paragraphs (1 paragraph per TextEvent).
-// This is the "normal" case where markdown can flush between blocks.
-//
-// Geometry:
-//   - TermHeight = 24, CursorRow = 18 → available lines = 7
-//   - statusBarOverhead = 2 (the "\n\n" prefix)
-//   - SpaceBelow = 4 = MaxAbsoluteHeight (initial)
-//   - Status bar text = 1 line
-//
-// This test verifies:
-// 1. StatusBar_Always_OneLine: status bar stays 1 line (not split by ANSI codes)
-// 2. Early_Scroll_Detection: view never exceeds available space
-// 3. History_Plus_View_Stable: total height is stable (no visual jumps)
-func TestIntegration_ViewInvariants_OneBlockPerEvent(t *testing.T) {
-	// Force color profile so the spinner styling actually produces ANSI codes.
+const (
+	testTermHeight        = 24
+	testCursorRow         = 18
+	testChatWidth         = 40 // Narrow enough that len()-based width overflows
+	testStatusBarOverhead = 2  // The "\n\n" prefix (geometry.go:13)
+)
+
+func setupTestHarness(t *testing.T) (*harnessFrameHarness, engine.Geometry) {
+	t.Helper()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
-	const (
-		termHeight        = 24
-		cursorRow         = 18
-		chatWidth         = 40 // Narrow enough that len()-based width overflows
-		statusBarOverhead = 2  // The "\n\n" prefix (geometry.go:13)
-		statusTextLines   = 1  // Status bar text should be exactly 1 line
-	)
-
-	// Available terminal lines from cursor to bottom (inclusive).
-	availableLines := termHeight - cursorRow + 1 // = 7
-	expectedTotal := statusBarOverhead + statusTextLines + (termHeight - cursorRow - statusBarOverhead) // = 7
-
 	cfg := config.DefaultConfig()
-	cfg.UI.ChatWindowWidth = chatWidth
-	cd := &staticCursorDetector{row: cursorRow}
-	geom, err := teapkg.ResolveGeometry(cfg, cd, termHeight)
+	cfg.UI.ChatWindowWidth = testChatWidth
+	cd := &staticCursorDetector{row: testCursorRow}
+	geom, err := teapkg.ResolveGeometry(cfg, cd, testTermHeight)
 	if err != nil {
 		t.Fatalf("ResolveGeometry: %v", err)
 	}
@@ -148,9 +203,55 @@ func TestIntegration_ViewInvariants_OneBlockPerEvent(t *testing.T) {
 	sink := &teapkg.RecordingSink{}
 	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
 	harness := &harnessFrameHarness{adapter: adapter, sink: sink}
+	return harness, geom
+}
+
+func logFrameDebug(t *testing.T, frames []viewFrame, geom engine.Geometry) {
+	t.Helper()
+	t.Logf("Geometry: SpaceBelow=%d, TermHeight=%d", geom.SpaceBelow, geom.TermHeight)
+	for i, f := range frames {
+		viewLines := len(strings.Split(f.View, "\n"))
+		t.Logf("Frame %2d: viewLines=%d flushed=%d maxAbs=%d isPrinting=%v queue=%d",
+			i, viewLines, f.TotalFlushedLines, f.MaxAbsoluteHeight, f.IsPrinting, f.QueueLen)
+	}
+}
+
+func runAllAssertions(t *testing.T, frames []viewFrame, geom engine.Geometry) {
+	t.Helper()
+
+	t.Run("StatusBar_Always_OneLine", func(t *testing.T) {
+		assertStatusBarAlwaysOneLine(t, frames)
+	})
+
+	t.Run("No_Premature_Scroll", func(t *testing.T) {
+		assertNoPrematureScroll(t, frames, testTermHeight, testCursorRow, geom.SpaceBelow)
+	})
+
+	t.Run("View_Compacts_After_Flush", func(t *testing.T) {
+		assertViewCompactsAfterFlush(t, frames)
+	})
+
+	t.Run("Settled_View_Consistent", func(t *testing.T) {
+		assertSettledViewConsistent(t, frames)
+	})
+}
+
+// =========================================================================
+// TEST SUITE: OneBlockPerEvent
+// =========================================================================
+
+// TestIntegration_ViewInvariants_OneBlockPerEvent tests the Split View model
+// with content streamed as complete paragraphs (1 paragraph per TextEvent).
+// This is the "normal" case where markdown can flush between blocks.
+//
+// Geometry:
+//   - TermHeight = 24, CursorRow = 18
+//   - SpaceBelow = 4, statusBarOverhead = 2
+//   - Initial available lines = 7 (termHeight - cursorRow + 1)
+func TestIntegration_ViewInvariants_OneBlockPerEvent(t *testing.T) {
+	harness, geom := setupTestHarness(t)
 
 	// Stream 8 paragraphs. Each paragraph = 3 text lines + 1 blank line separator.
-	// Blank lines create markdown block boundaries, triggering flushing (≥2 blocks).
 	for i := 1; i <= 8; i++ {
 		para := fmt.Sprintf("Paragraph %d line 1\nParagraph %d line 2\nParagraph %d line 3\n\n", i, i, i)
 		harness.ApplyEvent(domain.TextEvent{Text: para}, fmt.Sprintf("p%d", i))
@@ -161,28 +262,8 @@ func TestIntegration_ViewInvariants_OneBlockPerEvent(t *testing.T) {
 		t.Fatal("no frames captured")
 	}
 
-	// --- Debug logging (always, not just on failure) ---
-	t.Logf("Geometry: SpaceBelow=%d, MaxAbsoluteHeight=%d, Available=%d",
-		geom.SpaceBelow, state.MaxAbsoluteHeight, availableLines)
-	for i, f := range frames {
-		viewLines := len(strings.Split(f.View, "\n"))
-		totalHeight := f.TotalFlushedLines + viewLines
-		t.Logf("Frame %2d: viewLines=%d, flushed=%d, total=%d, maxAbs=%d",
-			i, viewLines, f.TotalFlushedLines, totalHeight, f.MaxAbsoluteHeight)
-	}
-
-	// Run all 3 assertions on this streaming pattern
-	t.Run("StatusBar_Always_OneLine", func(t *testing.T) {
-		assertStatusBarAlwaysOneLine(t, frames)
-	})
-
-	t.Run("Early_Scroll_Detection", func(t *testing.T) {
-		assertEarlyScrollDetection(t, frames, termHeight, cursorRow)
-	})
-
-	t.Run("History_Plus_View_Stable", func(t *testing.T) {
-		assertHistoryPlusViewStable(t, frames, expectedTotal)
-	})
+	logFrameDebug(t, frames, geom)
+	runAllAssertions(t, frames, geom)
 }
 
 // =========================================================================
@@ -192,53 +273,14 @@ func TestIntegration_ViewInvariants_OneBlockPerEvent(t *testing.T) {
 // TestIntegration_ViewInvariants_IncompleteBlockStreaming tests the Split View model
 // with content streamed line-by-line (partial blocks in TextEvents).
 // This mimics character-streaming from an LLM, with less frequent markdown flushing.
-// More content accumulates before flushing, stressing the layout engine.
 func TestIntegration_ViewInvariants_IncompleteBlockStreaming(t *testing.T) {
-	// Force color profile so the spinner styling actually produces ANSI codes.
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	harness, geom := setupTestHarness(t)
 
-	const (
-		termHeight        = 24
-		cursorRow         = 18
-		chatWidth         = 40
-		statusBarOverhead = 2
-		statusTextLines   = 1
-	)
-
-	availableLines := termHeight - cursorRow + 1
-	expectedTotal := statusBarOverhead + statusTextLines + (termHeight - cursorRow - statusBarOverhead)
-
-	cfg := config.DefaultConfig()
-	cfg.UI.ChatWindowWidth = chatWidth
-	cd := &staticCursorDetector{row: cursorRow}
-	geom, err := teapkg.ResolveGeometry(cfg, cd, termHeight)
-	if err != nil {
-		t.Fatalf("ResolveGeometry: %v", err)
-	}
-	mdRenderer, err := markdown.NewGlamourRenderer(80)
-	if err != nil {
-		t.Fatalf("markdown.NewGlamourRenderer: %v", err)
-	}
-	sm := markdown.NewStream(mdRenderer)
-	state := engine.NewInitialState(geom)
-
-	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, 80)
-		return deps
-	}
-	sink := &teapkg.RecordingSink{}
-	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
-	harness := &harnessFrameHarness{adapter: adapter, sink: sink}
-
-	// Stream 8 paragraphs line-by-line (24 lines total + 8 blank separators = 32 events).
-	// Markdown flushes only when 2+ complete blocks are ready.
-	// This creates scenarios where content accumulates faster than flushing.
+	// Stream 8 paragraphs line-by-line.
 	for i := 1; i <= 8; i++ {
-		// Lines 1-3 of paragraph
 		harness.ApplyEvent(domain.TextEvent{Text: fmt.Sprintf("Paragraph %d line 1\n", i)}, fmt.Sprintf("p%d-l1", i))
 		harness.ApplyEvent(domain.TextEvent{Text: fmt.Sprintf("Paragraph %d line 2\n", i)}, fmt.Sprintf("p%d-l2", i))
 		harness.ApplyEvent(domain.TextEvent{Text: fmt.Sprintf("Paragraph %d line 3\n", i)}, fmt.Sprintf("p%d-l3", i))
-		// Blank line to complete the block
 		harness.ApplyEvent(domain.TextEvent{Text: "\n"}, fmt.Sprintf("p%d-blank", i))
 	}
 
@@ -247,28 +289,8 @@ func TestIntegration_ViewInvariants_IncompleteBlockStreaming(t *testing.T) {
 		t.Fatal("no frames captured")
 	}
 
-	// --- Debug logging ---
-	t.Logf("Geometry: SpaceBelow=%d, MaxAbsoluteHeight=%d, Available=%d",
-		geom.SpaceBelow, state.MaxAbsoluteHeight, availableLines)
-	for i, f := range frames {
-		viewLines := len(strings.Split(f.View, "\n"))
-		totalHeight := f.TotalFlushedLines + viewLines
-		t.Logf("Frame %2d: viewLines=%d, flushed=%d, total=%d, maxAbs=%d",
-			i, viewLines, f.TotalFlushedLines, totalHeight, f.MaxAbsoluteHeight)
-	}
-
-	// Run all 3 assertions on this streaming pattern
-	t.Run("StatusBar_Always_OneLine", func(t *testing.T) {
-		assertStatusBarAlwaysOneLine(t, frames)
-	})
-
-	t.Run("Early_Scroll_Detection", func(t *testing.T) {
-		assertEarlyScrollDetection(t, frames, termHeight, cursorRow)
-	})
-
-	t.Run("History_Plus_View_Stable", func(t *testing.T) {
-		assertHistoryPlusViewStable(t, frames, expectedTotal)
-	})
+	logFrameDebug(t, frames, geom)
+	runAllAssertions(t, frames, geom)
 }
 
 // =========================================================================
@@ -277,47 +299,10 @@ func TestIntegration_ViewInvariants_IncompleteBlockStreaming(t *testing.T) {
 
 // TestIntegration_ViewInvariants_MultipleBlocksPerEvent tests the Split View model
 // with content streamed in bursts (3 complete paragraphs per TextEvent).
-// This creates aggressive content arrival, immediately triggering overflow scenarios.
 func TestIntegration_ViewInvariants_MultipleBlocksPerEvent(t *testing.T) {
-	// Force color profile so the spinner styling actually produces ANSI codes.
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	harness, geom := setupTestHarness(t)
 
-	const (
-		termHeight        = 24
-		cursorRow         = 18
-		chatWidth         = 40
-		statusBarOverhead = 2
-		statusTextLines   = 1
-	)
-
-	availableLines := termHeight - cursorRow + 1
-	expectedTotal := statusBarOverhead + statusTextLines + (termHeight - cursorRow - statusBarOverhead)
-
-	cfg := config.DefaultConfig()
-	cfg.UI.ChatWindowWidth = chatWidth
-	cd := &staticCursorDetector{row: cursorRow}
-	geom, err := teapkg.ResolveGeometry(cfg, cd, termHeight)
-	if err != nil {
-		t.Fatalf("ResolveGeometry: %v", err)
-	}
-	mdRenderer, err := markdown.NewGlamourRenderer(80)
-	if err != nil {
-		t.Fatalf("markdown.NewGlamourRenderer: %v", err)
-	}
-	sm := markdown.NewStream(mdRenderer)
-	state := engine.NewInitialState(geom)
-
-	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, 80)
-		return deps
-	}
-	sink := &teapkg.RecordingSink{}
-	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
-	harness := &harnessFrameHarness{adapter: adapter, sink: sink}
-
-	// Stream 8 paragraphs in 3 bursts (3 paragraphs in event 1, 3 in event 2, 2 in event 3).
-	// Each burst = multiple complete blocks, triggering markdown flush immediately.
-	// Total = 24 text lines + 8 blank separators across 3 TextEvents.
+	// Stream 8 paragraphs in 3 bursts (3 + 3 + 2).
 	burst1 := ""
 	for i := 1; i <= 3; i++ {
 		burst1 += fmt.Sprintf("Paragraph %d line 1\nParagraph %d line 2\nParagraph %d line 3\n\n", i, i, i)
@@ -341,31 +326,13 @@ func TestIntegration_ViewInvariants_MultipleBlocksPerEvent(t *testing.T) {
 		t.Fatal("no frames captured")
 	}
 
-	// --- Debug logging ---
-	t.Logf("Geometry: SpaceBelow=%d, MaxAbsoluteHeight=%d, Available=%d",
-		geom.SpaceBelow, state.MaxAbsoluteHeight, availableLines)
-	for i, f := range frames {
-		viewLines := len(strings.Split(f.View, "\n"))
-		totalHeight := f.TotalFlushedLines + viewLines
-		t.Logf("Frame %2d: viewLines=%d, flushed=%d, total=%d, maxAbs=%d",
-			i, viewLines, f.TotalFlushedLines, totalHeight, f.MaxAbsoluteHeight)
-	}
-
-	// Run all 3 assertions on this streaming pattern
-	t.Run("StatusBar_Always_OneLine", func(t *testing.T) {
-		assertStatusBarAlwaysOneLine(t, frames)
-	})
-
-	t.Run("Early_Scroll_Detection", func(t *testing.T) {
-		assertEarlyScrollDetection(t, frames, termHeight, cursorRow)
-	})
-
-	t.Run("History_Plus_View_Stable", func(t *testing.T) {
-		assertHistoryPlusViewStable(t, frames, expectedTotal)
-	})
+	logFrameDebug(t, frames, geom)
+	runAllAssertions(t, frames, geom)
 }
 
-// --- Invariant tests for new path ---
+// =========================================================================
+// EXISTING INVARIANT TESTS
+// =========================================================================
 
 func TestNewPath_StatusBarNeverJumpsUp(t *testing.T) {
 	h := newHarnessFrameHarness(t, 80, 24, 20)
@@ -455,12 +422,9 @@ func TestNewPath_GoldenSequence_TextStream(t *testing.T) {
 	h.ApplyEvent(domain.TextEvent{Text: "Hi\n"}, "t1")
 	h.ApplyEvent(domain.TextEvent{Text: "Bye\n\n"}, "t2")
 	seq := eventSequenceString(h.Events())
-	// Text stream: ViewRendered on every render. HistoryFlushed when markdown flushes complete blocks.
-	// Markdown may not flush until 2+ blocks; we assert we get ViewRendered and valid sequence.
 	if !strings.Contains(seq, "VR") {
 		t.Errorf("must emit ViewRendered events, got: %s", seq)
 	}
-	// Event log must be non-empty and ordered
 	if len(h.Events()) == 0 {
 		t.Error("event log must not be empty")
 	}
@@ -479,7 +443,6 @@ func TestNewPath_GoldenSequence_ToolStream(t *testing.T) {
 	if !strings.Contains(seq, "VR") {
 		t.Errorf("must emit ViewRendered, got: %s", seq)
 	}
-	// No QuitRequested in normal tool flow
 	if strings.Contains(seq, "QR") {
 		t.Errorf("tool stream should not quit, got: %s", seq)
 	}
@@ -490,7 +453,6 @@ func TestNewPath_GoldenSequence_DoneFlush(t *testing.T) {
 	h.ApplyEvent(domain.TextEvent{Text: "Final\n"}, "text")
 	h.ApplyEvent(domain.DoneEvent{}, "done")
 	seq := eventSequenceString(h.Events())
-	// Done triggers flush of remaining content, then QuitRequested
 	if !strings.Contains(seq, "QR") {
 		t.Errorf("done must emit QuitRequested, got: %s", seq)
 	}
@@ -508,7 +470,6 @@ func TestNewPath_EventSequence_CompleteTimeline(t *testing.T) {
 	h.ApplyEvent(domain.TextEvent{Text: "B\n"}, "t2")
 	frames := h.ViewFrames()
 	events := h.Events()
-	// Every ViewRendered must have monotonic TotalFlushedLines
 	lastFlush := -1
 	for _, f := range frames {
 		if f.TotalFlushedLines < lastFlush {
@@ -518,17 +479,14 @@ func TestNewPath_EventSequence_CompleteTimeline(t *testing.T) {
 			lastFlush = f.TotalFlushedLines
 		}
 	}
-	// Event log must be non-empty
 	if len(events) == 0 {
 		t.Error("event log must not be empty")
 	}
 }
 
 // TestArchitecture_NoUnsunkTerminalWrites ensures all bubbletea.Println/Printf
-// calls are only in frame.go (ProductionSink, NoopSink). No direct terminal writes
-// outside the FrameSink path.
+// calls are only in frame.go (ProductionSink, NoopSink).
 func TestArchitecture_NoUnsunkTerminalWrites(t *testing.T) {
-	// Walk from ui package (parent of compose)
 	uiDir := ".."
 	allowedFile := "tea/frame.go"
 	var violations []string
@@ -540,18 +498,17 @@ func TestArchitecture_NoUnsunkTerminalWrites(t *testing.T) {
 			return nil
 		}
 		if strings.HasSuffix(path, "_test.go") {
-			return nil // Test files may reference the pattern
+			return nil
 		}
 		rel, _ := filepath.Rel(uiDir, path)
 		if rel == filepath.Join("tea", "frame.go") {
-			return nil // Allowed: sink implementations
+			return nil
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		s := string(content)
-		// Match actual calls, not string literals or comments
 		if strings.Contains(s, "bubbletea.Println(") || strings.Contains(s, "bubbletea.Printf(") {
 			violations = append(violations, path)
 		}

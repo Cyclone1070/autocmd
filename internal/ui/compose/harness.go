@@ -26,11 +26,23 @@ func (d *staticCursorDetector) GetCursorRow() (int, error) {
 
 // viewFrame is derived from ViewRendered events for assertions.
 type viewFrame struct {
-	View              string
-	TotalFlushedLines int
-	MaxAbsoluteHeight int
-	QueueLen          int
-	IsPrinting        bool
+	View                string
+	TotalFlushedLines   int
+	MaxAbsoluteHeight   int
+	QueueLen            int
+	IsPrinting          bool
+	ContentBeingPrinted string
+}
+
+func (f viewFrame) effectiveHistoryHeight() int {
+	h := f.TotalFlushedLines
+	if f.IsPrinting && f.ContentBeingPrinted != "" {
+		h += strings.Count(f.ContentBeingPrinted, "\n")
+		// Factor in the newline added by Println/Printf.
+		// We mimic engine.currentHistoryHeight here.
+		h++
+	}
+	return h
 }
 
 func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
@@ -40,11 +52,12 @@ func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
 			continue
 		}
 		out = append(out, viewFrame{
-			View:              ev.View,
-			TotalFlushedLines: ev.Snapshot.TotalFlushedLines,
-			MaxAbsoluteHeight: ev.Snapshot.MaxAbsoluteHeight,
-			QueueLen:          ev.Snapshot.PrintQueueLen,
-			IsPrinting:        ev.Snapshot.IsPrinting,
+			View:                ev.View,
+			TotalFlushedLines:   ev.Snapshot.TotalFlushedLines,
+			MaxAbsoluteHeight:   ev.Snapshot.MaxAbsoluteHeight,
+			QueueLen:            ev.Snapshot.PrintQueueLen,
+			IsPrinting:          ev.Snapshot.IsPrinting,
+			ContentBeingPrinted: ev.Snapshot.ContentBeingPrinted,
 		})
 	}
 	return out
@@ -112,9 +125,26 @@ func (h *harnessFrameHarness) Events() []teapkg.FrameEvent {
 	return h.sink.Events
 }
 
+func (h *harnessFrameHarness) FullTranscript() string {
+	var b strings.Builder
+	for _, ev := range h.sink.Events {
+		if ev.Type == teapkg.FrameEventHistoryFlushed {
+			b.WriteString(ev.Content)
+			if !ev.Raw {
+				b.WriteByte('\n')
+			}
+		}
+	}
+	frames := h.ViewFrames()
+	if len(frames) > 0 {
+		b.WriteString(frames[len(frames)-1].View)
+	}
+	return b.String()
+}
+
 // ViewFrames returns view frames derived from ViewRendered events.
 func (h *harnessFrameHarness) ViewFrames() []viewFrame {
-	return viewFramesFromEvents(h.Events())
+	return viewFramesFromEvents(h.sink.Events)
 }
 
 // --- Assertion helpers ---
@@ -176,10 +206,10 @@ func assertVisualBottomMonotonic(t harnessAssertTB, frames []viewFrame) {
 		if frameHeight == 0 {
 			continue
 		}
-		visualBottom := f.TotalFlushedLines + frameHeight
+		visualBottom := f.effectiveHistoryHeight() + frameHeight
 		if lastVisualBottom != -1 && visualBottom < lastVisualBottom {
-			t.Errorf("frame %d: visual bottom dropped %d -> %d (flush=%d, maxAbs=%d)\nView:\n%s",
-				i, lastVisualBottom, visualBottom, f.TotalFlushedLines, f.MaxAbsoluteHeight, f.View)
+			t.Errorf("frame %d: visual bottom dropped %d -> %d (effHistory=%d, maxAbs=%d)\nView:\n%s",
+				i, lastVisualBottom, visualBottom, f.effectiveHistoryHeight(), f.MaxAbsoluteHeight, f.View)
 		}
 		if visualBottom > lastVisualBottom {
 			lastVisualBottom = visualBottom
@@ -219,10 +249,14 @@ func assertNoFlushVisibilityGap(t harnessAssertTB, frames []viewFrame, contentMu
 			continue
 		}
 		for _, needle := range contentMustRemain {
-			if !strings.Contains(f.View, needle) {
-				t.Errorf("frame %d (queue=%d): content %q missing from view (flush visibility gap)\nView:\n%s",
-					i, f.QueueLen, needle, f.View)
+			if strings.Contains(f.View, needle) {
+				continue
 			}
+			if f.IsPrinting && strings.Contains(f.ContentBeingPrinted, needle) {
+				continue
+			}
+			t.Errorf("frame %d (queue=%d): content %q missing from view (flush visibility gap)\nView:\n%s",
+				i, f.QueueLen, needle, f.View)
 		}
 	}
 }

@@ -74,10 +74,11 @@ func (a *TeaModelAdapter) View() string {
 		Type: FrameEventViewRendered,
 		View: view,
 		Snapshot: &RenderSnapshot{
-			TotalFlushedLines: s.TotalFlushedLines,
-			MaxAbsoluteHeight: s.MaxAbsoluteHeight,
-			PrintQueueLen:     len(s.PrintQueue),
-			IsPrinting:        s.IsPrinting,
+			TotalFlushedLines:   s.TotalFlushedLines,
+			MaxAbsoluteHeight:   s.MaxAbsoluteHeight,
+			PrintQueueLen:       len(s.PrintQueue),
+			IsPrinting:          s.IsPrinting,
+			ContentBeingPrinted: s.ContentBeingPrinted,
 		},
 	})
 	return view
@@ -105,7 +106,7 @@ func toEngineMsg(teaMsg bubbletea.Msg) (engine.Msg, bool) {
 		return engine.MsgToolEnd{CallID: ev.CallID, Error: ev.Error}, true
 	case domain.DoneEvent:
 		return engine.MsgDone{}, true
-	case msgPrintFinished:
+	case MsgPrintFinished:
 		return engine.MsgPrintFinished{}, true
 	case bubbletea.KeyMsg:
 		if ev.Type == bubbletea.KeyCtrlC {

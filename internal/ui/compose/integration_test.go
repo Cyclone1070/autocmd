@@ -396,29 +396,22 @@ func TestNewPath_OrderingParity(t *testing.T) {
 	h.ApplyEvent(domain.ToolEndEvent{CallID: "a"}, "endA")
 	h.ApplyEvent(domain.ToolEndEvent{CallID: "b"}, "endB")
 	h.ApplyEvent(domain.TextEvent{Text: "trailer\n\n"}, "trailer")
-	frames := h.ViewFrames()
-	var lastView string
-	for i := len(frames) - 1; i >= 0; i-- {
-		if frames[i].View != "" {
-			lastView = frames[i].View
-			break
-		}
-	}
-	idxIntro := strings.Index(lastView, "Intro text")
-	idxA := strings.Index(lastView, "Tool A")
-	idxB := strings.Index(lastView, "Tool B")
-	idxStatus := strings.Index(lastView, "Context:")
+	transcript := h.FullTranscript()
+	idxIntro := strings.Index(transcript, "Intro text")
+	idxA := strings.Index(transcript, "Tool A")
+	idxB := strings.Index(transcript, "Tool B")
+	idxStatus := strings.Index(transcript, "Context:")
 	if idxIntro == -1 || idxA == -1 || idxB == -1 || idxStatus == -1 {
-		t.Fatalf("missing expected content in final view:\n%s", lastView)
+		t.Fatalf("missing expected content in transcript:\n%s", transcript)
 	}
 	if idxIntro > idxA {
-		t.Error("parity: intro text must appear before Tool A")
+		t.Error("ordering: intro text must appear before Tool A")
 	}
 	if idxA > idxB {
-		t.Error("parity: Tool A must appear before Tool B")
+		t.Error("ordering: Tool A must appear before Tool B")
 	}
 	if idxB > idxStatus {
-		t.Error("parity: status bar (Context:) must appear last")
+		t.Error("ordering: status bar (Context:) must appear last")
 	}
 }
 

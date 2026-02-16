@@ -6,7 +6,7 @@ import (
 )
 
 // msgPrintFinished is sent when a print command completes.
-type msgPrintFinished struct{}
+type MsgPrintFinished struct{}
 
 // Interpret converts an engine Effect into a tea.Cmd.
 // PrintPayload and QuitPayload are handled by the adapter via FrameSink; this only handles other effects.

@@ -41,10 +41,11 @@ func (t FrameEventType) String() string {
 
 // RenderSnapshot captures engine state at render time.
 type RenderSnapshot struct {
-	TotalFlushedLines  int
-	MaxAbsoluteHeight  int
-	PrintQueueLen      int
-	IsPrinting         bool
+	TotalFlushedLines   int
+	MaxAbsoluteHeight   int
+	PrintQueueLen       int
+	IsPrinting          bool
+	ContentBeingPrinted string
 }
 
 // FrameSink receives all frame events in order.
@@ -66,12 +67,12 @@ func (ProductionSink) PrintCmd(content string, raw bool) bubbletea.Cmd {
 	if raw {
 		return bubbletea.Sequence(
 			bubbletea.Printf("%s", content),
-			func() bubbletea.Msg { return msgPrintFinished{} },
+			func() bubbletea.Msg { return MsgPrintFinished{} },
 		)
 	}
 	return bubbletea.Sequence(
 		bubbletea.Println(content),
-		func() bubbletea.Msg { return msgPrintFinished{} },
+		func() bubbletea.Msg { return MsgPrintFinished{} },
 	)
 }
 
@@ -86,7 +87,7 @@ func (r *RecordingSink) OnFrameEvent(ev FrameEvent) {
 
 func (r *RecordingSink) PrintCmd(content string, raw bool) bubbletea.Cmd {
 	// No actual print; just send msgPrintFinished so the engine continues.
-	return func() bubbletea.Msg { return msgPrintFinished{} }
+	return func() bubbletea.Msg { return MsgPrintFinished{} }
 }
 
 // NoopSink does nothing; used when observability is not needed.
@@ -99,11 +100,11 @@ func (NoopSink) PrintCmd(content string, raw bool) bubbletea.Cmd {
 	if raw {
 		return bubbletea.Sequence(
 			bubbletea.Printf("%s", content),
-			func() bubbletea.Msg { return msgPrintFinished{} },
+			func() bubbletea.Msg { return MsgPrintFinished{} },
 		)
 	}
 	return bubbletea.Sequence(
 		bubbletea.Println(content),
-		func() bubbletea.Msg { return msgPrintFinished{} },
+		func() bubbletea.Msg { return MsgPrintFinished{} },
 	)
 }

@@ -33,9 +33,7 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 				effects = append(effects, eff)
 			}
 		}
-		if len(effects) == len(flushEffects) {
-			updateMaxAbsoluteHeight(state, deps)
-		}
+		updateMaxAbsoluteHeight(state, deps)
 		return state, effects
 
 	case MsgToolStart:
@@ -201,23 +199,8 @@ func startNextPrint(state *State) Effect {
 	return EffectPrint(item.Content)
 }
 
-func updateMaxAbsoluteHeight(state *State, deps Deps) {
-	content := renderContent(state, deps)
-	if content == "" {
-		return
-	}
-	currentHeight := strings.Count(content, "\n")
-	totalFootprint := state.TotalFlushedLines + currentHeight
-	if totalFootprint > state.MaxAbsoluteHeight {
-		state.MaxAbsoluteHeight = totalFootprint
-	}
-}
-
 func renderContent(state *State, deps Deps) string {
 	var parts []string
-	if state.ContentBeingPrinted != "" {
-		parts = append(parts, deps.Layout.TruncateWithIndicator(state.ContentBeingPrinted, state.Geometry.TermHeight))
-	}
 	for _, item := range state.PrintQueue {
 		if item.Content != "" {
 			parts = append(parts, deps.Layout.TruncateWithIndicator(item.Content, state.Geometry.TermHeight))
@@ -230,6 +213,16 @@ func renderContent(state *State, deps Deps) string {
 		parts = append(parts, deps.ToolRenderer.Render(t, deps.Spinner))
 	}
 	return strings.Join(parts, "\n")
+}
+
+func updateMaxAbsoluteHeight(state *State, deps Deps) {
+	contentLines := currentContentHeight(state, deps)
+	historyLines := currentHistoryHeight(state)
+
+	totalFootprint := historyLines + contentLines
+	if totalFootprint > state.MaxAbsoluteHeight {
+		state.MaxAbsoluteHeight = totalFootprint
+	}
 }
 
 func statusBar(state *State, deps Deps) string {

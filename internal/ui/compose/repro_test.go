@@ -2,6 +2,7 @@ package compose
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -15,33 +16,37 @@ func TestDemo_StreamingStability(t *testing.T) {
 	h := newHarnessFrameHarness(t, 80, 24, 20)
 
 	lastCheckedFrame := 0
+	lastVisualBottom := -1
+	maxVisualBottomReached := -1
 	inJump := false
+
 	assertFrames := func() {
 		frames := h.ViewFrames()
 		for i := lastCheckedFrame; i < len(frames); i++ {
 			f := frames[i]
-			row := getStatusBarRow(f.View)
-			if row == -1 {
-				continue
-			}
 
-			effH := f.effectiveHistoryHeight()
-			absRow := effH + row
-			expected := f.MaxAbsoluteHeight + 2
+			// viewHeight is the number of lines Bubble Tea is redrawing.
+			viewHeight := strings.Count(f.View, "\n")
+			// visualBottom is the physical line in the terminal where the view ends.
+			// It includes TFL (permanent history), PrintlnLines (transient history
+			// during flush), and viewHeight (dynamic area).
+			visualBottom := f.TotalFlushedLines + f.PrintlnLines + viewHeight
 
-			if absRow != expected {
+			if lastVisualBottom != -1 && visualBottom < lastVisualBottom {
 				if !inJump {
-					t.Logf("Frame %d: JUMP! Pos=%d, Expected=%d (MaxAbs=%d, effH=%d, viewRow=%d, isPrinting=%v)",
-						i, absRow, expected, f.MaxAbsoluteHeight, effH, row, f.IsPrinting)
+					t.Errorf("Frame %d: JUMP UP! Visual bottom dropped %d -> %d (TFL=%d, viewH=%d, maxAbs=%d, isPrinting=%v)",
+						i, lastVisualBottom, visualBottom, f.TotalFlushedLines, viewHeight, f.MaxAbsoluteHeight, f.IsPrinting)
 					inJump = true
 				}
-			} else {
-				if inJump {
-					t.Logf("Frame %d: RECOVER! Pos=%d, Expected=%d (MaxAbs=%d, effH=%d, viewRow=%d, isPrinting=%v)",
-						i, absRow, expected, f.MaxAbsoluteHeight, effH, row, f.IsPrinting)
-					inJump = false
-				}
+			} else if inJump && visualBottom >= maxVisualBottomReached {
+				t.Logf("Frame %d: RECOVER! Visual bottom at %d (isPrinting=%v)", i, visualBottom, f.IsPrinting)
+				inJump = false
 			}
+
+			if visualBottom > maxVisualBottomReached {
+				maxVisualBottomReached = visualBottom
+			}
+			lastVisualBottom = visualBottom
 		}
 		lastCheckedFrame = len(frames)
 	}

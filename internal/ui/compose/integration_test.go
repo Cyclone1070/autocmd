@@ -215,6 +215,21 @@ func setupTestHarness(t *testing.T) (*harnessFrameHarness, engine.Geometry) {
 	}
 	sink := &teapkg.RecordingSink{}
 	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
+	sink.ViewFunc = func() teapkg.FrameEvent {
+		view := adapter.View()
+		s := adapter.State
+		return teapkg.FrameEvent{
+			Type: teapkg.FrameEventViewRendered,
+			View: view,
+			Snapshot: &teapkg.RenderSnapshot{
+				TotalFlushedLines:   s.TotalFlushedLines,
+				MaxAbsoluteHeight:   s.MaxAbsoluteHeight,
+				PrintQueueLen:       len(s.PrintQueue),
+				IsPrinting:          s.IsPrinting,
+				ContentBeingPrinted: s.ContentBeingPrinted,
+			},
+		}
+	}
 	harness := &harnessFrameHarness{adapter: adapter, sink: sink}
 	return harness, geom
 }

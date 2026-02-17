@@ -1,6 +1,8 @@
 package tea
 
 import (
+	"strings"
+
 	bubbletea "github.com/charmbracelet/bubbletea"
 )
 
@@ -46,6 +48,8 @@ type RenderSnapshot struct {
 	PrintQueueLen       int
 	IsPrinting          bool
 	ContentBeingPrinted string
+	// PrintlnLines is set only on frames captured during a simulated Println.
+	PrintlnLines int
 }
 
 // FrameSink receives all frame events in order.
@@ -78,7 +82,8 @@ func (ProductionSink) PrintCmd(content string, raw bool) bubbletea.Cmd {
 
 // RecordingSink records all frame events for test assertions.
 type RecordingSink struct {
-	Events []FrameEvent
+	Events   []FrameEvent
+	ViewFunc func() FrameEvent // If set, called during PrintCmd to capture the Println frame.
 }
 
 func (r *RecordingSink) OnFrameEvent(ev FrameEvent) {
@@ -86,7 +91,19 @@ func (r *RecordingSink) OnFrameEvent(ev FrameEvent) {
 }
 
 func (r *RecordingSink) PrintCmd(content string, raw bool) bubbletea.Cmd {
-	// No actual print; just send msgPrintFinished so the engine continues.
+	// Capture the Println frame: what View() looks like at the moment Bubble Tea
+	// would execute the Println. This frame is checked by the same assertions.
+	if r.ViewFunc != nil {
+		ev := r.ViewFunc()
+		if ev.Snapshot != nil {
+			printlnLines := strings.Count(content, "\n")
+			if !raw || !strings.HasSuffix(content, "\n") {
+				printlnLines++ // Println adds a newline
+			}
+			ev.Snapshot.PrintlnLines = printlnLines
+		}
+		r.Events = append(r.Events, ev)
+	}
 	return func() bubbletea.Msg { return MsgPrintFinished{} }
 }
 

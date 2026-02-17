@@ -32,6 +32,7 @@ type viewFrame struct {
 	QueueLen            int
 	IsPrinting          bool
 	ContentBeingPrinted string
+	PrintlnLines        int // Only set on frames captured during PrintCmd
 }
 
 func (f viewFrame) effectiveHistoryHeight() int {
@@ -51,6 +52,7 @@ func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
 			QueueLen:            ev.Snapshot.PrintQueueLen,
 			IsPrinting:          ev.Snapshot.IsPrinting,
 			ContentBeingPrinted: ev.Snapshot.ContentBeingPrinted,
+			PrintlnLines:        ev.Snapshot.PrintlnLines,
 		})
 	}
 	return out
@@ -83,6 +85,22 @@ func newHarnessFrameHarness(t *testing.T, width, height, cursorRow int) *harness
 	}
 	sink := &teapkg.RecordingSink{}
 	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
+	sink.ViewFunc = func() teapkg.FrameEvent {
+		view := adapter.View()
+		s := adapter.State
+		return teapkg.FrameEvent{
+			Type: teapkg.FrameEventViewRendered,
+			View: view,
+			Snapshot: &teapkg.RenderSnapshot{
+				TotalFlushedLines:   s.TotalFlushedLines,
+				MaxAbsoluteHeight:   s.MaxAbsoluteHeight,
+				PrintQueueLen:       len(s.PrintQueue),
+				IsPrinting:          s.IsPrinting,
+				ContentBeingPrinted: s.ContentBeingPrinted,
+				// PrintlnLines will be set by PrintCmd
+			},
+		}
+	}
 	return &harnessFrameHarness{adapter: adapter, sink: sink}
 }
 

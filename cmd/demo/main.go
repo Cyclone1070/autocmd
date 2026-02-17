@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
@@ -28,7 +27,7 @@ func main() {
 		runes := []rune(text)
 		cursor := 0
 		for cursor < len(runes) {
-			chunkSize := rand.Intn(5) + 1
+			chunkSize := 4
 			if cursor+chunkSize > len(runes) {
 				chunkSize = len(runes) - cursor
 			}
@@ -143,13 +142,9 @@ func main() {
 		for i := range 30 {
 			line := fmt.Sprintf("Line %03d: This is a generated line to fill the screen and force the pending block to overflow the viewport.\n", i+1)
 			simulateTyping(line)
-			// Small pause every 10 lines, but much faster
-			if i%10 == 0 {
-				time.Sleep(10 * time.Millisecond)
-			}
 		}
 		simulateTyping("\nEnd of long block.\n\n")
-		time.Sleep(2000 * time.Millisecond) // 2s pause to read
+		time.Sleep(500 * time.Millisecond) // Reduced read pause
 
 		// 7. Final Tool with Output
 		events <- domain.ToolStartEvent{

@@ -35,14 +35,7 @@ type viewFrame struct {
 }
 
 func (f viewFrame) effectiveHistoryHeight() int {
-	h := f.TotalFlushedLines
-	if f.IsPrinting && f.ContentBeingPrinted != "" {
-		h += strings.Count(f.ContentBeingPrinted, "\n")
-		// Factor in the newline added by Println/Printf.
-		// We mimic engine.currentHistoryHeight here.
-		h++
-	}
-	return h
+	return f.TotalFlushedLines
 }
 
 func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
@@ -107,15 +100,33 @@ func (h *harnessFrameHarness) runCmdOnce(cmd tea.Cmd) tea.Msg {
 
 const maxHarnessCmdIterations = 100
 
-func (h *harnessFrameHarness) ApplyEvent(ev domain.Event, _ string) {
+// ApplyEventOnly applies an event and returns the resulting command without running it.
+// This allows tests to inspect state before side effects (like printing) complete.
+func (h *harnessFrameHarness) ApplyEventOnly(ev domain.Event) tea.Cmd {
 	h.capture()
 	_, cmd := h.adapter.Update(ev)
 	h.capture()
+	return cmd
+}
+
+// ProcessCmd runs a single command, feeds the result back to Update, and returns the next command.
+// It captures frames before and after the update.
+func (h *harnessFrameHarness) ProcessCmd(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	msg := h.runCmdOnce(cmd)
+	h.capture()
+	_, nextCmd := h.adapter.Update(msg)
+	h.capture()
+	return nextCmd
+}
+
+func (h *harnessFrameHarness) ApplyEvent(ev domain.Event, _ string) {
+	cmd := h.ApplyEventOnly(ev)
 	iters := 0
 	for cmd != nil && iters < maxHarnessCmdIterations {
-		msg := h.runCmdOnce(cmd)
-		h.capture()
-		_, cmd = h.adapter.Update(msg)
+		cmd = h.ProcessCmd(cmd)
 		iters++
 	}
 }

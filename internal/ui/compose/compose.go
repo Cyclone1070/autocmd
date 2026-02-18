@@ -1,4 +1,4 @@
-// Package compose wires engine, tea, markdown, theme, tool, layout, and cursor for the UI.
+// Package compose wires engine, tea, markdown, theme, tool, and layout for the UI.
 // Entrypoints (main, cmd/*) import this package to obtain a configured Renderer.
 // Compose owns engine DI (NewEngineDeps) and composition.
 
@@ -10,11 +10,9 @@ import (
 	"os"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/ui/cursor"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
 	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
@@ -26,9 +24,7 @@ type Renderer struct {
 
 // NewRenderer creates a new Renderer writing to the given output.
 func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Renderer, error) {
-	cd := cursor.NewTerminalCursorDetector(input, output)
-
-	geom, err := resolveGeometry(cfg, cd)
+	geom, err := resolveTermSize(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +38,8 @@ func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Render
 
 	state := engine.NewInitialState(geom)
 
-	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, width)
-		deps.Spinner = nil
-		return deps
+	factory := func() engine.Deps {
+		return NewEngineDeps(cfg, sm, width)
 	}
 
 	adapter := teapkg.NewTeaModelAdapter(state, factory, teapkg.ProductionSink{})
@@ -53,7 +47,7 @@ func NewRenderer(output io.Writer, input io.Reader, cfg *config.Config) (*Render
 	return &Renderer{program: p}, nil
 }
 
-func resolveGeometry(cfg *config.Config, cd teapkg.CursorDetector) (engine.Geometry, error) {
+func resolveTermSize(cfg *config.Config) (engine.TermSize, error) {
 	width := cfg.UI.ChatWindowWidth
 	height := defaultTerminalHeight
 	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
@@ -62,7 +56,7 @@ func resolveGeometry(cfg *config.Config, cd teapkg.CursorDetector) (engine.Geome
 		}
 		height = h
 	}
-	return teapkg.ResolveGeometry(cfg, cd, height)
+	return engine.TermSize{Width: width, Height: height}, nil
 }
 
 const defaultTerminalHeight = 24

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Cyclone1070/iav/internal/ui/theme"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -12,35 +13,40 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 	effects := make([]Effect, 0, 8)
 
 	switch m := msg.(type) {
-	case MsgThinking:
-		state.Thinking = true
+	case MsgTick:
+		state.IdleTicks++
+		// Typing simulation: move N characters from TypingBuffer to Markdown.Append
+		const charsPerTick = 4
+		if state.TypingBuffer != "" {
+			take := charsPerTick
+			if len(state.TypingBuffer) < take {
+				take = len(state.TypingBuffer)
+			}
+			chunk := state.TypingBuffer[:take]
+			state.TypingBuffer = state.TypingBuffer[take:]
+
+			flushedBlocks, err := deps.Markdown.Append(chunk)
+			if err != nil {
+				effects = append(effects, EffectPrint(fmt.Sprintf("\nFatal: markdown rendering failed: %v", err)))
+				effects = append(effects, EffectQuit())
+				return state, effects
+			}
+			for _, block := range flushedBlocks {
+				if eff := enqueuePrintRaw(state, block); eff != nil {
+					effects = append(effects, eff)
+				}
+			}
+			state.IdleTicks = 0 // Reset idle ticks when actively typing
+		}
 		effects = append(effects, EffectScheduleTick())
 
 	case MsgText:
-		state.Thinking = false
-		flushEffects := flushCompletedTools(state, deps)
-		effects = append(effects, flushEffects...)
-
-		flushedBlocks, err := deps.Markdown.Append(m.Text)
-		if err != nil {
-			effects = append(effects, EffectPrint(fmt.Sprintf("\nFatal: markdown rendering failed: %v", err)))
-			effects = append(effects, EffectQuit())
-			return state, effects
-		}
-		for _, block := range flushedBlocks {
-			eff := enqueuePrintRaw(state, block)
-			if eff != nil {
-				effects = append(effects, eff)
-			}
-		}
-		updateMaxAbsoluteHeight(state, deps)
-		return state, effects
+		state.TypingBuffer += m.Text
+		state.IdleTicks = 0
+		effects = append(effects, EffectScheduleTick())
 
 	case MsgToolStart:
-		state.Thinking = false
-		flushEffects := flushCompletedTools(state, deps)
-		effects = append(effects, flushEffects...)
-
+		// Flush remaining markdown before starting tool
 		textFlush, err := deps.Markdown.RenderRemaining()
 		if err != nil {
 			effects = append(effects, EffectPrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)))
@@ -56,11 +62,11 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 		ts := &ToolState{
 			CallID:  m.CallID,
 			Display: m.Display,
-			Status:  StatusRunning,
+			Status:  theme.StatusRunning,
 		}
 		state.Tools = append(state.Tools, ts)
+		state.IdleTicks = 0
 		effects = append(effects, EffectScheduleTick())
-		updateMaxAbsoluteHeight(state, deps)
 
 	case MsgToolStream:
 		for _, ts := range state.Tools {
@@ -69,25 +75,25 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 				break
 			}
 		}
-		updateMaxAbsoluteHeight(state, deps)
+		state.IdleTicks = 0
+		effects = append(effects, EffectScheduleTick())
 
 	case MsgToolEnd:
 		for _, ts := range state.Tools {
 			if ts.CallID == m.CallID {
 				if m.Error != "" {
-					ts.Status = StatusError
+					ts.Status = theme.StatusError
 					ts.Err = m.Error
 				} else {
-					ts.Status = StatusSuccess
+					ts.Status = theme.StatusSuccess
 				}
 				break
 			}
 		}
 		flushEffects := flushCompletedTools(state, deps)
 		effects = append(effects, flushEffects...)
-		if len(flushEffects) == 0 {
-			updateMaxAbsoluteHeight(state, deps)
-		}
+		state.IdleTicks = 0
+		effects = append(effects, EffectScheduleTick())
 
 	case MsgDone:
 		state.RunState = StateDone
@@ -96,14 +102,13 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 
 	case MsgPrintFinished:
 		if state.ContentBeingPrinted != "" {
+			state.TotalFlushedLines += strings.Count(state.ContentBeingPrinted, "\n")
 			if state.ContentBeingPrintedRaw {
-				lines := strings.Count(state.ContentBeingPrinted, "\n")
 				if !strings.HasSuffix(state.ContentBeingPrinted, "\n") {
-					lines++
+					state.TotalFlushedLines++
 				}
-				state.TotalFlushedLines += lines
 			} else {
-				state.TotalFlushedLines += strings.Count(state.ContentBeingPrinted, "\n") + 1
+				state.TotalFlushedLines++
 			}
 		}
 		state.IsPrinting = false
@@ -129,6 +134,12 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 func handleDoneEvent(state *State, deps Deps) []Effect {
 	var effects []Effect
 
+	// Flush typing buffer and markdown
+	if state.TypingBuffer != "" {
+		deps.Markdown.Append(state.TypingBuffer)
+		state.TypingBuffer = ""
+	}
+
 	textFlush, err := deps.Markdown.RenderRemaining()
 	if err != nil {
 		effects = append(effects, EffectPrint(fmt.Sprintf("\nFatal: markdown flushing failed: %v", err)))
@@ -138,14 +149,16 @@ func handleDoneEvent(state *State, deps Deps) []Effect {
 		}
 	}
 
+	// Flush tools
 	for _, ts := range state.Tools {
-		output := deps.ToolRenderer.Render(ts, deps.Spinner)
+		output := deps.ToolRenderer.Render(ts)
 		if e := enqueuePrint(state, output); e != nil {
 			effects = append(effects, e)
 		}
 	}
 	state.Tools = nil
 
+	// Final status bar
 	finalStatus := statusBar(state, deps)
 	finalStatus = strings.TrimPrefix(finalStatus, "\n")
 	if e := enqueuePrint(state, finalStatus); e != nil {
@@ -157,10 +170,10 @@ func handleDoneEvent(state *State, deps Deps) []Effect {
 
 func flushCompletedTools(state *State, deps Deps) []Effect {
 	var effects []Effect
-	for len(state.Tools) > 0 && state.Tools[0].Status != StatusRunning {
+	for len(state.Tools) > 0 && state.Tools[0].Status != theme.StatusRunning {
 		tool := state.Tools[0]
 		state.Tools = state.Tools[1:]
-		output := deps.ToolRenderer.Render(tool, deps.Spinner)
+		output := deps.ToolRenderer.Render(tool)
 		if e := enqueuePrint(state, output); e != nil {
 			effects = append(effects, e)
 		}
@@ -203,26 +216,16 @@ func renderContent(state *State, deps Deps) string {
 	var parts []string
 	for _, item := range state.PrintQueue {
 		if item.Content != "" {
-			parts = append(parts, deps.Layout.TruncateWithIndicator(item.Content, state.Geometry.TermHeight))
+			parts = append(parts, deps.Layout.TruncateWithIndicator(item.Content, state.TermSize.Height))
 		}
 	}
 	if p := deps.Markdown.Pending(); p != "" {
-		parts = append(parts, deps.Layout.TruncateWithIndicator(p, state.Geometry.TermHeight))
+		parts = append(parts, deps.Layout.TruncateWithIndicator(p, state.TermSize.Height))
 	}
 	for _, t := range state.Tools {
-		parts = append(parts, deps.ToolRenderer.Render(t, deps.Spinner))
+		parts = append(parts, deps.ToolRenderer.Render(t))
 	}
 	return strings.Join(parts, "\n")
-}
-
-func updateMaxAbsoluteHeight(state *State, deps Deps) {
-	contentLines := currentContentHeight(state, deps)
-	historyLines := currentHistoryHeight(state)
-
-	totalFootprint := historyLines + contentLines
-	if totalFootprint > state.MaxAbsoluteHeight {
-		state.MaxAbsoluteHeight = totalFootprint
-	}
 }
 
 func statusBar(state *State, deps Deps) string {
@@ -244,25 +247,17 @@ func statusBar(state *State, deps Deps) string {
 	case StateCancelled:
 		left = fmt.Sprintf("%s %s", themeFunc("✗"), themeFunc("Cancelled"))
 	default:
-		status := "Generating"
-		if state.Thinking {
-			status = "Thinking"
-		}
-		spinnerView := ""
-		if deps.Spinner != nil {
-			spinnerView = deps.Spinner.SpinnerView()
-		}
-		left = spinnerView + themeFunc(status)
+		// Not shown during runtime anyway
+		left = themeFunc("Running")
 	}
 
-	width := state.Geometry.Width
-	// Measure visible width (ignoring ANSI escape codes from styled spinner)
+	width := state.TermSize.Width
 	leftLen := lipgloss.Width(left)
 	rightLen := lipgloss.Width(contextInfo)
 	neededWidth := leftLen + 1 + rightLen
 	if width < neededWidth {
-		return "\n\n" + left + "\n" + contextInfo
+		return "\n" + left + "\n" + contextInfo
 	}
 	gap := width - leftLen - rightLen
-	return "\n\n" + left + strings.Repeat(" ", gap) + contextInfo
+	return "\n" + left + strings.Repeat(" ", gap) + contextInfo
 }

@@ -1,63 +1,50 @@
 package tea
 
 import (
+	"time"
+
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
-	"github.com/charmbracelet/bubbles/spinner"
 	bubbletea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-// DepsFactory returns engine.Deps given the spinner (so ViewTool can use spinner.View()).
-type DepsFactory func(spinner *spinner.Model) engine.Deps
+// DepsFactory returns engine.Deps.
+type DepsFactory func() engine.Deps
 
 // TeaModelAdapter adapts the engine to Bubble Tea's Model interface.
 type TeaModelAdapter struct {
-	State   *engine.State
-	Deps    engine.Deps
-	Spinner spinner.Model
-	Sink    FrameSink
+	State *engine.State
+	Deps  engine.Deps
+	Sink  FrameSink
 }
 
 // NewTeaModelAdapter creates an adapter with the given state and deps factory.
-// The factory receives the spinner so ViewTool can render with the current spinner frame.
 // sink must be non-nil; use NoopSink{} if observability is not needed.
 func NewTeaModelAdapter(state *engine.State, factory DepsFactory, sink FrameSink) *TeaModelAdapter {
 	if sink == nil {
 		panic("tea: FrameSink must be non-nil for 100% frame observability")
 	}
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	deps := factory(&s)
+	deps := factory()
 	return &TeaModelAdapter{
-		State:   state,
-		Deps:    deps,
-		Spinner: s,
-		Sink:    sink,
+		State: state,
+		Deps:  deps,
+		Sink:  sink,
 	}
 }
 
-// Init returns the initial command (spinner tick).
+// Init returns the initial command (tick).
 func (a *TeaModelAdapter) Init() bubbletea.Cmd {
-	return a.Spinner.Tick
+	return bubbletea.Tick(100*time.Millisecond, func(t time.Time) bubbletea.Msg {
+		return engine.MsgTick{}
+	})
 }
 
 // Update processes messages and returns updated model and command.
 func (a *TeaModelAdapter) Update(teaMsg bubbletea.Msg) (bubbletea.Model, bubbletea.Cmd) {
-	deps := a.Deps
-	deps.Spinner = &spinnerProvider{m: &a.Spinner}
-
 	engineMsg, ok := toEngineMsg(teaMsg)
 	if ok {
-		_, effects := engine.Transition(a.State, engineMsg, deps)
+		_, effects := engine.Transition(a.State, engineMsg, a.Deps)
 		cmd := toTeaCmd(effects, a)
-		return a, cmd
-	}
-
-	if _, ok := teaMsg.(spinner.TickMsg); ok {
-		var cmd bubbletea.Cmd
-		a.Spinner, cmd = a.Spinner.Update(teaMsg)
 		return a, cmd
 	}
 
@@ -66,36 +53,22 @@ func (a *TeaModelAdapter) Update(teaMsg bubbletea.Msg) (bubbletea.Model, bubblet
 
 // View delegates to engine.Render and emits ViewRendered to the sink.
 func (a *TeaModelAdapter) View() string {
-	deps := a.Deps
-	deps.Spinner = &spinnerProvider{m: &a.Spinner}
-	view := engine.Render(a.State, deps)
+	view := engine.Render(a.State, a.Deps)
 	s := a.State
 	a.Sink.OnFrameEvent(FrameEvent{
 		Type: FrameEventViewRendered,
 		View: view,
 		Snapshot: &RenderSnapshot{
-			TotalFlushedLines:   s.TotalFlushedLines,
-			MaxAbsoluteHeight:   s.MaxAbsoluteHeight,
-			PrintQueueLen:       len(s.PrintQueue),
-			IsPrinting:          s.IsPrinting,
-			ContentBeingPrinted: s.ContentBeingPrinted,
+			TotalFlushedLines: s.TotalFlushedLines,
 		},
 	})
 	return view
 }
 
-type spinnerProvider struct {
-	m *spinner.Model
-}
-
-func (s *spinnerProvider) SpinnerView() string {
-	return s.m.View()
-}
-
 func toEngineMsg(teaMsg bubbletea.Msg) (engine.Msg, bool) {
 	switch ev := teaMsg.(type) {
-	case domain.ThinkingEvent:
-		return engine.MsgThinking{}, true
+	case engine.MsgTick:
+		return ev, true
 	case domain.TextEvent:
 		return engine.MsgText{Text: ev.Text}, true
 	case domain.ToolStartEvent:
@@ -133,8 +106,6 @@ func toTeaCmd(effects []engine.Effect, a *TeaModelAdapter) bubbletea.Cmd {
 		default:
 			if cmd := Interpret(e); cmd != nil {
 				cmds = append(cmds, cmd)
-			} else {
-				cmds = append(cmds, a.Spinner.Tick)
 			}
 		}
 	}

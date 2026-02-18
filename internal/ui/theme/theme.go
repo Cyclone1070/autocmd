@@ -26,8 +26,7 @@ type Theme struct {
 	success lipgloss.AdaptiveColor
 	err     lipgloss.AdaptiveColor
 
-	box     lipgloss.Style
-	spinner lipgloss.Style
+	box lipgloss.Style
 }
 
 // NewTheme creates a theme from config.
@@ -43,7 +42,6 @@ func NewTheme(cfg config.UIConfig) *Theme {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.muted).
 		Padding(0, 0)
-	t.spinner = lipgloss.NewStyle().Foreground(t.primary)
 
 	return t
 }
@@ -83,9 +81,4 @@ func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	default:
 		return t.muted
 	}
-}
-
-// SpinnerStyle returns the lipgloss style for spinner.
-func (t *Theme) SpinnerStyle() lipgloss.Style {
-	return t.spinner
 }

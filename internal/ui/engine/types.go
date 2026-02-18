@@ -2,23 +2,14 @@ package engine
 
 import (
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui/theme"
 )
 
-// Geometry holds terminal/viewport dimensions for layout.
-type Geometry struct {
-	Width      int
-	TermHeight int
-	SpaceBelow int // Initial space below cursor (height - row - statusBarOverhead)
+// TermSize holds terminal dimensions.
+type TermSize struct {
+	Width  int
+	Height int
 }
-
-// ToolStatus represents tool lifecycle state.
-type ToolStatus int
-
-const (
-	StatusRunning ToolStatus = iota
-	StatusSuccess
-	StatusError
-)
 
 // RunState represents the overall session state.
 type RunState int
@@ -34,7 +25,7 @@ const (
 type ToolState struct {
 	CallID      string
 	Display     domain.ToolDisplay
-	Status      ToolStatus
+	Status      theme.ToolStatus
 	Err         string
 	ShellOutput string
 }
@@ -50,8 +41,7 @@ type Deps struct {
 	Markdown     MarkdownStream
 	Theme        ThemeAdapter
 	Layout       LayoutAdapter
-	ToolRenderer ToolRenderer        // Renders a tool for display
-	Spinner      SpinnerViewProvider // Current spinner frame (runtime provides)
+	ToolRenderer ToolRenderer // Renders a tool for display
 }
 
 // State is the full UI engine state.
@@ -61,30 +51,27 @@ type State struct {
 	Tools []*ToolState
 
 	// Layout tracking
-	MaxAbsoluteHeight   int
-	TotalFlushedLines   int
+	TotalFlushedLines      int
 	ContentBeingPrinted    string
 	ContentBeingPrintedRaw bool
 	PrintQueue             []PrintItem
 	IsPrinting             bool
 
 	// Session state
-	Thinking bool
-	RunState RunState
+	TypingBuffer string // Simulated typing buffer
+	IdleTicks    int    // Ticks since last activity (for "..." animation)
+	RunState     RunState
 
-	// Geometry (read-only after init)
-	Geometry Geometry
-
-	// Config-derived (width, etc. from Geometry)
+	// TermSize (read-only after init)
+	TermSize TermSize
 }
 
 // NewInitialState creates the initial engine state.
-func NewInitialState(geom Geometry) *State {
+func NewInitialState(ts TermSize) *State {
 	return &State{
-		Tools:             make([]*ToolState, 0),
-		PrintQueue:        nil,
-		Geometry:          geom,
-		MaxAbsoluteHeight: geom.SpaceBelow,
+		Tools:      make([]*ToolState, 0),
+		PrintQueue: nil,
+		TermSize:   ts,
 	}
 }
 
@@ -95,10 +82,10 @@ type Msg interface {
 
 // --- Domain event wrappers (engine-facing, exported for runtime) ---
 
-// MsgThinking represents a thinking event.
-type MsgThinking struct{}
+// MsgTick represents a timer tick.
+type MsgTick struct{}
 
-func (MsgThinking) isMsg() {}
+func (MsgTick) isMsg() {}
 
 // MsgText represents a text chunk.
 type MsgText struct {

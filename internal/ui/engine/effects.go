@@ -26,9 +26,10 @@ func EffectPrintRaw(content string) Effect {
 
 type effectScheduleTick struct{}
 
-func (effectScheduleTick) isEffect() {}
+func (effectScheduleTick) isEffect()             {}
+func (effectScheduleTick) isEffectScheduleTick() {}
 
-// EffectScheduleTick requests a spinner tick.
+// EffectScheduleTick requests the next simulation tick.
 func EffectScheduleTick() Effect {
 	return effectScheduleTick{}
 }

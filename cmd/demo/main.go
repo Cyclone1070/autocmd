@@ -21,26 +21,6 @@ func main() {
 	}
 	events := make(chan domain.Event, 100)
 
-	// Helper for natural typing simulation
-	simulateTyping := func(text string) {
-		// Split into small chunks of 1-5 chars
-		runes := []rune(text)
-		cursor := 0
-		for cursor < len(runes) {
-			chunkSize := 4
-			if cursor+chunkSize > len(runes) {
-				chunkSize = len(runes) - cursor
-			}
-
-			chunk := string(runes[cursor : cursor+chunkSize])
-			events <- domain.TextEvent{Text: chunk}
-			cursor += chunkSize
-
-			// Variable delay 10-50ms
-			time.Sleep(time.Duration(10 * time.Millisecond))
-		}
-	}
-
 	go func() {
 		for ev := range events {
 			renderer.Send(ev)
@@ -51,39 +31,35 @@ func main() {
 		defer close(events)
 		time.Sleep(500 * time.Millisecond)
 
-		// 1. Thinking
-		events <- domain.ThinkingEvent{}
-		time.Sleep(1000 * time.Millisecond)
-
 		// 2. Intro with Markdown features (Paragraphs, Bold, List)
-		simulateTyping("# Integrated Architecture Validation\n\n")
+		events <- domain.TextEvent{Text: "# Integrated Architecture Validation\n\n"}
 		time.Sleep(300 * time.Millisecond)
 
-		simulateTyping("I will now demonstrate the **new inline UI** capabilities. ")
-		simulateTyping("This system uses a _streaming markdown parser_ to flush content block-by-block.\n\n")
+		events <- domain.TextEvent{Text: "I will now demonstrate the **new inline UI** capabilities. "}
+		events <- domain.TextEvent{Text: "This system uses a _streaming markdown parser_ to flush content block-by-block.\n\n"}
 
-		simulateTyping("Here is the plan:\n")
-		simulateTyping("1. Test fragmentation handling\n")
-		simulateTyping("2. Test code block streaming\n")
-		simulateTyping("3. Test concurrent tool execution\n")
-		simulateTyping("4. Test overflow handling for long blocks\n\n")
+		events <- domain.TextEvent{Text: "Here is the plan:\n"}
+		events <- domain.TextEvent{Text: "1. Test fragmentation handling\n"}
+		events <- domain.TextEvent{Text: "2. Test code block streaming\n"}
+		events <- domain.TextEvent{Text: "3. Test concurrent tool execution\n"}
+		events <- domain.TextEvent{Text: "4. Test overflow handling for long blocks\n\n"}
 
 		time.Sleep(500 * time.Millisecond)
 
 		// 3. Fragmentation Test (Partial markdown markers)
-		simulateTyping("### Fragmentation Test\n\n")
-		simulateTyping("This sentence has **bro")
+		events <- domain.TextEvent{Text: "### Fragmentation Test\n\n"}
+		events <- domain.TextEvent{Text: "This sentence has **bro"}
 		time.Sleep(500 * time.Millisecond) // Pause mid-bold
-		simulateTyping("ken bold** markers and `split")
+		events <- domain.TextEvent{Text: "ken bold** markers and `split"}
 		time.Sleep(500 * time.Millisecond) // Pause mid-code
-		simulateTyping(" code` formatting. ")
+		events <- domain.TextEvent{Text: " code` formatting. "}
 		time.Sleep(500 * time.Millisecond)
-		simulateTyping("this is ```inline ")
+		events <- domain.TextEvent{Text: "this is ```inline "}
 		time.Sleep(500 * time.Millisecond)
-		simulateTyping("code block```\n\n")
+		events <- domain.TextEvent{Text: "code block```\n\n"}
 
 		// 4. Code Block Streaming (Unsafe -> Safe transition)
-		simulateTyping("Now writing a Go function:\n\n")
+		events <- domain.TextEvent{Text: "Now writing a Go function:\n\n"}
 
 		events <- domain.TextEvent{Text: "```go\n"} // Start block
 		time.Sleep(500 * time.Millisecond)
@@ -98,17 +74,17 @@ func main() {
 		}
 
 		for _, line := range codeLines {
-			simulateTyping(line)
+			events <- domain.TextEvent{Text: line}
 			time.Sleep(200 * time.Millisecond)
 		}
 
 		events <- domain.TextEvent{Text: "```\n\n"} // Close block (should trigger flush)
-		simulateTyping("That block should now be flushed to history.\n\n")
+		events <- domain.TextEvent{Text: "That block should now be flushed to history.\n\n"}
 		time.Sleep(1000 * time.Millisecond)
 
 		// 5. Concurrent Tools & Ordered Flushing
-		simulateTyping("### Tool Execution & Ordering\n\n")
-		simulateTyping("I'll start two tools. Tool B finishes FIRST, but should wait for Tool A.\n\n")
+		events <- domain.TextEvent{Text: "### Tool Execution & Ordering\n\n"}
+		events <- domain.TextEvent{Text: "I'll start two tools. Tool B finishes FIRST, but should wait for Tool A.\n\n"}
 
 		// Start A
 		events <- domain.ToolStartEvent{
@@ -135,15 +111,15 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 
 		// 6. Long Block Overflow Test
-		simulateTyping("\n### Overflow Indicator Test\n\n")
-		simulateTyping("Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n")
+		events <- domain.TextEvent{Text: "\n### Overflow Indicator Test\n\n"}
+		events <- domain.TextEvent{Text: "Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n"}
 
 		// Generate 30 lines of text (enough to overflow typical terminals)
-		for i := range 30 {
+		for i := 0; i < 30; i++ {
 			line := fmt.Sprintf("Line %03d: This is a generated line to fill the screen and force the pending block to overflow the viewport.\n", i+1)
-			simulateTyping(line)
+			events <- domain.TextEvent{Text: line}
 		}
-		simulateTyping("\nEnd of long block.\n\n")
+		events <- domain.TextEvent{Text: "\nEnd of long block.\n\n"}
 		time.Sleep(500 * time.Millisecond) // Reduced read pause
 
 		// 7. Final Tool with Output

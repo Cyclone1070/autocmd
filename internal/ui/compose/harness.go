@@ -9,34 +9,17 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
 	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// staticCursorDetector for harness tests.
-type staticCursorDetector struct {
-	row int
-}
-
-func (d *staticCursorDetector) GetCursorRow() (int, error) {
-	return d.row, nil
-}
+const maxHarnessCmdIterations = 1000
 
 // --- Event-log frame harness (engine + tea + markdown) ---
 
 // viewFrame is derived from ViewRendered events for assertions.
 type viewFrame struct {
-	View                string
-	TotalFlushedLines   int
-	MaxAbsoluteHeight   int
-	QueueLen            int
-	IsPrinting          bool
-	ContentBeingPrinted string
-	PrintlnLines        int // Only set on frames captured during PrintCmd
-}
-
-func (f viewFrame) effectiveHistoryHeight() int {
-	return f.TotalFlushedLines
+	View              string
+	TotalFlushedLines int
 }
 
 func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
@@ -46,13 +29,8 @@ func viewFramesFromEvents(events []teapkg.FrameEvent) []viewFrame {
 			continue
 		}
 		out = append(out, viewFrame{
-			View:                ev.View,
-			TotalFlushedLines:   ev.Snapshot.TotalFlushedLines,
-			MaxAbsoluteHeight:   ev.Snapshot.MaxAbsoluteHeight,
-			QueueLen:            ev.Snapshot.PrintQueueLen,
-			IsPrinting:          ev.Snapshot.IsPrinting,
-			ContentBeingPrinted: ev.Snapshot.ContentBeingPrinted,
-			PrintlnLines:        ev.Snapshot.PrintlnLines,
+			View:              ev.View,
+			TotalFlushedLines: ev.Snapshot.TotalFlushedLines,
 		})
 	}
 	return out
@@ -67,41 +45,51 @@ func newHarnessFrameHarness(t *testing.T, width, height, cursorRow int) *harness
 	t.Helper()
 	cfg := config.DefaultConfig()
 	cfg.UI.ChatWindowWidth = width
-	cd := &staticCursorDetector{row: cursorRow}
-	geom, err := teapkg.ResolveGeometry(cfg, cd, height)
-	if err != nil {
-		t.Fatalf("ResolveGeometry: %v", err)
-	}
+	geom := engine.TermSize{Width: width, Height: height}
 	mdRenderer, err := markdown.NewGlamourRenderer(width)
 	if err != nil {
 		t.Fatalf("markdown.NewGlamourRenderer: %v", err)
 	}
 	sm := markdown.NewStream(mdRenderer)
 	state := engine.NewInitialState(geom)
-	factory := func(s *spinner.Model) engine.Deps {
-		deps := NewEngineDeps(cfg, sm, width)
-		deps.Spinner = nil
-		return deps
+	factory := func() engine.Deps {
+		return NewEngineDeps(cfg, sm, width)
 	}
 	sink := &teapkg.RecordingSink{}
 	adapter := teapkg.NewTeaModelAdapter(state, factory, sink)
-	sink.ViewFunc = func() teapkg.FrameEvent {
-		view := adapter.View()
-		s := adapter.State
-		return teapkg.FrameEvent{
-			Type: teapkg.FrameEventViewRendered,
-			View: view,
-			Snapshot: &teapkg.RenderSnapshot{
-				TotalFlushedLines:   s.TotalFlushedLines,
-				MaxAbsoluteHeight:   s.MaxAbsoluteHeight,
-				PrintQueueLen:       len(s.PrintQueue),
-				IsPrinting:          s.IsPrinting,
-				ContentBeingPrinted: s.ContentBeingPrinted,
-				// PrintlnLines will be set by PrintCmd
-			},
+	h := &harnessFrameHarness{adapter: adapter, sink: sink}
+
+	// Run Init
+	h.runLoop(adapter.Init())
+
+	return h
+}
+
+func (h *harnessFrameHarness) runLoop(cmd tea.Cmd) {
+	iters := 0
+	for cmd != nil && iters < maxHarnessCmdIterations {
+		// Stop if we are "idle" (no typing, no printing, no tools)
+		// and the next message would just be a tick.
+		// This prevents infinite loops from the activity indicator.
+		s := h.adapter.State
+		if s.TypingBuffer == "" && !s.IsPrinting && len(s.PrintQueue) == 0 && len(s.Tools) == 0 {
+			// Check if the command is a tick
+			// We can't easily check the command content, so we use a heuristic:
+			// if we've reached a stable state, stop.
+			// But we need at least one VR frame.
+			if iters > 10 {
+				break
+			}
 		}
+
+		cmd = h.ProcessCmd(cmd)
+		iters++
 	}
-	return &harnessFrameHarness{adapter: adapter, sink: sink}
+}
+
+func (h *harnessFrameHarness) ApplyEvent(ev domain.Event, _ string) {
+	cmd := h.ApplyEventOnly(ev)
+	h.runLoop(cmd)
 }
 
 // capture triggers a render so ViewRendered is emitted to the sink.
@@ -115,8 +103,6 @@ func (h *harnessFrameHarness) runCmdOnce(cmd tea.Cmd) tea.Msg {
 	}
 	return cmd()
 }
-
-const maxHarnessCmdIterations = 100
 
 // ApplyEventOnly applies an event and returns the resulting command without running it.
 // This allows tests to inspect state before side effects (like printing) complete.
@@ -138,15 +124,6 @@ func (h *harnessFrameHarness) ProcessCmd(cmd tea.Cmd) tea.Cmd {
 	_, nextCmd := h.adapter.Update(msg)
 	h.capture()
 	return nextCmd
-}
-
-func (h *harnessFrameHarness) ApplyEvent(ev domain.Event, _ string) {
-	cmd := h.ApplyEventOnly(ev)
-	iters := 0
-	for cmd != nil && iters < maxHarnessCmdIterations {
-		cmd = h.ProcessCmd(cmd)
-		iters++
-	}
 }
 
 // Events returns the canonical FrameEvent log for assertions.
@@ -174,120 +151,6 @@ func (h *harnessFrameHarness) FullTranscript() string {
 // ViewFrames returns view frames derived from ViewRendered events.
 func (h *harnessFrameHarness) ViewFrames() []viewFrame {
 	return viewFramesFromEvents(h.sink.Events)
-}
-
-// --- Assertion helpers ---
-
-func getStatusBarRow(frame string) int {
-	lines := strings.Split(frame, "\n")
-	for i, line := range lines {
-		if strings.Contains(line, "Context:") {
-			return i
-		}
-	}
-	return -1
-}
-
-func getContentBottomRow(frame string) int {
-	lines := strings.Split(frame, "\n")
-	lastContent := -1
-	for i, line := range lines {
-		if strings.Contains(line, "Context:") {
-			break
-		}
-		if strings.TrimSpace(line) != "" {
-			lastContent = i
-		}
-	}
-	return lastContent
-}
-
-type harnessAssertTB interface {
-	Helper()
-	Errorf(format string, args ...interface{})
-}
-
-func assertStatusBarNeverJumpsUp(t harnessAssertTB, frames []viewFrame) {
-	t.Helper()
-	lastStatusRow := -1
-	for i, f := range frames {
-		row := getStatusBarRow(f.View)
-		if row == -1 {
-			continue
-		}
-		if lastStatusRow != -1 && row < lastStatusRow {
-			t.Errorf("frame %d: status bar jumped up from row %d to %d\nView:\n%s",
-				i, lastStatusRow, row, f.View)
-		}
-		lastStatusRow = row
-	}
-}
-
-func assertVisualBottomMonotonic(t harnessAssertTB, frames []viewFrame) {
-	t.Helper()
-	lastVisualBottom := -1
-	for i, f := range frames {
-		lines := strings.Split(f.View, "\n")
-		frameHeight := len(lines)
-		if len(lines) > 0 && lines[len(lines)-1] == "" {
-			frameHeight--
-		}
-		if frameHeight == 0 {
-			continue
-		}
-		visualBottom := f.effectiveHistoryHeight() + frameHeight
-		if lastVisualBottom != -1 && visualBottom < lastVisualBottom {
-			t.Errorf("frame %d: visual bottom dropped %d -> %d (effHistory=%d, maxAbs=%d)\nView:\n%s",
-				i, lastVisualBottom, visualBottom, f.effectiveHistoryHeight(), f.MaxAbsoluteHeight, f.View)
-		}
-		if visualBottom > lastVisualBottom {
-			lastVisualBottom = visualBottom
-		}
-	}
-}
-
-func assertMaxAbsoluteHeightMonotonic(t harnessAssertTB, frames []viewFrame) {
-	t.Helper()
-	last := -1
-	for i, f := range frames {
-		if last != -1 && f.MaxAbsoluteHeight < last {
-			t.Errorf("frame %d: MaxAbsoluteHeight decreased %d -> %d", i, last, f.MaxAbsoluteHeight)
-		}
-		if f.MaxAbsoluteHeight > last {
-			last = f.MaxAbsoluteHeight
-		}
-	}
-}
-
-func assertStatusBarAfterContent(t harnessAssertTB, frames []viewFrame) {
-	t.Helper()
-	for i, f := range frames {
-		statusRow := getStatusBarRow(f.View)
-		contentRow := getContentBottomRow(f.View)
-		if statusRow != -1 && contentRow != -1 && statusRow < contentRow {
-			t.Errorf("frame %d: status bar (row %d) above content (row %d)\nView:\n%s",
-				i, statusRow, contentRow, f.View)
-		}
-	}
-}
-
-func assertNoFlushVisibilityGap(t harnessAssertTB, frames []viewFrame, contentMustRemain []string) {
-	t.Helper()
-	for i, f := range frames {
-		if f.QueueLen == 0 {
-			continue
-		}
-		for _, needle := range contentMustRemain {
-			if strings.Contains(f.View, needle) {
-				continue
-			}
-			if f.IsPrinting && strings.Contains(f.ContentBeingPrinted, needle) {
-				continue
-			}
-			t.Errorf("frame %d (queue=%d): content %q missing from view (flush visibility gap)\nView:\n%s",
-				i, f.QueueLen, needle, f.View)
-		}
-	}
 }
 
 // eventSequenceString produces a compact representation of the event log for golden tests.

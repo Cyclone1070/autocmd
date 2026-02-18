@@ -22,7 +22,6 @@ func NewEngineDeps(cfg *config.Config, sm *markdown.Stream, width int) engine.De
 		Theme:        &themeAdapter{t: theme.NewTheme(cfg.UI)},
 		Layout:       layoutAdapter{},
 		ToolRenderer: newToolRenderer(cfg, width),
-		Spinner:      nil, // Set at runtime
 	}
 }
 
@@ -34,27 +33,13 @@ func (a *themeAdapter) Success(s string) string { return a.t.Success(s) }
 func (a *themeAdapter) Error(s string) string   { return a.t.Error(s) }
 func (a *themeAdapter) Muted(s string) string   { return a.t.Muted(s) }
 func (a *themeAdapter) Primary(s string) string { return a.t.Primary(s) }
-func (a *themeAdapter) SpinnerStyle() string    { return "" }
 
-func (a *themeAdapter) Box(content string, width int, status engine.ToolStatus) string {
-	return a.t.Box(content, width, toToolStatus(status))
+func (a *themeAdapter) Box(content string, width int, status theme.ToolStatus) string {
+	return a.t.Box(content, width, status)
 }
 
-func (a *themeAdapter) Separator(width int, status engine.ToolStatus) string {
-	return a.t.Separator(width, toToolStatus(status))
-}
-
-func toToolStatus(s engine.ToolStatus) theme.ToolStatus {
-	switch s {
-	case engine.StatusRunning:
-		return theme.StatusRunning
-	case engine.StatusSuccess:
-		return theme.StatusSuccess
-	case engine.StatusError:
-		return theme.StatusError
-	default:
-		return theme.StatusRunning
-	}
+func (a *themeAdapter) Separator(width int, status theme.ToolStatus) string {
+	return a.t.Separator(width, status)
 }
 
 type layoutAdapter struct{}
@@ -80,16 +65,11 @@ func newToolRenderer(cfg *config.Config, width int) *toolRenderer {
 }
 
 // Render implements engine.ToolRenderer.Render.
-func (r *toolRenderer) Render(t *engine.ToolState, spinner engine.SpinnerViewProvider) string {
-	status := toToolStatus(t.Status)
+func (r *toolRenderer) Render(t *engine.ToolState) string {
+	status := t.Status
 
-	// Get spinner view at render time (not at creation time!)
 	var prefix string
 	switch status {
-	case theme.StatusRunning:
-		if spinner != nil {
-			prefix = spinner.SpinnerView()
-		}
 	case theme.StatusSuccess:
 		prefix = r.theme.Success("✓")
 	case theme.StatusError:

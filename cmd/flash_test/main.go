@@ -32,19 +32,6 @@ func main() {
 		}
 	}()
 
-	simulateTyping := func(text string) {
-		runes := []rune(text)
-		for i := 0; i < len(runes); {
-			chunkSize := 4
-			if i+chunkSize > len(runes) {
-				chunkSize = len(runes) - i
-			}
-			events <- domain.TextEvent{Text: string(runes[i : i+chunkSize])}
-			i += chunkSize
-			time.Sleep(10 * time.Millisecond) // Slow enough to see the view grow
-		}
-	}
-
 	go func() {
 		defer close(events)
 		time.Sleep(500 * time.Millisecond)
@@ -58,10 +45,7 @@ func main() {
 			}
 			sb.WriteString("\n") // Double newline to trigger markdown flush
 
-			simulateTyping(sb.String())
-
-			// Optional thinking/pause between blocks to stabilize
-			events <- domain.ThinkingEvent{}
+			events <- domain.TextEvent{Text: sb.String()}
 			time.Sleep(500 * time.Millisecond)
 		}
 

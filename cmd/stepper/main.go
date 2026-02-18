@@ -8,11 +8,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui/compose"
-	"github.com/Cyclone1070/iav/internal/ui/cursor"
 	"github.com/Cyclone1070/iav/internal/ui/engine"
 	"github.com/Cyclone1070/iav/internal/ui/markdown"
 	teapkg "github.com/Cyclone1070/iav/internal/ui/tea"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 )
@@ -20,8 +18,7 @@ import (
 func main() {
 	cfg := config.DefaultConfig()
 
-	// 1. Geometry Detection
-	cd := cursor.NewTerminalCursorDetector(os.Stdin, os.Stdout)
+	// 1. Terminal Size
 	width := cfg.UI.ChatWindowWidth
 	height := 24
 	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
@@ -30,18 +27,14 @@ func main() {
 		}
 		height = h
 	}
-	geom, err := teapkg.ResolveGeometry(cfg, cd, height)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error resolving geometry: %v\n", err)
-		os.Exit(1)
-	}
+	geom := engine.TermSize{Width: width, Height: height}
 
 	// 2. Engine Initialization
 	mdRenderer, _ := markdown.NewGlamourRenderer(geom.Width)
 	sm := markdown.NewStream(mdRenderer)
 	state := engine.NewInitialState(geom)
 
-	factory := func(s *spinner.Model) engine.Deps {
+	factory := func() engine.Deps {
 		deps := compose.NewEngineDeps(cfg, sm, geom.Width)
 		return deps
 	}
@@ -135,42 +128,28 @@ func (m *stepperModel) View() string {
 
 func generateEvents() []domain.Event {
 	var evs []domain.Event
-	typing := func(text string) {
-		runes := []rune(text)
-		for i := 0; i < len(runes); {
-			chunkSize := 4
-			if i+chunkSize > len(runes) {
-				chunkSize = len(runes) - i
-			}
-			evs = append(evs, domain.TextEvent{Text: string(runes[i : i+chunkSize])})
-			i += chunkSize
-		}
-	}
 
-	// 1. Thinking
-	evs = append(evs, domain.ThinkingEvent{})
+	// 1. Intro
+	evs = append(evs, domain.TextEvent{Text: "# Integrated Architecture Validation\n\n"})
+	evs = append(evs, domain.TextEvent{Text: "I will now demonstrate the **new inline UI** capabilities. "})
+	evs = append(evs, domain.TextEvent{Text: "This system uses a _streaming markdown parser_ to flush content block-by-block.\n\n"})
 
-	// 2. Intro
-	typing("# Integrated Architecture Validation\n\n")
-	typing("I will now demonstrate the **new inline UI** capabilities. ")
-	typing("This system uses a _streaming markdown parser_ to flush content block-by-block.\n\n")
-
-	typing("Here is the plan:\n")
-	typing("1. Test fragmentation handling\n")
-	typing("2. Test code block streaming\n")
-	typing("3. Test concurrent tool execution\n")
-	typing("4. Test overflow handling for long blocks\n\n")
+	evs = append(evs, domain.TextEvent{Text: "Here is the plan:\n"})
+	evs = append(evs, domain.TextEvent{Text: "1. Test fragmentation handling\n"})
+	evs = append(evs, domain.TextEvent{Text: "2. Test code block streaming\n"})
+	evs = append(evs, domain.TextEvent{Text: "3. Test concurrent tool execution\n"})
+	evs = append(evs, domain.TextEvent{Text: "4. Test overflow handling for long blocks\n\n"})
 
 	// 3. Fragmentation
-	typing("### Fragmentation Test\n\n")
-	typing("This sentence has **bro")
-	typing("ken bold** markers and `split")
-	typing(" code` formatting. ")
-	typing("this is ```inline ")
-	typing("code block```\n\n")
+	evs = append(evs, domain.TextEvent{Text: "### Fragmentation Test\n\n"})
+	evs = append(evs, domain.TextEvent{Text: "This sentence has **bro"})
+	evs = append(evs, domain.TextEvent{Text: "ken bold** markers and `split"})
+	evs = append(evs, domain.TextEvent{Text: " code` formatting. "})
+	evs = append(evs, domain.TextEvent{Text: "this is ```inline "})
+	evs = append(evs, domain.TextEvent{Text: "code block```\n\n"})
 
 	// 4. Code Block
-	typing("Now writing a Go function:\n\n")
+	evs = append(evs, domain.TextEvent{Text: "Now writing a Go function:\n\n"})
 	evs = append(evs, domain.TextEvent{Text: "```go\n"})
 	codeLines := []string{
 		"package main\n\n",
@@ -181,14 +160,14 @@ func generateEvents() []domain.Event {
 		"}\n",
 	}
 	for _, line := range codeLines {
-		typing(line)
+		evs = append(evs, domain.TextEvent{Text: line})
 	}
 	evs = append(evs, domain.TextEvent{Text: "```\n\n"})
-	typing("That block should now be flushed to history.\n\n")
+	evs = append(evs, domain.TextEvent{Text: "That block should now be flushed to history.\n\n"})
 
 	// 5. Tool
-	typing("### Tool Execution & Ordering\n\n")
-	typing("I'll start two tools. Tool B finishes FIRST, but should wait for Tool A.\n\n")
+	evs = append(evs, domain.TextEvent{Text: "### Tool Execution & Ordering\n\n"})
+	evs = append(evs, domain.TextEvent{Text: "I'll start two tools. Tool B finishes FIRST, but should wait for Tool A.\n\n"})
 	evs = append(evs, domain.ToolStartEvent{
 		CallID:   "tool-A",
 		ToolName: "long-job",
@@ -203,13 +182,13 @@ func generateEvents() []domain.Event {
 	evs = append(evs, domain.ToolEndEvent{CallID: "tool-A"})
 
 	// 6. Overflow
-	typing("\n### Overflow Indicator Test\n\n")
-	typing("Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n")
+	evs = append(evs, domain.TextEvent{Text: "\n### Overflow Indicator Test\n\n"})
+	evs = append(evs, domain.TextEvent{Text: "Generating a VERY long block to test standard output clipping and the overflow indicator:\n\n"})
 	for i := 0; i < 30; i++ {
 		line := fmt.Sprintf("Line %03d: This is a generated line to fill the screen and force the pending block to overflow the viewport.\n", i+1)
-		typing(line)
+		evs = append(evs, domain.TextEvent{Text: line})
 	}
-	typing("\nEnd of long block.\n\n")
+	evs = append(evs, domain.TextEvent{Text: "\nEnd of long block.\n\n"})
 
 	// 7. Final tool
 	evs = append(evs, domain.ToolStartEvent{

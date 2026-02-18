@@ -42,6 +42,7 @@ type Deps struct {
 	Theme        ThemeAdapter
 	Layout       LayoutAdapter
 	ToolRenderer ToolRenderer // Renders a tool for display
+	Spinner      SpinnerViewProvider
 }
 
 // State is the full UI engine state.

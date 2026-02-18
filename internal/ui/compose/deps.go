@@ -22,6 +22,7 @@ func NewEngineDeps(cfg *config.Config, sm *markdown.Stream, width int) engine.De
 		Theme:        &themeAdapter{t: theme.NewTheme(cfg.UI)},
 		Layout:       layoutAdapter{},
 		ToolRenderer: newToolRenderer(cfg, width),
+		Spinner:      nil, // Set at runtime
 	}
 }
 
@@ -65,11 +66,15 @@ func newToolRenderer(cfg *config.Config, width int) *toolRenderer {
 }
 
 // Render implements engine.ToolRenderer.Render.
-func (r *toolRenderer) Render(t *engine.ToolState) string {
+func (r *toolRenderer) Render(t *engine.ToolState, spinner engine.SpinnerViewProvider) string {
 	status := t.Status
 
 	var prefix string
 	switch status {
+	case theme.StatusRunning:
+		if spinner != nil {
+			prefix = r.theme.Primary(spinner.SpinnerView())
+		}
 	case theme.StatusSuccess:
 		prefix = r.theme.Success("✓")
 	case theme.StatusError:

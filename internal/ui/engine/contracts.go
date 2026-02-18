@@ -26,8 +26,13 @@ type LayoutAdapter interface {
 	TruncateWithIndicator(content string, termHeight int) string
 }
 
+// SpinnerViewProvider returns the current spinner character (runtime provides this).
+type SpinnerViewProvider interface {
+	SpinnerView() string
+}
+
 // ToolRenderer renders tool displays for the UI.
 // Consumer-defined; implemented by compose package.
 type ToolRenderer interface {
-	Render(t *ToolState) string
+	Render(t *ToolState, spinner SpinnerViewProvider) string
 }

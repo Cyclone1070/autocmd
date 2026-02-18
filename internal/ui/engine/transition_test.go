@@ -56,7 +56,7 @@ func (noopLayout) TruncateWithIndicator(content string, _ int) string {
 // noopToolRenderer returns simple string representation.
 type noopToolRenderer struct{}
 
-func (noopToolRenderer) Render(t *ToolState) string {
+func (noopToolRenderer) Render(t *ToolState, _ SpinnerViewProvider) string {
 	return string(t.Display.(domain.StringDisplay))
 }
 

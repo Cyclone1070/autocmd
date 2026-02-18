@@ -74,6 +74,8 @@ func (t *Theme) Box(content string, width int, status ToolStatus) string {
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	switch status {
+	case StatusRunning:
+		return t.primary
 	case StatusSuccess:
 		return t.success
 	case StatusError:

@@ -151,7 +151,7 @@ func handleDoneEvent(state *State, deps Deps) []Effect {
 
 	// Flush tools
 	for _, ts := range state.Tools {
-		output := deps.ToolRenderer.Render(ts)
+		output := deps.ToolRenderer.Render(ts, deps.Spinner)
 		if e := enqueuePrint(state, output); e != nil {
 			effects = append(effects, e)
 		}
@@ -173,7 +173,7 @@ func flushCompletedTools(state *State, deps Deps) []Effect {
 	for len(state.Tools) > 0 && state.Tools[0].Status != theme.StatusRunning {
 		tool := state.Tools[0]
 		state.Tools = state.Tools[1:]
-		output := deps.ToolRenderer.Render(tool)
+		output := deps.ToolRenderer.Render(tool, deps.Spinner)
 		if e := enqueuePrint(state, output); e != nil {
 			effects = append(effects, e)
 		}
@@ -223,7 +223,7 @@ func renderContent(state *State, deps Deps) string {
 		parts = append(parts, deps.Layout.TruncateWithIndicator(p, state.TermSize.Height))
 	}
 	for _, t := range state.Tools {
-		parts = append(parts, deps.ToolRenderer.Render(t))
+		parts = append(parts, deps.ToolRenderer.Render(t, deps.Spinner))
 	}
 	return strings.Join(parts, "\n")
 }

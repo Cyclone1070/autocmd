@@ -97,6 +97,6 @@ func (mockLayout) TruncateWithIndicator(content string, _ int) string {
 
 type mockToolRenderer struct{}
 
-func (m *mockToolRenderer) Render(t *engine.ToolState) string {
+func (m *mockToolRenderer) Render(t *engine.ToolState, _ engine.SpinnerViewProvider) string {
 	return "Mock: " + string(t.Display.(domain.StringDisplay))
 }

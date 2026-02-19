@@ -46,6 +46,12 @@ func Transition(state *State, msg Msg, deps Deps) (*State, []Effect) {
 		effects = append(effects, EffectScheduleTick())
 
 	case MsgToolStart:
+		// Flush typing buffer first
+		if state.TypingBuffer != "" {
+			deps.Markdown.Append(state.TypingBuffer)
+			state.TypingBuffer = ""
+		}
+
 		// Flush remaining markdown before starting tool
 		textFlush, err := deps.Markdown.RenderRemaining()
 		if err != nil {

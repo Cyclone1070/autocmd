@@ -44,7 +44,7 @@ func NewTeaModelAdapter(state *engine.State, factory DepsFactory, sink FrameSink
 func (a *TeaModelAdapter) Init() bubbletea.Cmd {
 	return bubbletea.Batch(
 		a.Spinner.Tick,
-		bubbletea.Tick(100*time.Millisecond, func(t time.Time) bubbletea.Msg {
+		bubbletea.Tick(16*time.Millisecond, func(t time.Time) bubbletea.Msg {
 			return engine.MsgTick{}
 		}),
 	)

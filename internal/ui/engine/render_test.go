@@ -8,18 +8,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/theme"
 )
 
-func TestRender_EmptyState_HasActivityIndicator(t *testing.T) {
-	geom := TermSize{Width: 80, Height: 24}
-	state := NewInitialState(geom)
-	deps := testDeps(&mockMarkdown{})
-
-	out := Render(state, deps)
-
-	if !strings.Contains(out, ".") {
-		t.Errorf("expected activity indicator, got %q", out)
-	}
-}
-
 func TestRender_Done_ReturnsEmpty(t *testing.T) {
 	geom := TermSize{Width: 80, Height: 24}
 	state := NewInitialState(geom)

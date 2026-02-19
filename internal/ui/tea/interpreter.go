@@ -17,7 +17,7 @@ func Interpret(e engine.Effect) bubbletea.Cmd {
 		return nil
 	}
 	if e.IsTick() {
-		return bubbletea.Tick(100*time.Millisecond, func(t time.Time) bubbletea.Msg {
+		return bubbletea.Tick(16*time.Millisecond, func(t time.Time) bubbletea.Msg {
 			return engine.MsgTick{}
 		})
 	}

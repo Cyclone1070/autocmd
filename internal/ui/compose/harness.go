@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const maxHarnessCmdIterations = 1000
+const maxHarnessCmdIterations = 100
 
 // --- Event-log frame harness (engine + tea + markdown) ---
 

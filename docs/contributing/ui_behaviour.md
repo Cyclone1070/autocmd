@@ -81,16 +81,15 @@ Crucially, when that block finally resolves and is flushed to the permanent hist
 
 **Frame 3: Closing fence arrives (Flushed to history)**
 ```text
-  History 1        <-- (Scrolled off screen)
-  History 2        <-- (Scrolled off screen)
+  History 1         <-- (Scrolled off screen)
+  History 2         <-- (Scrolled off screen)
+ ```go              <-- FULL block printed to stdout
+ package main       <-- (Scrolled off screen)
+ func (m Model) {   <-- (Scrolled off screen)
 ┌─Terminal Window──┐
-│ ```go            │ <-- FULL block printed to stdout, pushing older history up.
-│ package main     │ 
-│ func (m Model) { │ 
 │     var a = 1    │
 │     var b = 2    │
-│ }                │
-│ ```              │
-│                  │ (View resets to empty, ready for next block at the bottom)
-└──────────────────┘
+│ }```             │
+│                  │ (View resets to empty, 
+└──────────────────┘  or render the next pending block)
 ```

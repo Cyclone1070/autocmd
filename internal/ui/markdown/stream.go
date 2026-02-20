@@ -10,10 +10,11 @@ import (
 
 // Stream handles buffering and safe block separation for streaming markdown.
 type Stream struct {
-	buffer    string
-	lastBlock string // Raw markdown of the last successfully flushed block
-	parser    goldmark.Markdown
-	renderer  Renderer
+	buffer        string
+	lastBlock     string // Raw markdown of the last successfully flushed block
+	lastBlockANSI string // Cached ANSI rendering of lastBlock
+	parser        goldmark.Markdown
+	renderer      Renderer
 }
 
 // NewStream creates a new Stream.
@@ -43,6 +44,7 @@ func (s *Stream) Append(chunk string) ([]string, error) {
 
 	// Update lastBlock context for next block.
 	s.lastBlock = s.extractLastBlockSource(safeContent)
+	s.lastBlockANSI, _ = s.renderer.Render(s.lastBlock)
 
 	s.buffer = s.buffer[split:]
 	return []string{rendered}, nil
@@ -59,6 +61,7 @@ func (s *Stream) Flush() ([]string, error) {
 	}
 	s.buffer = ""
 	s.lastBlock = "" // Reset context
+	s.lastBlockANSI = ""
 	return []string{rendered}, nil
 }
 
@@ -319,13 +322,10 @@ func (s *Stream) renderDelta(newContent string) (string, error) {
 		return "", err
 	}
 
-	prefixANSI, err := s.renderer.Render(s.lastBlock)
-	if err != nil {
-		return "", err
+	if strings.HasPrefix(fullANSI, s.lastBlockANSI) {
+		return fullANSI[len(s.lastBlockANSI):], nil
 	}
 
-	if strings.HasPrefix(fullANSI, prefixANSI) {
-		return fullANSI[len(prefixANSI):], nil
-	}
-	return fullANSI[len(prefixANSI):], nil
+	// Fallback to fresh render if context-aware delta fails (Issue 6)
+	return s.renderer.Render(newContent)
 }

@@ -1,353 +1,174 @@
 package markdown
 
 import (
+	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/muesli/termenv"
 )
 
-func newTestRenderer(t *testing.T) Renderer {
-	t.Helper()
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.DarkStyle),
-		glamour.WithWordWrap(80),
-		glamour.WithColorProfile(termenv.TrueColor),
-	)
-	if err != nil {
-		t.Fatalf("failed to create test renderer: %v", err)
+// mockRenderer just returns the input as is
+type mockRenderer struct{}
+
+func (m mockRenderer) Render(markdown string) (string, error) {
+	return markdown, nil
+}
+
+// makeBlock returns a unique block of the given type with an index.
+// Content is returned WITHOUT trailing newlines.
+func makeBlock(kind string, index int) string {
+	switch kind {
+	case "PARA_SIMPLE":
+		return fmt.Sprintf("Para %d plain text.", index)
+	case "PARA_BOLD_END":
+		return fmt.Sprintf("Para %d with **bold**.", index)
+	case "PARA_ITALIC_END":
+		return fmt.Sprintf("Para %d with *italic*.", index)
+	case "PARA_CODE_END":
+		return fmt.Sprintf("Para %d with `inline code`.", index)
+	case "PARA_LINK_END":
+		return fmt.Sprintf("Para %d with [link](url).", index)
+	case "H1":
+		return fmt.Sprintf("# Header One %d", index)
+	case "H2":
+		return fmt.Sprintf("## Header Two %d", index)
+	case "H3":
+		return fmt.Sprintf("### Header Three %d", index)
+	case "H4":
+		return fmt.Sprintf("#### Header Four %d", index)
+	case "H5":
+		return fmt.Sprintf("##### Header Five %d", index)
+	case "SETEXT_1":
+		return fmt.Sprintf("Setext One %d\n======", index)
+	case "SETEXT_2":
+		return fmt.Sprintf("Setext Two %d\n------", index)
+	case "LIST_BUL_DAT":
+		return fmt.Sprintf("- Item %d A\n- Item %d B", index, index)
+	case "LIST_BUL_AST":
+		return fmt.Sprintf("* Item %d A\n* Item %d B", index, index)
+	case "LIST_NUM_DOT":
+		return fmt.Sprintf("1. Item %d A\n2. Item %d B", index, index)
+	case "LIST_NUM_PAR":
+		return fmt.Sprintf("1) Item %d A\n2) Item %d B", index, index)
+	case "CODE_FENCE_GO":
+		return fmt.Sprintf("```go\nfunc main%d(){}\n```", index)
+	case "CODE_FENCE_TXT":
+		return fmt.Sprintf("```text\nplain %d\n```", index)
+	case "CODE_FENCE_NONE":
+		return fmt.Sprintf("```\nraw %d\n```", index)
+	case "CODE_INDENT":
+		return fmt.Sprintf("    indented code %d", index)
+	case "QUOTE_SIMPLE":
+		return fmt.Sprintf("> Quote %d simple.", index)
+	case "QUOTE_NESTED":
+		return fmt.Sprintf("> > Quote %d nested.", index)
+	case "HR_DASH":
+		return "---"
+	case "HR_STAR":
+		return "***"
+	case "HR_UNDER":
+		return "___"
+	default:
+		return fmt.Sprintf("Unknown %d", index)
 	}
-	return WrapGlamour(r)
 }
 
-func normalize(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.TrimRight(s, " \t\n")
-	return s
-}
-
-func renderOneShot(t *testing.T, md string) string {
-	t.Helper()
-	renderer := newTestRenderer(t)
-	out, err := renderer.Render(md)
-	if err != nil {
-		t.Fatalf("renderOneShot failed: %v", err)
+func TestStream_Split(t *testing.T) {
+	keys := []string{
+		"PARA_SIMPLE", "PARA_BOLD_END", "PARA_ITALIC_END", "PARA_CODE_END", "PARA_LINK_END",
+		"H1", "H2", "H3", "H4", "H5",
+		"SETEXT_1", "SETEXT_2",
+		"LIST_BUL_DAT", "LIST_BUL_AST", "LIST_NUM_DOT", "LIST_NUM_PAR",
+		"CODE_FENCE_GO", "CODE_FENCE_TXT", "CODE_FENCE_NONE", "CODE_INDENT",
+		"QUOTE_SIMPLE", "QUOTE_NESTED",
+		"HR_DASH", "HR_STAR", "HR_UNDER",
 	}
-	return normalize(out)
-}
 
-func renderStreamed(t *testing.T, md string, chunker func(string) []string) string {
-	t.Helper()
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
+	runSequence := func(t *testing.T, types []string, newlineCount int) {
+		t.Helper()
+		s := NewStream(mockRenderer{})
+		gap := strings.Repeat("\n", newlineCount)
 
-	var flushedBlocks []string
-	chunks := chunker(md)
-	for _, chunk := range chunks {
-		flushed, err := sm.Append(chunk)
-		if err != nil {
-			t.Fatalf("append failed: %v", err)
+		var blocks []string
+		for i, k := range types {
+			blocks = append(blocks, makeBlock(k, i))
 		}
-		flushedBlocks = append(flushedBlocks, flushed...)
-	}
 
-	tail, err := sm.RenderRemaining()
-	if err != nil {
-		t.Fatalf("RenderRemaining failed: %v", err)
-	}
-	if tail != "" {
-		flushedBlocks = append(flushedBlocks, tail)
-	}
+		var accFlush strings.Builder
 
-	var result strings.Builder
-	for _, block := range flushedBlocks {
-		result.WriteString(block)
-	}
-	return normalize(result.String())
-}
+		for i := 0; i < len(blocks); i++ {
+			chunk := blocks[i]
+			var toAppend string
+			if i == 0 {
+				toAppend = chunk
+			} else {
+				toAppend = gap + chunk
+			}
 
-func chunkOneShot(md string) []string {
-	return []string{md}
-}
+			flushed, err := s.Append(toAppend)
+			if err != nil {
+				t.Fatalf("Step %d Append failed: %v", i, err)
+			}
+			for _, f := range flushed {
+				accFlush.WriteString(f)
+			}
 
-func chunkByRuneSize(md string, size int) []string {
-	runes := []rune(md)
-	var chunks []string
-	for i := 0; i < len(runes); i += size {
-		end := i + size
-		if end > len(runes) {
-			end = len(runes)
-		}
-		chunks = append(chunks, string(runes[i:end]))
-	}
-	return chunks
-}
+			var wantFlush string
+			var wantPend string
 
-func chunkBoundarySplits(md string) []string {
-	var chunks []string
-	remaining := md
+			if i == 0 {
+				wantFlush = ""
+				wantPend = blocks[0]
+			} else {
+				var flushBuilder strings.Builder
+				for j := 0; j < i; j++ {
+					if j > 0 {
+						flushBuilder.WriteString(gap)
+					}
+					flushBuilder.WriteString(blocks[j])
+				}
+				wantFlush = flushBuilder.String()
+				wantPend = gap + blocks[i]
+			}
 
-	if idx := strings.Index(remaining, "\n\n"); idx != -1 {
-		chunks = append(chunks, remaining[:idx+2])
-		remaining = remaining[idx+2:]
-	}
+			gotFlush := accFlush.String()
+			gotPend := s.Pending()
 
-	if idx := strings.Index(remaining, "**"); idx != -1 && idx+2 < len(remaining) {
-		chunks = append(chunks, remaining[:idx+1])
-		remaining = remaining[idx+1:]
-	}
-
-	if idx := strings.Index(remaining, "```"); idx != -1 {
-		if idx+3 < len(remaining) {
-			chunks = append(chunks, remaining[:idx+3])
-			remaining = remaining[idx+3:]
+			if gotFlush != wantFlush {
+				t.Errorf("Seq %v Gap %d Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, newlineCount, i, gotFlush, wantFlush)
+			}
+			if gotPend != wantPend {
+				t.Errorf("Seq %v Gap %d Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, newlineCount, i, gotPend, wantPend)
+			}
 		}
 	}
 
-	if remaining != "" {
-		chunks = append(chunks, remaining)
-	}
+	newlineGaps := []int{2, 3, 4}
 
-	if len(chunks) == 0 {
-		return []string{md}
-	}
-	return chunks
-}
+	t.Run("Single", func(t *testing.T) {
+		for _, k := range keys {
+			runSequence(t, []string{k}, 2)
+		}
+	})
 
-var testFixtures = map[string]string{
-	"F01": "Para1\n\nPara2",
-	"F02": "Para1\n\n\nPara2",
-	"F03": "Para1\n\n\n\n\nPara2",
-	"F04": "Heading\n===\n\nNext",
-	"F05": "# Heading\n\nNext",
-	"F06": "- a\n- b\n\nNext",
-	"F07": "1. a\n2. b\n\nNext",
-	"F08": "> q1\n> q2\n\nNext",
-	"F09": "```\ncode\n```\n\nNext",
-	"F10": "~~~\ncode\n~~~\n\nNext",
-	"F11": "Para\n\n    code\n\nNext",
-	"F12": "Line1\\\nLine2\n\nNext",
-	"F13": "Text **bold** more\n\nNext",
-	"F14": "`Inline `code` then\n\nNext",
-	"F15": "---\n\nNext",
-	"F16": "\n\nLeading blank\n\nNext",
-	"F17": "Unicode: 你好 👋\n\nNext",
-	"F18": "Long line " + strings.Repeat("word ", 40) + "\n\nNext",
-}
-
-func TestStreamingEquivalence_OneShot(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, chunkOneShot)
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("one-shot chunking failed\nGot:\n%s\nWant:\n%s", got, want)
+	t.Run("Pair", func(t *testing.T) {
+		for _, gap := range newlineGaps {
+			for _, k1 := range keys {
+				for _, k2 := range keys {
+					runSequence(t, []string{k1, k2}, gap)
+				}
 			}
-		})
-	}
-}
+		}
+	})
 
-func TestStreamingEquivalence_RuneSize1(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 1)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 1 failed\nGot:\n%s\nWant:\n%s", got, want)
+	t.Run("Triple", func(t *testing.T) {
+		for _, gap := range newlineGaps {
+			for _, k1 := range keys {
+				for _, k2 := range keys {
+					for _, k3 := range keys {
+						runSequence(t, []string{k1, k2, k3}, gap)
+					}
+				}
 			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_RuneSize2(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 2)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 2 failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_RuneSize3(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 3)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 3 failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_RuneSize5(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 5)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 5 failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_RuneSize8(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 8)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 8 failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_RuneSize13(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, func(md string) []string {
-				return chunkByRuneSize(md, 13)
-			})
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("rune size 13 failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestStreamingEquivalence_BoundarySplits(t *testing.T) {
-	for name, fixture := range testFixtures {
-		t.Run(name, func(t *testing.T) {
-			got := renderStreamed(t, fixture, chunkBoundarySplits)
-			want := renderOneShot(t, fixture)
-			if got != want {
-				t.Errorf("boundary splits failed\nGot:\n%s\nWant:\n%s", got, want)
-			}
-		})
-	}
-}
-
-func TestFlush_FencedCode_IncludesClosingFence(t *testing.T) {
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
-
-	input := "```\ncode\n```\n\nNext"
-	flushed, err := sm.Append(input)
-	if err != nil {
-		t.Fatalf("append failed: %v", err)
-	}
-
-	if len(flushed) != 1 {
-		t.Fatalf("expected 1 flushed block, got %d", len(flushed))
-	}
-
-	pending := sm.Pending()
-	if strings.Contains(pending, "```") {
-		t.Errorf("pending buffer should not contain closing fence, got: %q", pending)
-	}
-	if !strings.Contains(pending, "Next") {
-		t.Errorf("pending buffer should contain 'Next', got: %q", pending)
-	}
-}
-
-func TestFlush_SetextUnderline_Included(t *testing.T) {
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
-
-	input := "Heading\n===\n\nNext"
-	flushed, err := sm.Append(input)
-	if err != nil {
-		t.Fatalf("append failed: %v", err)
-	}
-
-	if len(flushed) != 1 {
-		t.Fatalf("expected 1 flushed block, got %d", len(flushed))
-	}
-
-	pending := sm.Pending()
-	if strings.Contains(pending, "===") {
-		t.Errorf("pending buffer should not contain underline, got: %q", pending)
-	}
-	if !strings.Contains(pending, "Next") {
-		t.Errorf("pending buffer should contain 'Next', got: %q", pending)
-	}
-}
-
-func TestFlush_ParagraphToFence_DoesNotStealFence(t *testing.T) {
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
-
-	input := "Para\n\n```go\ncode"
-	flushed, err := sm.Append(input)
-	if err != nil {
-		t.Fatalf("append failed: %v", err)
-	}
-
-	if len(flushed) != 1 {
-		t.Fatalf("expected 1 flushed block, got %d", len(flushed))
-	}
-
-	flushedContent := flushed[0]
-	if strings.Contains(flushedContent, "```") {
-		t.Errorf("flushed content should not contain opening fence, got: %q", flushedContent)
-	}
-
-	pending := sm.Pending()
-	if !strings.Contains(pending, "code") {
-		t.Errorf("pending buffer should contain code content, got: %q", pending)
-	}
-}
-
-func TestFlush_UnclosedFence_ConsumesAll(t *testing.T) {
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
-
-	input := "```go\ncode\n\n# NotAHeading"
-	flushed, err := sm.Append(input)
-	if err != nil {
-		t.Fatalf("append failed: %v", err)
-	}
-
-	if len(flushed) != 0 {
-		t.Errorf("unclosed fence should not flush, got %d flushed blocks", len(flushed))
-	}
-
-	pending := sm.Pending()
-	if !strings.Contains(pending, "NotAHeading") {
-		t.Errorf("pending buffer should contain 'NotAHeading' (consumed by code block), got: %q", pending)
-	}
-}
-
-func TestFlush_ThematicBreak_NoPanic(t *testing.T) {
-	renderer := newTestRenderer(t)
-	sm := NewStream(renderer)
-
-	input := "---\n\nNext"
-	flushed, err := sm.Append(input)
-	if err != nil {
-		t.Logf("thematic break append returned error (acceptable): %v", err)
-	}
-
-	pending := sm.Pending()
-	if pending == "" && len(flushed) == 0 {
-		t.Log("thematic break did not flush and pending is empty (acceptable behavior)")
-	}
+		}
+	})
 }

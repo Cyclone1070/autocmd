@@ -1,7 +1,6 @@
 package markdown
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -11,11 +10,10 @@ import (
 
 // Stream handles buffering and safe block separation for streaming markdown.
 type Stream struct {
-	buffer       string
-	safeMarkdown string
-	flushedLen   int
-	parser       goldmark.Markdown
-	renderer     Renderer
+	buffer    string
+	lastBlock string // Raw markdown of the last successfully flushed block
+	parser    goldmark.Markdown
+	renderer  Renderer
 }
 
 // NewStream creates a new Stream.
@@ -26,129 +24,316 @@ func NewStream(renderer Renderer) *Stream {
 	}
 }
 
-// Append adds a chunk of text, updates the cache, and returns any complete blocks that are safe to flush.
+// Append adds a chunk of text and returns any complete blocks that are safe to flush.
 func (s *Stream) Append(chunk string) ([]string, error) {
 	s.buffer += chunk
 
-	safePoint, err := s.findSafeSplit()
-	if err != nil {
+	split := s.findSafeSplit()
+	if split <= 0 {
 		return nil, nil
 	}
 
-	s.safeMarkdown = s.buffer[:safePoint]
+	safeContent := s.buffer[:split]
 
-	rendered, err := s.render(s.safeMarkdown)
+	// Perform Delta Rendering
+	rendered, err := s.renderDelta(safeContent)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(rendered) > s.flushedLen {
-		delta := rendered[s.flushedLen:]
-		content := strings.TrimRight(delta, "\n")
+	// Update lastBlock context for next block.
+	s.lastBlock = s.extractLastBlockSource(safeContent)
 
-		if len(content) == 0 {
-			return nil, nil
-		}
-
-		s.flushedLen += len(content)
-		return []string{content}, nil
-	}
-
-	return nil, nil
+	s.buffer = s.buffer[split:]
+	return []string{rendered}, nil
 }
 
-// RenderRemaining returns any remaining content in the buffer as a single block.
-func (s *Stream) RenderRemaining() (string, error) {
-	fullRendered, err := s.render(s.buffer)
+// Flush returns any remaining content in the buffer.
+func (s *Stream) Flush() ([]string, error) {
+	if s.buffer == "" {
+		return nil, nil
+	}
+	rendered, err := s.renderDelta(s.buffer)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	if len(fullRendered) > s.flushedLen {
-		delta := fullRendered[s.flushedLen:]
-		content := strings.TrimRight(delta, "\n")
-		s.flushedLen += len(content)
-		return content, nil
-	}
-	return "", nil
+	s.buffer = ""
+	s.lastBlock = "" // Reset context
+	return []string{rendered}, nil
 }
 
-// Pending returns the cached rendered content of the buffer (uncertain block).
+// Pending returns the temporary rendered ANSI for the dynamic view.
 func (s *Stream) Pending() string {
-	fullRendered, _ := s.render(s.buffer)
-	if len(fullRendered) > s.flushedLen {
-		return strings.TrimRight(fullRendered[s.flushedLen:], "\n")
+	if s.buffer == "" {
+		return ""
 	}
-	return ""
+	rendered, _ := s.renderDelta(s.buffer)
+	return rendered
 }
 
-func (s *Stream) findSafeSplit() (int, error) {
-	src := []byte(s.buffer)
-	reader := text.NewReader(src)
+// findSafeSplit identifies the byte offset representing the end of the safe content.
+func (s *Stream) findSafeSplit() int {
+	reader := text.NewReader([]byte(s.buffer))
 	doc := s.parser.Parser().Parse(reader)
 
-	var blocks []ast.Node
-	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
-		blocks = append(blocks, child)
+	var last ast.Node
+	count := 0
+	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+		last = c
+		count++
 	}
 
-	if len(blocks) <= 1 {
-		return 0, fmt.Errorf("not enough blocks to flush")
+	if count == 0 {
+		return 0
 	}
 
-	safeBlock := blocks[len(blocks)-2]
+	if count >= 2 {
+		anchor := s.getNodeStart(last)
+		return s.scanBack(anchor)
+	}
 
-	var getLastStop func(node ast.Node) int
-	getLastStop = func(node ast.Node) int {
+	// Single block: find rightmost \n\n that is not in a sensitive area.
+	split := s.getInternalSplit(doc)
+	if split > 0 {
+		return s.scanBack(split)
+	}
+	return 0
+}
+
+func (s *Stream) scanBack(anchor int) int {
+	if anchor <= 0 {
+		return 0
+	}
+	i := anchor - 1
+	for i >= 0 {
+		if s.buffer[i] != '\n' && s.buffer[i] != ' ' && s.buffer[i] != '\t' && s.buffer[i] != '\r' {
+			break
+		}
+		i--
+	}
+	return i + 1
+}
+
+func (s *Stream) getInternalSplit(doc ast.Node) int {
+	src := s.buffer
+	// Search for the last double-newline gap.
+	for i := len(src) - 2; i >= 0; i-- {
+		if src[i] == '\n' && src[i+1] == '\n' {
+			// Candidates for splitting: the point after the first \n.
+			splitPoint := i + 1
+			// Skip extra newlines and whitespace to find start of next unit.
+			target := splitPoint
+			for target < len(src) && (src[target] == '\n' || src[target] == '\r' || src[target] == ' ' || src[target] == '\t') {
+				target++
+			}
+			if target >= len(src) {
+				continue
+			}
+
+			// Validate if we are in a fenced block.
+			if !s.isInsideFencedBlock(doc, target) {
+				return target
+			}
+		}
+	}
+	return 0
+}
+
+func (s *Stream) isInsideFencedBlock(node ast.Node, pos int) bool {
+	if node.Kind() == ast.KindFencedCodeBlock {
+		start := s.getNodeStart(node)
+		end := s.getNodeEnd(node)
+		return pos > start && pos < end
+	}
+	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+		if s.isInsideFencedBlock(c, pos) {
+			return true
+		}
+	}
+	return false
+}
+
+// getNodeStart finds the true byte start of a node including syntax markers.
+func (s *Stream) getNodeStart(node ast.Node) int {
+	if node == nil {
+		return 0
+	}
+
+	var anchor int
+	if node.Type() == ast.TypeBlock {
 		lines := node.Lines()
 		if lines.Len() > 0 {
-			lastLine := lines.At(lines.Len() - 1)
-			return lastLine.Stop
+			anchor = lines.At(0).Start
 		}
-		if node.HasChildren() {
-			var lastChild ast.Node
-			for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-				lastChild = c
+	}
+
+	if anchor == 0 && node.HasChildren() {
+		return s.getNodeStart(node.FirstChild())
+	}
+
+	if anchor <= 0 {
+		if node.Kind() == ast.KindThematicBreak {
+			prev := node.PreviousSibling()
+			offset := 0
+			if prev != nil {
+				offset = s.getNodeEnd(prev)
 			}
-			if lastChild != nil {
-				return getLastStop(lastChild)
+			src := s.buffer[offset:]
+			for i := 0; i < len(src); i++ {
+				c := src[i]
+				if c == '-' || c == '*' || c == '_' {
+					j := offset + i - 1
+					for j >= 0 && s.buffer[j] != '\n' && (s.buffer[j] == ' ' || s.buffer[j] == '\t') {
+						j--
+					}
+					return j + 1
+				}
 			}
 		}
 		return 0
 	}
 
-	safeEnd := getLastStop(safeBlock)
-	if safeEnd == 0 {
-		return 0, fmt.Errorf("could not find end of safe block")
+	i := anchor - 1
+	for i >= 0 && s.buffer[i] != '\n' {
+		i--
+	}
+	startOfLine := i + 1
+
+	if node.Kind() == ast.KindFencedCodeBlock {
+		if i >= 0 {
+			i--
+			for i >= 0 && s.buffer[i] != '\n' {
+				i--
+			}
+			startOfLine = i + 1
+		}
 	}
 
-	if safeBlock.Kind() == ast.KindHeading {
-		src := []byte(s.buffer)
-		if safeEnd < len(src) && src[safeEnd] == '\n' {
-			rest := src[safeEnd+1:]
-			lineEnd := 0
-			for i, b := range rest {
-				if b == '\n' {
-					lineEnd = i
-					break
-				}
-				lineEnd = i + 1
-			}
+	return startOfLine
+}
 
-			line := rest[:lineEnd]
-			t := strings.TrimSpace(string(line))
+// getNodeEnd finds the true byte end of a node including closing syntax.
+func (s *Stream) getNodeEnd(node ast.Node) int {
+	if node == nil {
+		return 0
+	}
+
+	var stop int
+	if node.Type() == ast.TypeBlock {
+		lines := node.Lines()
+		if lines.Len() > 0 {
+			stop = lines.At(lines.Len() - 1).Stop
+		}
+	}
+
+	if node.HasChildren() {
+		cStop := s.getNodeEnd(node.LastChild())
+		if cStop > stop {
+			stop = cStop
+		}
+	}
+
+	if stop == 0 {
+		if node.Kind() == ast.KindThematicBreak {
+			start := s.getNodeStart(node)
+			if start >= 0 {
+				src := s.buffer[start:]
+				idx := strings.IndexByte(src, '\n')
+				if idx != -1 {
+					return start + idx + 1
+				}
+				return start + len(src)
+			}
+		}
+		return 0
+	}
+
+	switch node.Kind() {
+	case ast.KindFencedCodeBlock:
+		src := s.buffer[stop:]
+		for _, fence := range []string{"```", "~~~"} {
+			if idx := strings.Index(src, fence); idx != -1 {
+				lineEnd := strings.IndexByte(src[idx:], '\n')
+				if lineEnd == -1 {
+					return stop + idx + len(fence)
+				}
+				return stop + idx + lineEnd + 1
+			}
+		}
+	case ast.KindHeading:
+		src := s.buffer[stop:]
+		if len(src) > 0 && (src[0] == '\n' || src[0] == '\r') {
+			offset := 1
+			if len(src) > 1 && src[0] == '\r' && src[1] == '\n' {
+				offset = 2
+			}
+			rest := src[offset:]
+			lineEnd := strings.IndexByte(rest, '\n')
+			var underline string
+			if lineEnd == -1 {
+				underline = rest
+			} else {
+				underline = rest[:lineEnd]
+			}
+			t := strings.TrimSpace(underline)
 			if (strings.HasPrefix(t, "===") || strings.HasPrefix(t, "---")) && len(t) >= 3 {
-				safeEnd += 1 + lineEnd
+				if lineEnd == -1 {
+					return stop + offset + len(underline)
+				}
+				return stop + offset + lineEnd + 1
 			}
 		}
 	}
 
-	return safeEnd, nil
+	return stop
 }
 
-func (s *Stream) render(markdown string) (string, error) {
-	if strings.TrimSpace(markdown) == "" {
-		return "", nil
+// extractLastBlockSource finds the raw markdown of the last top-level block in content.
+func (s *Stream) extractLastBlockSource(content string) string {
+	reader := text.NewReader([]byte(content))
+	doc := s.parser.Parser().Parse(reader)
+	var last ast.Node
+	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
+		last = c
 	}
-	return s.renderer.Render(markdown)
+	if last == nil {
+		return ""
+	}
+
+	oldBuf := s.buffer
+	s.buffer = content
+	defer func() { s.buffer = oldBuf }()
+
+	start := s.getNodeStart(last)
+	end := s.getNodeEnd(last)
+	if end > len(content) {
+		end = len(content)
+	}
+	if start < 0 {
+		start = 0
+	}
+	return content[start:end]
+}
+
+// renderDelta renders newContent with correct spacing relative to lastBlock.
+func (s *Stream) renderDelta(newContent string) (string, error) {
+	if s.lastBlock == "" {
+		return s.renderer.Render(newContent)
+	}
+
+	full := s.lastBlock + newContent
+	fullANSI, err := s.renderer.Render(full)
+	if err != nil {
+		return "", err
+	}
+
+	prefixANSI, err := s.renderer.Render(s.lastBlock)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.HasPrefix(fullANSI, prefixANSI) {
+		return fullANSI[len(prefixANSI):], nil
+	}
+	return fullANSI[len(prefixANSI):], nil
 }

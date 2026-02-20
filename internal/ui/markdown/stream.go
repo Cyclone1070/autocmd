@@ -91,8 +91,17 @@ func (s *Stream) findSafeSplit() int {
 	}
 
 	if count >= 2 {
-		anchor := s.getNodeStart(last, s.buffer)
-		return s.scanBack(anchor, s.buffer)
+		// Find the second to last node to determine where the previous block ends.
+		var prev ast.Node
+		curr := doc.FirstChild()
+		for curr != nil && curr != last {
+			prev = curr
+			curr = curr.NextSibling()
+		}
+		if prev != nil {
+			return s.getNodeEnd(prev, s.buffer)
+		}
+		return 0
 	}
 
 	// Single block: find rightmost \n\n that is not in a sensitive area.
@@ -118,23 +127,33 @@ func (s *Stream) scanBack(anchor int, src string) int {
 }
 
 func (s *Stream) getInternalSplit(doc ast.Node, src string) int {
-	// Search for the last double-newline gap.
+	// Search for any double-newline gap (Unix \n\n or Windows \r\n\r\n)
+	// that may contain trailing spaces/tabs between the newlines.
 	for i := len(src) - 2; i >= 0; i-- {
-		if src[i] == '\n' && src[i+1] == '\n' {
-			// Candidates for splitting: the point after the first \n.
-			splitPoint := i + 1
-			// Skip extra newlines and whitespace to find start of next unit.
-			target := splitPoint
-			for target < len(src) && (src[target] == '\n' || src[target] == '\r' || src[target] == ' ' || src[target] == '\t') {
-				target++
+		if src[i] == '\n' {
+			// Find the previous newline to see if we have a gap
+			j := i - 1
+			if j >= 0 && src[j] == '\r' {
+				j--
 			}
-			if target >= len(src) {
-				continue
+			for j >= 0 && (src[j] == ' ' || src[j] == '\t') {
+				j--
 			}
+			if j >= 0 && src[j] == '\n' {
+				// We found a gap like \n [spaces] \n or \n [spaces] \r\n
+				splitPoint := i + 1
+				// Skip extra whitespace to find start of next unit.
+				target := splitPoint
+				for target < len(src) && (src[target] == '\n' || src[target] == '\r' || src[target] == ' ' || src[target] == '\t') {
+					target++
+				}
+				if target >= len(src) {
+					continue
+				}
 
-			// Validate if we are in a fenced block.
-			if !s.isInsideFencedBlock(doc, target, src) {
-				return target
+				if !s.isInsideFencedBlock(doc, target, src) {
+					return target
+				}
 			}
 		}
 	}
@@ -181,14 +200,21 @@ func (s *Stream) getNodeStart(node ast.Node, src string) int {
 				offset = s.getNodeEnd(prev, src)
 			}
 			sliced := src[offset:]
+			// Thematic break can start with up to 3 spaces indentation.
+			// Skip any leading gap newlines/whitespace to find the actual marker.
 			for i := 0; i < len(sliced); i++ {
 				c := sliced[i]
 				if c == '-' || c == '*' || c == '_' {
+					// We found the first marker. Backtrack to start of line.
 					j := offset + i - 1
-					for j >= 0 && src[j] != '\n' && (src[j] == ' ' || src[j] == '\t') {
+					for j >= 0 && src[j] != '\n' {
 						j--
 					}
 					return j + 1
+				}
+				if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+					// Not a thematic break marker and not whitespace
+					break
 				}
 			}
 		}
@@ -202,8 +228,10 @@ func (s *Stream) getNodeStart(node ast.Node, src string) int {
 	startOfLine := i + 1
 
 	if node.Kind() == ast.KindFencedCodeBlock {
+		// Fenced code blocks can have an opening fence line before the content lines.
+		// Goldmark's anchor points to the first line of CONTENT.
 		if i >= 0 {
-			i--
+			i-- // Skip the \n
 			for i >= 0 && src[i] != '\n' {
 				i--
 			}
@@ -235,35 +263,23 @@ func (s *Stream) getNodeEnd(node ast.Node, src string) int {
 		}
 	}
 
-	if stop == 0 {
-		if node.Kind() == ast.KindThematicBreak {
-			start := s.getNodeStart(node, src)
-			if start >= 0 {
-				sliced := src[start:]
-				idx := strings.IndexByte(sliced, '\n')
-				if idx != -1 {
-					return start + idx + 1
-				}
-				return start + len(sliced)
-			}
-		}
-		return 0
-	}
-
 	switch node.Kind() {
 	case ast.KindFencedCodeBlock:
 		sliced := src[stop:]
-		for _, fence := range []string{"```", "~~~"} {
-			if idx := strings.Index(sliced, fence); idx != -1 {
-				lineEnd := strings.IndexByte(sliced[idx:], '\n')
-				if lineEnd == -1 {
-					return stop + idx + len(fence)
-				}
-				return stop + idx + lineEnd + 1
+		// Find the closing fence. It must start on a new line.
+		idx := strings.IndexAny(sliced, "`~")
+		if idx != -1 {
+			// Find end of that line
+			lineEnd := strings.IndexByte(sliced[idx:], '\n')
+			if lineEnd == -1 {
+				stop += idx + len(strings.TrimRight(sliced[idx:], " \t\r"))
+			} else {
+				stop += idx + lineEnd
 			}
 		}
 	case ast.KindHeading:
 		sliced := src[stop:]
+		// Potential Setext underline
 		if len(sliced) > 0 && (sliced[0] == '\n' || sliced[0] == '\r') {
 			offset := 1
 			if len(sliced) > 1 && sliced[0] == '\r' && sliced[1] == '\n' {
@@ -277,14 +293,31 @@ func (s *Stream) getNodeEnd(node ast.Node, src string) int {
 			} else {
 				underline = rest[:lineEnd]
 			}
-			t := strings.TrimSpace(underline)
+			t := strings.TrimRight(underline, " \t\r")
 			if (strings.HasPrefix(t, "===") || strings.HasPrefix(t, "---")) && len(t) >= 3 {
 				if lineEnd == -1 {
-					return stop + offset + len(underline)
+					stop += offset + len(underline)
+				} else {
+					stop += offset + lineEnd
 				}
-				return stop + offset + lineEnd + 1
 			}
 		}
+	case ast.KindThematicBreak:
+		// Thematic break ends at the end of its line
+		start := s.getNodeStart(node, src)
+		sliced := src[start:]
+		idx := strings.IndexByte(sliced, '\n')
+		if idx != -1 {
+			stop = start + idx
+		} else {
+			stop = start + len(sliced)
+		}
+	}
+
+	// Finally, for ALL blocks, ensure we don't include a trailing newline.
+	// This ensures our gap separation logic (which expects gaps to start with \n) works.
+	for stop > 0 && stop <= len(src) && (src[stop-1] == '\n' || src[stop-1] == '\r') {
+		stop--
 	}
 
 	return stop

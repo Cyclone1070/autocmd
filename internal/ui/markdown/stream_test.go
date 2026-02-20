@@ -67,6 +67,14 @@ func makeBlock(kind string, index int) string {
 		return "***"
 	case "HR_UNDER":
 		return "___"
+	case "CODE_FENCE_TILDE_4":
+		return fmt.Sprintf("~~~~go\nfunc main%d(){}\n~~~~", index)
+	case "HR_SPACED_DASH":
+		return "- - -"
+	case "HR_SPACED_STAR":
+		return "*   *   *"
+	case "SETEXT_PADDED":
+		return fmt.Sprintf("Setext Padded %d\n===   ", index)
 	default:
 		return fmt.Sprintf("Unknown %d", index)
 	}
@@ -81,12 +89,12 @@ func TestStream_Split(t *testing.T) {
 		"CODE_FENCE_GO", "CODE_FENCE_TXT", "CODE_FENCE_NONE", "CODE_INDENT",
 		"QUOTE_SIMPLE", "QUOTE_NESTED",
 		"HR_DASH", "HR_STAR", "HR_UNDER",
+		"CODE_FENCE_TILDE_4", "HR_SPACED_DASH", "HR_SPACED_STAR", "SETEXT_PADDED",
 	}
 
-	runSequence := func(t *testing.T, types []string, newlineCount int) {
+	runSequence := func(t *testing.T, types []string, gap string) {
 		t.Helper()
 		s := NewStream(mockRenderer{})
-		gap := strings.Repeat("\n", newlineCount)
 
 		var blocks []string
 		for i, k := range types {
@@ -134,38 +142,46 @@ func TestStream_Split(t *testing.T) {
 			gotPend := s.Pending()
 
 			if gotFlush != wantFlush {
-				t.Errorf("Seq %v Gap %d Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, newlineCount, i, gotFlush, wantFlush)
+				t.Errorf("Seq %v Gap %q Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotFlush, wantFlush)
 			}
 			if gotPend != wantPend {
-				t.Errorf("Seq %v Gap %d Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, newlineCount, i, gotPend, wantPend)
+				t.Errorf("Seq %v Gap %q Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotPend, wantPend)
 			}
 		}
 	}
 
-	newlineGaps := []int{2, 3, 4}
+	gaps := []string{"\n\n", "\n\n\n", "\r\n\r\n", "\n   \n", "\r\n  \r\n"}
 
 	t.Run("Single", func(t *testing.T) {
 		for _, k := range keys {
-			runSequence(t, []string{k}, 2)
+			runSequence(t, []string{k}, "\n\n")
 		}
 	})
 
 	t.Run("Pair", func(t *testing.T) {
-		for _, gap := range newlineGaps {
+		for _, gap := range gaps {
 			for _, k1 := range keys {
 				for _, k2 := range keys {
-					runSequence(t, []string{k1, k2}, gap)
+					types := []string{k1, k2}
+					t.Run(fmt.Sprintf("%v/%s", types, gap), func(t *testing.T) {
+						t.Parallel()
+						runSequence(t, types, gap)
+					})
 				}
 			}
 		}
 	})
 
 	t.Run("Triple", func(t *testing.T) {
-		for _, gap := range newlineGaps {
+		for _, gap := range gaps {
 			for _, k1 := range keys {
 				for _, k2 := range keys {
 					for _, k3 := range keys {
-						runSequence(t, []string{k1, k2, k3}, gap)
+						types := []string{k1, k2, k3}
+						t.Run(fmt.Sprintf("%v/%s", types, gap), func(t *testing.T) {
+							t.Parallel()
+							runSequence(t, types, gap)
+						})
 					}
 				}
 			}

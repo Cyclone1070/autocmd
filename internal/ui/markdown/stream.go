@@ -12,7 +12,8 @@ import (
 type Stream struct {
 	buffer        string
 	lastBlock     string // Raw markdown of the last successfully flushed block
-	lastBlockANSI string // Cached ANSI rendering of lastBlock
+	lastBlockANSI string // Cached ANSI rendering of lastBlock stripped of doc margins
+	lastMargin    string // Trailing newlines stripped from the last render
 	parser        goldmark.Markdown
 	renderer      Renderer
 }
@@ -42,17 +43,26 @@ func (s *Stream) Append(chunk string) ([]string, error) {
 		return nil, err
 	}
 
+	strippedRendered, margin := splitTrailingNewlines(rendered)
+	s.lastMargin = margin
+
 	// Update lastBlock context for next block.
 	s.lastBlock = s.extractLastBlockSource(safeContent)
-	s.lastBlockANSI, _ = s.renderer.Render(s.lastBlock)
+	lastANSI, _ := s.renderer.Render(s.lastBlock)
+	s.lastBlockANSI, _ = splitTrailingNewlines(lastANSI)
 
 	s.buffer = s.buffer[split:]
-	return []string{rendered}, nil
+	return []string{strippedRendered}, nil
 }
 
 // Flush returns any remaining content in the buffer.
 func (s *Stream) Flush() ([]string, error) {
 	if s.buffer == "" {
+		if s.lastMargin != "" {
+			m := s.lastMargin
+			s.lastMargin = ""
+			return []string{m}, nil
+		}
 		return nil, nil
 	}
 	rendered, err := s.renderDelta(s.buffer)
@@ -62,13 +72,14 @@ func (s *Stream) Flush() ([]string, error) {
 	s.buffer = ""
 	s.lastBlock = "" // Reset context
 	s.lastBlockANSI = ""
+	s.lastMargin = ""
 	return []string{rendered}, nil
 }
 
 // Pending returns the temporary rendered ANSI for the dynamic view.
 func (s *Stream) Pending() string {
 	if s.buffer == "" {
-		return ""
+		return s.lastMargin
 	}
 	rendered, _ := s.renderDelta(s.buffer)
 	return rendered
@@ -151,7 +162,7 @@ func (s *Stream) getInternalSplit(doc ast.Node, src string) int {
 					continue
 				}
 
-				if !s.isInsideFencedBlock(doc, target, src) {
+				if !s.isInsideUnsplittableBlock(doc, target, src) {
 					return target
 				}
 			}
@@ -160,14 +171,15 @@ func (s *Stream) getInternalSplit(doc ast.Node, src string) int {
 	return 0
 }
 
-func (s *Stream) isInsideFencedBlock(node ast.Node, pos int, src string) bool {
-	if node.Kind() == ast.KindFencedCodeBlock {
+func (s *Stream) isInsideUnsplittableBlock(node ast.Node, pos int, src string) bool {
+	kind := node.Kind()
+	if kind == ast.KindFencedCodeBlock || kind == ast.KindCodeBlock || kind == ast.KindList || kind == ast.KindBlockquote {
 		start := s.getNodeStart(node, src)
 		end := s.getNodeEnd(node, src)
 		return pos > start && pos < end
 	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		if s.isInsideFencedBlock(c, pos, src) {
+		if s.isInsideUnsplittableBlock(c, pos, src) {
 			return true
 		}
 	}
@@ -361,4 +373,15 @@ func (s *Stream) renderDelta(newContent string) (string, error) {
 
 	// Fallback to fresh render if context-aware delta fails (Issue 6)
 	return s.renderer.Render(newContent)
+}
+
+// splitTrailingNewlines separates the trailing newlines from a string.
+func splitTrailingNewlines(text string) (string, string) {
+	i := len(text) - 1
+	for ; i >= 0; i-- {
+		if text[i] != '\n' && text[i] != '\r' {
+			break
+		}
+	}
+	return text[:i+1], text[i+1:]
 }

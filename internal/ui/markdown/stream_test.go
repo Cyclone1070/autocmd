@@ -80,8 +80,8 @@ func makeBlock(kind string, index int) string {
 	}
 }
 
-func TestStream_Split(t *testing.T) {
-	keys := []string{
+var (
+	testKeys = []string{
 		"PARA_SIMPLE", "PARA_BOLD_END", "PARA_ITALIC_END", "PARA_CODE_END", "PARA_LINK_END",
 		"H1", "H2", "H3", "H4", "H5",
 		"SETEXT_1", "SETEXT_2",
@@ -91,7 +91,10 @@ func TestStream_Split(t *testing.T) {
 		"HR_DASH", "HR_STAR", "HR_UNDER",
 		"CODE_FENCE_TILDE_4", "HR_SPACED_DASH", "HR_SPACED_STAR", "SETEXT_PADDED",
 	}
+	testGaps = []string{"\n\n", "\n\n\n", "\r\n\r\n", "\n   \n", "\r\n  \r\n"}
+)
 
+func TestStream_Split(t *testing.T) {
 	runSequence := func(t *testing.T, types []string, gap string) {
 		t.Helper()
 		s := NewStream(mockRenderer{})
@@ -102,6 +105,8 @@ func TestStream_Split(t *testing.T) {
 		}
 
 		var accFlush strings.Builder
+		var pendingMD strings.Builder
+		var activeListContext string
 
 		for i := 0; i < len(blocks); i++ {
 			chunk := blocks[i]
@@ -120,48 +125,68 @@ func TestStream_Split(t *testing.T) {
 				accFlush.WriteString(f)
 			}
 
-			var wantFlush string
-			var wantPend string
-
+			// Track active list context to simulate Goldmark's AST grouping correctly across multiple blocks.
 			if i == 0 {
-				wantFlush = ""
-				wantPend = blocks[0]
-			} else {
-				var flushBuilder strings.Builder
-				for j := 0; j < i; j++ {
-					if j > 0 {
-						flushBuilder.WriteString(gap)
-					}
-					flushBuilder.WriteString(blocks[j])
+				pendingMD.WriteString(chunk)
+				if strings.HasPrefix(types[0], "LIST_") {
+					activeListContext = types[0]
 				}
-				wantFlush = flushBuilder.String()
-				wantPend = gap + blocks[i]
+			} else {
+				// Determine if Goldmark would split types[i] from the currently pending block
+				split := true
+				if types[i] == "CODE_INDENT" && (activeListContext != "" || types[i-1] == "CODE_INDENT") {
+					split = false
+				} else if strings.HasPrefix(types[i], "LIST_") && activeListContext == types[i] {
+					split = false
+				}
+
+				if split {
+					// We expected the PREVIOUS pending content to be flushed now.
+					// And the NEW chunk to become the new pending.
+					pendingMD.Reset()
+					pendingMD.WriteString(gap + chunk)
+					if strings.HasPrefix(types[i], "LIST_") {
+						activeListContext = types[i]
+					} else {
+						activeListContext = ""
+					}
+				} else {
+					// Sticky! It shouldn't have flushed anything extra.
+					pendingMD.WriteString(gap + chunk)
+				}
 			}
 
-			gotFlush := accFlush.String()
+			// The total accumulated flush should be everything except what is currently pending.
+			fullMD := strings.Join(blocks[:i+1], gap)
+			wantFlush := ""
+			if len(fullMD) > len(pendingMD.String()) {
+				wantFlush = fullMD[:len(fullMD)-len(pendingMD.String())]
+			}
+			// Trim trailing newlines because Stream flushes strip them
+			wantFlush = strings.TrimRight(wantFlush, "\n\r")
+
+			gotFlush := strings.TrimRight(accFlush.String(), "\n\r")
 			gotPend := s.Pending()
 
 			if gotFlush != wantFlush {
 				t.Errorf("Seq %v Gap %q Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotFlush, wantFlush)
 			}
-			if gotPend != wantPend {
-				t.Errorf("Seq %v Gap %q Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotPend, wantPend)
+			if gotPend != pendingMD.String() {
+				t.Errorf("Seq %v Gap %q Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotPend, pendingMD.String())
 			}
 		}
 	}
 
-	gaps := []string{"\n\n", "\n\n\n", "\r\n\r\n", "\n   \n", "\r\n  \r\n"}
-
 	t.Run("Single", func(t *testing.T) {
-		for _, k := range keys {
+		for _, k := range testKeys {
 			runSequence(t, []string{k}, "\n\n")
 		}
 	})
 
 	t.Run("Pair", func(t *testing.T) {
-		for _, gap := range gaps {
-			for _, k1 := range keys {
-				for _, k2 := range keys {
+		for _, gap := range testGaps {
+			for _, k1 := range testKeys {
+				for _, k2 := range testKeys {
 					types := []string{k1, k2}
 					t.Run(fmt.Sprintf("%v/%s", types, gap), func(t *testing.T) {
 						t.Parallel()
@@ -173,10 +198,10 @@ func TestStream_Split(t *testing.T) {
 	})
 
 	t.Run("Triple", func(t *testing.T) {
-		for _, gap := range gaps {
-			for _, k1 := range keys {
-				for _, k2 := range keys {
-					for _, k3 := range keys {
+		for _, gap := range testGaps {
+			for _, k1 := range testKeys {
+				for _, k2 := range testKeys {
+					for _, k3 := range testKeys {
 						types := []string{k1, k2, k3}
 						t.Run(fmt.Sprintf("%v/%s", types, gap), func(t *testing.T) {
 							t.Parallel()
@@ -187,4 +212,93 @@ func TestStream_Split(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestStream_RenderConsistency(t *testing.T) {
+	for _, gap := range testGaps {
+		t.Run(fmt.Sprintf("Giant_Stream_Gap_%q", gap), func(t *testing.T) {
+			t.Parallel()
+
+			renderer, err := NewGlamourRenderer(80)
+			if err != nil {
+				t.Fatalf("Failed to create renderer: %v", err)
+			}
+			s := NewStream(renderer)
+
+			var types []string
+			for _, k1 := range testKeys {
+				for _, k2 := range testKeys {
+					types = append(types, k1, k2)
+				}
+			}
+
+			var blocks []string
+			for i, k := range types {
+				blocks = append(blocks, makeBlock(k, i))
+			}
+
+			fullMD := strings.Join(blocks, gap)
+			wantOut, err := renderer.Render(fullMD)
+			if err != nil {
+				t.Fatalf("Render failed: %v", err)
+			}
+
+			var streamedOut strings.Builder
+			for i := 0; i < len(blocks); i++ {
+				var toAppend string
+				if i == 0 {
+					toAppend = blocks[i]
+				} else {
+					toAppend = gap + blocks[i]
+				}
+				flushed, err := s.Append(toAppend)
+				if err != nil {
+					t.Fatalf("Append failed: %v", err)
+				}
+				for _, f := range flushed {
+					streamedOut.WriteString(f)
+				}
+			}
+			finalFlush, err := s.Flush()
+			if err != nil {
+				t.Fatalf("Flush failed: %v", err)
+			}
+			for _, f := range finalFlush {
+				streamedOut.WriteString(f)
+			}
+
+			gotOut := streamedOut.String()
+			if gotOut != wantOut {
+				t.Errorf("Render inconsistency: Output mismatch. GOT %d bytes, WANT %d bytes", len(gotOut), len(wantOut))
+
+				// Find first difference to help debugging
+				minLen := len(gotOut)
+				if len(wantOut) < minLen {
+					minLen = len(wantOut)
+				}
+				for i := 0; i < minLen; i++ {
+					if gotOut[i] != wantOut[i] {
+						start := i - 50
+						if start < 0 {
+							start = 0
+						}
+
+						endGot := i + 50
+						if endGot > len(gotOut) {
+							endGot = len(gotOut)
+						}
+
+						endWant := i + 50
+						if endWant > len(wantOut) {
+							endWant = len(wantOut)
+						}
+
+						t.Logf("First mismatch at byte %d:\nGOT  context: %q\nWANT context: %q",
+							i, gotOut[start:endGot], wantOut[start:endWant])
+						break
+					}
+				}
+			}
+		})
+	}
 }

@@ -1,7 +1,7 @@
 // Package layout provides viewport layout utilities.
 // TruncateWithIndicator limits content height and shows an overflow indicator when content exceeds term height.
 
-package layout
+package ui
 
 import (
 	"fmt"

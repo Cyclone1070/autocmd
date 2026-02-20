@@ -1,7 +1,7 @@
 // Package theme provides styling and status types for the UI.
 // Theme and ToolStatus are used by tool display, status bar, and compose wiring.
 
-package theme
+package ui
 
 import (
 	"strings"

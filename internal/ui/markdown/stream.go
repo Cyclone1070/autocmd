@@ -88,25 +88,25 @@ func (s *Stream) findSafeSplit() int {
 	}
 
 	if count >= 2 {
-		anchor := s.getNodeStart(last)
-		return s.scanBack(anchor)
+		anchor := s.getNodeStart(last, s.buffer)
+		return s.scanBack(anchor, s.buffer)
 	}
 
 	// Single block: find rightmost \n\n that is not in a sensitive area.
-	split := s.getInternalSplit(doc)
+	split := s.getInternalSplit(doc, s.buffer)
 	if split > 0 {
-		return s.scanBack(split)
+		return s.scanBack(split, s.buffer)
 	}
 	return 0
 }
 
-func (s *Stream) scanBack(anchor int) int {
+func (s *Stream) scanBack(anchor int, src string) int {
 	if anchor <= 0 {
 		return 0
 	}
 	i := anchor - 1
 	for i >= 0 {
-		if s.buffer[i] != '\n' && s.buffer[i] != ' ' && s.buffer[i] != '\t' && s.buffer[i] != '\r' {
+		if src[i] != '\n' && src[i] != ' ' && src[i] != '\t' && src[i] != '\r' {
 			break
 		}
 		i--
@@ -114,8 +114,7 @@ func (s *Stream) scanBack(anchor int) int {
 	return i + 1
 }
 
-func (s *Stream) getInternalSplit(doc ast.Node) int {
-	src := s.buffer
+func (s *Stream) getInternalSplit(doc ast.Node, src string) int {
 	// Search for the last double-newline gap.
 	for i := len(src) - 2; i >= 0; i-- {
 		if src[i] == '\n' && src[i+1] == '\n' {
@@ -131,7 +130,7 @@ func (s *Stream) getInternalSplit(doc ast.Node) int {
 			}
 
 			// Validate if we are in a fenced block.
-			if !s.isInsideFencedBlock(doc, target) {
+			if !s.isInsideFencedBlock(doc, target, src) {
 				return target
 			}
 		}
@@ -139,14 +138,14 @@ func (s *Stream) getInternalSplit(doc ast.Node) int {
 	return 0
 }
 
-func (s *Stream) isInsideFencedBlock(node ast.Node, pos int) bool {
+func (s *Stream) isInsideFencedBlock(node ast.Node, pos int, src string) bool {
 	if node.Kind() == ast.KindFencedCodeBlock {
-		start := s.getNodeStart(node)
-		end := s.getNodeEnd(node)
+		start := s.getNodeStart(node, src)
+		end := s.getNodeEnd(node, src)
 		return pos > start && pos < end
 	}
 	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		if s.isInsideFencedBlock(c, pos) {
+		if s.isInsideFencedBlock(c, pos, src) {
 			return true
 		}
 	}
@@ -154,7 +153,7 @@ func (s *Stream) isInsideFencedBlock(node ast.Node, pos int) bool {
 }
 
 // getNodeStart finds the true byte start of a node including syntax markers.
-func (s *Stream) getNodeStart(node ast.Node) int {
+func (s *Stream) getNodeStart(node ast.Node, src string) int {
 	if node == nil {
 		return 0
 	}
@@ -168,7 +167,7 @@ func (s *Stream) getNodeStart(node ast.Node) int {
 	}
 
 	if anchor == 0 && node.HasChildren() {
-		return s.getNodeStart(node.FirstChild())
+		return s.getNodeStart(node.FirstChild(), src)
 	}
 
 	if anchor <= 0 {
@@ -176,14 +175,14 @@ func (s *Stream) getNodeStart(node ast.Node) int {
 			prev := node.PreviousSibling()
 			offset := 0
 			if prev != nil {
-				offset = s.getNodeEnd(prev)
+				offset = s.getNodeEnd(prev, src)
 			}
-			src := s.buffer[offset:]
-			for i := 0; i < len(src); i++ {
-				c := src[i]
+			sliced := src[offset:]
+			for i := 0; i < len(sliced); i++ {
+				c := sliced[i]
 				if c == '-' || c == '*' || c == '_' {
 					j := offset + i - 1
-					for j >= 0 && s.buffer[j] != '\n' && (s.buffer[j] == ' ' || s.buffer[j] == '\t') {
+					for j >= 0 && src[j] != '\n' && (src[j] == ' ' || src[j] == '\t') {
 						j--
 					}
 					return j + 1
@@ -194,7 +193,7 @@ func (s *Stream) getNodeStart(node ast.Node) int {
 	}
 
 	i := anchor - 1
-	for i >= 0 && s.buffer[i] != '\n' {
+	for i >= 0 && src[i] != '\n' {
 		i--
 	}
 	startOfLine := i + 1
@@ -202,7 +201,7 @@ func (s *Stream) getNodeStart(node ast.Node) int {
 	if node.Kind() == ast.KindFencedCodeBlock {
 		if i >= 0 {
 			i--
-			for i >= 0 && s.buffer[i] != '\n' {
+			for i >= 0 && src[i] != '\n' {
 				i--
 			}
 			startOfLine = i + 1
@@ -213,7 +212,7 @@ func (s *Stream) getNodeStart(node ast.Node) int {
 }
 
 // getNodeEnd finds the true byte end of a node including closing syntax.
-func (s *Stream) getNodeEnd(node ast.Node) int {
+func (s *Stream) getNodeEnd(node ast.Node, src string) int {
 	if node == nil {
 		return 0
 	}
@@ -227,7 +226,7 @@ func (s *Stream) getNodeEnd(node ast.Node) int {
 	}
 
 	if node.HasChildren() {
-		cStop := s.getNodeEnd(node.LastChild())
+		cStop := s.getNodeEnd(node.LastChild(), src)
 		if cStop > stop {
 			stop = cStop
 		}
@@ -235,14 +234,14 @@ func (s *Stream) getNodeEnd(node ast.Node) int {
 
 	if stop == 0 {
 		if node.Kind() == ast.KindThematicBreak {
-			start := s.getNodeStart(node)
+			start := s.getNodeStart(node, src)
 			if start >= 0 {
-				src := s.buffer[start:]
-				idx := strings.IndexByte(src, '\n')
+				sliced := src[start:]
+				idx := strings.IndexByte(sliced, '\n')
 				if idx != -1 {
 					return start + idx + 1
 				}
-				return start + len(src)
+				return start + len(sliced)
 			}
 		}
 		return 0
@@ -250,10 +249,10 @@ func (s *Stream) getNodeEnd(node ast.Node) int {
 
 	switch node.Kind() {
 	case ast.KindFencedCodeBlock:
-		src := s.buffer[stop:]
+		sliced := src[stop:]
 		for _, fence := range []string{"```", "~~~"} {
-			if idx := strings.Index(src, fence); idx != -1 {
-				lineEnd := strings.IndexByte(src[idx:], '\n')
+			if idx := strings.Index(sliced, fence); idx != -1 {
+				lineEnd := strings.IndexByte(sliced[idx:], '\n')
 				if lineEnd == -1 {
 					return stop + idx + len(fence)
 				}
@@ -261,13 +260,13 @@ func (s *Stream) getNodeEnd(node ast.Node) int {
 			}
 		}
 	case ast.KindHeading:
-		src := s.buffer[stop:]
-		if len(src) > 0 && (src[0] == '\n' || src[0] == '\r') {
+		sliced := src[stop:]
+		if len(sliced) > 0 && (sliced[0] == '\n' || sliced[0] == '\r') {
 			offset := 1
-			if len(src) > 1 && src[0] == '\r' && src[1] == '\n' {
+			if len(sliced) > 1 && sliced[0] == '\r' && sliced[1] == '\n' {
 				offset = 2
 			}
-			rest := src[offset:]
+			rest := sliced[offset:]
 			lineEnd := strings.IndexByte(rest, '\n')
 			var underline string
 			if lineEnd == -1 {
@@ -292,20 +291,13 @@ func (s *Stream) getNodeEnd(node ast.Node) int {
 func (s *Stream) extractLastBlockSource(content string) string {
 	reader := text.NewReader([]byte(content))
 	doc := s.parser.Parser().Parse(reader)
-	var last ast.Node
-	for c := doc.FirstChild(); c != nil; c = c.NextSibling() {
-		last = c
-	}
+	last := doc.LastChild()
 	if last == nil {
 		return ""
 	}
 
-	oldBuf := s.buffer
-	s.buffer = content
-	defer func() { s.buffer = oldBuf }()
-
-	start := s.getNodeStart(last)
-	end := s.getNodeEnd(last)
+	start := s.getNodeStart(last, content)
+	end := s.getNodeEnd(last, content)
 	if end > len(content) {
 		end = len(content)
 	}

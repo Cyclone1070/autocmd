@@ -41,3 +41,56 @@ Stream: `Here is a list:\n\n1. Item one\n2. Ite`
 *   **Block 3 (`2. Ite`)**: The last block. **UNSAFE**. -> Render in Bubble Tea view (likely showing a spinner or simply the incomplete text).
 
 This ensures that we never "flash" or "jitter" properly formatted history, while retaining the responsiveness of a live-updating CLI.
+
+## Dynamic View Truncation
+
+Because we operate inline (without the alternate screen), the active Bubble Tea `View` must **never** exceed the current terminal height. If it did, Bubble Tea would draw off the top edge of the screen, permanently destroying the user's scrollback history.
+
+To prevent this, truncation logic is applied **only to the volatile pending view**. If a single unsafe markdown block (e.g., a massive code block that cannot be safely split until its closing fence) grows larger than the viewport, the view is truncated at the top with an overflow indicator (`▲ [Truncated]`). 
+
+Crucially, when that block finally resolves and is flushed to the permanent history via `Printf`, it is written **fully intact** without any truncation.
+
+### Truncation Example Flow
+
+**Scenario**: Terminal height is 6 lines. We are streaming a large CodeBlock.
+
+**Frame 1: Text arrives (fits in View)**
+```text
+  History 1
+  History 2
+┌─Terminal Window──┐
+│ ```go            │ (View starts drawing)
+│ package main     │
+│ func (m Model) { │
+│                  │
+└──────────────────┘
+```
+
+**Frame 2: More text arrives (exceeds viewport, triggers View truncation)**
+```text
+  History 1
+  History 2
+┌─Terminal Window──┐
+│ ▲ [Truncated]    │ <-- Indicator warns that the live view is clipped
+│     var a = 1    │
+│     var b = 2    │
+│                  │
+└──────────────────┘
+```
+*(Without this, drawing 7 lines in a 6-line terminal forces the terminal to scroll up, permanently erasing "History 2" from the screen buffer since Bubble Tea cannot retrieve it.)*
+
+**Frame 3: Closing fence arrives (Flushed to history)**
+```text
+  History 1        <-- (Scrolled off screen)
+  History 2        <-- (Scrolled off screen)
+┌─Terminal Window──┐
+│ ```go            │ <-- FULL block printed to stdout, pushing older history up.
+│ package main     │ 
+│ func (m Model) { │ 
+│     var a = 1    │
+│     var b = 2    │
+│ }                │
+│ ```              │
+│                  │ (View resets to empty, ready for next block at the bottom)
+└──────────────────┘
+```

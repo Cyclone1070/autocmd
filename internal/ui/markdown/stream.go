@@ -115,75 +115,9 @@ func (s *Stream) findSafeSplit() int {
 		return 0
 	}
 
-	// Single block: find rightmost \n\n that is not in a sensitive area.
-	split := s.getInternalSplit(doc, s.buffer)
-	if split > 0 {
-		return s.scanBack(split, s.buffer)
-	}
+	// If we have only 1 node (e.g. 1 giant List or 1 giant CodeBlock), we cannot safely split it
+	// without risking broken layout. We must buffer it until it's finished or the stream ends.
 	return 0
-}
-
-func (s *Stream) scanBack(anchor int, src string) int {
-	if anchor <= 0 {
-		return 0
-	}
-	i := anchor - 1
-	for i >= 0 {
-		if src[i] != '\n' && src[i] != ' ' && src[i] != '\t' && src[i] != '\r' {
-			break
-		}
-		i--
-	}
-	return i + 1
-}
-
-func (s *Stream) getInternalSplit(doc ast.Node, src string) int {
-	// Search for any double-newline gap (Unix \n\n or Windows \r\n\r\n)
-	// that may contain trailing spaces/tabs between the newlines.
-	for i := len(src) - 2; i >= 0; i-- {
-		if src[i] == '\n' {
-			// Find the previous newline to see if we have a gap
-			j := i - 1
-			if j >= 0 && src[j] == '\r' {
-				j--
-			}
-			for j >= 0 && (src[j] == ' ' || src[j] == '\t') {
-				j--
-			}
-			if j >= 0 && src[j] == '\n' {
-				// We found a gap like \n [spaces] \n or \n [spaces] \r\n
-				splitPoint := i + 1
-				// Skip extra whitespace to find start of next unit.
-				target := splitPoint
-				for target < len(src) && (src[target] == '\n' || src[target] == '\r' || src[target] == ' ' || src[target] == '\t') {
-					target++
-				}
-				if target >= len(src) {
-					continue
-				}
-
-				if !s.isInsideUnsplittableBlock(doc, target, src) {
-					return target
-				}
-			}
-		}
-	}
-	return 0
-}
-
-func (s *Stream) isInsideUnsplittableBlock(node ast.Node, pos int, src string) bool {
-	kind := node.Kind()
-	if kind == ast.KindFencedCodeBlock || kind == ast.KindCodeBlock || kind == ast.KindList || kind == ast.KindBlockquote {
-		start := s.getNodeStart(node, src)
-		end := s.getNodeEnd(node, src)
-		return pos > start && pos < end
-	}
-	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
-		if s.isInsideUnsplittableBlock(c, pos, src) {
-			return true
-		}
-	}
-	return false
 }
 
 // getNodeStart finds the true byte start of a node including syntax markers.

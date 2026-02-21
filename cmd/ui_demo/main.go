@@ -25,7 +25,7 @@ func main() {
 		// 2. Text Stream
 		markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
 		events <- domain.TextEvent{Text: markdown}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		// 3. Tool Call: Shell
 		events <- domain.ToolStartEvent{
@@ -56,12 +56,12 @@ func main() {
 				Removed: 1,
 			},
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		events <- domain.ToolEndEvent{CallID: "diff-1"}
 
 		// 6. Final text
 		events <- domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 
 		// 7. Done
 		events <- domain.DoneEvent{}

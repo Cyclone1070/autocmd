@@ -960,3 +960,24 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	assert.NotContains(t, allSignals, "DISCARD", "textQueue should be discarded on interrupt")
 	assert.Empty(t, m.textQueue, "Interrupt should leave textQueue empty")
 }
+
+func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewTestModel(events)
+	m.isThinking = true // Ensure spinner.Update is called
+	tracker := &outputTracker{}
+
+	// 1. Manually seed pendingOutput as if a handler forgot to finalize
+	// (or as if we want to ensure any branch finalizes)
+	m.pendingOutput = []string{"TRAPPED"}
+
+	// 2. Send spinner.TickMsg
+	tm, cmd := m.Update(spinner.TickMsg{})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// Assertion: In the current bugged state, tracker.signals will be empty
+	// because return m, cmd bypasses finalize().
+	assert.Contains(t, strings.Join(tracker.signals, ""), "TRAPPED", "Spinner tick should still trigger finalization if output is pending")
+	assert.Empty(t, m.pendingOutput, "pendingOutput should be cleared even on spinner tick")
+}

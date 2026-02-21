@@ -104,9 +104,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.isThinking || (m.activeTool != nil && m.activeTool.status == StatusRunning) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			return m, cmd
+			return m.finalize([]tea.Cmd{cmd})
 		}
-		return m, nil
+		return m.finalize(nil)
 
 	case streamTickMsg:
 		if m.textQueue == "" {

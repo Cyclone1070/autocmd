@@ -21,6 +21,11 @@ type eventMsg struct {
 	event domain.Event
 }
 
+// flushSignalMsg is a discrete signal emitted by the central flusher.
+type flushSignalMsg struct {
+	content string
+}
+
 type toolState struct {
 	id      string
 	display domain.ToolDisplay
@@ -47,7 +52,9 @@ type Model struct {
 	activeTool *toolState
 
 	// Smooth streaming state
-	textQueue string
+	textQueue     string
+	eventBuffer   []domain.Event
+	pendingOutput []string
 }
 
 // NewModel creates a new UI engine model.
@@ -82,7 +89,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
-			return m, tea.Quit
+			m.eventBuffer = nil
+			// DISCARD textQueue, only flush currently visible tail (stream buffer)
+			safe, _ := m.stream.Flush()
+			m.pendingOutput = append(m.pendingOutput, safe...)
+
+			m.textQueue = ""
+			m.isThinking = false
+			m.activeTool = nil
+			return m.finalize([]tea.Cmd{tea.Quit})
 		}
 
 	case spinner.TickMsg:
@@ -112,75 +127,141 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		safe, err := m.stream.Append(chunk)
 		if err == nil && len(safe) > 0 {
-			cmds = append(cmds, m.flushHistory(safe))
+			m.pendingOutput = append(m.pendingOutput, safe...)
 		}
 
 		if m.textQueue != "" {
 			cmds = append(cmds, m.streamTick())
+		} else if len(m.eventBuffer) > 0 {
+			for len(m.eventBuffer) > 0 {
+				ev := m.eventBuffer[0]
+				m.eventBuffer = m.eventBuffer[1:]
+				tm, cmd := m.handleEvent(ev)
+				m = tm.(*Model)
+				cmds = append(cmds, cmd)
+				if m.textQueue != "" {
+					break
+				}
+			}
 		}
 		cmds = append(cmds, m.waitForEvent())
-		return m, tea.Batch(cmds...)
+		return m.finalize(cmds)
 
 	case eventMsg:
-		// Logic to end thinking if any substantive event arrives
-		if m.isThinking {
-			switch msg.event.(type) {
-			case domain.TextEvent, domain.ToolStartEvent, domain.DoneEvent:
-				m.isThinking = false
-				m.thinkEnd = time.Now()
-				duration := m.thinkEnd.Sub(m.thinkStart).Round(time.Second)
-				style := lipgloss.NewStyle().Foreground(m.theme.success)
-				checkmark := style.Render("✔")
-				cmds = append(cmds, tea.Printf("\n  %s Thought for %v\n", checkmark, style.Render(duration.String())))
-			}
+		if m.textQueue != "" || len(m.eventBuffer) > 0 {
+			m.eventBuffer = append(m.eventBuffer, msg.event)
+			cmds = append(cmds, m.waitForEvent())
+			return m.finalize(cmds)
 		}
-
-		switch ev := msg.event.(type) {
-		case domain.ThinkingEvent:
-			m.isThinking = true
-			m.thinkStart = time.Now()
-			cmds = append(cmds, m.spinner.Tick)
-
-		case domain.TextEvent:
-			wasEmpty := m.textQueue == ""
-			m.textQueue += ev.Text
-			if wasEmpty && m.textQueue != "" {
-				cmds = append(cmds, m.streamTick())
-			}
-
-		case domain.ToolStartEvent:
-			m.activeTool = &toolState{
-				id:      ev.CallID,
-				display: ev.Display,
-				status:  StatusRunning,
-			}
-			cmds = append(cmds, m.spinner.Tick)
-
-		case domain.ToolStreamEvent:
-			if m.activeTool != nil && m.activeTool.id == ev.CallID {
-				m.activeTool.output += ev.Chunk
-			}
-
-		case domain.ToolEndEvent:
-			if m.activeTool != nil && m.activeTool.id == ev.CallID {
-				m.activeTool.status = StatusSuccess
-				if ev.Error != "" {
-					m.activeTool.status = StatusError
-					m.activeTool.err = ev.Error
-				}
-				// Render and Printf
-				cmds = append(cmds, tea.Printf("%s", m.renderTool(m.activeTool)))
-				m.activeTool = nil
-			}
-
-		case domain.DoneEvent:
-			return m, tea.Quit
-		}
-
-		cmds = append(cmds, m.waitForEvent())
-		return m, tea.Batch(cmds...)
+		tm, cmd := m.handleEvent(msg.event)
+		m = tm.(*Model)
+		return m.finalize([]tea.Cmd{cmd})
 	}
-	return m, nil
+	return m.finalize(cmds)
+}
+
+func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	if len(m.pendingOutput) > 0 {
+		content := strings.Join(m.pendingOutput, "")
+		m.pendingOutput = nil
+		cmds = append(cmds,
+			tea.Printf("%s", content),
+			func() tea.Msg { return flushSignalMsg{content: content} },
+		)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+func (m *Model) flushAll() {
+	if m.textQueue != "" {
+		safe, _ := m.stream.Append(m.textQueue)
+		m.textQueue = ""
+		m.pendingOutput = append(m.pendingOutput, safe...)
+	}
+	safe, _ := m.stream.Flush()
+	m.pendingOutput = append(m.pendingOutput, safe...)
+}
+
+// handleEvent processes a domain event and returns commands.
+func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	// Logic to end thinking if any substantive event arrives
+	if m.isThinking {
+		switch event.(type) {
+		case domain.TextEvent, domain.ToolStartEvent, domain.DoneEvent:
+			m.isThinking = false
+			m.thinkEnd = time.Now()
+
+			// Flush any pending text before printing duration to ensure order
+			safe, _ := m.stream.Flush()
+			m.pendingOutput = append(m.pendingOutput, safe...)
+
+			duration := m.thinkEnd.Sub(m.thinkStart).Round(time.Second)
+			style := lipgloss.NewStyle().Foreground(m.theme.success)
+			checkmark := style.Render("✔")
+			m.pendingOutput = append(m.pendingOutput, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(duration.String())))
+		}
+	}
+
+	switch ev := event.(type) {
+	case domain.ThinkingEvent:
+		// Flush any pending text before switching to thinking state
+		safe, _ := m.stream.Flush()
+		m.pendingOutput = append(m.pendingOutput, safe...)
+
+		m.isThinking = true
+		m.thinkStart = time.Now()
+		cmds = append(cmds, m.spinner.Tick)
+
+	case domain.TextEvent:
+		wasEmpty := m.textQueue == ""
+		m.textQueue += ev.Text
+		if wasEmpty && m.textQueue != "" {
+			cmds = append(cmds, m.streamTick())
+		}
+
+	case domain.ToolStartEvent:
+		// Flush any pending text before starting a tool
+		safe, _ := m.stream.Flush()
+		m.pendingOutput = append(m.pendingOutput, safe...)
+
+		m.activeTool = &toolState{
+			id:      ev.CallID,
+			display: ev.Display,
+			status:  StatusRunning,
+		}
+		cmds = append(cmds, m.spinner.Tick)
+
+	case domain.ToolStreamEvent:
+		if m.activeTool != nil && m.activeTool.id == ev.CallID {
+			m.activeTool.output += ev.Chunk
+		}
+
+	case domain.ToolEndEvent:
+		if m.activeTool != nil && m.activeTool.id == ev.CallID {
+			m.activeTool.status = StatusSuccess
+			if ev.Error != "" {
+				m.activeTool.status = StatusError
+				m.activeTool.err = ev.Error
+			}
+
+			// Flush any pending text before printing tool output box
+			safe, _ := m.stream.Flush()
+			m.pendingOutput = append(m.pendingOutput, safe...)
+
+			// Render and Printf
+			m.pendingOutput = append(m.pendingOutput, m.renderTool(m.activeTool))
+			m.activeTool = nil
+		}
+
+	case domain.DoneEvent:
+		m.flushAll()
+		return m, tea.Quit
+	}
+
+	cmds = append(cmds, m.waitForEvent())
+	return m, tea.Batch(cmds...)
 }
 
 // View computes the transient bottom-bar string.
@@ -212,17 +293,6 @@ func (m *Model) waitForEvent() tea.Cmd {
 		}
 		return eventMsg{event: ev}
 	}
-}
-
-func (m *Model) flushHistory(blocks []string) tea.Cmd {
-	if len(blocks) == 0 {
-		return nil
-	}
-	var combined string
-	for _, b := range blocks {
-		combined += b
-	}
-	return tea.Printf("%s", combined)
 }
 
 func (m *Model) renderTool(ts *toolState) string {

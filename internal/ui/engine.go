@@ -43,10 +43,10 @@ type Model struct {
 	height int
 
 	// Thinking state
-	isThinking bool
-	thinkStart time.Time
-	thinkEnd   time.Time
-	spinner    spinner.Model
+	isThinking       bool
+	thinkStart       time.Time
+	thinkingDuration time.Duration
+	spinner          spinner.Model
 
 	// Tool state
 	activeTool *toolState
@@ -102,6 +102,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		if m.isThinking || (m.activeTool != nil && m.activeTool.status == StatusRunning) {
+			if m.isThinking {
+				m.thinkingDuration = time.Since(m.thinkStart).Round(time.Second)
+			}
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m.finalize([]tea.Cmd{cmd})
@@ -204,7 +207,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		switch event.(type) {
 		case domain.TextEvent, domain.ToolStartEvent, domain.DoneEvent:
 			m.isThinking = false
-			m.thinkEnd = time.Now()
+			finalDuration := time.Since(m.thinkStart).Round(time.Second)
 
 			// Flush any pending text before printing duration to ensure order
 			safe, err := m.stream.Flush()
@@ -215,7 +218,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 				m.pendingOutput = append(m.pendingOutput, safe...)
 			}
 
-			duration := m.thinkEnd.Sub(m.thinkStart).Round(time.Second)
+			duration := finalDuration
 			style := lipgloss.NewStyle().Foreground(m.theme.success)
 			checkmark := style.Render("✔")
 			m.pendingOutput = append(m.pendingOutput, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(duration.String())))
@@ -301,7 +304,7 @@ func (m *Model) View() string {
 	var sb strings.Builder
 
 	if m.isThinking {
-		duration := time.Since(m.thinkStart).Round(time.Second)
+		duration := m.thinkingDuration
 		blueStyle := lipgloss.NewStyle().Foreground(m.theme.primary)
 		sb.WriteString(blueStyle.Render(fmt.Sprintf("\n %s Thinking for %v\n", m.spinner.View(), duration)))
 	}

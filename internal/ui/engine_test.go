@@ -298,7 +298,7 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	m = tm.(*Model)
 
 	assert.False(t, m.isThinking)
-	assert.NotZero(t, m.thinkEnd)
+	assert.NotEmpty(t, m.thinkStart)
 	assert.NotNil(t, cmd)
 
 	// Concrete assertion on Printf content
@@ -1006,4 +1006,25 @@ func TestIssue_RenderingFallback(t *testing.T) {
 	// We want it to contain the raw markdown.
 	allSignals := strings.Join(tracker.signals, "")
 	assert.Contains(t, allSignals, "RAW_MARKDOWN", "Should fallback to raw markdown on rendering error")
+}
+
+func TestIssue_PureView_DeterministicDuration(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewModel(events, 80)
+
+	m.isThinking = true
+	m.thinkStart = time.Now().Add(-5 * time.Second)
+
+	// Set the cached duration manually
+	m.thinkingDuration = 5 * time.Second
+
+	v1 := m.View()
+	assert.Contains(t, v1, "5s", "View should reflect cached duration")
+
+	// Even if time passes, View should NOT change if no Update occurred
+	// (Simulate time pass by manually shifting thinkStart further back)
+	m.thinkStart = m.thinkStart.Add(-10 * time.Second)
+
+	v2 := m.View()
+	assert.Equal(t, v1, v2, "View must be pure and not change without an Update")
 }

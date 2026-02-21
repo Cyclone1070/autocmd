@@ -89,6 +89,19 @@ func (s *Stream) Pending() string {
 	return rendered
 }
 
+// RawBuffer returns the current raw markdown in the buffer.
+func (s *Stream) RawBuffer() string {
+	return s.buffer
+}
+
+// ClearBuffer empties the current raw markdown buffer and resets context.
+func (s *Stream) ClearBuffer() {
+	s.buffer = ""
+	s.lastBlock = ""
+	s.lastBlockANSI = ""
+	s.lastMargin = ""
+}
+
 // findSafeSplit identifies the byte offset representing the end of the safe content.
 func (s *Stream) findSafeSplit() int {
 	reader := text.NewReader([]byte(s.buffer))

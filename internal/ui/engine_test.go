@@ -981,3 +981,29 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	assert.Contains(t, strings.Join(tracker.signals, ""), "TRAPPED", "Spinner tick should still trigger finalization if output is pending")
 	assert.Empty(t, m.pendingOutput, "pendingOutput should be cleared even on spinner tick")
 }
+
+func TestIssue_RenderingFallback(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewModel(events, 80)
+
+	// 1. Setup a renderer that fails
+	m.stream.renderer = &engineMockRenderer{
+		renderFunc: func(markdown string) (string, error) {
+			return "", fmt.Errorf("glamour failure")
+		},
+	}
+	tracker := &outputTracker{}
+
+	// 2. Put something in the buffer
+	m.stream.buffer = "RAW_MARKDOWN"
+
+	// 3. Trigger a flush (e.g. via ThinkingEvent)
+	tm, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// Assertion: Current implementation ignores error and returns empty safe slice.
+	// We want it to contain the raw markdown.
+	allSignals := strings.Join(tracker.signals, "")
+	assert.Contains(t, allSignals, "RAW_MARKDOWN", "Should fallback to raw markdown on rendering error")
+}

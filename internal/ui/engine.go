@@ -126,7 +126,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textQueue = m.textQueue[byteOffset:]
 
 		safe, err := m.stream.Append(chunk)
-		if err == nil && len(safe) > 0 {
+		if err != nil {
+			// Fallback: append raw chunk if rendering fails
+			m.pendingOutput = append(m.pendingOutput, chunk)
+		} else if len(safe) > 0 {
 			m.pendingOutput = append(m.pendingOutput, safe...)
 		}
 
@@ -174,12 +177,21 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 
 func (m *Model) flushAll() {
 	if m.textQueue != "" {
-		safe, _ := m.stream.Append(m.textQueue)
+		safe, err := m.stream.Append(m.textQueue)
+		if err != nil {
+			m.pendingOutput = append(m.pendingOutput, m.textQueue)
+		} else {
+			m.pendingOutput = append(m.pendingOutput, safe...)
+		}
 		m.textQueue = ""
+	}
+	safe, err := m.stream.Flush()
+	if err != nil {
+		m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+		m.stream.ClearBuffer()
+	} else {
 		m.pendingOutput = append(m.pendingOutput, safe...)
 	}
-	safe, _ := m.stream.Flush()
-	m.pendingOutput = append(m.pendingOutput, safe...)
 }
 
 // handleEvent processes a domain event and returns commands.
@@ -194,8 +206,13 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 			m.thinkEnd = time.Now()
 
 			// Flush any pending text before printing duration to ensure order
-			safe, _ := m.stream.Flush()
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			safe, err := m.stream.Flush()
+			if err != nil {
+				m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+				m.stream.ClearBuffer()
+			} else {
+				m.pendingOutput = append(m.pendingOutput, safe...)
+			}
 
 			duration := m.thinkEnd.Sub(m.thinkStart).Round(time.Second)
 			style := lipgloss.NewStyle().Foreground(m.theme.success)
@@ -207,8 +224,13 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 	switch ev := event.(type) {
 	case domain.ThinkingEvent:
 		// Flush any pending text before switching to thinking state
-		safe, _ := m.stream.Flush()
-		m.pendingOutput = append(m.pendingOutput, safe...)
+		safe, err := m.stream.Flush()
+		if err != nil {
+			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.stream.ClearBuffer()
+		} else {
+			m.pendingOutput = append(m.pendingOutput, safe...)
+		}
 
 		m.isThinking = true
 		m.thinkStart = time.Now()
@@ -223,8 +245,13 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.ToolStartEvent:
 		// Flush any pending text before starting a tool
-		safe, _ := m.stream.Flush()
-		m.pendingOutput = append(m.pendingOutput, safe...)
+		safe, err := m.stream.Flush()
+		if err != nil {
+			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.stream.ClearBuffer()
+		} else {
+			m.pendingOutput = append(m.pendingOutput, safe...)
+		}
 
 		m.activeTool = &toolState{
 			id:      ev.CallID,
@@ -247,8 +274,13 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 			}
 
 			// Flush any pending text before printing tool output box
-			safe, _ := m.stream.Flush()
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			safe, err := m.stream.Flush()
+			if err != nil {
+				m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+				m.stream.ClearBuffer()
+			} else {
+				m.pendingOutput = append(m.pendingOutput, safe...)
+			}
 
 			// Render and Printf
 			m.pendingOutput = append(m.pendingOutput, m.renderTool(m.activeTool))

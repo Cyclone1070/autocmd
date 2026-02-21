@@ -93,3 +93,9 @@ Crucially, when that block finally resolves and is flushed to the permanent hist
 │                  │ (View resets to empty, 
 └──────────────────┘  or render the next pending block)
 ```
+
+## Terminal State Assumptions
+
+1. **Fixed Width/Height**: The application assumes the terminal window is **never resized** during execution. 
+1. **History Consistency**: Content is flushed to stdout based on the initial width. Terminal emulators handle wrapping differently, and if the width changes, pre-rendered history blocks would often fragment or overlap.
+1. **Single-Shot Alignment**: Because we do not use the alternate screen, we cannot "re-paint" the history. We assume the environment is stable to preserve the visual integrity of the conversation log.

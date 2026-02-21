@@ -4,26 +4,28 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 )
 
 const (
-	truncationBuffer = 5
-	minVisibleLines  = 5
+	minVisibleLines = 3
 )
 
 // TruncateWithIndicator shows only the bottom portion if content is too tall.
 func TruncateWithIndicator(content string, termHeight int) string {
 	lines := strings.Split(content, "\n")
-	maxLines := max(termHeight-truncationBuffer, minVisibleLines)
-
-	if len(lines) <= maxLines {
+	if len(lines) <= termHeight {
 		return content
 	}
 
-	overflow := len(lines) - maxLines
+	// We need 1 line for the "▲ [Truncated]" header
+	maxContentLines := termHeight - 1
+	if maxContentLines < minVisibleLines {
+		maxContentLines = minVisibleLines
+	}
+
+	overflow := len(lines) - maxContentLines
 	visible := lines[overflow:]
-	header := fmt.Sprintf("\n  ↑ (%d lines temporarily truncated)", overflow)
+	header := "  ▲ [Truncated]"
 	return header + "\n" + strings.Join(visible, "\n")
 }

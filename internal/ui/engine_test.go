@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 )
@@ -132,6 +133,27 @@ func TestModel_Update_TextEvent(t *testing.T) {
 
 	assert.NotNil(t, cmd)
 	// cmd should be a batch {streamTick, waitForEvent}
+	events <- domain.DoneEvent{}
+	mMsg := cmd()
+	batch, ok := mMsg.(tea.BatchMsg)
+	assert.True(t, ok, "Should return a batch")
+
+	foundTick := false
+	foundWait := false
+	for _, bcmd := range batch {
+		if bcmd == nil {
+			continue
+		}
+		bmsg := bcmd()
+		switch bmsg.(type) {
+		case streamTickMsg:
+			foundTick = true
+		case eventMsg:
+			foundWait = true
+		}
+	}
+	assert.True(t, foundTick, "Should contain streamTickMsg")
+	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 }
 
 func TestModel_View_Truncation(t *testing.T) {
@@ -167,6 +189,28 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	assert.NotZero(t, m.thinkStart)
 	assert.NotNil(t, cmd)
 
+	events <- domain.DoneEvent{}
+	mMsg := cmd()
+	batch, ok := mMsg.(tea.BatchMsg)
+	assert.True(t, ok, "Should return a batch")
+
+	foundSpinner := false
+	foundWait := false
+	for _, bcmd := range batch {
+		if bcmd == nil {
+			continue
+		}
+		bmsg := bcmd()
+		// spinner.Tick returns spinner.TickMsg
+		if _, ok := bmsg.(spinner.TickMsg); ok {
+			foundSpinner = true
+		} else if _, ok := bmsg.(eventMsg); ok {
+			foundWait = true
+		}
+	}
+	assert.True(t, foundSpinner, "Should contain spinner.Tick")
+	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
+
 	// 2. Send TextEvent to finish thinking
 	msg := eventMsg{event: domain.TextEvent{Text: "Thinking done"}}
 	tm, cmd = m.Update(msg)
@@ -181,8 +225,8 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	case events <- domain.DoneEvent{}:
 	default:
 	}
-	mMsg := cmd()
-	if batch, ok := mMsg.(tea.BatchMsg); ok {
+	mMsg = cmd()
+	if batch, ok = mMsg.(tea.BatchMsg); ok {
 		foundPrintf := false
 		for _, bcmd := range batch {
 			if bcmd == nil {
@@ -265,29 +309,88 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 			Command: "go test ./...",
 		},
 	}
-	m2, _ := m.Update(eventMsg{event: startEv})
+	m2, cmd := m.Update(eventMsg{event: startEv})
 	m = m2.(*Model)
 
 	assert.NotNil(t, m.activeTool)
 	assert.Equal(t, "123", m.activeTool.id)
+
+	events <- domain.DoneEvent{}
+	mMsg := cmd()
+	batch, ok := mMsg.(tea.BatchMsg)
+	assert.True(t, ok, "ToolStart should return a batch")
+	foundSpinner := false
+	foundWait := false
+	for _, bcmd := range batch {
+		if bcmd == nil {
+			continue
+		}
+		bmsg := bcmd()
+		if _, ok := bmsg.(spinner.TickMsg); ok {
+			foundSpinner = true
+		} else if _, ok := bmsg.(eventMsg); ok {
+			foundWait = true
+		}
+	}
+	assert.True(t, foundSpinner, "Should contain spinner.Tick")
+	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 2. Tool Stream
 	streamEv := domain.ToolStreamEvent{
 		CallID: "123",
 		Chunk:  "PASS\n",
 	}
-	m2, _ = m.Update(eventMsg{event: streamEv})
+	m2, cmd = m.Update(eventMsg{event: streamEv})
 	m = m2.(*Model)
 	assert.Contains(t, m.activeTool.output, "PASS")
+
+	events <- domain.DoneEvent{}
+	mMsg = cmd()
+	foundWait = false
+	if batch, ok = mMsg.(tea.BatchMsg); ok {
+		for _, bcmd := range batch {
+			if bcmd == nil {
+				continue
+			}
+			bmsg := bcmd()
+			if _, ok := bmsg.(eventMsg); ok {
+				foundWait = true
+			}
+		}
+	} else if _, ok = mMsg.(eventMsg); ok {
+		foundWait = true
+	}
+	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 3. Tool End
 	endEv := domain.ToolEndEvent{
 		CallID: "123",
 		Error:  "",
 	}
-	m2, cmd := m.Update(eventMsg{event: endEv})
+	m2, cmd = m.Update(eventMsg{event: endEv})
 	m = m2.(*Model)
 
 	assert.Nil(t, m.activeTool)
 	assert.NotNil(t, cmd)
+
+	events <- domain.DoneEvent{}
+	mMsg = cmd()
+	batch, ok = mMsg.(tea.BatchMsg)
+	assert.True(t, ok, "ToolEnd should return a batch")
+	foundPrintf := false
+	foundWait = false
+	for _, bcmd := range batch {
+		if bcmd == nil {
+			continue
+		}
+		bmsg := bcmd()
+		s := fmt.Sprintf("%v", bmsg)
+		if strings.Contains(s, "Run tests") { // Header is in ShellDisplay
+			foundPrintf = true
+		} else if _, ok := bmsg.(eventMsg); ok {
+			foundWait = true
+		}
+	}
+	assert.True(t, foundPrintf, "Should contain Printf (tool output)")
+	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 }

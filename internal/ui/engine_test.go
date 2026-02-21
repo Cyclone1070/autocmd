@@ -289,8 +289,19 @@ func TestModel_Update_KeyMsg_Quit(t *testing.T) {
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, 80)
 
-	// Ctrl+C should quit
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	// Set up a "busy" state
+	m.isThinking = true
+	m.textQueue = "pending text"
+	m.activeTool = &toolState{id: "123", status: StatusRunning}
+
+	// Ctrl+C should quit and clear state
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = tm.(*Model)
+
+	assert.False(t, m.isThinking, "Thinking should be stopped on Ctrl+C")
+	assert.Equal(t, "", m.textQueue, "Text queue should be cleared on Ctrl+C")
+	assert.Nil(t, m.activeTool, "Active tool should be cleared on Ctrl+C")
+
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -393,4 +404,29 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	}
 	assert.True(t, foundPrintf, "Should contain Printf (tool output)")
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
+}
+
+func TestModel_Update_EventOrdering(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewModel(events, 80)
+	renderer := &engineMockRenderer{}
+	m.stream = NewStream(renderer)
+
+	// 1. Send TextEvent (long enough content to trigger queueing)
+	text := "Streaming text content..."
+	m2, _ := m.Update(eventMsg{event: domain.TextEvent{Text: text}})
+	m = m2.(*Model)
+
+	// 2. Send ToolStartEvent immediately after
+	toolEv := domain.ToolStartEvent{
+		CallID:  "tool-1",
+		Display: domain.StringDisplay("Running tool"),
+	}
+	m2, _ = m.Update(eventMsg{event: toolEv})
+	m = m2.(*Model)
+
+	// ASSERTION: Tool should NOT be visible while text is still in queue
+	view := m.View()
+	assert.Contains(t, view, "...") // Pending text
+	assert.NotContains(t, view, "Running tool", "Tool should not be visible while text is streaming")
 }

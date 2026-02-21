@@ -147,14 +147,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		cmds = append(cmds, m.waitForEvent())
 		return m.finalize(cmds)
 
 	case eventMsg:
 		if m.textQueue != "" || len(m.eventBuffer) > 0 {
 			m.eventBuffer = append(m.eventBuffer, msg.event)
-			cmds = append(cmds, m.waitForEvent())
-			return m.finalize(cmds)
+			return m.finalize(nil)
 		}
 		tm, cmd := m.handleEvent(msg.event)
 		m = tm.(*Model)
@@ -172,6 +170,9 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 			func() tea.Msg { return flushSignalMsg{content: content} },
 		)
 	}
+
+	// ALWAYS listen for the next event UNLESS we are quitting.
+	cmds = append(cmds, m.waitForEvent())
 	return m, tea.Batch(cmds...)
 }
 
@@ -292,7 +293,6 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	cmds = append(cmds, m.waitForEvent())
 	return m, tea.Batch(cmds...)
 }
 

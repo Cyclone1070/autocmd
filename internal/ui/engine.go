@@ -214,20 +214,6 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) flushAll() {
-	// Flush remaining queue (should only be text if called at correct times)
-	for len(m.queue) > 0 {
-		ev := m.queue[0]
-		m.queue = m.queue[1:]
-		if te, ok := ev.(domain.TextEvent); ok {
-			safe, err := m.stream.Append(te.Text)
-			if err != nil {
-				m.pendingOutput = append(m.pendingOutput, te.Text)
-			} else if len(safe) > 0 {
-				m.pendingOutput = append(m.pendingOutput, safe...)
-			}
-		}
-		// Non-text events are ignored in flushAll as it's typically called on Done
-	}
 
 	safe, err := m.stream.Flush()
 	if err != nil {
@@ -334,6 +320,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 	case domain.DoneEvent:
+		m.queue = nil
 		m.flushAll()
 		return m, tea.Quit
 	}

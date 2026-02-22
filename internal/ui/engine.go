@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // streamTickMsg indicates it's time to drain the text queue.
@@ -58,9 +60,17 @@ type Model struct {
 }
 
 // NewModel creates a new UI engine model.
-func NewModel(events <-chan domain.Event, width int) *Model {
-	cfg := config.DefaultConfig()
-	theme := NewTheme(cfg.UI)
+func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
+	theme := NewTheme(cfg)
+
+	// Detect terminal width
+	detectedWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+	width := cfg.ChatWindowWidth
+
+	if err == nil && detectedWidth < width {
+		width = detectedWidth
+	}
+
 	renderer, _ := NewGlamourRenderer(width)
 
 	s := spinner.New()

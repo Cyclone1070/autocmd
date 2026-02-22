@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,7 +13,7 @@ import (
 
 func main() {
 	events := make(chan domain.Event)
-	m := ui.NewModel(events, 80)
+	m := ui.NewModel(events, config.DefaultConfig().UI)
 
 	p := tea.NewProgram(m)
 

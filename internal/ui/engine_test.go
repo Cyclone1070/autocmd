@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -87,7 +88,9 @@ func (o *outputTracker) handleMsg(msg tea.Msg) {
 
 // NewTestModel creates a model with a mock renderer for literal string matching.
 func NewTestModel(events chan domain.Event) *Model {
-	m := NewModel(events, 80)
+	cfg := config.DefaultConfig().UI
+	cfg.ChatWindowWidth = 80
+	m := NewModel(events, cfg)
 	m.stream.renderer = &engineMockRenderer{}
 	return m
 }
@@ -135,7 +138,7 @@ var currentTracker *outputTracker
 
 func TestModel_Update_SmoothStreaming(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
@@ -205,7 +208,7 @@ func TestModel_Update_SmoothStreaming(t *testing.T) {
 
 func TestModel_Update_TextEvent(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
@@ -239,7 +242,7 @@ func TestModel_Update_TextEvent(t *testing.T) {
 
 func TestModel_View_Truncation(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	m.height = 5
 
 	longText := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
@@ -261,7 +264,7 @@ func TestModel_View_Truncation(t *testing.T) {
 
 func TestModel_Update_ThinkingEvent(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	// 1. Send ThinkingEvent
 	tm, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
@@ -329,7 +332,7 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 
 func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	// 1. ThinkingEvent must batch waitForEvent
 	_, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
@@ -355,7 +358,7 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 2. TextEvent (start of streaming) must batch waitForEvent
-	m = NewModel(events, 80)
+	m = NewModel(events, config.DefaultConfig().UI)
 	_, cmd = m.Update(eventMsg{event: domain.TextEvent{Text: "Hello"}})
 	assert.NotNil(t, cmd)
 
@@ -368,7 +371,7 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 
 func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	// 1. Fill model with busy state
 	m.isThinking = true
@@ -408,7 +411,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 
 func TestModel_Update_ToolLifecycle(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	// 1. Tool Start
 	startEv := domain.ToolStartEvent{
@@ -506,7 +509,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 
 func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -575,7 +578,7 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 
 func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -613,7 +616,7 @@ func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 
 func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -659,7 +662,7 @@ func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -702,7 +705,7 @@ func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -726,7 +729,7 @@ func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 	tracker := &outputTracker{}
@@ -984,7 +987,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 
 func TestIssue_RenderingFallback(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	// 1. Setup a renderer that fails
 	m.stream.renderer = &engineMockRenderer{
@@ -1010,7 +1013,7 @@ func TestIssue_RenderingFallback(t *testing.T) {
 
 func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, 80)
+	m := NewModel(events, config.DefaultConfig().UI)
 
 	m.isThinking = true
 	m.thinkStart = time.Now().Add(-5 * time.Second)

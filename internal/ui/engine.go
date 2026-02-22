@@ -75,7 +75,10 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
 	renderer, _ := NewGlamourRenderer(width)
 
 	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s.Spinner = spinner.Spinner{
+		Frames: []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "},
+		FPS:    time.Second / 10,
+	}
 	s.Style = lipgloss.NewStyle().Foreground(theme.primary)
 
 	return &Model{

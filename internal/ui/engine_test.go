@@ -1017,7 +1017,14 @@ func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 	// Even if time passes, View should NOT change if no Update occurred
 	// (Simulate time pass by manually shifting thinkStart further back)
 	m.thinkStart = m.thinkStart.Add(-10 * time.Second)
-
 	v2 := m.View()
 	assert.Equal(t, v1, v2, "View must be pure and not change without an Update")
+}
+
+func TestModel_Spinner_Clockwise(t *testing.T) {
+	events := make(chan domain.Event)
+	m := NewModel(events, config.DefaultConfig().UI)
+
+	expectedFrames := []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
+	assert.Equal(t, expectedFrames, m.spinner.Spinner.Frames)
 }

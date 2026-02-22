@@ -363,7 +363,8 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	m.isThinking = true
 	m.queue = []domain.Event{domain.TextEvent{Text: "pending text"}}
 	m.isStreaming = true
-	m.activeTool = &toolState{id: "busy-tool", status: StatusRunning}
+	m.activeTools["busy-tool"] = &toolState{id: "busy-tool", status: StatusRunning}
+	m.toolOrder = []string{"busy-tool"}
 
 	// 2. Trigger Ctrl+C
 	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -373,7 +374,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	assert.False(t, m.isThinking, "Thinking state should be wiped instantly on Ctrl+C")
 	assert.Empty(t, m.queue, "Queue should be wiped instantly on Ctrl+C")
 	assert.False(t, m.isStreaming, "Streaming state should be wiped instantly on Ctrl+C")
-	assert.Nil(t, m.activeTool, "Active tool should be wiped instantly on Ctrl+C")
+	assert.Empty(t, m.activeTools, "Active tools should be wiped instantly on Ctrl+C")
 
 	// 4. ASSERT: Next Tick should do nothing if queue is empty
 	_, tickCmd := m.Update(streamTickMsg{})
@@ -413,8 +414,8 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	m2, cmd := m.Update(eventMsg{event: startEv})
 	m = m2.(*Model)
 
-	assert.NotNil(t, m.activeTool)
-	assert.Equal(t, "123", m.activeTool.id)
+	assert.NotNil(t, m.activeTools["123"])
+	assert.Equal(t, StatusRunning, m.activeTools["123"].status)
 
 	events <- domain.DoneEvent{}
 	mMsg := cmd()
@@ -443,7 +444,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	}
 	m2, cmd = m.Update(eventMsg{event: streamEv})
 	m = m2.(*Model)
-	assert.Contains(t, m.activeTool.output, "PASS")
+	assert.Contains(t, m.activeTools["123"].output, "PASS")
 
 	events <- domain.DoneEvent{}
 	mMsg = cmd()
@@ -471,7 +472,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	m2, cmd = m.Update(eventMsg{event: endEv})
 	m = m2.(*Model)
 
-	assert.Nil(t, m.activeTool)
+	assert.Empty(t, m.activeTools)
 	assert.NotNil(t, cmd)
 
 	events <- domain.DoneEvent{}
@@ -877,7 +878,8 @@ func TestFlush_OnToolEnd(t *testing.T) {
 	currentTracker = tracker
 	defer func() { currentTracker = nil }()
 
-	m.activeTool = &toolState{id: "T1", status: StatusRunning}
+	m.activeTools["T1"] = &toolState{id: "T1", status: StatusRunning}
+	m.toolOrder = []string{"T1"}
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "DELTA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
@@ -1027,4 +1029,61 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 
 	expectedFrames := []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
 	assert.Equal(t, expectedFrames, m.spinner.Spinner.Frames)
+}
+
+func TestModel_ParallelTools(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewModel(events, config.DefaultConfig().UI)
+
+	// 1. Start Tool A
+	tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
+		CallID:  "A",
+		Display: domain.StringDisplay("Tool A"),
+	}})
+	m = tm.(*Model)
+
+	// 2. Start Tool B
+	tm, _ = m.Update(eventMsg{event: domain.ToolStartEvent{
+		CallID:  "B",
+		Display: domain.StringDisplay("Tool B"),
+	}})
+	m = tm.(*Model)
+
+	// ASSERT: Both should be in View
+	view := m.View()
+	assert.Contains(t, view, "Tool A")
+	assert.Contains(t, view, "Tool B")
+
+	// 3. Stream to Tool A
+	tm, _ = m.Update(eventMsg{event: domain.ToolStreamEvent{
+		CallID: "A",
+		Chunk:  " output A",
+	}})
+	m = tm.(*Model)
+
+	// 4. End Tool B (Parallel finishing)
+	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
+
+	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{
+		CallID: "B",
+	}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// ASSERT: Tool B removed from active, Tool A remains
+	view = m.View()
+	assert.Contains(t, view, "Tool A")
+	assert.NotContains(t, view, "Tool B")
+
+	// ASSERT: Tool B should be in pending/printf output
+	foundB := false
+	for _, h := range tracker.history {
+		if strings.Contains(h, "Tool B") {
+			foundB = true
+			break
+		}
+	}
+	assert.True(t, foundB, "Tool B should be in printed history")
 }

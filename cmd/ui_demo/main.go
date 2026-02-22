@@ -28,37 +28,36 @@ func main() {
 		events <- domain.TextEvent{Text: markdown}
 		time.Sleep(1 * time.Second)
 
-		// 3. Tool Call: Shell
+		// 3. Parallel Tool Calls
 		events <- domain.ToolStartEvent{
-			CallID: "shell-1",
+			CallID: "slow-tool",
 			Display: domain.ShellDisplay{
-				Header:  "Running tests",
-				Command: "go test -v ./internal/ui/...",
+				Header:  "Slow Background Process",
+				Command: "sleep 10",
 			},
 		}
-		time.Sleep(1 * time.Second)
-		events <- domain.ToolStreamEvent{CallID: "shell-1", Chunk: "=== RUN   TestStream\n"}
 		time.Sleep(500 * time.Millisecond)
-		events <- domain.ToolStreamEvent{CallID: "shell-1", Chunk: "--- PASS: TestStream (0.50s)\n"}
-		time.Sleep(500 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "shell-1"}
 
-		// 4. Thinking again
-		events <- domain.ThinkingEvent{}
-		time.Sleep(2 * time.Second)
-
-		// 5. Tool Call: Diff
 		events <- domain.ToolStartEvent{
-			CallID: "diff-1",
-			Display: domain.DiffDisplay{
-				Header:  "Updating main.go",
-				Diff:    "- old content\n+ new beautiful content",
-				Added:   1,
-				Removed: 1,
+			CallID: "fast-tool",
+			Display: domain.ShellDisplay{
+				Header:  "Quick Status Check",
+				Command: "ls -la",
 			},
 		}
+		time.Sleep(500 * time.Millisecond)
+
+		events <- domain.ToolStreamEvent{CallID: "slow-tool", Chunk: "Working...\n"}
+		time.Sleep(500 * time.Millisecond)
+		events <- domain.ToolStreamEvent{CallID: "fast-tool", Chunk: "total 123\ndrwxr-xr-x  2 user  group  64 ...\n"}
+		time.Sleep(500 * time.Millisecond)
+
+		// Fast tool finishes first
+		events <- domain.ToolEndEvent{CallID: "fast-tool"}
 		time.Sleep(1 * time.Second)
-		events <- domain.ToolEndEvent{CallID: "diff-1"}
+
+		// Slow tool finishes last
+		events <- domain.ToolEndEvent{CallID: "slow-tool"}
 
 		// 6. Final text
 		events <- domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"}

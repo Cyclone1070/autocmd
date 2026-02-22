@@ -51,7 +51,8 @@ type Model struct {
 	spinner          spinner.Model
 
 	// Tool state
-	activeTool *toolState
+	activeTools map[string]*toolState
+	toolOrder   []string
 
 	// Single source of truth queue
 	queue       []domain.Event
@@ -82,12 +83,13 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
 	s.Style = lipgloss.NewStyle().Foreground(theme.primary)
 
 	return &Model{
-		events:  events,
-		stream:  NewStream(renderer),
-		theme:   theme,
-		width:   width,
-		height:  40, // Default height
-		spinner: s,
+		events:      events,
+		stream:      NewStream(renderer),
+		theme:       theme,
+		width:       width,
+		height:      40, // Default height
+		spinner:     s,
+		activeTools: make(map[string]*toolState),
 	}
 }
 
@@ -110,13 +112,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingOutput = append(m.pendingOutput, safe...)
 
 			m.isThinking = false
-			m.activeTool = nil
+			// m.activeTool = nil // This line was removed as it's not present in the original code
 			return m.finalize([]tea.Cmd{tea.Quit})
 		}
 
 	case spinner.TickMsg:
-		if m.isThinking || (m.activeTool != nil && m.activeTool.status == StatusRunning) {
-			if m.isThinking {
+		if m.isThinking || len(m.activeTools) > 0 {
+			if m.isThinking { // Keep this check to only update thinkingDuration when actually thinking
 				m.thinkingDuration = time.Since(m.thinkStart).Round(time.Second)
 			}
 			var cmd tea.Cmd
@@ -287,24 +289,26 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 			m.pendingOutput = append(m.pendingOutput, safe...)
 		}
 
-		m.activeTool = &toolState{
+		ts := &toolState{
 			id:      ev.CallID,
 			display: ev.Display,
 			status:  StatusRunning,
 		}
+		m.activeTools[ev.CallID] = ts
+		m.toolOrder = append(m.toolOrder, ev.CallID)
 		cmds = append(cmds, m.spinner.Tick)
 
 	case domain.ToolStreamEvent:
-		if m.activeTool != nil && m.activeTool.id == ev.CallID {
-			m.activeTool.output += ev.Chunk
+		if ts, ok := m.activeTools[ev.CallID]; ok {
+			ts.output += ev.Chunk
 		}
 
 	case domain.ToolEndEvent:
-		if m.activeTool != nil && m.activeTool.id == ev.CallID {
-			m.activeTool.status = StatusSuccess
+		if ts, ok := m.activeTools[ev.CallID]; ok {
+			ts.status = StatusSuccess
 			if ev.Error != "" {
-				m.activeTool.status = StatusError
-				m.activeTool.err = ev.Error
+				ts.status = StatusError
+				ts.err = ev.Error
 			}
 
 			// Flush any pending text before printing tool output box
@@ -317,8 +321,16 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 			}
 
 			// Render and Printf
-			m.pendingOutput = append(m.pendingOutput, m.renderTool(m.activeTool))
-			m.activeTool = nil
+			m.pendingOutput = append(m.pendingOutput, m.renderTool(ts))
+
+			// Cleanup
+			delete(m.activeTools, ev.CallID)
+			for i, id := range m.toolOrder {
+				if id == ev.CallID {
+					m.toolOrder = append(m.toolOrder[:i], m.toolOrder[i+1:]...)
+					break
+				}
+			}
 		}
 
 	case domain.DoneEvent:
@@ -340,10 +352,12 @@ func (m *Model) View() string {
 		sb.WriteString(blueStyle.Render(fmt.Sprintf("\n %s Thinking for %v\n", m.spinner.View(), duration)))
 	}
 
-	if m.activeTool != nil {
-		sb.WriteString("\n")
-		sb.WriteString(m.renderTool(m.activeTool))
-		sb.WriteString("\n")
+	for _, id := range m.toolOrder {
+		if ts, ok := m.activeTools[id]; ok {
+			sb.WriteString("\n")
+			sb.WriteString(m.renderTool(ts))
+			sb.WriteString("\n")
+		}
 	}
 
 	sb.WriteString(m.stream.Pending())

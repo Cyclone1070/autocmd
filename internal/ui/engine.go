@@ -158,56 +158,59 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) processQueue() (tea.Model, tea.Cmd) {
-	if len(m.queue) == 0 {
-		return m.finalize(nil)
-	}
+	var cmds []tea.Cmd
 
-	ev := m.queue[0]
+	for len(m.queue) > 0 {
+		ev := m.queue[0]
 
-	if te, ok := ev.(domain.TextEvent); ok {
-		// Unroll text
-		if len(te.Text) > 0 {
-			// Drain up to 4 runes
-			count := 0
-			byteOffset := 0
-			for count < 4 && byteOffset < len(te.Text) {
-				_, size := utf8.DecodeRuneInString(te.Text[byteOffset:])
-				byteOffset += size
-				count++
-			}
+		if te, ok := ev.(domain.TextEvent); ok {
+			// Unroll text
+			if len(te.Text) > 0 {
+				// Drain up to 4 runes
+				count := 0
+				byteOffset := 0
+				for count < 4 && byteOffset < len(te.Text) {
+					_, size := utf8.DecodeRuneInString(te.Text[byteOffset:])
+					byteOffset += size
+					count++
+				}
 
-			chunk := te.Text[:byteOffset]
-			remainder := te.Text[byteOffset:]
+				chunk := te.Text[:byteOffset]
+				remainder := te.Text[byteOffset:]
 
-			m.queue[0] = domain.TextEvent{Text: remainder}
-			if remainder == "" {
+				tm, cmd := m.handleEvent(domain.TextEvent{Text: chunk})
+				m = tm.(*Model)
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+
+				if remainder != "" {
+					m.queue[0] = domain.TextEvent{Text: remainder}
+					m.isStreaming = true
+					cmds = append(cmds, m.streamTick())
+					return m.finalize(cmds) // Need to wait for tick
+				}
+
+				// Text chunk finished, pop and continue loop
 				m.queue = m.queue[1:]
+				continue
 			}
-
-			tm, cmd := m.handleEvent(domain.TextEvent{Text: chunk})
-			m = tm.(*Model)
-			if remainder != "" {
-				m.isStreaming = true
-				return m.finalize([]tea.Cmd{cmd, m.streamTick()})
-			}
-			// Text stream finished, process next event in queue
-			nm, ncmd := m.processQueue()
-			return nm, tea.Batch(cmd, ncmd)
+			// Empty text event, just pop and continue
+			m.queue = m.queue[1:]
+			continue
 		}
-		// Empty text event, just pop and continue
+
+		// Non-text event: pop and process
 		m.queue = m.queue[1:]
-		return m.processQueue()
+		tm, cmd := m.handleEvent(ev)
+		m = tm.(*Model)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		// Continue loop to process next event immediately
 	}
 
-	// Non-text event: pop and process
-	m.queue = m.queue[1:]
-	tm, cmd := m.handleEvent(ev)
-	m = tm.(*Model)
-
-	// Since we popped a non-text event, we can immediately process the next one in the same loop
-	// using recursion, BUT we must batch the command from handleEvent.
-	nm, ncmd := m.processQueue()
-	return nm, tea.Batch(cmd, ncmd)
+	return m.finalize(cmds)
 }
 
 func (m *Model) flushAll() {

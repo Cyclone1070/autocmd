@@ -146,64 +146,53 @@ func TestModel_Update_SmoothStreaming(t *testing.T) {
 	longText := "12345678" // 8 chars = 2 chunks
 	msg := eventMsg{event: domain.TextEvent{Text: longText}}
 
-	// First update should not flush yet (it queues)
+	// 1. Send text event
 	tm, cmd := m.Update(msg)
 	m = tm.(*Model)
-	assert.Equal(t, longText, m.textQueue)
+	assert.Len(t, m.queue, 1)
+	assert.Equal(t, "5678", m.queue[0].(domain.TextEvent).Text)
 	assert.NotNil(t, cmd)
 
-	// The cmd is a batch {streamTick, waitForEvent}.
-	// We want to extract the streamTickMsg.
-	mMsg := cmd()
-	batch, ok := mMsg.(tea.BatchMsg)
-	assert.True(t, ok)
-
-	var tickMsg tea.Msg
-	for _, bcmd := range batch {
-		if bcmd == nil {
-			continue
-		}
-		// Try to execute without blocking
-		select {
-		case events <- domain.DoneEvent{}: // Unblock waitForEvent if we hit it
-		default:
-		}
-		bmsg := bcmd()
-		if _, ok := bmsg.(streamTickMsg); ok {
-			tickMsg = bmsg
-			break
-		}
-	}
+	// Extract tick from batch
+	msgs := executeCmd(cmd)
+	tickMsg := extractTickFromMsgs(msgs)
 	assert.NotNil(t, tickMsg)
 
-	// Process tick 1
+	// 2. Process Tick 1 -> should process remaining "5678" and leave queue empty
 	tm, cmd = m.Update(tickMsg)
 	m = tm.(*Model)
-	assert.Equal(t, "5678", m.textQueue)
-	assert.Equal(t, "1234", m.stream.buffer)
+	assert.Empty(t, m.queue)
+	assert.Equal(t, "12345678", m.stream.buffer)
 
-	// Extract next tick from batch {flushHistory, streamTick, waitForEvent}
-	mMsg = cmd()
-	batch, ok = mMsg.(tea.BatchMsg)
-	assert.True(t, ok)
-	tickMsg = nil
-	for _, bcmd := range batch {
-		if bcmd == nil {
-			continue
-		}
-		bmsg := bcmd()
-		if _, ok := bmsg.(streamTickMsg); ok {
-			tickMsg = bmsg
-			break
+	// Since remainder was "", no more ticks should be scheduled (but waitForEvent is added)
+	msgs2 := executeCmd(cmd)
+	for _, bmsg := range msgs2 {
+		_, ok := bmsg.(streamTickMsg)
+		assert.False(t, ok, "Should not have streamTickMsg in final batch")
+	}
+}
+
+func extractTickFromMsgs(msgs []tea.Msg) tea.Msg {
+	for _, msg := range msgs {
+		if _, ok := msg.(streamTickMsg); ok {
+			return msg
 		}
 	}
-	assert.NotNil(t, tickMsg)
+	return nil
+}
 
-	// Process tick 2
-	tm, _ = m.Update(tickMsg)
-	m = tm.(*Model)
-	assert.Equal(t, "", m.textQueue)
-	assert.Equal(t, "12345678", m.stream.buffer)
+func extractTick(msg tea.Msg) tea.Msg {
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, bcmd := range batch {
+			bmsg := bcmd()
+			if _, ok := bmsg.(streamTickMsg); ok {
+				return bmsg
+			}
+		}
+	} else if _, ok := msg.(streamTickMsg); ok {
+		return msg
+	}
+	return nil
 }
 
 func TestModel_Update_TextEvent(t *testing.T) {
@@ -216,19 +205,12 @@ func TestModel_Update_TextEvent(t *testing.T) {
 	_, cmd := m.Update(msg)
 
 	assert.NotNil(t, cmd)
-	// cmd should be a batch {streamTick, waitForEvent}
-	events <- domain.DoneEvent{}
-	mMsg := cmd()
-	batch, ok := mMsg.(tea.BatchMsg)
-	assert.True(t, ok, "Should return a batch")
-
+	// cmd should be a batch {streamTick} or {streamTick, printf, ...}
+	// waitForEvent (eventMsg) is NOT present because isStreaming is true.
+	msgs := executeCmd(cmd)
 	foundTick := false
 	foundWait := false
-	for _, bcmd := range batch {
-		if bcmd == nil {
-			continue
-		}
-		bmsg := bcmd()
+	for _, bmsg := range msgs {
 		switch bmsg.(type) {
 		case streamTickMsg:
 			foundTick = true
@@ -237,7 +219,7 @@ func TestModel_Update_TextEvent(t *testing.T) {
 		}
 	}
 	assert.True(t, foundTick, "Should contain streamTickMsg")
-	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
+	assert.False(t, foundWait, "Should NOT contain waitForEvent (eventMsg) while streaming")
 }
 
 func TestModel_View_Truncation(t *testing.T) {
@@ -357,16 +339,20 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	}
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
-	// 2. TextEvent (start of streaming) must batch waitForEvent
+	// 2. TextEvent (start of streaming) must NOT batch waitForEvent (it waits for streamDone)
 	m = NewModel(events, config.DefaultConfig().UI)
 	_, cmd = m.Update(eventMsg{event: domain.TextEvent{Text: "Hello"}})
 	assert.NotNil(t, cmd)
 
-	events <- domain.DoneEvent{}
-	mMsg = cmd()
-
-	batch, ok = mMsg.(tea.BatchMsg)
-	assert.True(t, ok, "TextEvent should return a Batch to keep polling")
+	msgs := executeCmd(cmd)
+	foundWait = false
+	for _, bmsg := range msgs {
+		if _, ok := bmsg.(eventMsg); ok {
+			foundWait = true
+			break
+		}
+	}
+	assert.False(t, foundWait, "TextEvent should NOT return a Batch to keep polling (blocking leapfrog)")
 }
 
 func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
@@ -375,21 +361,24 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 
 	// 1. Fill model with busy state
 	m.isThinking = true
-	m.textQueue = "pending text that should be gone"
+	m.queue = []domain.Event{domain.TextEvent{Text: "pending text"}}
+	m.isStreaming = true
 	m.activeTool = &toolState{id: "busy-tool", status: StatusRunning}
 
 	// 2. Trigger Ctrl+C
 	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = tm.(*Model)
 
-	// 3. ASSERT: Instant reset - THIS SHOULD FAIL IN RED PHASE
+	// 3. ASSERT: Instant reset
 	assert.False(t, m.isThinking, "Thinking state should be wiped instantly on Ctrl+C")
-	assert.Equal(t, "", m.textQueue, "Text queue should be wiped instantly on Ctrl+C")
+	assert.Empty(t, m.queue, "Queue should be wiped instantly on Ctrl+C")
+	assert.False(t, m.isStreaming, "Streaming state should be wiped instantly on Ctrl+C")
 	assert.Nil(t, m.activeTool, "Active tool should be wiped instantly on Ctrl+C")
 
-	// 4. ASSERT: Next Tick should do nothing
+	// 4. ASSERT: Next Tick should do nothing if queue is empty
 	_, tickCmd := m.Update(streamTickMsg{})
-	assert.Nil(t, tickCmd, "Tick after wipe should return no commands")
+	// m.processQueue() will call m.finalize(nil) which returns waitForEvent
+	assert.NotNil(t, tickCmd, "Tick after wipe should return waitForEvent to resume listening")
 
 	// 5. ASSERT: Quit signal present
 	tracker := &outputTracker{}
@@ -630,7 +619,7 @@ func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 
 	// 2. Step once to start ticking. "Text" is taken, " 1" remains.
 	q.step()
-	assert.NotEmpty(t, q.m.textQueue, "Text should still be in queue")
+	assert.NotEmpty(t, q.m.queue, "Text should still be in queue")
 
 	// 3. Send Thinking (Turn 2) - should be buffered
 	q.push(func() tea.Msg { return eventMsg{event: domain.ThinkingEvent{}} })
@@ -949,7 +938,8 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	m = tm.(*Model)
 
 	assert.Equal(t, "KEEP", m.stream.buffer)
-	assert.Equal(t, "DISCARD", m.textQueue)
+	assert.Len(t, m.queue, 1)
+	assert.Equal(t, "DISCARD", m.queue[0].(domain.TextEvent).Text)
 	assert.Empty(t, tracker.signals)
 
 	// 2. Ctrl+C (Emergency Exit)
@@ -960,8 +950,8 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	// Assertion: Buffer ("KEEP") should be signaled. Queue ("DISCARD") should NOT.
 	allSignals := strings.Join(tracker.signals, "")
 	assert.Contains(t, allSignals, "KEEP", "Buffer tail should be signaled on interrupt")
-	assert.NotContains(t, allSignals, "DISCARD", "textQueue should be discarded on interrupt")
-	assert.Empty(t, m.textQueue, "Interrupt should leave textQueue empty")
+	assert.NotContains(t, allSignals, "DISCARD", "queue should be discarded on interrupt")
+	assert.Empty(t, m.queue, "Interrupt should leave queue empty")
 }
 
 func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {

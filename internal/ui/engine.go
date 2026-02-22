@@ -53,9 +53,10 @@ type Model struct {
 	// Tool state
 	activeTool *toolState
 
-	// Smooth streaming state
-	textQueue     string
-	eventBuffer   []domain.Event
+	// Single source of truth queue
+	queue       []domain.Event
+	isStreaming bool
+
 	pendingOutput []string
 }
 
@@ -99,12 +100,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
-			m.eventBuffer = nil
-			// DISCARD textQueue, only flush currently visible tail (stream buffer)
+			m.queue = nil
+			m.isStreaming = false
+			// DISCARD buffered text, only flush currently visible tail (stream buffer)
 			safe, _ := m.stream.Flush()
 			m.pendingOutput = append(m.pendingOutput, safe...)
 
-			m.textQueue = ""
 			m.isThinking = false
 			m.activeTool = nil
 			return m.finalize([]tea.Cmd{tea.Quit})
@@ -122,54 +123,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finalize(nil)
 
 	case streamTickMsg:
-		if m.textQueue == "" {
-			return m, nil
-		}
-
-		// Drain up to 4 runes
-		count := 0
-		byteOffset := 0
-		for count < 4 && byteOffset < len(m.textQueue) {
-			_, size := utf8.DecodeRuneInString(m.textQueue[byteOffset:])
-			byteOffset += size
-			count++
-		}
-
-		chunk := m.textQueue[:byteOffset]
-		m.textQueue = m.textQueue[byteOffset:]
-
-		safe, err := m.stream.Append(chunk)
-		if err != nil {
-			// Fallback: append raw chunk if rendering fails
-			m.pendingOutput = append(m.pendingOutput, chunk)
-		} else if len(safe) > 0 {
-			m.pendingOutput = append(m.pendingOutput, safe...)
-		}
-
-		if m.textQueue != "" {
-			cmds = append(cmds, m.streamTick())
-		} else if len(m.eventBuffer) > 0 {
-			for len(m.eventBuffer) > 0 {
-				ev := m.eventBuffer[0]
-				m.eventBuffer = m.eventBuffer[1:]
-				tm, cmd := m.handleEvent(ev)
-				m = tm.(*Model)
-				cmds = append(cmds, cmd)
-				if m.textQueue != "" {
-					break
-				}
-			}
-		}
-		return m.finalize(cmds)
+		m.isStreaming = false
+		return m.processQueue()
 
 	case eventMsg:
-		if m.textQueue != "" || len(m.eventBuffer) > 0 {
-			m.eventBuffer = append(m.eventBuffer, msg.event)
-			return m.finalize(nil)
+		m.queue = append(m.queue, msg.event)
+		if m.isStreaming {
+			return m, nil
 		}
-		tm, cmd := m.handleEvent(msg.event)
-		m = tm.(*Model)
-		return m.finalize([]tea.Cmd{cmd})
+		return m.processQueue()
 	}
 	return m.finalize(cmds)
 }
@@ -184,21 +146,86 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	// ALWAYS listen for the next event UNLESS we are quitting.
-	cmds = append(cmds, m.waitForEvent())
+	// ALWAYS listen for the next event UNLESS we are quitting or streaming.
+	if !m.isStreaming {
+		cmds = append(cmds, m.waitForEvent())
+	}
+
+	if len(cmds) == 0 {
+		return m, nil
+	}
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) flushAll() {
-	if m.textQueue != "" {
-		safe, err := m.stream.Append(m.textQueue)
-		if err != nil {
-			m.pendingOutput = append(m.pendingOutput, m.textQueue)
-		} else {
-			m.pendingOutput = append(m.pendingOutput, safe...)
-		}
-		m.textQueue = ""
+func (m *Model) processQueue() (tea.Model, tea.Cmd) {
+	if len(m.queue) == 0 {
+		return m.finalize(nil)
 	}
+
+	ev := m.queue[0]
+
+	if te, ok := ev.(domain.TextEvent); ok {
+		// Unroll text
+		if len(te.Text) > 0 {
+			// Drain up to 4 runes
+			count := 0
+			byteOffset := 0
+			for count < 4 && byteOffset < len(te.Text) {
+				_, size := utf8.DecodeRuneInString(te.Text[byteOffset:])
+				byteOffset += size
+				count++
+			}
+
+			chunk := te.Text[:byteOffset]
+			remainder := te.Text[byteOffset:]
+
+			m.queue[0] = domain.TextEvent{Text: remainder}
+			if remainder == "" {
+				m.queue = m.queue[1:]
+			}
+
+			tm, cmd := m.handleEvent(domain.TextEvent{Text: chunk})
+			m = tm.(*Model)
+			if remainder != "" {
+				m.isStreaming = true
+				return m.finalize([]tea.Cmd{cmd, m.streamTick()})
+			}
+			// Text stream finished, process next event in queue
+			nm, ncmd := m.processQueue()
+			return nm, tea.Batch(cmd, ncmd)
+		}
+		// Empty text event, just pop and continue
+		m.queue = m.queue[1:]
+		return m.processQueue()
+	}
+
+	// Non-text event: pop and process
+	m.queue = m.queue[1:]
+	tm, cmd := m.handleEvent(ev)
+	m = tm.(*Model)
+
+	// Since we popped a non-text event, we can immediately process the next one in the same loop
+	// using recursion, BUT we must batch the command from handleEvent.
+	nm, ncmd := m.processQueue()
+	return nm, tea.Batch(cmd, ncmd)
+}
+
+func (m *Model) flushAll() {
+	// Flush remaining queue (should only be text if called at correct times)
+	for len(m.queue) > 0 {
+		ev := m.queue[0]
+		m.queue = m.queue[1:]
+		if te, ok := ev.(domain.TextEvent); ok {
+			safe, err := m.stream.Append(te.Text)
+			if err != nil {
+				m.pendingOutput = append(m.pendingOutput, te.Text)
+			} else if len(safe) > 0 {
+				m.pendingOutput = append(m.pendingOutput, safe...)
+			}
+		}
+		// Non-text events are ignored in flushAll as it's typically called on Done
+	}
+
 	safe, err := m.stream.Flush()
 	if err != nil {
 		m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
@@ -251,10 +278,12 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.spinner.Tick)
 
 	case domain.TextEvent:
-		wasEmpty := m.textQueue == ""
-		m.textQueue += ev.Text
-		if wasEmpty && m.textQueue != "" {
-			cmds = append(cmds, m.streamTick())
+		safe, err := m.stream.Append(ev.Text)
+		if err != nil {
+			// Fallback: append raw chunk if rendering fails
+			m.pendingOutput = append(m.pendingOutput, ev.Text)
+		} else if len(safe) > 0 {
+			m.pendingOutput = append(m.pendingOutput, safe...)
 		}
 
 	case domain.ToolStartEvent:

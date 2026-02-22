@@ -1087,3 +1087,63 @@ func TestModel_ParallelTools(t *testing.T) {
 	}
 	assert.True(t, foundB, "Tool B should be in printed history")
 }
+
+func TestModel_OrderedFlushing(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewModel(events, config.DefaultConfig().UI)
+
+	// 1. Start 3 tools: A, B, C
+	for _, id := range []string{"A", "B", "C"} {
+		tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
+			CallID:  id,
+			Display: domain.StringDisplay("Tool " + id),
+		}})
+		m = tm.(*Model)
+	}
+
+	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
+
+	// 2. End Tool B (Middle)
+	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "B"}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// ASSERT: Tool B must NOT be in history yet (blocked by A)
+	assert.NotContains(t, tracker.allHistory(), "Tool B")
+	assert.Contains(t, m.View(), "Tool B") // Should still be in status area
+
+	// 3. End Tool C (Last)
+	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "C"}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// ASSERT: Tool C must NOT be in history yet (blocked by A)
+	assert.NotContains(t, tracker.allHistory(), "Tool C")
+
+	// 4. End Tool A (Head) -> Should trigger cascading graduation
+	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "A"}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// ASSERT: All graduated in order A -> B -> C
+	history := tracker.allHistory()
+	idxA := strings.Index(history, "Tool A")
+	idxB := strings.Index(history, "Tool B")
+	idxC := strings.Index(history, "Tool C")
+
+	assert.NotEqual(t, -1, idxA)
+	assert.NotEqual(t, -1, idxB)
+	assert.NotEqual(t, -1, idxC)
+	assert.True(t, idxA < idxB, "A must be flushed before B")
+	assert.True(t, idxB < idxC, "B must be flushed before C")
+
+	// ASSERT: Status area empty
+	assert.Empty(t, m.activeTools)
+	assert.Empty(t, m.toolOrder)
+}
+
+func (o *outputTracker) allHistory() string {
+	return strings.Join(o.history, "|")
+}

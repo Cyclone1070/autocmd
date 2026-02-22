@@ -28,36 +28,50 @@ func main() {
 		events <- domain.TextEvent{Text: markdown}
 		time.Sleep(1 * time.Second)
 
-		// 3. Parallel Tool Calls
+		// 3. Parallel Tool Calls (3 tools)
 		events <- domain.ToolStartEvent{
-			CallID: "slow-tool",
+			CallID: "tool-1",
 			Display: domain.ShellDisplay{
-				Header:  "Slow Background Process",
-				Command: "sleep 10",
+				Header:  "Dependency Check",
+				Command: "npm list --depth=0",
 			},
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 
 		events <- domain.ToolStartEvent{
-			CallID: "fast-tool",
+			CallID: "tool-2",
 			Display: domain.ShellDisplay{
-				Header:  "Quick Status Check",
-				Command: "ls -la",
+				Header:  "Quick Lint",
+				Command: "eslint .",
 			},
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 
-		events <- domain.ToolStreamEvent{CallID: "slow-tool", Chunk: "Working...\n"}
-		time.Sleep(500 * time.Millisecond)
-		events <- domain.ToolStreamEvent{CallID: "fast-tool", Chunk: "total 123\ndrwxr-xr-x  2 user  group  64 ...\n"}
-		time.Sleep(500 * time.Millisecond)
+		events <- domain.ToolStartEvent{
+			CallID: "tool-3",
+			Display: domain.ShellDisplay{
+				Header:  "Unit Tests",
+				Command: "go test ./...",
+			},
+		}
+		time.Sleep(800 * time.Millisecond)
 
-		// Fast tool finishes first
-		events <- domain.ToolEndEvent{CallID: "fast-tool"}
+		// 3a. Tool 2 finishes first (blocked)
+		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}
+		time.Sleep(400 * time.Millisecond)
+		events <- domain.ToolEndEvent{CallID: "tool-2"}
 		time.Sleep(1 * time.Second)
 
-		// Slow tool finishes last
-		events <- domain.ToolEndEvent{CallID: "slow-tool"}
+		// 3b. Tool 3 finishes second (blocked)
+		events <- domain.ToolStreamEvent{CallID: "tool-3", Chunk: "Running tests...\nPASS\n"}
+		time.Sleep(400 * time.Millisecond)
+		events <- domain.ToolEndEvent{CallID: "tool-3"}
+		time.Sleep(1 * time.Second)
+
+		// 3c. Tool 1 finishes last (triggers cascading flush)
+		events <- domain.ToolStreamEvent{CallID: "tool-1", Chunk: "Found 45 dependencies.\n"}
+		time.Sleep(400 * time.Millisecond)
+		events <- domain.ToolEndEvent{CallID: "tool-1"}
 
 		// 6. Final text
 		events <- domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"}

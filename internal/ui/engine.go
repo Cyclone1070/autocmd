@@ -219,13 +219,45 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) flushAll() {
-
 	safe, err := m.stream.Flush()
 	if err != nil {
 		m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
 		m.stream.ClearBuffer()
-	} else {
+	} else if len(safe) > 0 {
 		m.pendingOutput = append(m.pendingOutput, safe...)
+	}
+
+	// Force graduate everything remaining (e.g. on DoneEvent)
+	for len(m.toolOrder) > 0 {
+		id := m.toolOrder[0]
+		ts := m.activeTools[id]
+		m.pendingOutput = append(m.pendingOutput, m.renderTool(ts)+"\n")
+		delete(m.activeTools, id)
+		m.toolOrder = m.toolOrder[1:]
+	}
+}
+
+func (m *Model) flushFinishedTools() {
+	for len(m.toolOrder) > 0 {
+		id := m.toolOrder[0]
+		ts := m.activeTools[id]
+
+		if ts.status == StatusRunning {
+			break
+		}
+
+		// Flush any pending text before tool box to preserve sequence
+		safe, err := m.stream.Flush()
+		if err != nil {
+			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.stream.ClearBuffer()
+		} else if len(safe) > 0 {
+			m.pendingOutput = append(m.pendingOutput, safe...)
+		}
+
+		m.pendingOutput = append(m.pendingOutput, m.renderTool(ts)+"\n")
+		delete(m.activeTools, id)
+		m.toolOrder = m.toolOrder[1:]
 	}
 }
 
@@ -311,26 +343,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 				ts.err = ev.Error
 			}
 
-			// Flush any pending text before printing tool output box
-			safe, err := m.stream.Flush()
-			if err != nil {
-				m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
-				m.stream.ClearBuffer()
-			} else {
-				m.pendingOutput = append(m.pendingOutput, safe...)
-			}
-
-			// Render and Printf
-			m.pendingOutput = append(m.pendingOutput, m.renderTool(ts))
-
-			// Cleanup
-			delete(m.activeTools, ev.CallID)
-			for i, id := range m.toolOrder {
-				if id == ev.CallID {
-					m.toolOrder = append(m.toolOrder[:i], m.toolOrder[i+1:]...)
-					break
-				}
-			}
+			m.flushFinishedTools()
 		}
 
 	case domain.DoneEvent:

@@ -244,10 +244,9 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 				m.pendingOutput = append(m.pendingOutput, safe...)
 			}
 
-			duration := finalDuration
 			style := lipgloss.NewStyle().Foreground(m.theme.success)
 			checkmark := style.Render("✔")
-			m.pendingOutput = append(m.pendingOutput, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(duration.String())))
+			m.pendingOutput = append(m.pendingOutput, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(finalDuration.String())))
 		}
 	}
 

@@ -367,7 +367,6 @@ func (m *Model) View() string {
 
 	for _, id := range m.toolOrder {
 		if ts, ok := m.activeTools[id]; ok {
-			sb.WriteString("\n")
 			sb.WriteString(m.renderTool(ts))
 			sb.WriteString("\n")
 		}

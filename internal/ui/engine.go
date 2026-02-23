@@ -387,6 +387,11 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 	case domain.DoneEvent:
 		m.isQuitting = true
 		m.flushAll()
+		if len(m.pendingOutput) > 0 {
+			content := strings.Join(m.pendingOutput, "")
+			m.pendingOutput = nil
+			return m.finalize([]tea.Cmd{tea.Sequence(m.flush(content), tea.Quit)})
+		}
 		return m.finalize([]tea.Cmd{tea.Quit})
 	}
 

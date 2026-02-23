@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,12 @@ func executeCmd(cmd tea.Cmd) []tea.Msg {
 		if batch, ok := msg.(tea.BatchMsg); ok {
 			for _, bcmd := range batch {
 				msgs = append(msgs, executeCmd(bcmd)...)
+			}
+		} else if fmt.Sprintf("%T", msg) == "tea.sequenceMsg" {
+			v := reflect.ValueOf(msg)
+			for i := 0; i < v.Len(); i++ {
+				cmd := v.Index(i).Interface().(tea.Cmd)
+				msgs = append(msgs, executeCmd(cmd)...)
 			}
 		} else {
 			msgs = append(msgs, msg)

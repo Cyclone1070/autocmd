@@ -1147,3 +1147,26 @@ func TestModel_OrderedFlushing(t *testing.T) {
 func (o *outputTracker) allHistory() string {
 	return strings.Join(o.history, "|")
 }
+
+func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewTestModel(events)
+
+	// Send a BigTextEvent
+	msg := eventMsg{event: domain.TextEvent{Text: "1234567890"}} // 10 chars
+
+	// Process it. It should process "1234", and leave "5678" and "90" as separate TextEvents in the queue.
+	m2, cmd := m.Update(msg)
+	m = m2.(*Model)
+
+	assert.NotNil(t, cmd, "Should return a command (stream tick)")
+	assert.Len(t, m.queue, 2, "Queue should contain exactly 2 remaining items")
+
+	te1, ok := m.queue[0].(domain.TextEvent)
+	assert.True(t, ok, "First remaining item should be a TextEvent")
+	assert.Equal(t, "5678", te1.Text, "First remaining item should be next 4 runes")
+
+	te2, ok := m.queue[1].(domain.TextEvent)
+	assert.True(t, ok, "Second remaining item should be a TextEvent")
+	assert.Equal(t, "90", te2.Text, "Second remaining item should be the last 2 runes")
+}

@@ -169,39 +169,61 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 		ev := m.queue[0]
 
 		if te, ok := ev.(domain.TextEvent); ok {
-			// Unroll text
-			if len(te.Text) > 0 {
-				// Drain up to 4 runes
+			// If empty text event, just pop and continue
+			if len(te.Text) == 0 {
+				m.queue = m.queue[1:]
+				continue
+			}
+
+			// Pre-split the text into chunks of up to 4 runes
+			var chunks []domain.TextEvent
+			text := te.Text
+			for len(text) > 0 {
 				count := 0
 				byteOffset := 0
-				for count < 4 && byteOffset < len(te.Text) {
-					_, size := utf8.DecodeRuneInString(te.Text[byteOffset:])
+				for count < 4 && byteOffset < len(text) {
+					_, size := utf8.DecodeRuneInString(text[byteOffset:])
 					byteOffset += size
 					count++
 				}
+				chunks = append(chunks, domain.TextEvent{Text: text[:byteOffset]})
+				text = text[byteOffset:]
+			}
 
-				chunk := te.Text[:byteOffset]
-				remainder := te.Text[byteOffset:]
-
-				tm, cmd := m.handleEvent(domain.TextEvent{Text: chunk})
-				m = tm.(*Model)
-				if cmd != nil {
-					cmds = append(cmds, cmd)
+			// Sub the big event out for the smaller ones in that exact slot
+			if len(chunks) > 1 {
+				newQueue := make([]domain.Event, 0, len(chunks)+len(m.queue)-1)
+				for _, c := range chunks {
+					newQueue = append(newQueue, c) // Convert explicitly
 				}
+				newQueue = append(newQueue, m.queue[1:]...)
+				m.queue = newQueue
 
-				if remainder != "" {
-					m.queue[0] = domain.TextEvent{Text: remainder}
+				// Update te to the first chunk
+				te = m.queue[0].(domain.TextEvent)
+			} else {
+				// Ensure te refers to the exact single chunk
+				te = chunks[0]
+			}
+
+			tm, cmd := m.handleEvent(te)
+			m = tm.(*Model)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+
+			// Text chunk finished, pop
+			m.queue = m.queue[1:]
+
+			// If there's another TextEvent immediately following, wait for a tick
+			if len(m.queue) > 0 {
+				if _, nextIsText := m.queue[0].(domain.TextEvent); nextIsText {
 					m.isStreaming = true
 					cmds = append(cmds, m.streamTick())
 					return m.finalize(cmds) // Need to wait for tick
 				}
-
-				// Text chunk finished, pop and continue loop
-				m.queue = m.queue[1:]
-				continue
 			}
-			// Empty text event, just pop and continue
-			m.queue = m.queue[1:]
+
 			continue
 		}
 

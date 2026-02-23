@@ -26,13 +26,25 @@ func main() {
 		// 2. Text Stream
 		markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
 		events <- domain.TextEvent{Text: markdown}
+		time.Sleep(400 * time.Millisecond)
+
+		events <- domain.TextEvent{Text: "Here's a readfile tool call."}
+
+		events <- domain.ToolStartEvent{
+			CallID:  "tool-0",
+			Display: domain.StringDisplay("Reading main.go"),
+		}
 		time.Sleep(1 * time.Second)
+		events <- domain.ToolEndEvent{CallID: "tool-0"}
+
+		events <- domain.TextEvent{Text: "Now let's run some tools in parallel. Tools will be displayed in toolStart order."}
+		time.Sleep(400 * time.Millisecond)
 
 		// 3. Parallel Tool Calls (3 tools)
 		events <- domain.ToolStartEvent{
 			CallID: "tool-1",
 			Display: domain.ShellDisplay{
-				Header:  "Dependency Check",
+				Header:  "Finish last",
 				Command: "npm list --depth=0",
 			},
 		}
@@ -41,20 +53,22 @@ func main() {
 		events <- domain.ToolStartEvent{
 			CallID: "tool-2",
 			Display: domain.ShellDisplay{
-				Header:  "Quick Lint",
+				Header:  "Finish first",
 				Command: "eslint .",
 			},
 		}
+		time.Sleep(200 * time.Millisecond)
+		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}
 		time.Sleep(400 * time.Millisecond)
 
 		events <- domain.ToolStartEvent{
 			CallID: "tool-3",
 			Display: domain.ShellDisplay{
-				Header:  "Unit Tests",
+				Header:  "Finish second",
 				Command: "go test ./...",
 			},
 		}
-		time.Sleep(800 * time.Millisecond)
+		time.Sleep(400 * time.Millisecond)
 
 		// 3a. Tool 2 finishes first (blocked)
 		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}

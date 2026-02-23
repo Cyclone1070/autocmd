@@ -55,6 +55,8 @@ type Model struct {
 
 	pendingOutput []string
 	flush         func(string) tea.Cmd
+	isWaiting     bool
+	isQuitting    bool
 }
 
 // Option is a functional option for configuring the Model.
@@ -148,6 +150,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.processQueue()
 
 	case eventMsg:
+		m.isWaiting = false
 		m.queue = append(m.queue, msg.event)
 		if m.isStreaming {
 			return m, nil
@@ -164,8 +167,8 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.flush(content))
 	}
 
-	// ALWAYS listen for the next event UNLESS we are quitting or streaming.
-	if !m.isStreaming {
+	// ALWAYS listen for the next event UNLESS we are quitting or already waiting.
+	if !m.isWaiting && !m.isQuitting {
 		cmds = append(cmds, m.waitForEvent())
 	}
 
@@ -382,14 +385,9 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 	case domain.DoneEvent:
+		m.isQuitting = true
 		m.flushAll()
-		cmds := []tea.Cmd{tea.Quit}
-		if len(m.pendingOutput) > 0 {
-			content := strings.Join(m.pendingOutput, "")
-			m.pendingOutput = nil
-			cmds = append(cmds, m.flush(content))
-		}
-		return m, tea.Batch(cmds...)
+		return m.finalize([]tea.Cmd{tea.Quit})
 	}
 
 	return m, tea.Batch(cmds...)
@@ -418,6 +416,7 @@ func (m *Model) View() string {
 }
 
 func (m *Model) waitForEvent() tea.Cmd {
+	m.isWaiting = true
 	return func() tea.Msg {
 		ev, ok := <-m.events
 		if !ok {

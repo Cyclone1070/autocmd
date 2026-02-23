@@ -382,8 +382,9 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 
 	// 4. ASSERT: Next Tick should do nothing if queue is empty
 	_, tickCmd := m.Update(streamTickMsg{})
-	// m.processQueue() will call m.finalize(nil) which returns waitForEvent
-	assert.NotNil(t, tickCmd, "Tick after wipe should return waitForEvent to resume listening")
+	// We should already be waiting (spawned by Ctrl+C's finalize)
+	assert.Nil(t, tickCmd, "Should not return redundant listener")
+	assert.True(t, m.isWaiting, "Should still be waiting for event")
 
 	// 5. ASSERT: Quit signal present
 	tracker := &outputTracker{}

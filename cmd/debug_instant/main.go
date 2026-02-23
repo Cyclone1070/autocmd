@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -28,7 +27,6 @@ func main() {
 			CallID:  "tool-0",
 			Display: domain.StringDisplay("This tool call display should be sandwiched."),
 		}
-		time.Sleep(1 * time.Second)
 		events <- domain.ToolEndEvent{CallID: "tool-0"}
 
 		events <- domain.TextEvent{Text: "2nd text: This text should be bellow tool call at all stages of the display."}

@@ -77,8 +77,6 @@ func (o *outputTracker) handleMsg(msg tea.Msg) {
 		}
 	case eventMsg, streamTickMsg, spinner.TickMsg:
 		// Don't track loop-driving messages
-	case flushSignalMsg:
-		o.signals = append(o.signals, m.content)
 	default:
 		// Capture everything else as a side-effect
 		s := fmt.Sprintf("%v", m)
@@ -90,7 +88,13 @@ func (o *outputTracker) handleMsg(msg tea.Msg) {
 func NewTestModel(events chan domain.Event) *Model {
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
-	m := NewModel(events, cfg)
+	m := NewModel(events, cfg, WithFlush(func(content string) tea.Cmd {
+		if currentTracker != nil {
+			currentTracker.signals = append(currentTracker.signals, content)
+		}
+		// We still execute the actual printf so history capture works too
+		return tea.Printf("%s", content)
+	}))
 	m.stream.renderer = &engineMockRenderer{}
 	return m
 }
@@ -935,13 +939,13 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	// 1. Send text and pulse once to split between buffer and queue
 	tm, _ := m.Update(eventMsg{event: domain.TextEvent{Text: "KEEPDISCARD"}})
 	m = tm.(*Model)
-	// Pulse 4 runes: "KEEP" -> buffer, "DISCARD" -> queue
+	// Pulse 4 runes: "KEEP" -> buffer, "DISC", "ARD" -> queue
 	tm, _ = m.Update(streamTickMsg{})
 	m = tm.(*Model)
 
-	assert.Equal(t, "KEEP", m.stream.buffer)
+	assert.Equal(t, "KEEPDISC", m.stream.buffer)
 	assert.Len(t, m.queue, 1)
-	assert.Equal(t, "DISCARD", m.queue[0].(domain.TextEvent).Text)
+	assert.Equal(t, "ARD", m.queue[0].(domain.TextEvent).Text)
 	assert.Empty(t, tracker.signals)
 
 	// 2. Ctrl+C (Emergency Exit)
@@ -961,6 +965,8 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	m := NewTestModel(events)
 	m.isThinking = true // Ensure spinner.Update is called
 	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
 
 	// 1. Manually seed pendingOutput as if a handler forgot to finalize
 	// (or as if we want to ensure any branch finalizes)
@@ -979,7 +985,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 
 func TestIssue_RenderingFallback(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	m := NewTestModel(events)
 
 	// 1. Setup a renderer that fails
 	m.stream.renderer = &engineMockRenderer{
@@ -988,6 +994,8 @@ func TestIssue_RenderingFallback(t *testing.T) {
 		},
 	}
 	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
 
 	// 2. Put something in the buffer
 	m.stream.buffer = "RAW_MARKDOWN"
@@ -1033,7 +1041,7 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 
 func TestModel_ParallelTools(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	m := NewTestModel(events)
 
 	// 1. Start Tool A
 	tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
@@ -1072,12 +1080,17 @@ func TestModel_ParallelTools(t *testing.T) {
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
-	// ASSERT: Tool B removed from active, Tool A remains
+	// ASSERT: Tool B finished but pinned to status because blocked by A
 	view = m.View()
 	assert.Contains(t, view, "Tool A")
-	assert.NotContains(t, view, "Tool B")
+	assert.Contains(t, view, "Tool B")
 
-	// ASSERT: Tool B should be in pending/printf output
+	// ASSERT: Tool B removed from active? No, it should still be in activeTools
+	// until flushed, but status is now Success.
+	assert.Equal(t, StatusSuccess, m.activeTools["B"].status)
+	assert.Contains(t, m.toolOrder, "B")
+
+	// ASSERT: Tool B should NOT be in pending/printf output yet (blocked by A)
 	foundB := false
 	for _, h := range tracker.history {
 		if strings.Contains(h, "Tool B") {
@@ -1085,12 +1098,12 @@ func TestModel_ParallelTools(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, foundB, "Tool B should be in printed history")
+	assert.False(t, foundB, "Tool B should NOT be in printed history yet")
 }
 
 func TestModel_OrderedFlushing(t *testing.T) {
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	m := NewTestModel(events)
 
 	// 1. Start 3 tools: A, B, C
 	for _, id := range []string{"A", "B", "C"} {

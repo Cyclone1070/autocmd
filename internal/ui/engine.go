@@ -23,11 +23,6 @@ type eventMsg struct {
 	event domain.Event
 }
 
-// flushSignalMsg is a discrete signal emitted by the central flusher.
-type flushSignalMsg struct {
-	content string
-}
-
 type toolState struct {
 	id      string
 	display domain.ToolDisplay
@@ -59,10 +54,21 @@ type Model struct {
 	isStreaming bool
 
 	pendingOutput []string
+	flush         func(string) tea.Cmd
+}
+
+// Option is a functional option for configuring the Model.
+type Option func(*Model)
+
+// WithFlush sets the flush function for the model.
+func WithFlush(f func(string) tea.Cmd) Option {
+	return func(m *Model) {
+		m.flush = f
+	}
 }
 
 // NewModel creates a new UI engine model.
-func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
+func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *Model {
 	theme := NewTheme(cfg)
 
 	// Detect terminal width
@@ -82,7 +88,7 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
 	}
 	s.Style = lipgloss.NewStyle().Foreground(theme.primary)
 
-	return &Model{
+	m := &Model{
 		events:      events,
 		stream:      NewStream(renderer),
 		theme:       theme,
@@ -90,7 +96,16 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig) *Model {
 		height:      40, // Default height
 		spinner:     s,
 		activeTools: make(map[string]*toolState),
+		flush: func(content string) tea.Cmd {
+			return tea.Printf("%s", content)
+		},
 	}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	return m
 }
 
 // Init initializes the model.
@@ -112,7 +127,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingOutput = append(m.pendingOutput, safe...)
 
 			m.isThinking = false
-			// m.activeTool = nil // This line was removed as it's not present in the original code
+			m.activeTools = make(map[string]*toolState)
+			m.toolOrder = nil
 			return m.finalize([]tea.Cmd{tea.Quit})
 		}
 
@@ -145,10 +161,7 @@ func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	if len(m.pendingOutput) > 0 {
 		content := strings.Join(m.pendingOutput, "")
 		m.pendingOutput = nil
-		cmds = append(cmds,
-			tea.Printf("%s", content),
-			func() tea.Msg { return flushSignalMsg{content: content} },
-		)
+		cmds = append(cmds, m.flush(content))
 	}
 
 	// ALWAYS listen for the next event UNLESS we are quitting or streaming.
@@ -369,9 +382,14 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 	case domain.DoneEvent:
-		m.queue = nil
 		m.flushAll()
-		return m, tea.Quit
+		cmds := []tea.Cmd{tea.Quit}
+		if len(m.pendingOutput) > 0 {
+			content := strings.Join(m.pendingOutput, "")
+			m.pendingOutput = nil
+			cmds = append(cmds, m.flush(content))
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, tea.Batch(cmds...)

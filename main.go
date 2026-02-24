@@ -21,8 +21,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
-	"github.com/Cyclone1070/iav/internal/ui/compose"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
@@ -74,19 +75,8 @@ func main() {
 
 	llmRegistry := llm.NewRegistry(googleProvider)
 
-	// Create UI Renderer
-	renderer, err := compose.NewRenderer(os.Stdout, os.Stdin, cfg)
-
-	if err != nil {
-		log.Fatalf("Failed to create renderer: %v", err)
-	}
-
-	// Start event consumer
-	go func() {
-		for ev := range events {
-			renderer.Send(ev)
-		}
-	}()
+	// Create UI Model
+	m := ui.NewModel(events, cfg.UI)
 
 	wf := workflow.NewWorkflow(llmRegistry, toolRegistry, store, cfg, events)
 
@@ -109,8 +99,9 @@ func main() {
 	}()
 
 	// Block on TUI. This returns when the user quits or an error occurs.
-	if err := renderer.Wait(); err != nil {
-		log.Printf("Renderer failed: %v", err)
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		log.Printf("UI failed: %v", err)
 	}
 
 	// Signal workflow to stop. This is necessary (not redundant with defer cancel)

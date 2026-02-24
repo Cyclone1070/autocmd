@@ -931,9 +931,9 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	currentTracker = tracker
 	defer func() { currentTracker = nil }()
 
-	// 1. Manually seed pendingOutput as if a handler forgot to flush
+	// 1. Manually seed printQueue as if a handler forgot to flush
 	// (or as if we want to ensure any branch flushes)
-	m.pendingOutput = []string{"TRAPPED"}
+	m.printQueue = []string{"TRAPPED"}
 
 	// 2. Send spinner.TickMsg
 	tm, cmd := m.Update(spinner.TickMsg{})
@@ -943,7 +943,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	// Assertion: In the current bugged state, tracker.signals will be empty
 	// because return m, cmd bypasses continueEventLoop().
 	assert.Contains(t, strings.Join(tracker.signals, ""), "TRAPPED", "Spinner tick should still trigger finalization if output is pending")
-	assert.Empty(t, m.pendingOutput, "pendingOutput should be cleared even on spinner tick")
+	assert.Empty(t, m.printQueue, "printQueue should be cleared even on spinner tick")
 }
 
 func TestIssue_RenderingFallback(t *testing.T) {

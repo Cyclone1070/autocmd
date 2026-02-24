@@ -53,9 +53,9 @@ type Model struct {
 	queue       []domain.Event
 	isStreaming bool
 
-	pendingOutput []string
-	flush         func(string) tea.Cmd
-	isWaiting     bool
+	printQueue []string
+	flush      func(string) tea.Cmd
+	isWaiting  bool
 }
 
 // Option is a functional option for configuring the Model.
@@ -125,13 +125,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isStreaming = false
 			// DISCARD buffered text, only flush currently visible tail (stream buffer)
 			safe, _ := m.stream.Flush()
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			m.printQueue = append(m.printQueue, safe...)
 
 			m.isThinking = false
 			m.activeTools = make(map[string]*toolState)
 			m.toolOrder = nil
 
-			flushCmd := m.flushPending()
+			flushCmd := m.flushPrintQueue()
 			if flushCmd != nil {
 				return m, tea.Sequence(flushCmd, tea.Quit)
 			}
@@ -145,9 +145,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			return m, tea.Batch(cmd, tea.Sequence(m.flushPending(), m.ensureEventListener()))
+			return m, tea.Batch(cmd, tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 		}
-		return m, tea.Sequence(m.flushPending(), m.ensureEventListener())
+		return m, tea.Sequence(m.flushPrintQueue(), m.ensureEventListener())
 
 	case streamTickMsg:
 		m.isStreaming = false
@@ -161,7 +161,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.processQueue()
 	}
-	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener()))
+	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 }
 
 func (m *Model) ensureEventListener() tea.Cmd {
@@ -171,10 +171,10 @@ func (m *Model) ensureEventListener() tea.Cmd {
 	return m.waitForEvent()
 }
 
-func (m *Model) flushPending() tea.Cmd {
-	if len(m.pendingOutput) > 0 {
-		content := strings.Join(m.pendingOutput, "")
-		m.pendingOutput = nil
+func (m *Model) flushPrintQueue() tea.Cmd {
+	if len(m.printQueue) > 0 {
+		content := strings.Join(m.printQueue, "")
+		m.printQueue = nil
 		return m.flush(content)
 	}
 	return nil
@@ -238,7 +238,7 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 				if _, nextIsText := m.queue[0].(domain.TextEvent); nextIsText {
 					m.isStreaming = true
 					cmds = append(cmds, m.streamTick())
-					return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener())) // Need to wait for tick
+					return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener())) // Need to wait for tick
 				}
 			}
 
@@ -255,23 +255,23 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 		// Continue loop to process next event immediately
 	}
 
-	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener()))
+	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 }
 
 func (m *Model) flushAll() {
 	safe, err := m.stream.Flush()
 	if err != nil {
-		m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+		m.printQueue = append(m.printQueue, m.stream.RawBuffer())
 		m.stream.ClearBuffer()
 	} else if len(safe) > 0 {
-		m.pendingOutput = append(m.pendingOutput, safe...)
+		m.printQueue = append(m.printQueue, safe...)
 	}
 
 	// Force graduate everything remaining (e.g. on DoneEvent)
 	for len(m.toolOrder) > 0 {
 		id := m.toolOrder[0]
 		ts := m.activeTools[id]
-		m.pendingOutput = append(m.pendingOutput, m.renderTool(ts)+"\n")
+		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -289,13 +289,13 @@ func (m *Model) flushFinishedTools() {
 		// Flush any pending text before tool box to preserve sequence
 		safe, err := m.stream.Flush()
 		if err != nil {
-			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
 			m.stream.ClearBuffer()
 		} else if len(safe) > 0 {
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			m.printQueue = append(m.printQueue, safe...)
 		}
 
-		m.pendingOutput = append(m.pendingOutput, m.renderTool(ts)+"\n")
+		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -315,15 +315,15 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 			// Flush any pending text before printing duration to ensure order
 			safe, err := m.stream.Flush()
 			if err != nil {
-				m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+				m.printQueue = append(m.printQueue, m.stream.RawBuffer())
 				m.stream.ClearBuffer()
 			} else {
-				m.pendingOutput = append(m.pendingOutput, safe...)
+				m.printQueue = append(m.printQueue, safe...)
 			}
 
 			style := lipgloss.NewStyle().Foreground(m.theme.success)
 			checkmark := style.Render("✔")
-			m.pendingOutput = append(m.pendingOutput, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(finalDuration.String())))
+			m.printQueue = append(m.printQueue, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(finalDuration.String())))
 		}
 	}
 
@@ -332,10 +332,10 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		// Flush any pending text before switching to thinking state
 		safe, err := m.stream.Flush()
 		if err != nil {
-			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
 			m.stream.ClearBuffer()
 		} else {
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			m.printQueue = append(m.printQueue, safe...)
 		}
 
 		m.isThinking = true
@@ -346,19 +346,19 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		safe, err := m.stream.Append(ev.Text)
 		if err != nil {
 			// Fallback: append raw chunk if rendering fails
-			m.pendingOutput = append(m.pendingOutput, ev.Text)
+			m.printQueue = append(m.printQueue, ev.Text)
 		} else if len(safe) > 0 {
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			m.printQueue = append(m.printQueue, safe...)
 		}
 
 	case domain.ToolStartEvent:
 		// Flush any pending text before starting a tool
 		safe, err := m.stream.Flush()
 		if err != nil {
-			m.pendingOutput = append(m.pendingOutput, m.stream.RawBuffer())
+			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
 			m.stream.ClearBuffer()
 		} else {
-			m.pendingOutput = append(m.pendingOutput, safe...)
+			m.printQueue = append(m.printQueue, safe...)
 		}
 
 		ts := &toolState{
@@ -388,7 +388,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.DoneEvent:
 		m.flushAll()
-		flushCmd := m.flushPending()
+		flushCmd := m.flushPrintQueue()
 		if flushCmd != nil {
 			return m, tea.Sequence(flushCmd, tea.Quit)
 		}

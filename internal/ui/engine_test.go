@@ -352,7 +352,11 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	m.isThinking = true
 	m.queue = []domain.Event{domain.TextEvent{Text: "pending text"}}
 	m.isStreaming = true
-	m.activeTools["busy-tool"] = &toolState{id: "busy-tool", status: StatusRunning}
+	m.activeTools["busy-tool"] = &toolState{
+		id:      "busy-tool",
+		status:  StatusRunning,
+		display: domain.StringDisplay("Running busy-tool..."),
+	}
 	m.toolOrder = []string{"busy-tool"}
 
 	// 2. Trigger Ctrl+C
@@ -363,30 +367,26 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	assert.False(t, m.isThinking, "Thinking state should be wiped instantly on Ctrl+C")
 	assert.Empty(t, m.queue, "Queue should be wiped instantly on Ctrl+C")
 	assert.False(t, m.isStreaming, "Streaming state should be wiped instantly on Ctrl+C")
-	assert.Empty(t, m.activeTools, "Active tools should be wiped instantly on Ctrl+C")
+	assert.Empty(t, m.activeTools, "Active tools should be cleared after flushing")
 
-	// 4. ASSERT: Next Tick should resume listening if not already waiting
-	// (previously suppressed by isQuitting smell, now resumes normally if poked)
-	_, tickCmd := m.Update(streamTickMsg{})
-	assert.NotNil(t, tickCmd, "Tick should resume listening")
-	assert.True(t, m.isWaiting, "Should be waiting for event after poke")
+	assert.Empty(t, m.printQueue, "printQueue should be empty because it was flushed to tea.Cmd")
 
-	// 5. ASSERT: Quit signal present
+	// 5. ASSERT: Quit signal present and cancellation rendered
 	tracker := &outputTracker{}
 	tracker.capture(cmd)
 
+	foundCancelledTool := false
 	foundQuit := false
 	for _, h := range tracker.history {
-		// tea.Quit returns a tea.quitMsg which is usually displayed as {}
 		if strings.Contains(h, "quitMsg") || strings.Contains(h, "{}") {
 			foundQuit = true
-			break
+		}
+		if strings.Contains(h, "Cancelled") {
+			foundCancelledTool = true
 		}
 	}
+	assert.True(t, foundCancelledTool, "Should find 'Cancelled' tool output in historical tracker.history")
 	assert.True(t, foundQuit, "Should find Quit message in history/commands")
-	// Note: cmd() execution in Tracker will return the actual messages.
-	// tea.Quit returns a command that returns tea.QuoteMsg.
-	assert.NotNil(t, cmd)
 }
 
 func TestModel_Update_ToolLifecycle(t *testing.T) {

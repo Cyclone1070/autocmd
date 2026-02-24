@@ -132,6 +132,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.printQueue = append(m.printQueue, safe...)
 
 			m.isThinking = false
+
+			// Flush any active tool with a cancelled error rather than throwing it away
+			for _, id := range m.toolOrder {
+				if ts, ok := m.activeTools[id]; ok {
+					ts.status = StatusError
+					ts.err = "Cancelled"
+					m.printQueue = append(m.printQueue, m.renderTool(ts))
+				}
+			}
+
 			m.activeTools = make(map[string]*toolState)
 			m.toolOrder = nil
 

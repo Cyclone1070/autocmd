@@ -38,6 +38,8 @@ func main() {
 			events <- domain.ToolEndEvent{CallID: name + "-1"}
 		}
 
+		events <- domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n"}
+
 		// 1. String Suite
 		runSuite("STRING",
 			domain.StringDisplay("String 1 (Slow)"),

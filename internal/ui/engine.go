@@ -153,10 +153,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Sequence(m.flushPrintQueue(), m.ensureEventListener())
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		return m, nil
 	case streamTickMsg:
 		m.isStreaming = false
 		return m.processQueue()
@@ -450,14 +446,14 @@ func (m *Model) renderTool(ts *toolState) string {
 
 	switch d := ts.display.(type) {
 	case domain.ShellDisplay:
-		content = RenderShell(m.width, 12, m.theme, d, ts.output, ts.status, ts.err, prefix)
+		content = RenderShell(m.width-2, 12, m.theme, d, ts.output, ts.status, ts.err, prefix)
 	case domain.DiffDisplay:
-		content = RenderDiff(m.width, m.theme, d, ts.status, ts.err, prefix)
+		content = RenderDiff(m.width-2, m.theme, d, ts.status, ts.err, prefix)
 	case domain.StringDisplay:
 		content = RenderString(m.theme, d, ts.status, ts.err, prefix)
 	}
 
-	return m.theme.Box(content, m.width, ts.status)
+	return m.theme.Box(content, m.width-2, ts.status)
 }
 
 func (m *Model) streamTick() tea.Cmd {

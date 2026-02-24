@@ -11,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1145,4 +1146,45 @@ func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 	te2, ok := m.queue[1].(domain.TextEvent)
 	assert.True(t, ok, "Second remaining item should be a TextEvent")
 	assert.Equal(t, "90", te2.Text, "Second remaining item should be the last 2 runes")
+}
+
+func TestModel_Update_WindowSize_NoResize(t *testing.T) {
+	events := make(chan domain.Event)
+	cfg := config.DefaultConfig().UI
+	cfg.ChatWindowWidth = 80
+
+	m := NewModel(events, cfg)
+	initialWidth := m.width
+	initialHeight := m.height
+
+	// Simulate window resize to something much larger
+	m.Update(tea.WindowSizeMsg{Width: 200, Height: 100})
+
+	assert.Equal(t, initialWidth, m.width, "Width should not change on WindowSizeMsg")
+	assert.Equal(t, initialHeight, m.height, "Height should not change on WindowSizeMsg")
+}
+
+func TestModel_RenderTool_WidthConstraint(t *testing.T) {
+	events := make(chan domain.Event)
+	cfg := config.DefaultConfig().UI
+	cfg.ChatWindowWidth = 80
+
+	m := NewModel(events, cfg)
+
+	ts := &toolState{
+		id:      "test",
+		display: domain.StringDisplay("hello"),
+		status:  StatusSuccess,
+	}
+
+	rendered := m.renderTool(ts)
+	lines := strings.Split(rendered, "\n")
+
+	for _, line := range lines {
+		// Strip ANSI codes before measuring width
+		width := lipgloss.Width(line)
+		if width > 0 {
+			assert.Equal(t, 80, width, "Each line of the tool box should be exactly 80 characters wide")
+		}
+	}
 }

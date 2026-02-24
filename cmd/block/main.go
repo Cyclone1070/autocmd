@@ -27,8 +27,8 @@ func main() {
 			"1. Ordered item 1\n2. Ordered item 2\n",
 			"> This is a blockquote.\n> It can have multiple lines.\n",
 			"```go\nfunc hello() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n",
-			"---", // HR
-			"| Table | Header |\n|-------|--------|\n| Row 1 | Cell 1 |\n| Row 2 | Cell 2 |\n",
+			"---\n", // HR
+			"| Table | Header |\n|-------|--------|\n| Row 1 | Cell 1 |\n| Row 2 | Cell 2 |\n\n",
 			"Task list:\n- [x] Done\n- [ ] Todo\n",
 		}
 

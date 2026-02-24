@@ -179,7 +179,7 @@ func (m *Model) flushPrintQueue() tea.Cmd {
 	if len(m.printQueue) > 0 {
 		content := strings.Join(m.printQueue, "")
 		m.printQueue = nil
-		return m.flush(content)
+		return m.flush(strings.TrimRight(content, "\n"))
 	}
 	return nil
 }
@@ -421,7 +421,8 @@ func (m *Model) View() string {
 
 	sb.WriteString(m.stream.Pending())
 
-	return TruncateWithIndicator(sb.String(), m.height)
+	res := strings.TrimRight(sb.String(), "\n")
+	return TruncateWithIndicator(res, m.height)
 }
 
 func (m *Model) waitForEvent() tea.Cmd {

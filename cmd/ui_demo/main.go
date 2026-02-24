@@ -19,16 +19,19 @@ func main() {
 
 	// Simulate workflow in background
 	go func() {
-		// 1. Thinking
-		events <- domain.ThinkingEvent{}
-		time.Sleep(1 * time.Second)
-
-		// 2. Text Stream
+		// 1. Text Stream
 		markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
 		events <- domain.TextEvent{Text: markdown}
 		time.Sleep(400 * time.Millisecond)
 
+		// 2. Thinking
+		events <- domain.ThinkingEvent{}
+		time.Sleep(1 * time.Second)
+
 		events <- domain.TextEvent{Text: "Here's a readfile tool call."}
+
+		events <- domain.ThinkingEvent{}
+		time.Sleep(1 * time.Second)
 
 		events <- domain.ToolStartEvent{
 			CallID:  "tool-0",

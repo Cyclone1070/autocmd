@@ -24,6 +24,18 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	})
 
 	defer func() {
+		if ctx.Err() != nil {
+			msgs := w.currentSession.Messages
+			if len(msgs) == 0 || msgs[len(msgs)-1].Content != "[Session cancelled by user]" {
+				w.currentSession.Messages = append(w.currentSession.Messages, domain.Message{
+					Role:    domain.RoleUser,
+					Content: "[Session cancelled by user]",
+				})
+			}
+		}
+
+		_ = w.sessionStore.Save(w.currentSession)
+
 		if w.events != nil {
 			select {
 			case w.events <- domain.DoneEvent{}:
@@ -35,11 +47,6 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 	maxIterations := w.cfg.Tools.MaxIterations
 	for range maxIterations {
 		if err := ctx.Err(); err != nil {
-			w.currentSession.Messages = append(w.currentSession.Messages, domain.Message{
-				Role:    domain.RoleUser,
-				Content: "[Session cancelled by user]",
-			})
-			_ = w.sessionStore.Save(w.currentSession)
 			return err
 		}
 
@@ -53,7 +60,6 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 
 		stream, err := w.currentLLM.Stream(ctx, w.currentSession.Messages, w.toolExecutor.declarations())
 		if err != nil {
-			_ = w.sessionStore.Save(w.currentSession)
 			return fmt.Errorf("LLM.Stream: %w", err)
 		}
 
@@ -72,22 +78,20 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			}
 		}
 
+		// Save the accumulated stream contents so far before checking for errors
+		w.currentSession.Messages = append(w.currentSession.Messages, msg)
+
 		if err := stream.Err(); err != nil {
-			_ = w.sessionStore.Save(w.currentSession)
 			return fmt.Errorf("stream.Err: %w", err)
 		}
 
-		w.currentSession.Messages = append(w.currentSession.Messages, msg)
-
 		if len(msg.ToolCalls) == 0 {
-			_ = w.sessionStore.Save(w.currentSession)
 			return nil
 		}
 
 		for _, tc := range msg.ToolCalls {
 			toolResp, err := w.toolExecutor.execute(ctx, tc, w.events)
 			if err != nil {
-				_ = w.sessionStore.Save(w.currentSession)
 				return fmt.Errorf("tools.Execute (%s): %w", tc.Name, err)
 			}
 			w.currentSession.Messages = append(w.currentSession.Messages, toolResp)
@@ -99,6 +103,5 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 		Content: "[Max iterations reached]",
 	})
 
-	_ = w.sessionStore.Save(w.currentSession)
 	return fmt.Errorf("max iterations (%d) reached", maxIterations)
 }

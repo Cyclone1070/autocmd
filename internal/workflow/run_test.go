@@ -339,3 +339,75 @@ func TestRun_ContextCancelled_DuringThinking_ReturnsError(t *testing.T) {
 	messages := sess.Messages
 	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
 }
+
+type customMockLLM struct {
+	*mockLLM
+	cancel context.CancelFunc
+}
+
+func (c *customMockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+	s, err := c.mockLLM.Stream(ctx, msgs, tools)
+	c.cancel() // cancel mid-stream
+	return s, err
+}
+
+func TestRun_ContextCancelled_DuringStream_ReturnsError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{
+				chunks: []domain.StreamChunk{domain.TextChunk{Text: "half message"}},
+				err:    context.Canceled, // simulate stream returning error because of cancellation
+			},
+		},
+	}
+
+	customM := &customMockLLM{
+		mockLLM: m,
+		cancel:  cancel,
+	}
+
+	w := newTestWorkflow(t, customM, []domain.Tool{}, nil)
+
+	err := w.Run(ctx, "hello")
+
+	assert.Error(t, err)
+
+	sess := w.CurrentSession()
+	messages := sess.Messages
+	// The partially received message is kept.
+	assert.Equal(t, "half message", messages[len(messages)-2].Content)
+	// The cancellation message is appended.
+	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
+}
+
+func TestRun_ContextCancelled_DuringToolExecution_ReturnsError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-1", Name: "long_tool"}}},
+		},
+	}
+
+	mt := &mockTool{
+		name: "long_tool",
+		prepare: func(c context.Context, params json.RawMessage) (domain.Invocation, error) {
+			// Cancel context right before execute simulates user interrupt during tool runtime
+			cancel()
+			return &mockInvocation{content: "", err: context.Canceled}, nil
+		},
+	}
+
+	w := newTestWorkflow(t, m, []domain.Tool{mt}, nil)
+	err := w.Run(ctx, "run tool")
+
+	assert.Error(t, err)
+
+	sess := w.CurrentSession()
+	messages := sess.Messages
+	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
+}

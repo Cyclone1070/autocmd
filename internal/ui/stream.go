@@ -369,6 +369,7 @@ func NewGlamourRenderer(width int) (Renderer, error) {
 	style.H1.Color = style.H2.Color
 	style.H1.Bold = ptr(true)
 	style.H1.Underline = ptr(true)
+	style.H1.Upper = ptr(true)
 
 	tr, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),

@@ -239,7 +239,7 @@ func TestModel_View_Truncation(t *testing.T) {
 		}
 	}
 	assert.LessOrEqual(t, lines+1, m.height)
-	assert.Contains(t, view, "▲ [Truncated]")
+	assert.Contains(t, view, "\n  ▲ [7 lines truncated]")
 }
 
 func TestModel_Update_ThinkingEvent(t *testing.T) {

@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -18,14 +19,19 @@ func TruncateWithIndicator(content string, termHeight int) string {
 		return content
 	}
 
-	header := "  ▲ [Truncated]"
 	if termHeight == 1 {
+		return fmt.Sprintf("  ▲ [%d lines truncated]", len(lines))
+	}
+
+	// We need 2 lines for the indicator header (one empty line, one text line)
+	maxContentLines := termHeight - 2
+	overflow := len(lines) - maxContentLines
+	header := fmt.Sprintf("\n  ▲ [%d lines truncated]", overflow)
+
+	if maxContentLines == 0 {
 		return header
 	}
 
-	// We need 1 line for the "▲ [Truncated]" header
-	maxContentLines := termHeight - 1
-	overflow := len(lines) - maxContentLines
 	visible := lines[overflow:]
 	return header + "\n" + strings.Join(visible, "\n")
 }

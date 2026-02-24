@@ -22,7 +22,17 @@ func TestTruncateWithIndicator_ShowsIndicatorAndTail(t *testing.T) {
 	content := strings.Join(lines, "\n")
 
 	result := TruncateWithIndicator(content, 24)
-	assert.Contains(t, result, "[Truncated]")
+	assert.Contains(t, result, "\n  ▲ [8 lines truncated]")
 	assert.Contains(t, result, "Line 29")
 	assert.NotContains(t, result, "Line 0")
+}
+
+func TestTruncateWithIndicator_EdgeCases(t *testing.T) {
+	content := "A\nB\nC"
+
+	res1 := TruncateWithIndicator(content, 1)
+	assert.Equal(t, "  ▲ [3 lines truncated]", res1)
+
+	res2 := TruncateWithIndicator(content, 2)
+	assert.Equal(t, "\n  ▲ [3 lines truncated]", res2)
 }

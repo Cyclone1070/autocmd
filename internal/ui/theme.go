@@ -41,7 +41,9 @@ func NewTheme(cfg config.UIConfig) *Theme {
 	t.box = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.muted).
-		Padding(0, 0)
+		Padding(0, 0).
+		MarginTop(1).
+		MarginBottom(1)
 
 	return t
 }

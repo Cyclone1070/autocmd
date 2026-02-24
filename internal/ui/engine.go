@@ -275,7 +275,7 @@ func (m *Model) flushAll() {
 	for len(m.toolOrder) > 0 {
 		id := m.toolOrder[0]
 		ts := m.activeTools[id]
-		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
+		m.printQueue = append(m.printQueue, m.renderTool(ts))
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -299,7 +299,7 @@ func (m *Model) flushFinishedTools() {
 			m.printQueue = append(m.printQueue, safe...)
 		}
 
-		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
+		m.printQueue = append(m.printQueue, m.renderTool(ts))
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -415,7 +415,6 @@ func (m *Model) View() string {
 	for _, id := range m.toolOrder {
 		if ts, ok := m.activeTools[id]; ok {
 			sb.WriteString(m.renderTool(ts))
-			sb.WriteString("\n")
 		}
 	}
 

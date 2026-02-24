@@ -89,7 +89,6 @@ func main() {
 
 		// 6. Final text
 		events <- domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"}
-		time.Sleep(1 * time.Second)
 
 		// 7. Done
 		events <- domain.DoneEvent{}

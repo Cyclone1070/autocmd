@@ -192,20 +192,6 @@ func extractTickFromMsgs(msgs []tea.Msg) tea.Msg {
 	return nil
 }
 
-func extractTick(msg tea.Msg) tea.Msg {
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, bcmd := range batch {
-			bmsg := bcmd()
-			if _, ok := bmsg.(streamTickMsg); ok {
-				return bmsg
-			}
-		}
-	} else if _, ok := msg.(streamTickMsg); ok {
-		return msg
-	}
-	return nil
-}
-
 func TestModel_Update_TextEvent(t *testing.T) {
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
@@ -230,7 +216,7 @@ func TestModel_Update_TextEvent(t *testing.T) {
 		}
 	}
 	assert.True(t, foundTick, "Should contain streamTickMsg")
-	assert.False(t, foundWait, "Should NOT contain waitForEvent (eventMsg) while streaming")
+	assert.False(t, foundWait, "Should NOT contain waitForEvent (eventMsg) - it is suppressed by isWaiting")
 }
 
 func TestModel_View_Truncation(t *testing.T) {
@@ -387,11 +373,11 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	assert.False(t, m.isStreaming, "Streaming state should be wiped instantly on Ctrl+C")
 	assert.Empty(t, m.activeTools, "Active tools should be wiped instantly on Ctrl+C")
 
-	// 4. ASSERT: Next Tick should do nothing if queue is empty
+	// 4. ASSERT: Next Tick should resume listening if not already waiting
+	// (previously suppressed by isQuitting smell, now resumes normally if poked)
 	_, tickCmd := m.Update(streamTickMsg{})
-	// We should already be waiting (spawned by Ctrl+C's finalize)
-	assert.Nil(t, tickCmd, "Should not return redundant listener")
-	assert.True(t, m.isWaiting, "Should still be waiting for event")
+	assert.NotNil(t, tickCmd, "Tick should resume listening")
+	assert.True(t, m.isWaiting, "Should be waiting for event after poke")
 
 	// 5. ASSERT: Quit signal present
 	tracker := &outputTracker{}
@@ -591,8 +577,6 @@ func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 	// 1. Send text but don't tick it yet
 	text := "Final unflushed text"
 	q := &msgQueue{m: m}
-	// 1. Send text but don't tick it yet
-	text = "Final unflushed text"
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: text}} })
 	q.drain()
 
@@ -779,7 +763,6 @@ func TestFlush_Natural(t *testing.T) {
 	defer func() { currentTracker = nil }()
 
 	// 1. Send text that contains a finished block (H1) and an unfinished tail (Block 2).
-	// We send it as a single	// 1. Send text that contains a finished block (H1) and an unfinished tail (Block 2).
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "## H1\n\nBETA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
@@ -976,8 +959,8 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	currentTracker = tracker
 	defer func() { currentTracker = nil }()
 
-	// 1. Manually seed pendingOutput as if a handler forgot to finalize
-	// (or as if we want to ensure any branch finalizes)
+	// 1. Manually seed pendingOutput as if a handler forgot to flush
+	// (or as if we want to ensure any branch flushes)
 	m.pendingOutput = []string{"TRAPPED"}
 
 	// 2. Send spinner.TickMsg
@@ -986,7 +969,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	tracker.capture(cmd)
 
 	// Assertion: In the current bugged state, tracker.signals will be empty
-	// because return m, cmd bypasses finalize().
+	// because return m, cmd bypasses continueEventLoop().
 	assert.Contains(t, strings.Join(tracker.signals, ""), "TRAPPED", "Spinner tick should still trigger finalization if output is pending")
 	assert.Empty(t, m.pendingOutput, "pendingOutput should be cleared even on spinner tick")
 }

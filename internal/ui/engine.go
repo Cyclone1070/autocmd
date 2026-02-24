@@ -56,7 +56,6 @@ type Model struct {
 	pendingOutput []string
 	flush         func(string) tea.Cmd
 	isWaiting     bool
-	isQuitting    bool
 }
 
 // Option is a functional option for configuring the Model.
@@ -131,7 +130,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.isThinking = false
 			m.activeTools = make(map[string]*toolState)
 			m.toolOrder = nil
-			return m.finalize([]tea.Cmd{tea.Quit})
+
+			flushCmd := m.flushPending()
+			if flushCmd != nil {
+				return m, tea.Sequence(flushCmd, tea.Quit)
+			}
+			return m, tea.Quit
 		}
 
 	case spinner.TickMsg:
@@ -141,9 +145,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			return m.finalize([]tea.Cmd{cmd})
+			return m, tea.Batch(m.flushPending(), cmd, m.ensureEventListener())
 		}
-		return m.finalize(nil)
+		return m, tea.Batch(m.flushPending(), m.ensureEventListener())
 
 	case streamTickMsg:
 		m.isStreaming = false
@@ -157,25 +161,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.processQueue()
 	}
-	return m.finalize(cmds)
+	return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener())
 }
 
-func (m *Model) finalize(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+func (m *Model) ensureEventListener() tea.Cmd {
+	if m.isWaiting {
+		return nil
+	}
+	return m.waitForEvent()
+}
+
+func (m *Model) flushPending() tea.Cmd {
 	if len(m.pendingOutput) > 0 {
 		content := strings.Join(m.pendingOutput, "")
 		m.pendingOutput = nil
-		cmds = append(cmds, m.flush(content))
+		return m.flush(content)
 	}
-
-	// ALWAYS listen for the next event UNLESS we are quitting or already waiting.
-	if !m.isWaiting && !m.isQuitting {
-		cmds = append(cmds, m.waitForEvent())
-	}
-
-	if len(cmds) == 0 {
-		return m, nil
-	}
-	return m, tea.Batch(cmds...)
+	return nil
 }
 
 func (m *Model) processQueue() (tea.Model, tea.Cmd) {
@@ -236,7 +238,7 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 				if _, nextIsText := m.queue[0].(domain.TextEvent); nextIsText {
 					m.isStreaming = true
 					cmds = append(cmds, m.streamTick())
-					return m.finalize(cmds) // Need to wait for tick
+					return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener()) // Need to wait for tick
 				}
 			}
 
@@ -253,7 +255,7 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 		// Continue loop to process next event immediately
 	}
 
-	return m.finalize(cmds)
+	return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener())
 }
 
 func (m *Model) flushAll() {
@@ -385,14 +387,12 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 	case domain.DoneEvent:
-		m.isQuitting = true
 		m.flushAll()
-		if len(m.pendingOutput) > 0 {
-			content := strings.Join(m.pendingOutput, "")
-			m.pendingOutput = nil
-			return m.finalize([]tea.Cmd{tea.Sequence(m.flush(content), tea.Quit)})
+		flushCmd := m.flushPending()
+		if flushCmd != nil {
+			return m, tea.Sequence(flushCmd, tea.Quit)
 		}
-		return m.finalize([]tea.Cmd{tea.Quit})
+		return m, tea.Quit
 	}
 
 	return m, tea.Batch(cmds...)

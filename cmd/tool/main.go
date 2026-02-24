@@ -27,11 +27,12 @@ func main() {
 			events <- domain.ToolStartEvent{CallID: name + "-3", Display: display3}
 
 			// Finishes: 2 (0.5s), 3 (1.5s), 1 (3s)
+			// Tool 3 is the "middle" finisher - make it fail.
 			time.Sleep(500 * time.Millisecond)
 			events <- domain.ToolEndEvent{CallID: name + "-2"}
 
 			time.Sleep(1000 * time.Millisecond)
-			events <- domain.ToolEndEvent{CallID: name + "-3"}
+			events <- domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"}
 
 			time.Sleep(1500 * time.Millisecond)
 			events <- domain.ToolEndEvent{CallID: name + "-1"}
@@ -41,32 +42,38 @@ func main() {
 		runSuite("STRING",
 			domain.StringDisplay("String 1 (Slow)"),
 			domain.StringDisplay("String 2 (Fast)"),
-			domain.StringDisplay("String 3 (Medium)"))
+			domain.StringDisplay("String 3 (Medium/Fail)"))
 
 		// 2. Diff Suite
 		runSuite("DIFF",
 			domain.DiffDisplay{Header: "file.txt", Diff: "- old\n+ new"},
 			domain.DiffDisplay{Header: "fast.txt", Diff: "- fast\n+ gone"},
-			domain.DiffDisplay{Header: "med.txt", Diff: "- meh\n+ okay"})
+			domain.DiffDisplay{Header: "med.txt", Diff: "- error here\n+ failed"})
 
-		// 3. Shell Suite (with streaming)
-		events <- domain.TextEvent{Text: "\n### SUITE: SHELL (with streaming)\n"}
+		// 3. Shell Suite (with more streaming)
+		events <- domain.TextEvent{Text: "\n### SUITE: SHELL (Heavy Streaming)\n"}
 		events <- domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.ShellDisplay{Command: "slow-cmd", Header: "Slow Shell"}}
 		events <- domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.ShellDisplay{Command: "fast-cmd", Header: "Fast Shell"}}
-		events <- domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.ShellDisplay{Command: "med-cmd", Header: "Medium Shell"}}
+		events <- domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.ShellDisplay{Command: "med-cmd", Header: "Medium Shell (Fail)"}}
 
-		// Stream some output
-		for i := 0; i < 5; i++ {
-			events <- domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow line %d...\n", i)}
-			events <- domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast line %d...\n", i)}
-			events <- domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med line %d...\n", i)}
-			time.Sleep(100 * time.Millisecond)
+		// Heavy streaming
+		for i := 1; i <= 20; i++ {
+			if i <= 15 {
+				events <- domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast output line %d - working quickly...\n", i)}
+			}
+			if i <= 20 {
+				events <- domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time...\n", i)}
+			}
+			if i <= 18 {
+				events <- domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...\n", i)}
+			}
+			time.Sleep(300 * time.Millisecond)
 		}
 
 		// Finishes
 		events <- domain.ToolEndEvent{CallID: "SHELL-2"} // Fast
 		time.Sleep(1000 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "SHELL-3"} // Medium
+		events <- domain.ToolEndEvent{CallID: "SHELL-3", Error: "exit status 1: middle tool error"} // Medium/Fail
 		time.Sleep(1000 * time.Millisecond)
 		events <- domain.ToolEndEvent{CallID: "SHELL-1"} // Slow
 

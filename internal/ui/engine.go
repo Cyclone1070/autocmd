@@ -72,12 +72,16 @@ func WithFlush(f func(string) tea.Cmd) Option {
 func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *Model {
 	theme := NewTheme(cfg)
 
-	// Detect terminal width
-	detectedWidth, _, err := term.GetSize(int(os.Stdout.Fd()))
+	// Detect terminal size
+	detectedWidth, detectedHeight, err := term.GetSize(int(os.Stdout.Fd()))
 	width := cfg.ChatWindowWidth
+	height := 40 // Default fallback
 
-	if err == nil && detectedWidth < width {
-		width = detectedWidth
+	if err == nil {
+		if detectedWidth < width {
+			width = detectedWidth
+		}
+		height = detectedHeight
 	}
 
 	renderer, _ := NewGlamourRenderer(width)
@@ -94,7 +98,7 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 		stream:      NewStream(renderer),
 		theme:       theme,
 		width:       width,
-		height:      40, // Default height
+		height:      height,
 		spinner:     s,
 		activeTools: make(map[string]*toolState),
 		flush: func(content string) tea.Cmd {
@@ -149,6 +153,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Sequence(m.flushPrintQueue(), m.ensureEventListener())
 
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case streamTickMsg:
 		m.isStreaming = false
 		return m.processQueue()

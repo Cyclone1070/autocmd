@@ -288,25 +288,16 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	case events <- domain.DoneEvent{}:
 	default:
 	}
-	mMsg = cmd()
-	if batch, ok = mMsg.(tea.BatchMsg); ok {
-		foundPrintf := false
-		for _, bcmd := range batch {
-			if bcmd == nil {
-				continue
-			}
-			bmsg := bcmd()
-			s := fmt.Sprintf("%v", bmsg)
-			if strings.Contains(s, "Thought for") {
-				foundPrintf = true
-				break
-			}
+	msgs := executeCmd(cmd)
+	foundPrintf := false
+	for _, bmsg := range msgs {
+		s := fmt.Sprintf("%v", bmsg)
+		if strings.Contains(s, "Thought for") {
+			foundPrintf = true
+			break
 		}
-		assert.True(t, foundPrintf, "Should have found Printf in batch")
-	} else {
-		s := fmt.Sprintf("%v", mMsg)
-		assert.Contains(t, s, "Thought for")
 	}
+	assert.True(t, foundPrintf, "Should have found Printf in batch")
 }
 
 func TestModel_Update_EventLoopContinuity(t *testing.T) {
@@ -416,19 +407,13 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	assert.Equal(t, StatusRunning, m.activeTools["123"].status)
 
 	events <- domain.DoneEvent{}
-	mMsg := cmd()
-	batch, ok := mMsg.(tea.BatchMsg)
-	assert.True(t, ok, "ToolStart should return a batch")
+	msgs := executeCmd(cmd)
 	foundSpinner := false
 	foundWait := false
-	for _, bcmd := range batch {
-		if bcmd == nil {
-			continue
-		}
-		bmsg := bcmd()
-		if _, ok := bmsg.(spinner.TickMsg); ok {
+	for _, msg := range msgs {
+		if _, ok := msg.(spinner.TickMsg); ok {
 			foundSpinner = true
-		} else if _, ok := bmsg.(eventMsg); ok {
+		} else if _, ok := msg.(eventMsg); ok {
 			foundWait = true
 		}
 	}
@@ -445,20 +430,13 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	assert.Contains(t, m.activeTools["123"].output, "PASS")
 
 	events <- domain.DoneEvent{}
-	mMsg = cmd()
+	msgs = executeCmd(cmd)
 	foundWait = false
-	if batch, ok = mMsg.(tea.BatchMsg); ok {
-		for _, bcmd := range batch {
-			if bcmd == nil {
-				continue
-			}
-			bmsg := bcmd()
-			if _, ok := bmsg.(eventMsg); ok {
-				foundWait = true
-			}
+	for _, bmsg := range msgs {
+		if _, ok := bmsg.(eventMsg); ok {
+			foundWait = true
+			break
 		}
-	} else if _, ok = mMsg.(eventMsg); ok {
-		foundWait = true
 	}
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
@@ -474,16 +452,10 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	assert.NotNil(t, cmd)
 
 	events <- domain.DoneEvent{}
-	mMsg = cmd()
-	batch, ok = mMsg.(tea.BatchMsg)
-	assert.True(t, ok, "ToolEnd should return a batch")
+	msgs = executeCmd(cmd)
 	foundPrintf := false
 	foundWait = false
-	for _, bcmd := range batch {
-		if bcmd == nil {
-			continue
-		}
-		bmsg := bcmd()
+	for _, bmsg := range msgs {
 		s := fmt.Sprintf("%v", bmsg)
 		if strings.Contains(s, "Run tests") { // Header is in ShellDisplay
 			foundPrintf = true

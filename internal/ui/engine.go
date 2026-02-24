@@ -145,9 +145,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			return m, tea.Batch(m.flushPending(), cmd, m.ensureEventListener())
+			return m, tea.Batch(cmd, tea.Sequence(m.flushPending(), m.ensureEventListener()))
 		}
-		return m, tea.Batch(m.flushPending(), m.ensureEventListener())
+		return m, tea.Sequence(m.flushPending(), m.ensureEventListener())
 
 	case streamTickMsg:
 		m.isStreaming = false
@@ -161,7 +161,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.processQueue()
 	}
-	return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener())
+	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener()))
 }
 
 func (m *Model) ensureEventListener() tea.Cmd {
@@ -238,7 +238,7 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 				if _, nextIsText := m.queue[0].(domain.TextEvent); nextIsText {
 					m.isStreaming = true
 					cmds = append(cmds, m.streamTick())
-					return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener()) // Need to wait for tick
+					return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener())) // Need to wait for tick
 				}
 			}
 
@@ -255,7 +255,7 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 		// Continue loop to process next event immediately
 	}
 
-	return m, tea.Batch(m.flushPending(), tea.Batch(cmds...), m.ensureEventListener())
+	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPending(), m.ensureEventListener()))
 }
 
 func (m *Model) flushAll() {

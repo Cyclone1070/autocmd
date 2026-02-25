@@ -3,246 +3,182 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/session"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-type sessionPickerModel struct {
+type sessionPickerWrapper struct {
 	cfg       *config.Config
 	store     *session.Store
-	sessions  []domain.SessionSummary
-	cursor    int
-	quit      bool
-	err       error
-	selected  string
+	picker    *ui.Picker
 	renaming  bool
 	textInput textinput.Model
 }
 
-func newSessionPickerModel(cfg *config.Config, store *session.Store, sessions []domain.SessionSummary) *sessionPickerModel {
-	ti := textinput.New()
-	ti.Placeholder = "Session name..."
-	ti.CharLimit = 50
-	ti.Width = 30
-
-	return &sessionPickerModel{
-		cfg:       cfg,
-		store:     store,
-		sessions:  sessions,
-		textInput: ti,
-	}
-}
-
-func (m *sessionPickerModel) Init() tea.Cmd {
+func (w *sessionPickerWrapper) Init() tea.Cmd {
 	return nil
 }
 
-func (m *sessionPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.renaming {
+func (w *sessionPickerWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if w.renaming {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "enter":
-				id := m.sessions[m.cursor].ID
-				newName := strings.TrimSpace(m.textInput.Value())
-				if newName != "" {
-					_ = m.store.Rename(id, newName)
-					m.sessions, _ = m.store.List()
+				selected, _ := w.picker.Selected()
+				newName := strings.TrimSpace(w.textInput.Value())
+				if newName != "" && selected != nil {
+					_ = w.store.Rename(selected.ID, newName)
+					summaries, _ := w.store.List()
+					w.picker.RefreshItems(w.mapSessionsToItems(summaries))
 				}
-				m.renaming = false
-				m.textInput.Blur()
-				return m, nil
+				w.renaming = false
+				w.textInput.Blur()
+				return w, nil
 			case "esc":
-				m.renaming = false
-				m.textInput.Blur()
-				return m, nil
+				w.renaming = false
+				w.textInput.Blur()
+				return w, nil
 			}
 		}
 		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
+		w.textInput, cmd = w.textInput.Update(msg)
+		return w, cmd
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q", "esc":
-			m.quit = true
-			return m, tea.Quit
-
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-
-		case "down", "j":
-			if m.cursor < len(m.sessions)-1 {
-				m.cursor++
-			}
-
-		case "enter":
-			if len(m.sessions) > 0 {
-				id := m.sessions[m.cursor].ID
-				m.cfg.Session.CurrentSessionID = id
-				_ = config.Save(m.cfg)
-				m.selected = id
-				m.quit = true
-				return m, tea.Quit
-			}
-
-		case "n":
-			// Create new session
-			sess, err := m.store.Create()
-			if err != nil {
-				m.err = err
-				return m, nil
-			}
-			m.cfg.Session.CurrentSessionID = sess.ID
-			_ = config.Save(m.cfg)
-			m.selected = sess.ID
-			m.quit = true
-			return m, tea.Quit
-
-		case "d":
-			// Delete session
-			if len(m.sessions) > 0 {
-				id := m.sessions[m.cursor].ID
-				_ = m.store.Delete(id)
-				// Refresh list
-				m.sessions, _ = m.store.List()
-				if m.cursor >= len(m.sessions) && m.cursor > 0 {
-					m.cursor = len(m.sessions) - 1
-				}
-			}
-
-		case "r":
-			// Rename session
-			if len(m.sessions) > 0 {
-				m.renaming = true
-				m.textInput.SetValue(m.sessions[m.cursor].Name)
-				m.textInput.Focus()
-				return m, textinput.Blink
-			}
-		}
-	}
-	return m, nil
+	res, cmd := w.picker.Update(msg)
+	w.picker = res.(*ui.Picker)
+	return w, cmd
 }
 
-func (m *sessionPickerModel) View() string {
-	if m.quit {
-		if m.selected != "" {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Render(fmt.Sprintf("\n  Selected session: %s\n", m.selected))
-		}
-		return "\n  Cancelled.\n"
+func (w *sessionPickerWrapper) View() string {
+	if w.renaming {
+		return fmt.Sprintf("\n  Rename session:\n\n  %s\n\n  (Enter to save, Esc to cancel)\n", w.textInput.View())
 	}
+	return w.picker.View()
+}
 
-	if m.err != nil {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(fmt.Sprintf("\n  Error: %v\n", m.err))
-	}
-
-	var s strings.Builder
-
-	// Styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("86")).
-		MarginBottom(1)
-
-	keyStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("86"))
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
-	helpItem := func(k, d string) string {
-		return fmt.Sprintf("%s %s", keyStyle.Render(k), descStyle.Render(d))
-	}
-
-	// Header
-	s.WriteString(titleStyle.Render("  SESSIONS"))
-	s.WriteString("\n")
-
-	if m.renaming {
-		s.WriteString("  " + descStyle.Render("Rename current session:") + "\n\n")
-		s.WriteString("  " + m.textInput.View() + "\n\n")
-		s.WriteString(fmt.Sprintf("  %s %s\n", helpItem("Enter", "save"), helpItem("Esc", "cancel")))
-		return s.String()
-	}
-
-	// Help line (styled)
-	help := fmt.Sprintf("  %s   %s   %s   %s   %s   %s\n\n",
-		helpItem("↑/↓", "navigate"),
-		helpItem("Enter", "select"),
-		helpItem("n", "new"),
-		helpItem("r", "rename"),
-		helpItem("d", "delete"),
-		helpItem("q", "quit"),
-	)
-	s.WriteString(help)
-
-	if len(m.sessions) == 0 {
-		s.WriteString(lipgloss.NewStyle().Italic(true).Foreground(lipgloss.Color("240")).Render("    No sessions found. Press 'n' to create one.") + "\n")
-	}
-
-	// List
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Bold(true)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	fadedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	for i, sess := range m.sessions {
-		isCursor := m.cursor == i
-		isActive := sess.ID == m.cfg.Session.CurrentSessionID
-
-		var icon string
-		if isCursor {
-			icon = cursorStyle.Render("▸")
-		} else {
-			icon = " "
-		}
-
-		status := " "
-		if isActive {
-			status = activeStyle.Render("●")
-		}
-
-		name := sess.Name
+func (w *sessionPickerWrapper) mapSessionsToItems(sessions []domain.SessionSummary) []ui.Item {
+	var items []ui.Item
+	for _, s := range sessions {
+		name := s.Name
 		if name == "" {
 			name = "(untitled)"
 		}
 
-		// Truncate name
-		if len(name) > 40 {
-			name = name[:37] + "..."
-		}
-
-		var nameText string
-		if isCursor {
-			nameText = activeStyle.Bold(true).Render(name)
-		} else {
-			nameText = inactiveStyle.Render(name)
-		}
-
-		msgCount := sess.MessageCount
-		msgs := fadedStyle.Render(fmt.Sprintf("%d msg%s", msgCount, plural(msgCount)))
-		date := fadedStyle.Render(sess.Updated.Format("2.Jan 15:04"))
-
-		line := fmt.Sprintf(" %s %s %-40s  %s  %s", icon, status, nameText, msgs, date)
-		s.WriteString(line + "\n")
+		items = append(items, ui.Item{
+			ID:     s.ID,
+			Label:  name,
+			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
+			Active: s.ID == w.cfg.Session.CurrentSessionID,
+			Group:  getDateGroup(s.Updated),
+		})
 	}
-
-	return s.String()
+	return items
 }
 
-func plural(n int) string {
-	if n == 1 {
-		return ""
+func getDateGroup(t time.Time) string {
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	yesterday := today.AddDate(0, 0, -1)
+	thisWeek := today.AddDate(0, 0, -7)
+
+	if t.After(today) {
+		return "Today"
 	}
-	return "s"
+	if t.After(yesterday) {
+		return "Yesterday"
+	}
+	if t.After(thisWeek) {
+		return "This Week"
+	}
+	return "Earlier"
+}
+
+func runSessionPicker() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	store, err := buildSessionStore(cfg)
+	if err != nil {
+		return err
+	}
+
+	summaries, err := store.List()
+	if err != nil {
+		return err
+	}
+
+	ti := textinput.New()
+	ti.Placeholder = "New session name..."
+	ti.Focus()
+
+	wrapper := &sessionPickerWrapper{
+		cfg:       cfg,
+		store:     store,
+		textInput: ti,
+	}
+
+	pickerCfg := ui.Config{
+		Title: "SESSIONS",
+		Items: wrapper.mapSessionsToItems(summaries),
+		Actions: []ui.Action{
+			{
+				Key:   "n",
+				Label: "new",
+				Fn: func(item ui.Item) tea.Cmd {
+					sess, err := store.Create()
+					if err != nil {
+						return nil
+					}
+					cfg.Session.CurrentSessionID = sess.ID
+					_ = config.Save(cfg)
+					return tea.Quit
+				},
+			},
+			{
+				Key:   "r",
+				Label: "rename",
+				Fn: func(item ui.Item) tea.Cmd {
+					wrapper.renaming = true
+					wrapper.textInput.SetValue(item.Label)
+					wrapper.textInput.Focus()
+					return textinput.Blink
+				},
+			},
+			{
+				Key:   "d",
+				Label: "delete",
+				Fn: func(item ui.Item) tea.Cmd {
+					_ = store.Delete(item.ID)
+					summaries, _ := store.List()
+					wrapper.picker.RefreshItems(wrapper.mapSessionsToItems(summaries))
+					return nil
+				},
+			},
+		},
+	}
+
+	wrapper.picker = ui.NewPicker(pickerCfg)
+	p := tea.NewProgram(wrapper)
+
+	if _, err := p.Run(); err != nil {
+		return err
+	}
+
+	if selected, ok := wrapper.picker.Selected(); ok {
+		cfg.Session.CurrentSessionID = selected.ID
+		_ = config.Save(cfg)
+		fmt.Printf("\nSelected session: %s\n", selected.ID)
+	}
+
+	return nil
 }

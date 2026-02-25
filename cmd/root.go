@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/config"
@@ -122,9 +123,12 @@ func runAgent(cfg *config.Config, input string) error {
 	events := make(chan domain.Event, 100)
 	loop := agent.NewLoop(llmInstance, toolRegistry, cfg, events)
 
+	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
+		namingWg.Add(1)
 		go func() {
+			defer namingWg.Done()
 			name, err := session.GenerateName(context.Background(), llmInstance, input)
 			if err == nil {
 				_ = store.Rename(sess.ID, name)
@@ -153,5 +157,6 @@ func runAgent(cfg *config.Config, input string) error {
 		return fmt.Errorf("agent failed: %w", agentErr)
 	}
 
+	namingWg.Wait()
 	return nil
 }

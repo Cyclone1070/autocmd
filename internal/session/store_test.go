@@ -20,7 +20,7 @@ type mockDirEntry struct {
 
 func (m *mockDirEntry) Name() string               { return m.name }
 func (m *mockDirEntry) IsDir() bool                { return m.isDir }
-func (m *mockDirEntry) Type() os.FileMode         { return 0 }
+func (m *mockDirEntry) Type() os.FileMode          { return 0 }
 func (m *mockDirEntry) Info() (os.FileInfo, error) { return nil, errors.New("not implemented") }
 
 // mockFileSystem implements fileSystem interface for testing
@@ -297,10 +297,10 @@ func TestSave_Success(t *testing.T) {
 	store, fs := newTestStore()
 
 	sess := &domain.Session{
-		ID:       "test-session-123",
-		Name:     "Test Session",
-		Created:  time.Now(),
-		Updated:  time.Now(),
+		ID:      "test-session-123",
+		Name:    "Test Session",
+		Created: time.Now(),
+		Updated: time.Now(),
 		Messages: []domain.Message{
 			{Role: domain.RoleUser, Content: "Hello"},
 		},
@@ -758,3 +758,81 @@ func TestList_SkipsNonJSONFiles(t *testing.T) {
 	}
 }
 
+func TestFindBlank(t *testing.T) {
+	store, fs := newTestStore()
+
+	// 1. Initially no blanks
+	blank, err := store.FindBlank()
+	if err != nil {
+		t.Fatalf("FindBlank() failed: %v", err)
+	}
+	if blank != nil {
+		t.Errorf("Expected no blank session initially, got %v", blank.ID)
+	}
+
+	// 2. Add an empty session
+	sess, _ := store.Create()
+
+	// Add it to directory list for store.List()
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: sess.ID + ".json", isDir: false},
+	}
+
+	blank, err = store.FindBlank()
+	if err != nil {
+		t.Fatalf("FindBlank() failed: %v", err)
+	}
+	if blank == nil {
+		t.Fatal("Expected to find a blank session")
+	}
+	if blank.ID != sess.ID {
+		t.Errorf("Expected to find session %s, got %s", sess.ID, blank.ID)
+	}
+
+	// 3. Add a message - should no longer be blank
+	sess.Messages = append(sess.Messages, domain.Message{Role: domain.RoleUser, Content: "hi"})
+	_ = store.Save(sess)
+
+	blank, err = store.FindBlank()
+	if err != nil {
+		t.Fatalf("FindBlank() failed: %v", err)
+	}
+	if blank != nil {
+		t.Errorf("Expected no blank session after adding message, got %v", blank.ID)
+	}
+
+	// 4. Add a name - should no longer be blank
+	sess.Messages = []domain.Message{}
+	sess.Name = "Named Session"
+	_ = store.Save(sess)
+
+	blank, err = store.FindBlank()
+	if err != nil {
+		t.Fatalf("FindBlank() failed: %v", err)
+	}
+	if blank != nil {
+		t.Errorf("Expected no blank session after naming, got %v", blank.ID)
+	}
+}
+
+func TestRename(t *testing.T) {
+	store, _ := newTestStore()
+	sess, _ := store.Create()
+
+	err := store.Rename(sess.ID, "New Name")
+	if err != nil {
+		t.Fatalf("Rename() failed: %v", err)
+	}
+
+	// Load and verify
+	loaded, _ := store.Get(sess.ID)
+	if loaded.Name != "New Name" {
+		t.Errorf("Expected name %q, got %q", "New Name", loaded.Name)
+	}
+
+	// Rename non-existent
+	err = store.Rename("wrong-id", "Oops")
+	if err == nil {
+		t.Error("Rename() should have failed for non-existent session")
+	}
+}

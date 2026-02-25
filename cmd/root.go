@@ -11,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -120,6 +121,17 @@ func runAgent(cfg *config.Config, input string) error {
 
 	events := make(chan domain.Event, 100)
 	loop := agent.NewLoop(llmInstance, toolRegistry, cfg, events)
+
+	// Trigger auto-naming if this is a new session (no name yet)
+	if sess.Name == "" {
+		go func() {
+			name, err := session.GenerateName(context.Background(), llmInstance, input)
+			if err == nil {
+				_ = store.Rename(sess.ID, name)
+			}
+		}()
+	}
+
 	m := ui.NewModel(events, cfg.UI)
 
 	done := make(chan error, 1)

@@ -198,6 +198,32 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 	return summaries, nil
 }
 
+// FindBlank returns the most recently updated session that has no name and no messages.
+// Returns nil if no blank session is found.
+func (st *Store) FindBlank() (*domain.SessionSummary, error) {
+	summaries, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, s := range summaries {
+		if s.Name == "" && s.MessageCount == 0 {
+			return &s, nil
+		}
+	}
+	return nil, nil
+}
+
+// Rename updates the name of a session.
+func (st *Store) Rename(id, name string) error {
+	s, err := st.Get(id)
+	if err != nil {
+		return err
+	}
+	s.Name = name
+	return st.Save(s)
+}
+
 // Delete removes a session from disk by ID (both info and messages files).
 func (st *Store) Delete(id string) error {
 	infoPath := filepath.Join(st.storageDir, id+".json")

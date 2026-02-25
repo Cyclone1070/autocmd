@@ -18,6 +18,8 @@ const (
 type FileSystem interface {
 	UserHomeDir() (string, error)
 	ReadFile(path string) ([]byte, error)
+	WriteFile(path string, data []byte, perm os.FileMode) error
+	MkdirAll(path string, perm os.FileMode) error
 }
 
 // ConfigFileReader implements FileSystem using the real OS for config loading
@@ -29,6 +31,14 @@ func (ConfigFileReader) UserHomeDir() (string, error) {
 
 func (ConfigFileReader) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
+}
+
+func (ConfigFileReader) WriteFile(path string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(path, data, perm)
+}
+
+func (ConfigFileReader) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
 }
 
 // Loader handles configuration loading with injected dependencies
@@ -106,7 +116,7 @@ func (l *Loader) Save(cfg *Config) error {
 	configPath := filepath.Join(configDir, ConfigFile)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
+	if err := l.fs.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
@@ -115,9 +125,7 @@ func (l *Loader) Save(cfg *Config) error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	// For now using os.WriteFile directly.
-	// In the future we could add WriteFile to the FileSystem interface if needed for testing.
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := l.fs.WriteFile(configPath, data, 0644); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
 

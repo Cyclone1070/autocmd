@@ -70,7 +70,9 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 	defer streamWg.Wait()
 
 	if sh, ok := display.(domain.ShellDisplay); ok && sh.Output != nil && events != nil {
-		streamWg.Go(func() {
+		streamWg.Add(1)
+		go func() {
+			defer streamWg.Done()
 			buf := make([]byte, 4096)
 			for {
 				n, err := sh.Output.Read(buf)
@@ -86,7 +88,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 			}
 			// NOTE: Do NOT call sh.Wait() here - Execute() already calls streamCmd.Wait()
 			// Calling it twice causes a race condition.
-		})
+		}()
 	}
 
 	llmContent, err := inv.Execute(ctx)

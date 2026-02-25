@@ -49,7 +49,7 @@ type ToolsConfig struct {
 	DockerRetryIntervalMs    int `json:"docker_retry_interval_ms"`    // Default: 1000
 	DockerGracefulShutdownMs int `json:"docker_graceful_shutdown_ms"` // Default: 2000
 
-	// Workflow
+	// Agent
 	MaxIterations int `json:"max_iterations"` // Default: 20
 }
 

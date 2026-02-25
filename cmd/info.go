@@ -21,6 +21,7 @@ var infoCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Model:   %s\n", cfg.Model)
+		fmt.Printf("Active Session:  %s\n", cfg.Session.CurrentSessionID)
 		fmt.Printf("Session Storage: %s\n", cfg.Session.StorageDir)
 		fmt.Printf("Max Iterations:  %d\n", cfg.Tools.MaxIterations)
 		fmt.Printf("Max File Size:   %d bytes\n", cfg.Tools.MaxFileSize)

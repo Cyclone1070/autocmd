@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -30,7 +30,10 @@ var rootCmd = &cobra.Command{
 	Short: "IAV is an agentic AI coding assistant",
 	Args:  cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg := config.DefaultConfig()
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
 
 		if len(args) == 0 {
 			return cmd.Help()
@@ -43,7 +46,6 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -130,12 +132,13 @@ func runAgent(cfg *config.Config, input string) error {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		log.Printf("UI failed: %v", err)
+		fmt.Fprintf(os.Stderr, "UI failed: %v\n", err)
 	}
 
 	cancel()
-	if err := <-done; err != nil && err != context.Canceled {
-		log.Printf("Agent failed: %v", err)
+	agentErr := <-done
+	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
+		return fmt.Errorf("agent failed: %w", agentErr)
 	}
 
 	return nil

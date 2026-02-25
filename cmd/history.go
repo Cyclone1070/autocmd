@@ -26,24 +26,25 @@ var historyCmd = &cobra.Command{
 			return err
 		}
 
-		// Since we don't have a 'current session' tracked in config yet,
-		// we'll list sessions and pick the most recent one for now.
-		// In a future step, we might want to track 'last session' in config.
-		summaries, err := store.List()
-		if err != nil {
-			return err
+		var sessionID string
+		if cfg.Session.CurrentSessionID != "" {
+			sessionID = cfg.Session.CurrentSessionID
+		} else {
+			// Fallback to most recent session if none active
+			summaries, err := store.List()
+			if err != nil {
+				return err
+			}
+			if len(summaries) == 0 {
+				fmt.Println("No sessions found.")
+				return nil
+			}
+			sessionID = summaries[0].ID
 		}
 
-		if len(summaries) == 0 {
-			fmt.Println("No sessions found.")
-			return nil
-		}
-
-		// Most recent is first
-		latestID := summaries[0].ID
-		session, err := store.Get(latestID)
+		session, err := store.Get(sessionID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load session %s: %w", sessionID, err)
 		}
 
 		fmt.Printf("Session: %s (%s)\n", session.ID, session.Updated.Format("2006-01-02 15:04:05"))

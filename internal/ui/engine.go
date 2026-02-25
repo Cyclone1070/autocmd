@@ -131,7 +131,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			safe, _ := m.stream.Flush()
 			m.printQueue = append(m.printQueue, safe...)
 
-			m.isThinking = false
+			m.flushThinking(StatusError)
 
 			// Flush any active tool with a cancelled error rather than throwing it away
 			for _, id := range m.toolOrder {
@@ -323,21 +323,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 	if m.isThinking {
 		switch event.(type) {
 		case domain.TextEvent, domain.ToolStartEvent, domain.DoneEvent:
-			m.isThinking = false
-			finalDuration := time.Since(m.thinkStart).Round(time.Second)
-
-			// Flush any pending text before printing duration to ensure order
-			safe, err := m.stream.Flush()
-			if err != nil {
-				m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-				m.stream.ClearBuffer()
-			} else {
-				m.printQueue = append(m.printQueue, safe...)
-			}
-
-			style := lipgloss.NewStyle().Foreground(m.theme.success)
-			checkmark := style.Render("✔")
-			m.printQueue = append(m.printQueue, fmt.Sprintf("\n  %s Thought for %v\n", checkmark, style.Render(finalDuration.String())))
+			m.flushThinking(StatusSuccess)
 		}
 	}
 
@@ -418,8 +404,10 @@ func (m *Model) View() string {
 
 	if m.isThinking {
 		duration := m.thinkingDuration
-		blueStyle := lipgloss.NewStyle().Foreground(m.theme.primary)
-		sb.WriteString(blueStyle.Render(fmt.Sprintf("\n %s Thinking for %v\n", m.spinner.View(), duration)))
+		style := lipgloss.NewStyle().Foreground(m.theme.primary)
+		// Style the text separately because the spinner's View() includes a reset sequence
+		// that would clear any outer styling if nested.
+		sb.WriteString(fmt.Sprintf("\n %s %s\n", m.spinner.View(), style.Render(fmt.Sprintf("Thinking for %v", duration))))
 	}
 
 	for _, id := range m.toolOrder {
@@ -432,6 +420,43 @@ func (m *Model) View() string {
 
 	res := strings.TrimRight(sb.String(), "\n")
 	return TruncateWithIndicator(res, m.height)
+}
+
+func (m *Model) flushThinking(status ToolStatus) {
+	if !m.isThinking {
+		return
+	}
+
+	finalDuration := time.Since(m.thinkStart).Round(time.Second)
+	if status == StatusError && m.thinkingDuration > 0 {
+		finalDuration = m.thinkingDuration
+	}
+
+	// Flush any pending text before printing duration to ensure order
+	safe, err := m.stream.Flush()
+	if err != nil {
+		m.printQueue = append(m.printQueue, m.stream.RawBuffer())
+		m.stream.ClearBuffer()
+	} else if len(safe) > 0 {
+		m.printQueue = append(m.printQueue, safe...)
+	}
+
+	m.isThinking = false
+
+	var prefix string
+	var textColor lipgloss.AdaptiveColor
+
+	if status == StatusSuccess {
+		prefix = lipgloss.NewStyle().Foreground(m.theme.success).Render("✔")
+		textColor = m.theme.success
+	} else {
+		prefix = lipgloss.NewStyle().Foreground(m.theme.err).Render("✘")
+		textColor = m.theme.err
+	}
+
+	style := lipgloss.NewStyle().Foreground(textColor)
+	// Combine prefix and text into one styled string where possible, but prefix is already styled
+	m.printQueue = append(m.printQueue, fmt.Sprintf("\n  %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
 }
 
 func (m *Model) waitForEvent() tea.Cmd {

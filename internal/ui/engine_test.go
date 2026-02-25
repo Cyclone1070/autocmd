@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -1187,4 +1188,57 @@ func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 			assert.Equal(t, 80, width, "Each line of the tool box should be exactly 80 characters wide")
 		}
 	}
+}
+
+func TestThinking_Colors(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	events := make(chan domain.Event, 10)
+	m := NewTestModel(events)
+	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
+
+	// 1. Running state
+	m.isThinking = true
+	m.thinkStart = time.Now().Add(-5 * time.Second)
+	m.thinkingDuration = 5 * time.Second
+	m.spinner.Spinner.Frames = []string{"X"} // Stable frame for testing
+
+	view := m.View()
+	// Should contain the duration
+	assert.Contains(t, view, "Thinking for 5s")
+
+	// 2. Success state
+	// Sending TextEvent should trigger thinking completion
+	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "done"}})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	history := tracker.allHistory()
+	assert.Contains(t, history, "✔")
+	style := lipgloss.NewStyle().Foreground(m.theme.success)
+	assert.Contains(t, history, style.Render("Thought for 5s"))
+}
+
+func TestThinking_Cancelled(t *testing.T) {
+	events := make(chan domain.Event, 10)
+	m := NewTestModel(events)
+	tracker := &outputTracker{}
+	currentTracker = tracker
+	defer func() { currentTracker = nil }()
+
+	m.isThinking = true
+	m.thinkStart = time.Now().Add(-5 * time.Second)
+	m.thinkingDuration = 5 * time.Second
+
+	// Trigger Ctrl+C
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	history := tracker.allHistory()
+	// Should contain red cross and "Thought for 5s"
+	assert.Contains(t, history, "✘", "Cancelled thinking should show a cross")
+	style := lipgloss.NewStyle().Foreground(m.theme.err)
+	assert.Contains(t, history, style.Render("Thought for 5s"))
 }

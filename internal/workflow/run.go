@@ -54,11 +54,7 @@ func (w *Workflow) Run(ctx context.Context, input string) error {
 			w.events <- domain.ThinkingEvent{}
 		}
 
-		if w.currentLLM == nil {
-			return fmt.Errorf("no LLM selected")
-		}
-
-		stream, err := w.currentLLM.Stream(ctx, w.currentSession.Messages, w.toolExecutor.declarations())
+		stream, err := w.llm.Stream(ctx, w.currentSession.Messages, w.toolExecutor.declarations())
 		if err != nil {
 			return fmt.Errorf("LLM.Stream: %w", err)
 		}

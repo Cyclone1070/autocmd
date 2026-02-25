@@ -85,7 +85,10 @@ func main() {
 	// Create UI Model
 	m := ui.NewModel(events, cfg.UI)
 
-	wf := workflow.NewWorkflow(llmRegistry, toolRegistry, store, cfg, events)
+	wf, err := workflow.NewWorkflow(context.Background(), llmRegistry, toolRegistry, store, cfg, events)
+	if err != nil {
+		log.Fatalf("Failed to create workflow: %v", err)
+	}
 
 	// Run application
 	ctx, cancel := context.WithCancel(context.Background())

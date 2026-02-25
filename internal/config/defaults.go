@@ -13,6 +13,7 @@ type Config struct {
 	Tools   ToolsConfig   `json:"tools"`
 	Session SessionConfig `json:"session"`
 	UI      UIConfig      `json:"ui"`
+	Model   string        `json:"model"` // e.g., "google/gemini-2.5-flash"
 }
 
 type SessionConfig struct {
@@ -85,5 +86,6 @@ func DefaultConfig() *Config {
 			ChatWindowWidth:   80,
 			ShellOutputHeight: 12,
 		},
+		Model: "google/gemini-2.5-flash",
 	}
 }

@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -8,7 +11,7 @@ import (
 // Workflow is the central orchestrator for the application.
 type Workflow struct {
 	llmRegistry    llmRegistry
-	currentLLM     domain.LLM
+	llm            domain.LLM
 	toolExecutor   *toolExecutor
 	sessionStore   sessionStore
 	currentSession *domain.Session
@@ -18,20 +21,28 @@ type Workflow struct {
 
 // NewWorkflow creates a new Workflow with all dependencies.
 func NewWorkflow(
+	ctx context.Context,
 	llmRegistry llmRegistry,
 	toolRegistry toolRegistry,
 	sessionStore sessionStore,
 	cfg *config.Config,
 	events chan<- domain.Event,
-) *Workflow {
+) (*Workflow, error) {
 	if cfg == nil {
 		panic("cfg is required")
 	}
+
+	model, err := llmRegistry.Get(ctx, cfg.Model)
+	if err != nil {
+		return nil, fmt.Errorf("resolve model %q: %w", cfg.Model, err)
+	}
+
 	return &Workflow{
 		llmRegistry:  llmRegistry,
+		llm:          model,
 		toolExecutor: newToolExecutor(toolRegistry),
 		sessionStore: sessionStore,
 		events:       events,
 		cfg:          cfg,
-	}
+	}, nil
 }

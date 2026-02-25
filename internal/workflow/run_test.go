@@ -10,6 +10,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- Mocks for Workflow tests ---
@@ -156,16 +157,18 @@ func (m *mockSessionStore) Delete(id string) error {
 // --- Helper to create test workflow ---
 
 func newTestWorkflow(t *testing.T, m domain.LLM, tools []domain.Tool, events chan domain.Event) *Workflow {
-	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 5}}
+	cfg := &config.Config{
+		Tools: config.ToolsConfig{MaxIterations: 5},
+		Model: m.ID(),
+	}
 	registry := newMockToolRegistry(tools)
 	llmRegistry := &mockLLMRegistry{
 		models: map[string]domain.LLM{
 			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(llmRegistry, registry, newMockSessionStore(), cfg, events)
-	err := w.SetLLM(context.Background(), m.ID())
-	assert.NoError(t, err)
+	w, err := NewWorkflow(context.Background(), llmRegistry, registry, newMockSessionStore(), cfg, events)
+	require.NoError(t, err)
 	return w
 }
 
@@ -254,15 +257,17 @@ func TestRun_MaxIterationsExceeded_ReturnsError(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
+	cfg := &config.Config{
+		Tools: config.ToolsConfig{MaxIterations: 3},
+		Model: m.ID(),
+	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	llmRegistry := &mockLLMRegistry{
 		models: map[string]domain.LLM{
 			m.ID(): m,
 		},
 	}
-	w := NewWorkflow(llmRegistry, registry, newMockSessionStore(), cfg, nil)
-	err := w.SetLLM(context.Background(), m.ID())
+	w, err := NewWorkflow(context.Background(), llmRegistry, registry, newMockSessionStore(), cfg, nil)
 	assert.NoError(t, err)
 
 	err = w.Run(context.Background(), "go")
@@ -410,4 +415,40 @@ func TestRun_ContextCancelled_DuringToolExecution_ReturnsError(t *testing.T) {
 	sess := w.CurrentSession()
 	messages := sess.Messages
 	assert.Equal(t, "[Session cancelled by user]", messages[len(messages)-1].Content)
+}
+
+func TestGetModel(t *testing.T) {
+	m := &mockLLM{id: "test-model"}
+	w := newTestWorkflow(t, m, nil, nil)
+
+	assert.Equal(t, "test-model", w.GetModel())
+}
+
+func TestSetModel(t *testing.T) {
+	m1 := &mockLLM{id: "model-1"}
+	m2 := &mockLLM{id: "model-2"}
+
+	cfg := &config.Config{Model: "model-1"}
+	registry := &mockLLMRegistry{
+		models: map[string]domain.LLM{
+			"model-1": m1,
+			"model-2": m2,
+		},
+	}
+
+	w, err := NewWorkflow(context.Background(), registry, newMockToolRegistry(nil), newMockSessionStore(), cfg, nil)
+	require.NoError(t, err)
+
+	t.Run("ValidModel", func(t *testing.T) {
+		err := w.SetModel(context.Background(), "model-2")
+		assert.NoError(t, err)
+		assert.Equal(t, "model-2", w.GetModel())
+		assert.Equal(t, m1, w.llm) // Should still be the original model
+	})
+
+	t.Run("InvalidModel", func(t *testing.T) {
+		err := w.SetModel(context.Background(), "non-existent")
+		assert.Error(t, err)
+		assert.Equal(t, "model-2", w.GetModel()) // Should remain unchanged
+	})
 }

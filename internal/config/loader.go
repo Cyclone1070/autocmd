@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -88,4 +89,42 @@ func (l *Loader) Load() (*Config, error) {
 // Load is a convenience function using the default loader
 func Load() (*Config, error) {
 	return NewLoader().Load()
+}
+
+// Save writes configuration to ~/.config/iav/config.json.
+func (l *Loader) Save(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	homeDir, err := l.fs.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+
+	configDir := filepath.Join(homeDir, ".config", ConfigDir)
+	configPath := filepath.Join(configDir, ConfigFile)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+
+	// For now using os.WriteFile directly.
+	// In the future we could add WriteFile to the FileSystem interface if needed for testing.
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
+
+	return nil
+}
+
+// Save is a convenience function using the default loader
+func Save(cfg *Config) error {
+	return NewLoader().Save(cfg)
 }

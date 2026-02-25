@@ -1,4 +1,4 @@
-package workflow
+package agent
 
 import (
 	"context"
@@ -12,69 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Mocks for toolExecutor tests ---
-
-type tmMockTool struct {
-	name        string
-	description string
-	prepare     func(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
-}
-
-func (mt *tmMockTool) Name() string { return mt.name }
-func (mt *tmMockTool) Declaration() domain.Declaration {
-	return domain.Declaration{Name: mt.name, Description: mt.description}
-}
-func (mt *tmMockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
-	if mt.prepare != nil {
-		return mt.prepare(ctx, params)
-	}
-	return &tmMockInvocation{content: "ok", display: domain.StringDisplay("ok")}, nil
-}
-
-type tmMockInvocation struct {
-	content string
-	err     error
-	display domain.ToolDisplay
-}
-
-func (m *tmMockInvocation) Execute(ctx context.Context) (string, error) {
-	return m.content, m.err
-}
-func (m *tmMockInvocation) Display() domain.ToolDisplay { return m.display }
-
-type mockToolRegistry struct {
-	tools map[string]domain.Tool
-}
-
-func newMockToolRegistry(tools []domain.Tool) *mockToolRegistry {
-	m := &mockToolRegistry{tools: make(map[string]domain.Tool)}
-	for _, t := range tools {
-		m.tools[t.Name()] = t
-	}
-	return m
-}
-
-func (m *mockToolRegistry) Declarations() []domain.Declaration {
-	decls := make([]domain.Declaration, 0, len(m.tools))
-	for _, t := range m.tools {
-		decls = append(decls, t.Declaration())
-	}
-	sort.Slice(decls, func(i, j int) bool {
-		return decls[i].Name < decls[j].Name
-	})
-	return decls
-}
-
-func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
-	tool, ok := m.tools[name]
-	return tool, ok
-}
-
 // --- Tests ---
 
 func TestRegister_DuplicateName(t *testing.T) {
-	mt1 := &tmMockTool{name: "test-tool", description: "v1"}
-	mt2 := &tmMockTool{name: "test-tool", description: "v2"}
+	mt1 := &mockTool{name: "test-tool", description: "v1"}
+	mt2 := &mockTool{name: "test-tool", description: "v2"}
 
 	registry := newMockToolRegistry([]domain.Tool{mt1, mt2})
 	executor := newToolExecutor(registry)
@@ -86,9 +28,9 @@ func TestRegister_DuplicateName(t *testing.T) {
 
 func TestDeclarations_SortedByName(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{
-		&tmMockTool{name: "z"},
-		&tmMockTool{name: "a"},
-		&tmMockTool{name: "m"},
+		&mockTool{name: "z"},
+		&mockTool{name: "a"},
+		&mockTool{name: "m"},
 	})
 	executor := newToolExecutor(registry)
 
@@ -114,11 +56,11 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 
 func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	var capturedParams []byte
-	mt := &tmMockTool{
+	mt := &mockTool{
 		name: "test",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			capturedParams = params
-			return &tmMockInvocation{content: "ok"}, nil
+			return &mockInvocation{content: "ok"}, nil
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
@@ -135,7 +77,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 }
 
 func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
-	mt := &tmMockTool{
+	mt := &mockTool{
 		name: "test",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
@@ -154,10 +96,10 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 }
 
 func TestExecute_EmitsToolEvents(t *testing.T) {
-	mt := &tmMockTool{
+	mt := &mockTool{
 		name: "test",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
-			return &tmMockInvocation{
+			return &mockInvocation{
 				content: "result",
 				display: domain.StringDisplay("display output"),
 			}, nil
@@ -189,10 +131,10 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 }
 
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
-	mt := &tmMockTool{
+	mt := &mockTool{
 		name: "shell",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
-			return &tmMockInvocation{
+			return &mockInvocation{
 				content: "Command finished",
 				display: domain.ShellDisplay{
 					Command: "ls",
@@ -235,10 +177,10 @@ loop:
 }
 
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
-	mt := &tmMockTool{
+	mt := &mockTool{
 		name: "fail",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
-			return &tmMockInvocation{
+			return &mockInvocation{
 				content: "Detailed error in content",
 				err:     fmt.Errorf("infra failure"),
 			}, nil
@@ -268,7 +210,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
-	registry := newMockToolRegistry([]domain.Tool{&tmMockTool{name: "tool"}})
+	registry := newMockToolRegistry([]domain.Tool{&mockTool{name: "tool"}})
 	executor := newToolExecutor(registry)
 
 	results := make(chan bool, 10)
@@ -290,9 +232,9 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 
 func TestDeclarations_Sorted(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{
-		&tmMockTool{name: "z"},
-		&tmMockTool{name: "a"},
-		&tmMockTool{name: "m"},
+		&mockTool{name: "z"},
+		&mockTool{name: "a"},
+		&mockTool{name: "m"},
 	})
 	executor := newToolExecutor(registry)
 

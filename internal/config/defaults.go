@@ -17,7 +17,8 @@ type Config struct {
 }
 
 type SessionConfig struct {
-	StorageDir string `json:"storage_dir"` // Default: ~/.iav/sessions
+	StorageDir       string `json:"storage_dir"`        // Default: ~/.iav/sessions
+	CurrentSessionID string `json:"current_session_id"` // Last used session
 }
 
 type ToolsConfig struct {

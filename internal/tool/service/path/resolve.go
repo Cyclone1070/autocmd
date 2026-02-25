@@ -22,6 +22,11 @@ func NewResolver(workspaceRoot string) *Resolver {
 	}
 }
 
+// Root returns the canonical workspace root path.
+func (r *Resolver) Root() string {
+	return r.workspaceRoot
+}
+
 // CanonicaliseRoot canonicalises a workspace root path by making it absolute and resolving symlinks.
 // Returns an error if the path doesn't exist or isn't a directory.
 func CanonicaliseRoot(root string) (string, error) {

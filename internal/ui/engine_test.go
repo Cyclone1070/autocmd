@@ -1191,7 +1191,10 @@ func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 }
 
 func TestThinking_Colors(t *testing.T) {
+	origProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(origProfile)
+
 	events := make(chan domain.Event, 10)
 	m := NewTestModel(events)
 	tracker := &outputTracker{}
@@ -1205,8 +1208,9 @@ func TestThinking_Colors(t *testing.T) {
 	m.spinner.Spinner.Frames = []string{"X"} // Stable frame for testing
 
 	view := m.View()
-	// Should contain the duration
-	assert.Contains(t, view, "Thinking for 5s")
+	// Should contain the styled duration
+	styleRunning := lipgloss.NewStyle().Foreground(m.theme.primary)
+	assert.Contains(t, view, styleRunning.Render("Thinking for 5s"))
 
 	// 2. Success state
 	// Sending TextEvent should trigger thinking completion
@@ -1221,6 +1225,10 @@ func TestThinking_Colors(t *testing.T) {
 }
 
 func TestThinking_Cancelled(t *testing.T) {
+	origProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(origProfile)
+
 	events := make(chan domain.Event, 10)
 	m := NewTestModel(events)
 	tracker := &outputTracker{}

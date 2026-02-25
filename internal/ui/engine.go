@@ -432,15 +432,6 @@ func (m *Model) flushThinking(status ToolStatus) {
 		finalDuration = m.thinkingDuration
 	}
 
-	// Flush any pending text before printing duration to ensure order
-	safe, err := m.stream.Flush()
-	if err != nil {
-		m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-		m.stream.ClearBuffer()
-	} else if len(safe) > 0 {
-		m.printQueue = append(m.printQueue, safe...)
-	}
-
 	m.isThinking = false
 
 	var prefix string
@@ -455,7 +446,6 @@ func (m *Model) flushThinking(status ToolStatus) {
 	}
 
 	style := lipgloss.NewStyle().Foreground(textColor)
-	// Combine prefix and text into one styled string where possible, but prefix is already styled
 	m.printQueue = append(m.printQueue, fmt.Sprintf("\n  %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
@@ -67,8 +68,14 @@ func main() {
 	store := session.NewStore(cfg, fileSystem)
 	events := make(chan domain.Event, 100)
 
+	// Resolve Credentials
+	cred := resolveCredential("google")
+	if cred == nil {
+		log.Fatalf("No credentials found for google. Set GEMINI_API_KEY or use 'iav auth set google' (future)")
+	}
+
 	// Create model registry
-	googleProvider, err := google.NewProvider(context.Background(), os.Getenv("GEMINI_API_KEY"))
+	googleProvider, err := google.NewProvider(context.Background(), cred)
 	if err != nil {
 		log.Fatalf("Failed to create google provider: %v", err)
 	}
@@ -112,4 +119,21 @@ func main() {
 	if err := <-wfDone; err != nil && err != context.Canceled {
 		log.Printf("Workflow failed: %v", err)
 	}
+}
+
+func resolveCredential(providerID string) *domain.Credential {
+	// 1. Try environment variable
+	if providerID == "google" {
+		if key := os.Getenv("GEMINI_API_KEY"); key != "" {
+			return &domain.Credential{Type: "api_key", APIKey: key}
+		}
+	}
+
+	// 2. Try auth storage
+	cred, err := auth.Get(providerID)
+	if err != nil {
+		log.Printf("Warning: failed to read auth storage: %v", err)
+		return nil
+	}
+	return cred
 }

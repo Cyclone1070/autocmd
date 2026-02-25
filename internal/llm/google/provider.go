@@ -13,11 +13,24 @@ type Provider struct {
 	client *genai.Client
 }
 
-// NewProvider creates a new Google provider using the given API key.
-func NewProvider(ctx context.Context, apiKey string) (*Provider, error) {
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey: apiKey,
-	})
+// NewProvider creates a new Google provider using the given credential.
+func NewProvider(ctx context.Context, cred *domain.Credential) (*Provider, error) {
+	if cred == nil {
+		return nil, fmt.Errorf("credential is required")
+	}
+
+	cfg := &genai.ClientConfig{
+		APIKey: cred.APIKey,
+	}
+
+	// Future: handle Vertex AI specific fields from cred (Project, Location, etc.)
+	if cred.Project != "" || cred.Location != "" {
+		cfg.Backend = genai.BackendVertexAI
+		cfg.Project = cred.Project
+		cfg.Location = cred.Location
+	}
+
+	client, err := genai.NewClient(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create genai client: %w", err)
 	}

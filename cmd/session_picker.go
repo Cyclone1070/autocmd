@@ -14,11 +14,12 @@ import (
 )
 
 type sessionPickerWrapper struct {
-	cfg       *config.Config
-	store     *session.Store
-	picker    *ui.Picker
-	renaming  bool
-	textInput textinput.Model
+	cfg          *config.Config
+	store        *session.Store
+	picker       *ui.Picker
+	renaming     bool
+	renameItemID string
+	textInput    textinput.Model
 }
 
 func (w *sessionPickerWrapper) Init() tea.Cmd {
@@ -31,18 +32,19 @@ func (w *sessionPickerWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "enter":
-				selected, _ := w.picker.Selected()
 				newName := strings.TrimSpace(w.textInput.Value())
-				if newName != "" && selected != nil {
-					_ = w.store.Rename(selected.ID, newName)
+				if newName != "" && w.renameItemID != "" {
+					_ = w.store.Rename(w.renameItemID, newName)
 					summaries, _ := w.store.List()
 					w.picker.RefreshItems(w.mapSessionsToItems(summaries))
 				}
 				w.renaming = false
+				w.renameItemID = ""
 				w.textInput.Blur()
 				return w, nil
 			case "esc":
 				w.renaming = false
+				w.renameItemID = ""
 				w.textInput.Blur()
 				return w, nil
 			}
@@ -119,7 +121,6 @@ func runSessionPicker() error {
 
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
-	ti.Focus()
 
 	wrapper := &sessionPickerWrapper{
 		cfg:       cfg,
@@ -149,6 +150,7 @@ func runSessionPicker() error {
 				Label: "rename",
 				Fn: func(item ui.Item) tea.Cmd {
 					wrapper.renaming = true
+					wrapper.renameItemID = item.ID
 					wrapper.textInput.SetValue(item.Label)
 					wrapper.textInput.Focus()
 					return textinput.Blink

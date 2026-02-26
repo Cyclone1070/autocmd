@@ -39,7 +39,7 @@ type Picker struct {
 	cursor   int
 	selected *Item
 	quit     bool
-	// Internal calculated indices for navigation (skipping headers)
+	// Internal calculated indices for navigation
 	selectableIndices []int
 }
 
@@ -181,9 +181,17 @@ func (m *Picker) View() string {
 			labelText = inactiveStyle.Render(item.Label)
 		}
 
+		// Manual padding for alignment: ANSI escape sequences shouldn't count towards width.
+		const labelWidth = 40
+		currentWidth := lipgloss.Width(labelText)
+		padding := 0
+		if currentWidth < labelWidth {
+			padding = labelWidth - currentWidth
+		}
+
 		detailText := fadedStyle.Render(item.Detail)
 
-		s.WriteString(fmt.Sprintf(" %s %s %-40s  %s\n", icon, status, labelText, detailText))
+		s.WriteString(fmt.Sprintf(" %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText))
 	}
 
 	return s.String()

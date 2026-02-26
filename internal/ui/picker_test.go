@@ -61,3 +61,41 @@ func TestPicker_Actions(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	assert.True(t, actionCalled)
 }
+
+func TestPicker_RefreshItems(t *testing.T) {
+	items := []Item{
+		{ID: "1", Label: "A"},
+		{ID: "2", Label: "B"},
+	}
+
+	m := NewPicker(Config{
+		Items: items,
+	})
+
+	// Move to second item
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	assert.Equal(t, 1, m.cursor)
+
+	// Refresh with only one item
+	m.RefreshItems([]Item{{ID: "1", Label: "A"}})
+
+	// Cursor should be adjusted to last valid index
+	assert.Equal(t, 0, m.cursor)
+}
+
+func TestPicker_EmptyList(t *testing.T) {
+	m := NewPicker(Config{
+		Items: []Item{},
+	})
+
+	// Navigation should not crash
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	assert.Equal(t, 0, m.cursor)
+
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	assert.Equal(t, 0, m.cursor)
+
+	// View should not crash
+	view := m.View()
+	assert.Contains(t, view, "No entries found.")
+}

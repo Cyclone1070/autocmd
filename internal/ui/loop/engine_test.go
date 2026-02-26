@@ -1,4 +1,4 @@
-package ui
+package loop
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,7 +37,7 @@ func executeCmd(cmd tea.Cmd) []tea.Msg {
 
 	done := make(chan tea.Msg, 1)
 	go func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		done <- cmd()
 	}()
 
@@ -229,7 +230,7 @@ func TestModel_View_Truncation(t *testing.T) {
 	longText := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	m.stream.Append(longText)
+	_, _ = m.stream.Append(longText)
 
 	view := m.View()
 
@@ -355,7 +356,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	m.isStreaming = true
 	m.activeTools["busy-tool"] = &toolState{
 		id:      "busy-tool",
-		status:  StatusRunning,
+		status:  ui.StatusRunning,
 		display: domain.StringDisplay("Running busy-tool..."),
 	}
 	m.toolOrder = []string{"busy-tool"}
@@ -406,7 +407,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	m = m2.(*Model)
 
 	assert.NotNil(t, m.activeTools["123"])
-	assert.Equal(t, StatusRunning, m.activeTools["123"].status)
+	assert.Equal(t, ui.StatusRunning, m.activeTools["123"].status)
 
 	events <- domain.DoneEvent{}
 	msgs := executeCmd(cmd)
@@ -482,12 +483,12 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 	q := &msgQueue{m: m}
 	q.push(func() tea.Msg { return eventMsg{event: domain.ThinkingEvent{}} })
 	q.drain()
-	m = q.m
+	_ = q.m
 
 	text := "Block 1\n\nBlock 2\n\n"
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: text}} })
 	q.drain()
-	m = q.m
+	_ = q.m
 
 	// 2. Send ToolStartEvent immediately
 	toolEv := domain.ToolStartEvent{
@@ -496,20 +497,20 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 	}
 	q.push(func() tea.Msg { return eventMsg{event: toolEv} })
 	q.drain()
-	m = q.m
+	_ = q.m
 
 	// 3. Send ToolEndEvent immediately
 	endEv := domain.ToolEndEvent{CallID: "tool-seq"}
 	q.push(func() tea.Msg { return eventMsg{event: endEv} })
 	q.drain()
-	m = q.m
+	_ = q.m
 
 	// 4. Drain the stream
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		q.push(func() tea.Msg { return streamTickMsg{} })
 		q.drain()
 	}
-	m = q.m
+	_ = q.m
 
 	// 6. ASSERT FINAL HISTORY ORDER
 	// Expected Order:
@@ -557,7 +558,7 @@ func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 	// 2. Send DoneEvent
 	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
 	q.drain()
-	m = q.m
+	_ = q.m
 
 	// 3. ASSERT: History contains the flushed text
 	found := false
@@ -742,7 +743,7 @@ func TestFlush_Natural(t *testing.T) {
 	tracker.capture(cmd)
 
 	// 2. Pulse enough ticks to process "## H1\n\n".
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -768,7 +769,7 @@ func TestFlush_OnThinkingStart(t *testing.T) {
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "ALPHA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -778,7 +779,8 @@ func TestFlush_OnThinkingStart(t *testing.T) {
 
 	// 2. Send Thinking Event
 	tm, cmd = m.Update(eventMsg{event: domain.ThinkingEvent{}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
+
 	tracker.capture(cmd)
 
 	// Assertion: "ALPHA" signal should be emitted
@@ -797,7 +799,7 @@ func TestFlush_OnThinkingEnd(t *testing.T) {
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "BETA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -806,7 +808,7 @@ func TestFlush_OnThinkingEnd(t *testing.T) {
 	// 2. Transition out of thinking
 	// We'll simulate a substantive event that ends thinking
 	tm, cmd = m.Update(eventMsg{event: domain.ToolStartEvent{CallID: "T1"}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
 	tracker.capture(cmd)
 
 	// Assertion: "BETA" signal should be emitted
@@ -824,7 +826,7 @@ func TestFlush_OnToolStart(t *testing.T) {
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "GAMMA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -833,7 +835,7 @@ func TestFlush_OnToolStart(t *testing.T) {
 
 	// 2. Start Tool
 	tm, cmd = m.Update(eventMsg{event: domain.ToolStartEvent{CallID: "T1"}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
 	tracker.capture(cmd)
 
 	allSignals := strings.Join(tracker.signals, "")
@@ -847,12 +849,12 @@ func TestFlush_OnToolEnd(t *testing.T) {
 	currentTracker = tracker
 	defer func() { currentTracker = nil }()
 
-	m.activeTools["T1"] = &toolState{id: "T1", status: StatusRunning}
+	m.activeTools["T1"] = &toolState{id: "T1", status: ui.StatusRunning}
 	m.toolOrder = []string{"T1"}
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "DELTA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -861,7 +863,7 @@ func TestFlush_OnToolEnd(t *testing.T) {
 
 	// 2. End Tool
 	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "T1"}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
 	tracker.capture(cmd)
 
 	allSignals := strings.Join(tracker.signals, "")
@@ -878,7 +880,7 @@ func TestFlush_OnDone(t *testing.T) {
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "EPSILON"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tm, cmd = m.Update(streamTickMsg{})
 		m = tm.(*Model)
 		tracker.capture(cmd)
@@ -887,7 +889,7 @@ func TestFlush_OnDone(t *testing.T) {
 
 	// 2. Done
 	tm, cmd = m.Update(eventMsg{event: domain.DoneEvent{}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
 	tracker.capture(cmd)
 
 	allSignals := strings.Join(tracker.signals, "")
@@ -967,7 +969,7 @@ func TestIssue_RenderingFallback(t *testing.T) {
 
 	// 3. Trigger a flush (e.g. via ThinkingEvent)
 	tm, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
-	m = tm.(*Model)
+	_ = tm.(*Model)
 	tracker.capture(cmd)
 
 	// Assertion: Current implementation ignores error and returns empty safe slice.
@@ -1052,7 +1054,7 @@ func TestModel_ParallelTools(t *testing.T) {
 
 	// ASSERT: Tool B removed from active? No, it should still be in activeTools
 	// until flushed, but status is now Success.
-	assert.Equal(t, StatusSuccess, m.activeTools["B"].status)
+	assert.Equal(t, ui.StatusSuccess, m.activeTools["B"].status)
 	assert.Contains(t, m.toolOrder, "B")
 
 	// ASSERT: Tool B should NOT be in pending/printf output yet (blocked by A)
@@ -1175,13 +1177,13 @@ func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 	ts := &toolState{
 		id:      "test",
 		display: domain.StringDisplay("hello"),
-		status:  StatusSuccess,
+		status:  ui.StatusSuccess,
 	}
 
 	rendered := m.renderTool(ts)
-	lines := strings.Split(rendered, "\n")
+	lines := strings.SplitSeq(rendered, "\n")
 
-	for _, line := range lines {
+	for line := range lines {
 		// Strip ANSI codes before measuring width
 		width := lipgloss.Width(line)
 		if width > 0 {
@@ -1209,7 +1211,7 @@ func TestThinking_Colors(t *testing.T) {
 
 	view := m.View()
 	// Should contain the styled duration
-	styleRunning := lipgloss.NewStyle().Foreground(m.theme.primary)
+	styleRunning := lipgloss.NewStyle().Foreground(m.theme.PrimaryColor())
 	assert.Contains(t, view, styleRunning.Render("Thinking for 5s"))
 
 	// 2. Success state
@@ -1220,7 +1222,7 @@ func TestThinking_Colors(t *testing.T) {
 
 	history := tracker.allHistory()
 	assert.Contains(t, history, "✔")
-	style := lipgloss.NewStyle().Foreground(m.theme.success)
+	style := lipgloss.NewStyle().Foreground(m.theme.SuccessColor())
 	assert.Contains(t, history, style.Render("Thought for 5s"))
 }
 
@@ -1247,6 +1249,6 @@ func TestThinking_Cancelled(t *testing.T) {
 	history := tracker.allHistory()
 	// Should contain red cross and "Thought for 5s"
 	assert.Contains(t, history, "✘", "Cancelled thinking should show a cross")
-	style := lipgloss.NewStyle().Foreground(m.theme.err)
+	style := lipgloss.NewStyle().Foreground(m.theme.ErrorColor())
 	assert.Contains(t, history, style.Render("Thought for 5s"))
 }

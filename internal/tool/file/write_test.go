@@ -64,14 +64,6 @@ func (m *mockFileSystemForWrite) createFile(path string, content []byte, mode os
 	m.files[path] = fileEntry{content: content, mode: mode}
 }
 
-func (m *mockFileSystemForWrite) createDir(path string) {
-	m.dirs[path] = true
-}
-
-func (m *mockFileSystemForWrite) createSymlink(path, target string) {
-	m.symlinks[path] = symlinkEntry{target: target}
-}
-
 func (m *mockFileSystemForWrite) setOperationError(operation string, err error) {
 	m.operationErrors[operation] = err
 }

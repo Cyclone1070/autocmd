@@ -87,7 +87,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			case domain.TextChunk:
 				msg.Content += c.Text
 				if l.events != nil {
-					l.events <- domain.TextEvent{Text: c.Text}
+					l.events <- domain.TextEvent(c)
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)

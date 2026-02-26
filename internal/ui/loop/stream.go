@@ -1,12 +1,9 @@
-package ui
+package loop
 
 import (
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/muesli/termenv"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -19,11 +16,11 @@ type Stream struct {
 	lastBlockANSI string // Cached ANSI rendering of lastBlock stripped of doc margins
 	lastMargin    string // Trailing newlines stripped from the last render
 	parser        goldmark.Markdown
-	renderer      Renderer
+	renderer      ui.Renderer
 }
 
 // NewStream creates a new Stream.
-func NewStream(renderer Renderer) *Stream {
+func NewStream(renderer ui.Renderer) *Stream {
 	return &Stream{
 		parser:   goldmark.New(),
 		renderer: renderer,
@@ -296,10 +293,7 @@ func (s *Stream) extractLastBlockSource(content string) string {
 	}
 
 	start := s.getNodeStart(last, content)
-	end := s.getNodeEnd(last, content)
-	if end > len(content) {
-		end = len(content)
-	}
+	end := min(s.getNodeEnd(last, content), len(content))
 	if start < 0 {
 		start = 0
 	}
@@ -328,64 +322,6 @@ func (s *Stream) renderDelta(newContent string) (string, error) {
 
 // splitTrailingNewlines separates the trailing newlines from a string.
 func splitTrailingNewlines(text string) (string, string) {
-	i := len(text) - 1
-	for ; i >= 0; i-- {
-		if text[i] != '\n' && text[i] != '\r' {
-			break
-		}
-	}
-	return text[:i+1], text[i+1:]
-}
-
-// Renderer renders markdown to ANSI strings.
-type Renderer interface {
-	Render(markdown string) (string, error)
-}
-
-// GlamourRenderer wraps glamour.TermRenderer to implement Renderer.
-type GlamourRenderer struct {
-	tr *glamour.TermRenderer
-}
-
-// Render implements Renderer.
-func (g *GlamourRenderer) Render(markdown string) (string, error) {
-	return g.tr.Render(markdown)
-}
-
-// NewGlamourRenderer creates a Renderer using glamour with the given width.
-func NewGlamourRenderer(width int) (Renderer, error) {
-	var style ansi.StyleConfig
-	if termenv.HasDarkBackground() {
-		style = styles.DarkStyleConfig
-	} else {
-		style = styles.LightStyleConfig
-	}
-
-	// Remove background colors to ensure safe contrast on all palettes
-	style.H1.BackgroundColor = nil
-	style.Code.BackgroundColor = nil
-
-	// Match H1 foreground to other headings (H2) and restore bold/underline
-	style.H1.Color = style.H2.Color
-	style.H1.Bold = ptr(true)
-	style.H1.Underline = ptr(true)
-	style.H1.Upper = ptr(true)
-
-	tr, err := glamour.NewTermRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &GlamourRenderer{tr: tr}, nil
-}
-
-func ptr[T any](v T) *T {
-	return &v
-}
-
-// WrapGlamour adapts an existing glamour.TermRenderer to Renderer (for tests).
-func WrapGlamour(tr *glamour.TermRenderer) Renderer {
-	return &GlamourRenderer{tr: tr}
+	trimmed := strings.TrimRight(text, "\n")
+	return trimmed, text[len(trimmed):]
 }

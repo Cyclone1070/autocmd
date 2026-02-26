@@ -69,14 +69,6 @@ func (m *mockFileSystemForList) createDir(path string) {
 	m.dirs[path] = true
 }
 
-func (m *mockFileSystemForList) createSymlink(symlinkPath, targetPath string) {
-	m.symlinks[symlinkPath] = targetPath
-}
-
-func (m *mockFileSystemForList) setError(path string, err error) {
-	m.errors[path] = err
-}
-
 func (m *mockFileSystemForList) remove(path string) {
 	delete(m.files, path)
 	delete(m.dirs, path)

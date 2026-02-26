@@ -48,7 +48,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(context.Background(), params)
-		inv.Execute(context.Background())
+		_, _ = inv.Execute(context.Background())
 
 		// Modify file externally (simulate external change)
 		modifiedContent := []byte("modified externally")
@@ -111,7 +111,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(context.Background(), params)
-		inv.Execute(context.Background())
+		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -156,7 +156,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(context.Background(), params)
-		inv.Execute(context.Background())
+		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -188,7 +188,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(context.Background(), params)
-		inv.Execute(context.Background())
+		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
 			{

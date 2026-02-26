@@ -14,7 +14,7 @@ func TestAuth(t *testing.T) {
 	// Setup temp auth file
 	tmpDir, err := os.MkdirTemp("", "iav-auth-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	origStorePath := storePath
 	storePath = func() string {
@@ -57,7 +57,7 @@ func TestAuth(t *testing.T) {
 
 	t.Run("All_Empty", func(t *testing.T) {
 		// Clear file for this test
-		os.Remove(storePath())
+		_ = os.Remove(storePath())
 		all, err := All()
 		assert.NoError(t, err)
 		assert.Empty(t, all)

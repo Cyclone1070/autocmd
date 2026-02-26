@@ -86,3 +86,8 @@ func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 		return t.muted
 	}
 }
+
+func (t *Theme) PrimaryColor() lipgloss.AdaptiveColor { return t.primary }
+func (t *Theme) SuccessColor() lipgloss.AdaptiveColor { return t.success }
+func (t *Theme) ErrorColor() lipgloss.AdaptiveColor   { return t.err }
+func (t *Theme) MutedColor() lipgloss.AdaptiveColor   { return t.muted }

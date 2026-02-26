@@ -1,4 +1,4 @@
-package ui
+package loop
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,7 +28,7 @@ type toolState struct {
 	id      string
 	display domain.ToolDisplay
 	output  string
-	status  ToolStatus
+	status  ui.ToolStatus
 	err     string
 }
 
@@ -35,7 +36,7 @@ type toolState struct {
 type Model struct {
 	events <-chan domain.Event
 	stream *Stream
-	theme  *Theme
+	theme  *ui.Theme
 	width  int
 	height int
 
@@ -70,7 +71,7 @@ func WithFlush(f func(string) tea.Cmd) Option {
 
 // NewModel creates a new UI engine model.
 func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *Model {
-	theme := NewTheme(cfg)
+	theme := ui.NewTheme(cfg)
 
 	// Detect terminal size
 	detectedWidth, detectedHeight, err := term.GetSize(int(os.Stdout.Fd()))
@@ -84,14 +85,14 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 		height = detectedHeight
 	}
 
-	renderer, _ := NewGlamourRenderer(width)
+	renderer, _ := ui.NewGlamourRenderer(width)
 
 	s := spinner.New()
 	s.Spinner = spinner.Spinner{
 		Frames: []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "},
 		FPS:    time.Second / 10,
 	}
-	s.Style = lipgloss.NewStyle().Foreground(theme.primary)
+	s.Style = lipgloss.NewStyle().Foreground(theme.PrimaryColor())
 
 	m := &Model{
 		events:      events,
@@ -131,12 +132,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			safe, _ := m.stream.Flush()
 			m.printQueue = append(m.printQueue, safe...)
 
-			m.flushThinking(StatusError)
+			m.flushThinking(ui.StatusError)
 
 			// Flush any active tool with a cancelled error rather than throwing it away
 			for _, id := range m.toolOrder {
 				if ts, ok := m.activeTools[id]; ok {
-					ts.status = StatusError
+					ts.status = ui.StatusError
 					ts.err = "Cancelled"
 					m.printQueue = append(m.printQueue, m.renderTool(ts))
 				}
@@ -296,7 +297,7 @@ func (m *Model) flushFinishedTools() {
 		id := m.toolOrder[0]
 		ts := m.activeTools[id]
 
-		if ts.status == StatusRunning {
+		if ts.status == ui.StatusRunning {
 			break
 		}
 
@@ -323,7 +324,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 	if m.isThinking {
 		switch event.(type) {
 		case domain.TextEvent, domain.ToolStartEvent, domain.DoneEvent:
-			m.flushThinking(StatusSuccess)
+			m.flushThinking(ui.StatusSuccess)
 		}
 	}
 
@@ -364,7 +365,7 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		ts := &toolState{
 			id:      ev.CallID,
 			display: ev.Display,
-			status:  StatusRunning,
+			status:  ui.StatusRunning,
 		}
 		m.activeTools[ev.CallID] = ts
 		m.toolOrder = append(m.toolOrder, ev.CallID)
@@ -377,9 +378,9 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 
 	case domain.ToolEndEvent:
 		if ts, ok := m.activeTools[ev.CallID]; ok {
-			ts.status = StatusSuccess
+			ts.status = ui.StatusSuccess
 			if ev.Error != "" {
-				ts.status = StatusError
+				ts.status = ui.StatusError
 				ts.err = ev.Error
 			}
 
@@ -404,10 +405,10 @@ func (m *Model) View() string {
 
 	if m.isThinking {
 		duration := m.thinkingDuration
-		style := lipgloss.NewStyle().Foreground(m.theme.primary)
+		style := lipgloss.NewStyle().Foreground(m.theme.PrimaryColor())
 		// Style the text separately because the spinner's View() includes a reset sequence
 		// that would clear any outer styling if nested.
-		sb.WriteString(fmt.Sprintf("\n %s %s\n", m.spinner.View(), style.Render(fmt.Sprintf("Thinking for %v", duration))))
+		fmt.Fprintf(&sb, "\n %s %s\n", m.spinner.View(), style.Render(fmt.Sprintf("Thinking for %v", duration)))
 	}
 
 	for _, id := range m.toolOrder {
@@ -419,16 +420,16 @@ func (m *Model) View() string {
 	sb.WriteString(m.stream.Pending())
 
 	res := strings.TrimRight(sb.String(), "\n")
-	return TruncateWithIndicator(res, m.height)
+	return ui.TruncateWithIndicator(res, m.height)
 }
 
-func (m *Model) flushThinking(status ToolStatus) {
+func (m *Model) flushThinking(status ui.ToolStatus) {
 	if !m.isThinking {
 		return
 	}
 
 	finalDuration := time.Since(m.thinkStart).Round(time.Second)
-	if status == StatusError && m.thinkingDuration > 0 {
+	if status == ui.StatusError && m.thinkingDuration > 0 {
 		finalDuration = m.thinkingDuration
 	}
 
@@ -437,12 +438,12 @@ func (m *Model) flushThinking(status ToolStatus) {
 	var prefix string
 	var textColor lipgloss.AdaptiveColor
 
-	if status == StatusSuccess {
-		prefix = lipgloss.NewStyle().Foreground(m.theme.success).Render("✔")
-		textColor = m.theme.success
+	if status == ui.StatusSuccess {
+		prefix = lipgloss.NewStyle().Foreground(m.theme.SuccessColor()).Render("✔")
+		textColor = m.theme.SuccessColor()
 	} else {
-		prefix = lipgloss.NewStyle().Foreground(m.theme.err).Render("✘")
-		textColor = m.theme.err
+		prefix = lipgloss.NewStyle().Foreground(m.theme.ErrorColor()).Render("✘")
+		textColor = m.theme.ErrorColor()
 	}
 
 	style := lipgloss.NewStyle().Foreground(textColor)
@@ -463,19 +464,20 @@ func (m *Model) waitForEvent() tea.Cmd {
 func (m *Model) renderTool(ts *toolState) string {
 	var content string
 	prefix := m.spinner.View()
-	if ts.status == StatusSuccess {
-		prefix = lipgloss.NewStyle().Foreground(m.theme.success).Render("✔")
-	} else if ts.status == StatusError {
-		prefix = lipgloss.NewStyle().Foreground(m.theme.err).Render("✘")
+	switch ts.status {
+	case ui.StatusSuccess:
+		prefix = lipgloss.NewStyle().Foreground(m.theme.SuccessColor()).Render("✔")
+	case ui.StatusError:
+		prefix = lipgloss.NewStyle().Foreground(m.theme.ErrorColor()).Render("✘")
 	}
 
 	switch d := ts.display.(type) {
 	case domain.ShellDisplay:
-		content = RenderShell(m.width-2, 12, m.theme, d, ts.output, ts.status, ts.err, prefix)
+		content = ui.RenderShell(m.width-2, 12, m.theme, d, ts.output, ts.status, ts.err, prefix)
 	case domain.DiffDisplay:
-		content = RenderDiff(m.width-2, m.theme, d, ts.status, ts.err, prefix)
+		content = ui.RenderDiff(m.width-2, m.theme, d, ts.status, ts.err, prefix)
 	case domain.StringDisplay:
-		content = RenderString(m.theme, d, ts.status, ts.err, prefix)
+		content = ui.RenderString(m.theme, d, ts.status, ts.err, prefix)
 	}
 
 	return m.theme.Box(content, m.width-2, ts.status)

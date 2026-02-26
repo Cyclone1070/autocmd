@@ -187,13 +187,13 @@ func formatFileContent(lines []string, startLine, endLine, totalLines int) strin
 	var sb strings.Builder
 	sb.WriteString("<file>\n")
 	for i, line := range lines {
-		sb.WriteString(fmt.Sprintf("%05d| %s\n", startLine+i, line))
+		fmt.Fprintf(&sb, "%05d| %s\n", startLine+i, line)
 	}
 
 	if endLine < totalLines {
-		sb.WriteString(fmt.Sprintf("\n(File has more lines. Use offset=%d to read more)", endLine))
+		fmt.Fprintf(&sb, "\n(File has more lines. Use offset=%d to read more)", endLine)
 	} else {
-		sb.WriteString(fmt.Sprintf("\n(End of file - total %d lines)", totalLines))
+		fmt.Fprintf(&sb, "\n(End of file - total %d lines)", totalLines)
 	}
 	sb.WriteString("\n</file>")
 	return sb.String()

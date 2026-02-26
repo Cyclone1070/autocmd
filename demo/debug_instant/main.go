@@ -6,13 +6,13 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/loop"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
 	events := make(chan domain.Event)
-	m := ui.NewModel(events, config.DefaultConfig().UI)
+	m := loop.NewModel(events, config.DefaultConfig().UI)
 
 	p := tea.NewProgram(m)
 

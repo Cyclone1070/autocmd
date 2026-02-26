@@ -1,4 +1,4 @@
-package ui
+package picker
 
 import (
 	"fmt"
@@ -191,7 +191,7 @@ func (m *Picker) View() string {
 
 		detailText := fadedStyle.Render(item.Detail)
 
-		s.WriteString(fmt.Sprintf(" %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText))
+		fmt.Fprintf(&s, " %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText)
 	}
 
 	return s.String()

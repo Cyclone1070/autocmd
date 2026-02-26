@@ -255,7 +255,7 @@ func formatSearchMatches(matches []searchContentMatch, truncated bool) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Found %d matches\n", len(matches)))
+	fmt.Fprintf(&sb, "Found %d matches\n", len(matches))
 
 	currentFile := ""
 	for _, m := range matches {
@@ -266,7 +266,7 @@ func formatSearchMatches(matches []searchContentMatch, truncated bool) string {
 			sb.WriteString("\n" + m.File + ":\n")
 			currentFile = m.File
 		}
-		sb.WriteString(fmt.Sprintf("  Line %d: %s\n", m.LineNumber, m.LineContent))
+		fmt.Fprintf(&sb, "  Line %d: %s\n", m.LineNumber, m.LineContent)
 	}
 
 	if truncated {

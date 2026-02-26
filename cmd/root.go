@@ -22,7 +22,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/loop"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
@@ -121,26 +121,24 @@ func runAgent(cfg *config.Config, input string) error {
 	}
 
 	events := make(chan domain.Event, 100)
-	loop := agent.NewLoop(llmInstance, toolRegistry, cfg, events)
+	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, events)
 
 	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
-		namingWg.Add(1)
-		go func() {
-			defer namingWg.Done()
+		namingWg.Go(func() {
 			name, err := session.GenerateName(context.Background(), llmInstance, input)
 			if err == nil {
 				_ = store.Rename(sess.ID, name)
 			}
-		}()
+		})
 	}
 
-	m := ui.NewModel(events, cfg.UI)
+	m := loop.NewModel(events, cfg.UI)
 
 	done := make(chan error, 1)
 	go func() {
-		err := loop.Run(ctx, sess, input)
+		err := agentLoop.Run(ctx, sess, input)
 		close(events)
 		_ = store.Save(sess)
 		done <- err

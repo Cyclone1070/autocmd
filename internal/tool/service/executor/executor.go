@@ -247,9 +247,9 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 			n, readErr := src.Read(buf)
 			if n > 0 {
 				chunk := buf[:n]
-				pw.Write(chunk)
+				_, _ = pw.Write(chunk)
 				collectorMu.Lock()
-				collector.Write(chunk)
+				_, _ = collector.Write(chunk)
 				collectorMu.Unlock()
 			}
 			if readErr != nil {
@@ -264,7 +264,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 	// Goroutine to close pipe when streams finish
 	go func() {
 		wg.Wait()
-		pw.Close()
+		_ = pw.Close()
 	}()
 
 	// Wait function captures the result (uses timeoutCh started at command start)

@@ -245,7 +245,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 	}
 
 	if truncated {
-		sb.WriteString(fmt.Sprintf("\n(Results truncated. %d items hidden. Use specificity or ignore patterns to see more.)", hiddenCount))
+		fmt.Fprintf(&sb, "\n(Results truncated. %d items hidden. Use specificity or ignore patterns to see more.)", hiddenCount)
 	} else if len(validEntries) == 0 {
 		sb.WriteString("  (empty)")
 	}

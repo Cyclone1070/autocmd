@@ -204,7 +204,7 @@ func TestFindFile_HitMaxResults(t *testing.T) {
 	mockRunner.runFunc = func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
 		var output strings.Builder
 		for i := range 150 {
-			output.WriteString(fmt.Sprintf("/workspace/file%d.go\n", i))
+			fmt.Fprintf(&output, "/workspace/file%d.go\n", i)
 		}
 		return &executor.Result{Stdout: output.String(), ExitCode: 0}, nil
 	}

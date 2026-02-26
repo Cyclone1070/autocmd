@@ -8,7 +8,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/session"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/picker"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,7 +16,7 @@ import (
 type sessionPickerWrapper struct {
 	cfg          *config.Config
 	store        *session.Store
-	picker       *ui.Picker
+	picker       *picker.Picker
 	renaming     bool
 	renameItemID string
 	textInput    textinput.Model
@@ -55,7 +55,7 @@ func (w *sessionPickerWrapper) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	res, cmd := w.picker.Update(msg)
-	w.picker = res.(*ui.Picker)
+	w.picker = res.(*picker.Picker)
 	return w, cmd
 }
 
@@ -66,15 +66,15 @@ func (w *sessionPickerWrapper) View() string {
 	return w.picker.View()
 }
 
-func (w *sessionPickerWrapper) mapSessionsToItems(sessions []domain.SessionSummary) []ui.Item {
-	var items []ui.Item
+func (w *sessionPickerWrapper) mapSessionsToItems(sessions []domain.SessionSummary) []picker.Item {
+	var items []picker.Item
 	for _, s := range sessions {
 		name := s.Name
 		if name == "" {
 			name = "(untitled)"
 		}
 
-		items = append(items, ui.Item{
+		items = append(items, picker.Item{
 			ID:     s.ID,
 			Label:  name,
 			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
@@ -128,14 +128,14 @@ func runSessionPicker() error {
 		textInput: ti,
 	}
 
-	pickerCfg := ui.Config{
+	pickerCfg := picker.Config{
 		Title: "SESSIONS",
 		Items: wrapper.mapSessionsToItems(summaries),
-		Actions: []ui.Action{
+		Actions: []picker.Action{
 			{
 				Key:   "n",
 				Label: "new",
-				Fn: func(item ui.Item) tea.Cmd {
+				Fn: func(item picker.Item) tea.Cmd {
 					sess, err := store.Create()
 					if err != nil {
 						return nil
@@ -148,7 +148,7 @@ func runSessionPicker() error {
 			{
 				Key:   "r",
 				Label: "rename",
-				Fn: func(item ui.Item) tea.Cmd {
+				Fn: func(item picker.Item) tea.Cmd {
 					wrapper.renaming = true
 					wrapper.renameItemID = item.ID
 					wrapper.textInput.SetValue(item.Label)
@@ -159,7 +159,7 @@ func runSessionPicker() error {
 			{
 				Key:   "d",
 				Label: "delete",
-				Fn: func(item ui.Item) tea.Cmd {
+				Fn: func(item picker.Item) tea.Cmd {
 					_ = store.Delete(item.ID)
 					summaries, _ := store.List()
 					wrapper.picker.RefreshItems(wrapper.mapSessionsToItems(summaries))
@@ -169,7 +169,7 @@ func runSessionPicker() error {
 		},
 	}
 
-	wrapper.picker = ui.NewPicker(pickerCfg)
+	wrapper.picker = picker.NewPicker(pickerCfg)
 	p := tea.NewProgram(wrapper)
 
 	if _, err := p.Run(); err != nil {

@@ -65,8 +65,8 @@ func newTestStreamingCmd(output string, result *executor.Result, waitErr error) 
 
 	// Write output in background
 	go func() {
-		pw.Write([]byte(output))
-		pw.Close()
+		_, _ = pw.Write([]byte(output))
+		_ = pw.Close()
 	}()
 
 	return executor.NewStreamingCmd(pr, func() (*executor.Result, error) {
@@ -395,7 +395,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 
 	// Consume output
 	disp := inv.Display().(domain.ShellDisplay)
-	go io.Copy(io.Discard, disp.Output)
+	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err)
@@ -427,7 +427,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
-	go io.Copy(io.Discard, disp.Output)
+	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err) // No error for non-zero exit
@@ -457,7 +457,7 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
-	go io.Copy(io.Discard, disp.Output)
+	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	output, err := inv.Execute(ctx)
 	assert.ErrorIs(t, err, executor.ErrTimeout)
@@ -487,7 +487,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
-	go io.Copy(io.Discard, disp.Output)
+	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	cancel() // Cancel the context
 
@@ -518,7 +518,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
-	go io.Copy(io.Discard, disp.Output)
+	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err)
@@ -553,7 +553,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	var buf strings.Builder
 	done := make(chan struct{})
 	go func() {
-		io.Copy(&buf, disp.Output)
+		_, _ = io.Copy(&buf, disp.Output)
 		close(done)
 	}()
 
@@ -612,7 +612,7 @@ func TestShellTool_Display_Wait(t *testing.T) {
 
 	// Signal that Wait can return
 	once.Do(func() { close(waitCalled) })
-	pw.Close()
+	_ = pw.Close()
 
 	select {
 	case <-done:

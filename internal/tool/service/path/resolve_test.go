@@ -152,7 +152,7 @@ func TestCanonicaliseRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create tmp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	resolvedTmpDir, err := filepath.EvalSymlinks(tmpDir)
 	if err != nil {

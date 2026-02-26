@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/picker"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -27,7 +27,7 @@ func runModelPicker() error {
 		return err
 	}
 
-	var items []ui.Item
+	var items []picker.Item
 	for _, m := range models {
 		parts := strings.SplitN(m.ID, "/", 2)
 		provider := "unknown"
@@ -35,7 +35,7 @@ func runModelPicker() error {
 			provider = parts[0]
 		}
 
-		items = append(items, ui.Item{
+		items = append(items, picker.Item{
 			ID:     m.ID,
 			Label:  m.DisplayName,
 			Detail: m.ID,
@@ -44,12 +44,12 @@ func runModelPicker() error {
 		})
 	}
 
-	pickerCfg := ui.Config{
+	pickerCfg := picker.Config{
 		Title: "MODELS",
 		Items: items,
 	}
 
-	m := ui.NewPicker(pickerCfg)
+	m := picker.NewPicker(pickerCfg)
 	p := tea.NewProgram(m)
 
 	if _, err := p.Run(); err != nil {

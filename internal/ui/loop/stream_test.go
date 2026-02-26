@@ -1,9 +1,11 @@
-package ui
+package loop
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/Cyclone1070/iav/internal/ui"
 )
 
 // mockRenderer just returns the input as is
@@ -219,7 +221,7 @@ func TestStream_RenderConsistency(t *testing.T) {
 		t.Run(fmt.Sprintf("Giant_Stream_Gap_%q", gap), func(t *testing.T) {
 			t.Parallel()
 
-			renderer, err := NewGlamourRenderer(80)
+			renderer, err := ui.NewGlamourRenderer(80)
 			if err != nil {
 				t.Fatalf("Failed to create renderer: %v", err)
 			}
@@ -272,26 +274,14 @@ func TestStream_RenderConsistency(t *testing.T) {
 				t.Errorf("Render inconsistency: Output mismatch. GOT %d bytes, WANT %d bytes", len(gotOut), len(wantOut))
 
 				// Find first difference to help debugging
-				minLen := len(gotOut)
-				if len(wantOut) < minLen {
-					minLen = len(wantOut)
-				}
+				minLen := min(len(wantOut), len(gotOut))
 				for i := 0; i < minLen; i++ {
 					if gotOut[i] != wantOut[i] {
-						start := i - 50
-						if start < 0 {
-							start = 0
-						}
+						start := max(i-50, 0)
 
-						endGot := i + 50
-						if endGot > len(gotOut) {
-							endGot = len(gotOut)
-						}
+						endGot := min(i+50, len(gotOut))
 
-						endWant := i + 50
-						if endWant > len(wantOut) {
-							endWant = len(wantOut)
-						}
+						endWant := min(i+50, len(wantOut))
 
 						t.Logf("First mismatch at byte %d:\nGOT  context: %q\nWANT context: %q",
 							i, gotOut[start:endGot], wantOut[start:endWant])

@@ -85,7 +85,8 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 		height = detectedHeight
 	}
 
-	renderer, _ := ui.NewGlamourRenderer(width)
+	isDark := lipgloss.HasDarkBackground()
+	renderer, _ := ui.NewGlamourRenderer(width, isDark)
 
 	s := spinner.New()
 	s.Spinner = spinner.Spinner{

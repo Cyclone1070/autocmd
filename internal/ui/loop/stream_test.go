@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // mockRenderer just returns the input as is
@@ -221,7 +222,7 @@ func TestStream_RenderConsistency(t *testing.T) {
 		t.Run(fmt.Sprintf("Giant_Stream_Gap_%q", gap), func(t *testing.T) {
 			t.Parallel()
 
-			renderer, err := ui.NewGlamourRenderer(80)
+			renderer, err := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
 			if err != nil {
 				t.Fatalf("Failed to create renderer: %v", err)
 			}

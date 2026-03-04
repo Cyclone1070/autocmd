@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
-	"github.com/muesli/termenv"
 )
 
 // Renderer renders markdown to ANSI strings.
@@ -23,9 +22,9 @@ func (g *GlamourRenderer) Render(markdown string) (string, error) {
 }
 
 // NewGlamourRenderer creates a Renderer using glamour with the given width.
-func NewGlamourRenderer(width int) (Renderer, error) {
+func NewGlamourRenderer(width int, isDark bool) (Renderer, error) {
 	var style ansi.StyleConfig
-	if termenv.HasDarkBackground() {
+	if isDark {
 		style = styles.DarkStyleConfig
 	} else {
 		style = styles.LightStyleConfig

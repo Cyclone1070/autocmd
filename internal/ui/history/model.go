@@ -27,6 +27,7 @@ type Model struct {
 	bottomIdx        int
 	reachedTop       bool
 	renderedBlock    string
+	isDark           bool
 }
 
 // Option is a functional option for configuring the Model.
@@ -50,6 +51,7 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 		topIdx:           0,
 		bottomIdx:        0,
 		reachedTop:       false,
+		isDark:           lipgloss.HasDarkBackground(),
 	}
 	m.width = m.calculateWidth(width)
 
@@ -58,7 +60,7 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 	}
 
 	if m.renderer == nil {
-		m.renderer, _ = ui.NewGlamourRenderer(m.width)
+		m.renderer, _ = ui.NewGlamourRenderer(m.width, m.isDark)
 	}
 
 	m.viewport = viewport.New(m.width, height)
@@ -155,7 +157,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = m.calculateWidth(msg.Width)
-		m.renderer, _ = ui.NewGlamourRenderer(m.width)
+		m.renderer, _ = ui.NewGlamourRenderer(m.width, m.isDark)
 		m.viewport.Width = m.width
 		m.viewport.Height = m.height
 		// Reset everything on resize.

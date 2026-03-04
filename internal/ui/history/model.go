@@ -25,6 +25,7 @@ type Model struct {
 	renderedMessages map[int]string
 	topIdx           int
 	bottomIdx        int
+	reachedTop       bool
 	renderedBlock    string
 }
 
@@ -46,8 +47,9 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 		theme:            ui.NewTheme(cfg),
 		height:           height,
 		renderedMessages: make(map[int]string),
-		topIdx:           -1,
-		bottomIdx:        -1,
+		topIdx:           0,
+		bottomIdx:        0,
+		reachedTop:       false,
 	}
 	m.width = m.calculateWidth(width)
 
@@ -67,6 +69,7 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 
 func (m *Model) initializeContent() {
 	if len(m.messages) == 0 {
+		m.reachedTop = true
 		return
 	}
 
@@ -89,7 +92,8 @@ func (m *Model) initializeContent() {
 		}
 	}
 	if m.topIdx < 0 {
-		m.topIdx = -1 // sentinel to show we reached actual top
+		m.reachedTop = true
+		m.topIdx = 0
 	}
 
 	m.renderedBlock = strings.Join(renderedParts, "")
@@ -109,7 +113,7 @@ func (m *Model) renderMessage(idx int) string {
 func (m *Model) refreshViewport() {
 	// If we are getting close to the top of the rendered block, prepend more
 	// Use one screen height as the safety margin.
-	for m.viewport.YOffset < m.height && m.topIdx >= 0 {
+	for !m.reachedTop && m.viewport.YOffset < m.height {
 		rendered := m.renderMessage(m.topIdx)
 		h := lipgloss.Height(rendered)
 
@@ -119,6 +123,10 @@ func (m *Model) refreshViewport() {
 		// Shift YOffset down so the user stays at the same visual location relative to bottom
 		m.viewport.YOffset += h
 		m.topIdx--
+		if m.topIdx < 0 {
+			m.reachedTop = true
+			m.topIdx = 0
+		}
 	}
 }
 

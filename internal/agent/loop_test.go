@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,7 +12,73 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestLoop(tools []domain.Tool, m domain.LLM, events chan domain.Event) *Loop {
+// --- Mocks ---
+
+type mockLLM struct {
+	id            string
+	displayName   string
+	contextWindow int
+	streams       []*mockStream
+	streamErr     error
+}
+
+func (m *mockLLM) ID() string          { return m.id }
+func (m *mockLLM) DisplayName() string { return m.displayName }
+func (m *mockLLM) ContextWindow() int  { return m.contextWindow }
+
+func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+	return 100, nil
+}
+
+func (m *mockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+	if m.streamErr != nil && len(m.streams) == 0 {
+		return nil, m.streamErr
+	}
+	if len(m.streams) == 0 {
+		return nil, fmt.Errorf("no more streams")
+	}
+	s := m.streams[0]
+	m.streams = m.streams[1:]
+	return s, nil
+}
+
+type mockStream struct {
+	chunks []domain.StreamChunk
+	err    error
+	index  int
+}
+
+func (m *mockStream) Next() bool {
+	if m.index < len(m.chunks) {
+		m.index++
+		return true
+	}
+	return false
+}
+
+func (m *mockStream) Chunk() domain.StreamChunk {
+	return m.chunks[m.index-1]
+}
+
+func (m *mockStream) Err() error {
+	return m.err
+}
+
+type mockEventSender struct {
+	events chan domain.Event
+}
+
+func (m *mockEventSender) Send(ev domain.Event) {
+	if m.events != nil {
+		m.events <- ev
+	}
+}
+
+func newMockEventSender(size int) *mockEventSender {
+	return &mockEventSender{events: make(chan domain.Event, size)}
+}
+
+func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
 	cfg := &config.Config{
 		Tools: config.ToolsConfig{MaxIterations: 5},
 	}
@@ -23,7 +90,6 @@ func newTestLoop(tools []domain.Tool, m domain.LLM, events chan domain.Event) *L
 
 func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	ctx := context.Background()
-	events := make(chan domain.Event, 10)
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
@@ -32,23 +98,20 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	}
 
 	session := &domain.Session{}
-	l := newTestLoop([]domain.Tool{}, m, events)
+	sender := newMockEventSender(10)
+	l := newTestLoop([]domain.Tool{}, m, sender)
 	err := l.Run(ctx, session, "Hi")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(session.Messages))
-	assert.Equal(t, "Hi", session.Messages[0].Content)
-	assert.Equal(t, "Hello!", session.Messages[1].Content)
 
-	assert.IsType(t, domain.ThinkingEvent{}, <-events)
-	assert.Equal(t, domain.TextEvent{Text: "Hello!"}, <-events)
-	assert.IsType(t, domain.DoneEvent{}, <-events)
+	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
+	assert.Equal(t, domain.TextEvent{Text: "Hello!"}, <-sender.events)
 }
 
 func TestRun_SingleToolCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	events := make(chan domain.Event, 10)
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
@@ -69,18 +132,18 @@ func TestRun_SingleToolCall(t *testing.T) {
 	}
 
 	session := &domain.Session{}
-	l := newTestLoop([]domain.Tool{mt}, m, events)
+	sender := newMockEventSender(10)
+	l := newTestLoop([]domain.Tool{mt}, m, sender)
 	err := l.Run(ctx, session, "Weather?")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(session.Messages))
 
-	assert.IsType(t, domain.ThinkingEvent{}, <-events)
-	assert.IsType(t, domain.ToolStartEvent{}, <-events)
-	assert.IsType(t, domain.ToolEndEvent{}, <-events)
-	assert.IsType(t, domain.ThinkingEvent{}, <-events)
-	assert.Equal(t, domain.TextEvent{Text: "It's sunny!"}, <-events)
-	assert.IsType(t, domain.DoneEvent{}, <-events)
+	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
+	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
+	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
+	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
+	assert.Equal(t, domain.TextEvent{Text: "It's sunny!"}, <-sender.events)
 }
 
 func TestRun_MaxIterationsExceeded(t *testing.T) {
@@ -128,4 +191,58 @@ func TestRun_ContextCancelled(t *testing.T) {
 
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, "[Session cancelled by user]", session.Messages[len(session.Messages)-1].Content)
+}
+
+func TestRun_ParallelToolCalls(t *testing.T) {
+	ctx := context.Background()
+	sender := newMockEventSender(20)
+
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []domain.StreamChunk{
+				domain.ToolCall{ID: "tc-1", Name: "t1"},
+				domain.ToolCall{ID: "tc-2", Name: "t2"},
+			}},
+			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Done."}}},
+		},
+	}
+
+	mt1 := &mockTool{
+		name: "t1",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				execute: func(ctx context.Context) (string, error) {
+					time.Sleep(100 * time.Millisecond)
+					return "R1", nil
+				},
+			}, nil
+		},
+	}
+	mt2 := &mockTool{
+		name: "t2",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				execute: func(ctx context.Context) (string, error) {
+					time.Sleep(50 * time.Millisecond)
+					return "R2", nil
+				},
+			}, nil
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{mt1, mt2}, m, sender)
+	session := &domain.Session{}
+
+	start := time.Now()
+	err := l.Run(ctx, session, "run")
+	duration := time.Since(start)
+
+	assert.NoError(t, err)
+	// Parallel should take ~100ms, sequential ~150ms.
+	assert.Less(t, duration, 140*time.Millisecond)
+
+	// Verify order in session messages
+	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
+	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
 }

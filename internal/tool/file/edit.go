@@ -215,12 +215,12 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		newContent:       newContentBytes,
 		originalPerm:     info.Mode(),
 		expectedChecksum: currentChecksum,
-		display: domain.DiffDisplay{
-			Header:  fmt.Sprintf("Edit %s", filepath.Base(abs)),
-			Added:   added,
-			Removed: removed,
-			Diff:    diff,
-		},
+		display: domain.NewDiffDisplay(
+			fmt.Sprintf("Edit %s", filepath.Base(abs)),
+			added,
+			removed,
+			diff,
+		),
 	}, nil
 }
 

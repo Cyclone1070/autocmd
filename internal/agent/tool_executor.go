@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -23,7 +22,7 @@ func (e *toolExecutor) declarations() []domain.Declaration {
 	return e.registry.Declarations()
 }
 
-func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events chan<- domain.Event) (domain.Message, error) {
+func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events eventSender) (domain.Message, domain.ToolDisplay, error) {
 	t, ok := e.registry.Get(tc.Name)
 	if !ok {
 		decls := e.declarations()
@@ -35,13 +34,13 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    errMsg,
-		}, nil
+		}, nil, nil
 	}
 
 	inv, err := t.Prepare(ctx, tc.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{}, ctx.Err()
+			return domain.Message{}, nil, ctx.Err()
 		}
 		declJSON, _ := json.MarshalIndent(t.Declaration(), "", "  ")
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Name, err, declJSON)
@@ -51,55 +50,56 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    errMsg,
-		}, nil
+		}, nil, nil
 	}
 
 	display := inv.Display()
 
 	if events != nil {
-		events <- domain.ToolStartEvent{
+		events.Send(domain.ToolStartEvent{
 			CallID:   tc.ID,
 			ToolName: tc.Name,
 			Display:  display,
-		}
+		})
 	}
 
-	var streamWg sync.WaitGroup
-	// Defer ensures goroutine cleanup on ALL paths (including early error returns).
-	// The explicit Wait() below ensures streaming completes before ToolEndEvent.
-	defer streamWg.Wait()
+	// We no longer wait for streaming to complete before returning from execute.
+	// The broker/Loop will handle the async nature of streaming.
 
 	if sh, ok := display.(domain.ShellDisplay); ok && sh.Output != nil && events != nil {
-		streamWg.Go(func() {
+		go func() {
 			buf := make([]byte, 4096)
 			for {
 				n, err := sh.Output.Read(buf)
 				if n > 0 {
-					events <- domain.ToolStreamEvent{
+					events.Send(domain.ToolStreamEvent{
 						CallID: tc.ID,
 						Chunk:  string(buf[:n]),
-					}
+					})
 				}
 				if err != nil {
 					break
 				}
 			}
-			// NOTE: Do NOT call sh.Wait() here - Execute() already calls streamCmd.Wait()
-			// Calling it twice causes a race condition.
-		})
+
+			// ToolEndEvent is now sent by the goroutine after streaming finishes
+			events.Send(domain.ToolEndEvent{
+				CallID: tc.ID,
+			})
+		}()
 	}
 
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{}, err
+			return domain.Message{}, nil, err
 		}
 
 		if events != nil {
-			events <- domain.ToolEndEvent{
+			events.Send(domain.ToolEndEvent{
 				CallID: tc.ID,
 				Error:  "Execution failed",
-			}
+			})
 		}
 
 		return domain.Message{
@@ -107,16 +107,16 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    llmContent,
-		}, nil
+			ToolError:  true,
+		}, display, nil
 	}
 
-	// Wait for streaming goroutine to finish reading all output
-	streamWg.Wait()
-
-	if events != nil {
-		events <- domain.ToolEndEvent{
+	// For non-streaming tools, we send the end event now.
+	// For streaming tools (shell), the goroutine above sends it.
+	if _, ok := display.(domain.ShellDisplay); !ok && events != nil {
+		events.Send(domain.ToolEndEvent{
 			CallID: tc.ID,
-		}
+		})
 	}
 
 	return domain.Message{
@@ -124,5 +124,5 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events c
 		ToolCallID: tc.ID,
 		ToolName:   tc.Name,
 		Content:    llmContent,
-	}, nil
+	}, display, nil
 }

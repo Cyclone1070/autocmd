@@ -357,7 +357,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	m.activeTools["busy-tool"] = &toolState{
 		id:      "busy-tool",
 		status:  ui.StatusRunning,
-		display: domain.StringDisplay("Running busy-tool..."),
+		display: domain.NewStringDisplay("Running busy-tool..."),
 	}
 	m.toolOrder = []string{"busy-tool"}
 
@@ -397,11 +397,8 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 
 	// 1. Tool Start
 	startEv := domain.ToolStartEvent{
-		CallID: "123",
-		Display: domain.ShellDisplay{
-			Header:  "Run tests",
-			Command: "go test ./...",
-		},
+		CallID:  "123",
+		Display: domain.NewShellDisplay("Run tests", "go test ./...", nil, nil),
 	}
 	m2, cmd := m.Update(eventMsg{event: startEv})
 	m = m2.(*Model)
@@ -493,7 +490,7 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 	// 2. Send ToolStartEvent immediately
 	toolEv := domain.ToolStartEvent{
 		CallID:  "tool-seq",
-		Display: domain.StringDisplay("SEQUENTIAL TOOL"),
+		Display: domain.NewStringDisplay("SEQUENTIAL TOOL"),
 	}
 	q.push(func() tea.Msg { return eventMsg{event: toolEv} })
 	q.drain()
@@ -638,7 +635,7 @@ func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 
 	// 2. Tool (Turn 1)
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "TC1", Display: domain.StringDisplay("TOOL 1")}}
+		return eventMsg{event: domain.ToolStartEvent{CallID: "TC1", Display: domain.NewStringDisplay("TOOL 1")}}
 	})
 	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "TC1"}} })
 
@@ -705,13 +702,13 @@ func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
 
 	// 2. Tool 1
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "T1", Display: domain.StringDisplay("TOOL 1")}}
+		return eventMsg{event: domain.ToolStartEvent{CallID: "T1", Display: domain.NewStringDisplay("TOOL 1")}}
 	})
 	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "T1"}} })
 
 	// 3. Tool 2
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "T2", Display: domain.StringDisplay("TOOL 2")}}
+		return eventMsg{event: domain.ToolStartEvent{CallID: "T2", Display: domain.NewStringDisplay("TOOL 2")}}
 	})
 	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "T2"}} })
 
@@ -1013,14 +1010,14 @@ func TestModel_ParallelTools(t *testing.T) {
 	// 1. Start Tool A
 	tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
 		CallID:  "A",
-		Display: domain.StringDisplay("Tool A"),
+		Display: domain.NewStringDisplay("Tool A"),
 	}})
 	m = tm.(*Model)
 
 	// 2. Start Tool B
 	tm, _ = m.Update(eventMsg{event: domain.ToolStartEvent{
 		CallID:  "B",
-		Display: domain.StringDisplay("Tool B"),
+		Display: domain.NewStringDisplay("Tool B"),
 	}})
 	m = tm.(*Model)
 
@@ -1076,7 +1073,7 @@ func TestModel_OrderedFlushing(t *testing.T) {
 	for _, id := range []string{"A", "B", "C"} {
 		tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
 			CallID:  id,
-			Display: domain.StringDisplay("Tool " + id),
+			Display: domain.NewStringDisplay("Tool " + id),
 		}})
 		m = tm.(*Model)
 	}
@@ -1176,7 +1173,7 @@ func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 
 	ts := &toolState{
 		id:      "test",
-		display: domain.StringDisplay("hello"),
+		display: domain.NewStringDisplay("hello"),
 		status:  ui.StatusSuccess,
 	}
 

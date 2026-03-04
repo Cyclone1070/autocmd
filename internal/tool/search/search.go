@@ -123,7 +123,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         domain.StringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
 	}, nil
 }
 

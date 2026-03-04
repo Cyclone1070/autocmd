@@ -121,7 +121,8 @@ func runAgent(cfg *config.Config, input string) error {
 	}
 
 	events := make(chan domain.Event, 100)
-	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, events)
+	broker := agent.NewEventBroker(events)
+	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, broker)
 
 	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
@@ -139,6 +140,8 @@ func runAgent(cfg *config.Config, input string) error {
 	done := make(chan error, 1)
 	go func() {
 		err := agentLoop.Run(ctx, sess, input)
+		broker.Close()
+		events <- domain.DoneEvent{}
 		close(events)
 		_ = store.Save(sess)
 		done <- err

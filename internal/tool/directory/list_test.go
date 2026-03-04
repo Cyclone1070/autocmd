@@ -282,8 +282,8 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	content, ok := display.(domain.StringDisplay)
 	if !ok {
 		t.Errorf("Display() returned wrong type")
-	} else if !strings.Contains(string(content), "Listing") {
-		t.Errorf("Display() content mismatch: %s", content)
+	} else if !strings.Contains(content.Content, "Listing") {
+		t.Errorf("Display() content mismatch: %s", content.Content)
 	}
 
 	// Verify Tree Output

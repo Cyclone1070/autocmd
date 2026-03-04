@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/ui/history"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func init() {
@@ -47,15 +50,16 @@ var historyCmd = &cobra.Command{
 			return fmt.Errorf("failed to load session %s: %w", sessionID, err)
 		}
 
-		fmt.Printf("Session: %s (%s)\n", session.ID, session.Updated.Format("2006-01-02 15:04:05"))
-		fmt.Println(strings.Repeat("-", 40))
+		width, height, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil {
+			width = cfg.UI.ChatWindowWidth
+			height = 20
+		}
 
-		for _, msg := range session.Messages {
-			role := strings.ToUpper(string(msg.Role))
-			fmt.Printf("[%s]:\n%s\n\n", role, msg.Content)
-			if len(msg.ToolCalls) > 0 {
-				fmt.Printf("  (Tool Calls: %d)\n\n", len(msg.ToolCalls))
-			}
+		m := history.NewModel(session.Messages, cfg.UI, width, height)
+		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+		if _, err := p.Run(); err != nil {
+			return fmt.Errorf("failed to run history viewer: %w", err)
 		}
 
 		return nil

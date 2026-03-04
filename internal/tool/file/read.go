@@ -133,7 +133,7 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		absPath:         abs,
 		offset:          req.Offset,
 		limit:           req.Limit,
-		display:         domain.StringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
 	}, nil
 }
 

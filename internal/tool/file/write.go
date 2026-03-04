@@ -131,7 +131,7 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (do
 		absPath:         abs,
 		relPath:         req.Path,
 		content:         []byte(req.Content),
-		display:         domain.StringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
 	}, nil
 }
 

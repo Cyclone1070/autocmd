@@ -85,7 +85,7 @@ func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (d
 	return &writeTodosInvocation{
 		store:   t.store,
 		todos:   req.Todos,
-		display: domain.StringDisplay(fmt.Sprintf("Writing %d todos", len(req.Todos))),
+		display: domain.NewStringDisplay(fmt.Sprintf("Writing %d todos", len(req.Todos))),
 	}, nil
 }
 

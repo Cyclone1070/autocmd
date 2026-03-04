@@ -35,7 +35,7 @@ func main() {
 
 		events <- domain.ToolStartEvent{
 			CallID:  "tool-0",
-			Display: domain.StringDisplay("Reading main.go"),
+			Display: domain.NewStringDisplay("Reading main.go"),
 		}
 		time.Sleep(1 * time.Second)
 		events <- domain.ToolEndEvent{CallID: "tool-0"}

@@ -46,7 +46,7 @@ func (t *ReadTodosTool) Prepare(ctx context.Context, params json.RawMessage) (do
 	// No validation needed for read - just return the invocation
 	return &readTodosInvocation{
 		store:   t.store,
-		display: domain.StringDisplay("Reading todos"),
+		display: domain.NewStringDisplay("Reading todos"),
 	}, nil
 }
 

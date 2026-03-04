@@ -40,7 +40,7 @@ func formatError(header string, err string, th *Theme) string {
 
 // RenderString renders StringDisplay.
 func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
-	s := string(d)
+	s := d.Content
 	if status == StatusError {
 		s = formatError(s, err, th)
 	}

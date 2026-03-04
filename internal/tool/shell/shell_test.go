@@ -154,7 +154,7 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	disp := inv.Display()
 	shellDisp, ok := disp.(domain.ShellDisplay)
 	require.True(t, ok)
-	assert.Equal(t, "[echo hello]", shellDisp.Command)
+	assert.Equal(t, "echo hello", shellDisp.Command)
 	assert.Equal(t, "say hello", shellDisp.Header)
 	assert.NotNil(t, shellDisp.Output)
 	assert.NotNil(t, shellDisp.Wait)
@@ -620,4 +620,31 @@ func TestShellTool_Display_Wait(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Wait should have unblocked")
 	}
+}
+func TestShellTool_CapturedOutput(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mockExec := &mockCommandExecutor{}
+	res := &executor.Result{Stdout: "captured\n", ExitCode: 0}
+	mockExec.On("RunStreaming", mock.Anything, []string{"echo", "captured"}, mock.Anything, mock.Anything, mock.Anything).
+		Return(newTestStreamingCmd("captured\n", res, nil), nil)
+
+	mockPath := &mockPathResolver{}
+	mockPath.On("Abs", mock.Anything).Return(".", nil)
+
+	tl := NewShellTool(&mockEnvFileOps{}, mockExec, cfg, mockPath)
+	ctx := context.Background()
+	params := `{"command": ["echo", "captured"], "description": "test capture"}`
+
+	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	require.NoError(t, err)
+
+	disp := inv.Display().(domain.ShellDisplay)
+	require.NotNil(t, disp.CapturedOutput)
+	assert.Equal(t, "", *disp.CapturedOutput)
+
+	// Execute should populate the pointer
+	_, err = inv.Execute(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "captured\n", *disp.CapturedOutput)
 }

@@ -42,9 +42,9 @@ func main() {
 
 		// 1. String Suite
 		runSuite("STRING",
-			domain.StringDisplay("String 1 (Slow)"),
-			domain.StringDisplay("String 2 (Fast)"),
-			domain.StringDisplay("String 3 (Medium/Fail)"))
+			domain.NewStringDisplay("String 1 (Slow)"),
+			domain.NewStringDisplay("String 2 (Fast)"),
+			domain.NewStringDisplay("String 3 (Medium/Fail)"))
 
 		// 2. Diff Suite
 		runSuite("DIFF",

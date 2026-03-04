@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -158,29 +159,35 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 		return nil, err
 	}
 
+	empty := ""
 	return &shellInvocation{
-		streamCmd:   streamCmd,
-		commandStr:  fmt.Sprintf("%v", req.Command),
-		description: req.Description,
+		streamCmd:      streamCmd,
+		commandStr:     strings.Join(req.Command, " "),
+		description:    req.Description,
+		capturedOutput: &empty,
 	}, nil
 }
 
 type shellInvocation struct {
-	streamCmd   *executor.StreamingCmd
-	commandStr  string
-	description string
+	streamCmd      *executor.StreamingCmd
+	commandStr     string
+	description    string
+	capturedOutput *string
 }
 
 func (i *shellInvocation) Display() domain.ToolDisplay {
-	return domain.ShellDisplay{
-		Header:  i.description,
-		Command: i.commandStr,
-		Output:  i.streamCmd.Output(),
-		Wait: func() {
+	d := domain.NewShellDisplay(
+		i.description,
+		i.commandStr,
+		i.streamCmd.Output(),
+		func() {
 			// Block until command completes by calling Wait (result discarded here)
 			_, _ = i.streamCmd.Wait()
 		},
-	}
+	)
+	// Override the default empty capture with our shared pointer
+	d.CapturedOutput = i.capturedOutput
+	return d
 }
 
 func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
@@ -194,17 +201,22 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
 	// Handle infrastructure errors
 	if err != nil {
 		if errors.Is(err, executor.ErrTimeout) {
-			return result.Stdout + "\n(Command timed out)", executor.ErrTimeout
+			return fmt.Sprintf("Error: %s\n(Command timed out)", result.Stdout), executor.ErrTimeout
 		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return "", err
 		}
-		return fmt.Sprintf("Execution error: %v", err), err
+		return fmt.Sprintf("Error: %v", err), err
 	}
 
 	// Format output
 	output := result.Stdout
 	exitCode := result.ExitCode
+
+	// Populate captured output for history
+	if i.capturedOutput != nil {
+		*i.capturedOutput = output
+	}
 
 	// Add truncation note if applicable
 	var truncationNote string

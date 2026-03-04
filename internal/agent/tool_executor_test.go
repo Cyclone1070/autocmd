@@ -12,6 +12,70 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// --- Mocks ---
+
+type mockTool struct {
+	name        string
+	description string
+	prepare     func(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
+}
+
+func (mt *mockTool) Name() string { return mt.name }
+func (mt *mockTool) Declaration() domain.Declaration {
+	return domain.Declaration{Name: mt.name, Description: mt.description}
+}
+func (mt *mockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+	if mt.prepare != nil {
+		return mt.prepare(ctx, params)
+	}
+	return &mockInvocation{content: "ok"}, nil
+}
+
+type mockInvocation struct {
+	content string
+	err     error
+	display domain.ToolDisplay
+	execute func(ctx context.Context) (string, error)
+}
+
+func (m *mockInvocation) Execute(ctx context.Context) (string, error) {
+	if m.execute != nil {
+		return m.execute(ctx)
+	}
+	return m.content, m.err
+}
+func (m *mockInvocation) Display() domain.ToolDisplay { return m.display }
+
+type mockToolRegistry struct {
+	tools map[string]domain.Tool
+}
+
+func newMockToolRegistry(tools []domain.Tool) *mockToolRegistry {
+	m := &mockToolRegistry{tools: make(map[string]domain.Tool)}
+	for _, t := range tools {
+		if t != nil {
+			m.tools[t.Name()] = t
+		}
+	}
+	return m
+}
+
+func (m *mockToolRegistry) Declarations() []domain.Declaration {
+	var decls []domain.Declaration
+	for _, t := range m.tools {
+		decls = append(decls, t.Declaration())
+	}
+	sort.Slice(decls, func(i, j int) bool {
+		return decls[i].Name < decls[j].Name
+	})
+	return decls
+}
+
+func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
+	t, ok := m.tools[name]
+	return t, ok
+}
+
 // --- Tests ---
 
 func TestRegister_DuplicateName(t *testing.T) {
@@ -44,7 +108,7 @@ func TestDeclarations_SortedByName(t *testing.T) {
 func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{})
 	executor := newToolExecutor(registry)
-	res, err := executor.execute(context.Background(), domain.ToolCall{
+	res, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-123",
 		Name: "unknown",
 	}, nil)
@@ -66,7 +130,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	_, err := executor.execute(context.Background(), domain.ToolCall{
+	_, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:        "tc-456",
 		Name:      "test",
 		Arguments: json.RawMessage(`{"value": "hello"}`),
@@ -86,7 +150,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	res, err := executor.execute(context.Background(), domain.ToolCall{
+	res, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-789",
 		Name: "test",
 	}, nil)
@@ -101,29 +165,29 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "result",
-				display: domain.StringDisplay("display output"),
+				display: domain.NewStringDisplay("display output"),
 			}, nil
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan domain.Event, 10)
-	_, err := executor.execute(context.Background(), domain.ToolCall{
+	sender := newMockEventSender(10)
+	_, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-1",
 		Name: "test",
-	}, events)
+	}, sender)
 
 	assert.NoError(t, err)
 
-	e1 := <-events
+	e1 := <-sender.events
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", start.CallID)
 	assert.Equal(t, "test", start.ToolName)
-	assert.Equal(t, domain.StringDisplay("display output"), start.Display)
+	assert.Equal(t, domain.NewStringDisplay("display output"), start.Display)
 
-	e2 := <-events
+	e2 := <-sender.events
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", end.CallID)
@@ -136,32 +200,28 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Command finished",
-				display: domain.ShellDisplay{
-					Command: "ls",
-					Output:  strings.NewReader("file1\nfile2\n"),
-					Wait:    func() {},
-				},
+				display: domain.NewShellDisplay("ls", "ls", strings.NewReader("file1\nfile2\n"), func() {}),
 			}, nil
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan domain.Event, 10)
-	_, err := executor.execute(context.Background(), domain.ToolCall{
+	sender := newMockEventSender(10)
+	_, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-shell",
 		Name: "shell",
-	}, events)
+	}, sender)
 
 	assert.NoError(t, err)
 
 	// ToolStartEvent
-	<-events
+	<-sender.events
 
 	var streamOutput strings.Builder
 loop:
 	for {
-		e := <-events
+		e := <-sender.events
 		switch ev := e.(type) {
 		case domain.ToolStreamEvent:
 			assert.Equal(t, "tc-shell", ev.CallID)
@@ -189,20 +249,20 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	events := make(chan domain.Event, 10)
-	res, err := executor.execute(context.Background(), domain.ToolCall{
+	sender := newMockEventSender(10)
+	res, _, err := executor.execute(context.Background(), domain.ToolCall{
 		ID:   "tc-fail",
 		Name: "fail",
-	}, events)
+	}, sender)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "Detailed error in content", res.Content)
 
 	// ToolStartEvent
-	<-events
+	<-sender.events
 
 	// ToolEndEvent
-	e2 := <-events
+	e2 := <-sender.events
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
@@ -216,7 +276,7 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	results := make(chan bool, 10)
 	for i := range 10 {
 		go func(id int) {
-			_, err := executor.execute(context.Background(), domain.ToolCall{
+			_, _, err := executor.execute(context.Background(), domain.ToolCall{
 				ID:        fmt.Sprintf("tc-%d", id),
 				Name:      "tool",
 				Arguments: json.RawMessage(`{}`),

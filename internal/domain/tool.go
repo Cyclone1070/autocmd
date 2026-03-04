@@ -52,34 +52,72 @@ type Invocation interface {
 // The UI uses type switches to render each type appropriately.
 // Must be in domain so tools can implement without importing workflow.
 type ToolDisplay interface {
+	Type() string
 	isToolDisplay()
 }
 
 // StringDisplay is for simple text output (most tools).
-type StringDisplay string
+type StringDisplay struct {
+	TypeField string `json:"type"`
+	Content   string `json:"content"`
+}
 
 func (StringDisplay) isToolDisplay() {}
+func (s StringDisplay) Type() string { return s.TypeField }
+
+// NewStringDisplay creates a new StringDisplay with correct type.
+func NewStringDisplay(content string) StringDisplay {
+	return StringDisplay{TypeField: "string", Content: content}
+}
 
 // DiffDisplay is for file edit operations with unified diff content.
-// DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
-	Header  string // e.g. "Edit config.yaml"
-	Added   int    // Lines added
-	Removed int    // Lines removed
-	Diff    string // Unified diff content
+	TypeField string `json:"type"`
+	Header    string `json:"header"`  // e.g. "Edit config.yaml"
+	Added     int    `json:"added"`   // Lines added
+	Removed   int    `json:"removed"` // Lines removed
+	Diff      string `json:"diff"`    // Unified diff content
 }
 
 func (DiffDisplay) isToolDisplay() {}
+func (d DiffDisplay) Type() string { return d.TypeField }
+
+// NewDiffDisplay creates a new DiffDisplay with correct type.
+func NewDiffDisplay(header string, added, removed int, diff string) DiffDisplay {
+	return DiffDisplay{
+		TypeField: "diff",
+		Header:    header,
+		Added:     added,
+		Removed:   removed,
+		Diff:      diff,
+	}
+}
 
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
-	Header  string    // Description from tool (e.g. "Installing dependencies")
-	Command string    // The command being run (e.g. "npm install")
-	Output  io.Reader // Stream stdout/stderr
-	Wait    func()    // Wait for execution to finish
+	TypeField      string    `json:"type"`
+	Header         string    `json:"header"`          // Description from tool (e.g. "Installing dependencies")
+	Command        string    `json:"command"`         // The command being run (e.g. "npm install")
+	CapturedOutput *string   `json:"captured_output"` // Pointer to raw output captured after execution (baked)
+	Output         io.Reader `json:"-"`               // Stream stdout/stderr (transient)
+	Wait           func()    `json:"-"`               // Wait for execution to finish (transient)
 }
 
 func (ShellDisplay) isToolDisplay() {}
+func (s ShellDisplay) Type() string { return s.TypeField }
+
+// NewShellDisplay creates a new ShellDisplay with correct type.
+func NewShellDisplay(header, command string, output io.Reader, wait func()) ShellDisplay {
+	empty := ""
+	return ShellDisplay{
+		TypeField:      "shell",
+		Header:         header,
+		Command:        command,
+		Output:         output,
+		Wait:           wait,
+		CapturedOutput: &empty,
+	}
+}
 
 // Tool defines the interface for individual tools.
 type Tool interface {

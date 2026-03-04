@@ -41,6 +41,9 @@ func NewGlamourRenderer(width int) (Renderer, error) {
 	style.H1.Underline = ptr(true)
 	style.H1.Upper = ptr(true)
 
+	// Disable document end padding
+	style.Document.BlockSuffix = ""
+
 	tr, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),

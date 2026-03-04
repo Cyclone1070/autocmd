@@ -41,14 +41,14 @@ func assertGolden(t *testing.T, name string, actual string) {
 
 func TestRenderString_Running(t *testing.T) {
 	th := newTestTheme(t)
-	display := domain.StringDisplay("Reading massive_file.txt...")
+	display := domain.NewStringDisplay("Reading massive_file.txt...")
 	output := RenderString(th, display, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderString_Running", output)
 }
 
 func TestRenderString_ErrorWrap(t *testing.T) {
 	th := newTestTheme(t)
-	display := domain.StringDisplay("Reading file")
+	display := domain.NewStringDisplay("Reading file")
 	output := RenderString(th, display, StatusError, "permission denied", "✗")
 	assertGolden(t, "RenderString_Error_Wrap", output)
 }

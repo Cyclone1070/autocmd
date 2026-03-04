@@ -127,7 +127,7 @@ func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.StringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
 	}, nil
 }
 

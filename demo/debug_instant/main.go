@@ -25,7 +25,7 @@ func main() {
 
 		events <- domain.ToolStartEvent{
 			CallID:  "tool-0",
-			Display: domain.StringDisplay("This tool call display should be sandwiched."),
+			Display: domain.NewStringDisplay("This tool call display should be sandwiched."),
 		}
 		events <- domain.ToolEndEvent{CallID: "tool-0"}
 

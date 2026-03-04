@@ -137,7 +137,7 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (doma
 		config:         t.config,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
-		display:        domain.StringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
+		display:        domain.NewStringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
 	}, nil
 }
 

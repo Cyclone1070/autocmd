@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -12,7 +13,7 @@ import (
 type Loop struct {
 	llm          domain.LLM
 	toolExecutor *toolExecutor
-	events       chan<- domain.Event
+	events       eventSender
 	cfg          *config.Config
 }
 
@@ -21,7 +22,7 @@ func NewLoop(
 	llm domain.LLM,
 	toolRegistry toolRegistry,
 	cfg *config.Config,
-	events chan<- domain.Event,
+	events eventSender,
 ) *Loop {
 	if cfg == nil {
 		panic("cfg is required")
@@ -57,10 +58,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		}
 
 		if l.events != nil {
-			select {
-			case l.events <- domain.DoneEvent{}:
-			default:
-			}
+			// DoneEvent is now emitted by the caller (root.go)
 		}
 	}()
 
@@ -71,7 +69,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		}
 
 		if l.events != nil {
-			l.events <- domain.ThinkingEvent{}
+			l.events.Send(domain.ThinkingEvent{})
 		}
 
 		stream, err := l.llm.Stream(ctx, session.Messages, l.toolExecutor.declarations())
@@ -87,7 +85,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			case domain.TextChunk:
 				msg.Content += c.Text
 				if l.events != nil {
-					l.events <- domain.TextEvent(c)
+					l.events.Send(domain.TextEvent(c))
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)
@@ -105,12 +103,45 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			return nil
 		}
 
-		for _, tc := range msg.ToolCalls {
-			toolResp, err := l.toolExecutor.execute(ctx, tc, l.events)
-			if err != nil {
-				return fmt.Errorf("tools.Execute (%s): %w", tc.Name, err)
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+		toolResponses := make([]domain.Message, len(msg.ToolCalls))
+
+		for i, tc := range msg.ToolCalls {
+			wg.Add(1)
+			go func(idx int, call domain.ToolCall) {
+				defer wg.Done()
+
+				resp, disp, err := l.toolExecutor.execute(ctx, call, l.events)
+				if err != nil {
+					// We've already handled individual tool errors inside toolExecutor.execute
+					// which returns a domain.Message with the error for the LLM.
+					// If there's a serious infrastructure error (context cancelled), we stop.
+					return
+				}
+
+				mu.Lock()
+				defer mu.Unlock()
+
+				if disp != nil {
+					if msg.ToolDisplays == nil {
+						msg.ToolDisplays = make(map[string]domain.ToolDisplay)
+					}
+					msg.ToolDisplays[call.ID] = disp
+				}
+				toolResponses[idx] = resp
+			}(i, tc)
+		}
+
+		wg.Wait()
+
+		// Final update to the assistant message that launched the calls
+		session.Messages[len(session.Messages)-1] = msg
+		// Append all responses in the correct order
+		for _, r := range toolResponses {
+			if r.Role != "" {
+				session.Messages = append(session.Messages, r)
 			}
-			session.Messages = append(session.Messages, toolResp)
 		}
 	}
 

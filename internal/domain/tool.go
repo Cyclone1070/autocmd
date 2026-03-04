@@ -108,14 +108,13 @@ func (s ShellDisplay) Type() string { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
 func NewShellDisplay(header, command string, output io.Reader, wait func()) ShellDisplay {
-	empty := ""
 	return ShellDisplay{
 		TypeField:      "shell",
 		Header:         header,
 		Command:        command,
 		Output:         output,
 		Wait:           wait,
-		CapturedOutput: &empty,
+		CapturedOutput: nil,
 	}
 }
 

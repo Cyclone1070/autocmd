@@ -69,7 +69,7 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 		Header:  "file.go",
 		Added:   5,
 		Removed: 2,
-		Diff:    " @@ -1,2 +1,2 @@\n-old\n+new",
+		Diff:    "-old\n+new",
 	}
 	output := RenderDiff(60, th, diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Success_WithStats", output)

@@ -174,3 +174,42 @@ func TestDivider_Color(t *testing.T) {
 	renderedAssistant := RenderMessage(messages, 1, nil, theme, 80, true)
 	assert.Contains(t, renderedAssistant, expectedAssistantDivider, "ASSISTANT divider should use muted color")
 }
+func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
+	// RED PHASE: This test should fail because tool box is currently trimmed.
+	theme := newTestTheme()
+	width := 80
+	renderer := ui.NewGlamourRenderer(width, true)
+
+	tcID := "1"
+	msg := domain.Message{
+		Role:    domain.RoleAssistant,
+		Content: "thought",
+		ToolCalls: []domain.ToolCall{
+			{
+				ID:   tcID,
+				Name: "shell",
+			},
+		},
+		ToolDisplays: map[string]domain.ToolDisplay{
+			tcID: domain.NewShellDisplay("header", "ls", nil, nil),
+		},
+	}
+
+	var sb strings.Builder
+	renderAssistantMessage(&sb, []domain.Message{msg}, 0, renderer, theme, width, false)
+	rendered := sb.String()
+
+	// Re-rendering a box to see its start
+	rawBox := theme.Box("header", width-2, ui.StatusSuccess)
+	assert.True(t, strings.HasPrefix(rawBox, "\n"), "Raw theme.Box should start with a newline")
+
+	// We verify that the rendered history contains the box (starting with its unique top border)
+	// and that it is preceded by at least one newline (for spacing).
+	topBorder := "╭──────────────────────────────────────────────────────────────────────────────╮"
+	assert.Contains(t, rendered, topBorder, "Rendered history should contain the tool box top border")
+
+	// Check that the character immediately preceding the top border is a newline.
+	borderIdx := strings.Index(rendered, topBorder)
+	assert.Greater(t, borderIdx, 0, "Top border should not be at the very start")
+	assert.Equal(t, uint8('\n'), rendered[borderIdx-1], "Top border should be preceded by a newline")
+}

@@ -143,7 +143,10 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		}
 
 		if rendered != "" {
-			fmt.Fprint(sb, theme.Box(rendered, boxWidth, status))
+			// Boxes already have their own internal vertical padding.
+			// We only want a single newline to separate them from text or other boxes.
+			boxed := strings.TrimLeft(theme.Box(rendered, boxWidth, status), "\n")
+			fmt.Fprint(sb, boxed)
 		}
 	}
 }

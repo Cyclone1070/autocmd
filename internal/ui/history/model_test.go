@@ -100,3 +100,35 @@ func TestModel_ResizeBehavior(t *testing.T) {
 		assert.Greater(t, m2.topIdx, 0)
 	})
 }
+
+func TestIssue_History_ViewportGapAccumulation(t *testing.T) {
+	// This test ensures that YOffset does not exceed mathematical bounds
+	// due to the newline fusion over-counting bug.
+	// Prepending messages must correctly account for the true line count of
+	// the joined string rather than individual heights.
+
+	cfg := config.DefaultConfig().UI
+	var messages []domain.Message
+	// Provide many messages to ensure we have content to prepend.
+	for i := 0; i < 50; i++ {
+		messages = append(messages, domain.Message{Role: domain.RoleUser, Content: "filler\n"})
+	}
+
+	// 1. Initialize with height 20.
+	// initializeContent renders from messages backward up to limit=height*2 (40 lines).
+	m := NewModel(messages, cfg, 80, 20)
+
+	// 2. refreshViewport triggers if YOffset < height.
+	// It must increment YOffset exactly by the number of mathematical lines added.
+	m.refreshViewport()
+
+	totalLines := m.viewport.TotalLineCount()
+	maxAllowedY := totalLines - m.height
+	if maxAllowedY < 0 {
+		maxAllowedY = 0
+	}
+
+	assert.LessOrEqual(t, m.viewport.YOffset, maxAllowedY,
+		"YOffset (%d) should be within content bounds [%d]. Failure indicates a blank gap at the bottom.",
+		m.viewport.YOffset, maxAllowedY)
+}

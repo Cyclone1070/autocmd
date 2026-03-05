@@ -7,6 +7,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/ui/history"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -56,7 +57,8 @@ var historyCmd = &cobra.Command{
 			height = 20
 		}
 
-		m := history.NewModel(session.Messages, cfg.UI, width, height)
+		isDark := lipgloss.HasDarkBackground()
+		m := history.NewModel(session.Messages, cfg.UI, width, height, history.WithIsDark(isDark))
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run history viewer: %w", err)

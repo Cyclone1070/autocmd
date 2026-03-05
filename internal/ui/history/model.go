@@ -40,6 +40,13 @@ func WithRenderer(r ui.Renderer) Option {
 	}
 }
 
+// WithIsDark sets the dark mode flag for the model.
+func WithIsDark(isDark bool) Option {
+	return func(m *Model) {
+		m.isDark = isDark
+	}
+}
+
 // NewModel creates a new history model.
 func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int, opts ...Option) *Model {
 	m := &Model{
@@ -51,12 +58,17 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 		topIdx:           0,
 		bottomIdx:        0,
 		reachedTop:       false,
-		isDark:           lipgloss.HasDarkBackground(),
+		isDark:           false, // Default, will be overridden by options or polled on-demand
 	}
 	m.width = m.calculateWidth(width)
 
 	for _, opt := range opts {
 		opt(m)
+	}
+
+	// If isDark wasn't provided, we poll it. But ideally it's passed from cmd/
+	if !m.isDark && m.renderer == nil {
+		m.isDark = lipgloss.HasDarkBackground()
 	}
 
 	if m.renderer == nil {
@@ -87,7 +99,10 @@ func (m *Model) initializeContent() {
 	for m.topIdx >= 0 {
 		rendered := m.renderMessage(m.topIdx)
 		renderedParts = append([]string{rendered}, renderedParts...)
-		currentHeight += lipgloss.Height(rendered)
+
+		// Use exact height of joined parts to avoid the newline fusion bug
+		m.renderedBlock = strings.Join(renderedParts, "")
+		currentHeight = lipgloss.Height(m.renderedBlock)
 		m.topIdx--
 
 		if currentHeight >= limit {
@@ -118,13 +133,20 @@ func (m *Model) refreshViewport() {
 	// Use one screen height as the safety margin.
 	for !m.reachedTop && m.viewport.YOffset < m.height {
 		rendered := m.renderMessage(m.topIdx)
-		h := lipgloss.Height(rendered)
+
+		// Record the previous line count before we add the new string
+		oldTotal := m.viewport.TotalLineCount()
 
 		m.renderedBlock = rendered + m.renderedBlock
 		m.viewport.SetContent(m.renderedBlock)
 
-		// Shift YOffset down so the user stays at the same visual location relative to bottom
-		m.viewport.YOffset += h
+		// Calculate exactly how many virtual lines were added.
+		// We do this instead of lipgloss.Height() because joining two strings
+		// that both end in newlines results in 1 fewer line than the sum of their individual heights.
+		linesAdded := m.viewport.TotalLineCount() - oldTotal
+
+		// Shift YOffset down by exactly the number of lines introduced
+		m.viewport.YOffset += linesAdded
 		m.topIdx--
 		if m.topIdx < 0 {
 			m.reachedTop = true
@@ -149,6 +171,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
+	// Update sub-models first so they have correct dimensions before our logic runs
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -166,13 +192,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.Width = m.width
 		m.viewport.Height = m.height
-		// Always re-initialize content to fill the new viewport and anchor to bottom,
-		// but it will be fast if the cache wasn't cleared.
+		// Always re-initialize content to fill the new viewport and anchor to bottom
 		m.initializeContent()
 	}
-
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
 
 	m.refreshViewport()
 

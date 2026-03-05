@@ -34,3 +34,69 @@ func TestModel_WidthCapping(t *testing.T) {
 	m = tm.(*Model)
 	assert.Equal(t, 30, m.width)
 }
+
+func TestModel_EmptyMessages_NoPanic(t *testing.T) {
+	cfg := config.DefaultConfig().UI
+	messages := []domain.Message{}
+	m := NewModel(messages, cfg, 80, 20)
+
+	// Should not panic on resize
+	assert.NotPanics(t, func() {
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	})
+	assert.True(t, m.reachedTop)
+}
+
+func TestModel_ResizeBehavior(t *testing.T) {
+	cfg := config.UIConfig{ChatWindowWidth: 100}
+	messages := []domain.Message{
+		{Role: domain.RoleUser, Content: "hello"},
+		{Role: domain.RoleAssistant, Content: "hi there"},
+		{Role: domain.RoleUser, Content: "how are you?"},
+		{Role: domain.RoleAssistant, Content: "i am good"},
+	}
+
+	t.Run("HeightOnlyResize_PreservesCache", func(t *testing.T) {
+		m := NewModel(messages, cfg, 80, 20)
+		// Trigger some rendering
+		m.initializeContent()
+		initialCacheSize := len(m.renderedMessages)
+		assert.Greater(t, initialCacheSize, 0)
+
+		// Resize height only
+		tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+		m2 := tm.(*Model)
+
+		assert.Equal(t, initialCacheSize, len(m2.renderedMessages), "Cache should be preserved when width stays the same")
+	})
+
+	t.Run("WidthResize_ClearsCache", func(t *testing.T) {
+		m := NewModel(messages, cfg, 80, 20)
+		m.initializeContent()
+
+		// Resize width
+		tm, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+		m2 := tm.(*Model)
+
+		assert.Equal(t, len(messages), len(m2.renderedMessages), "Cache should be reset and re-populated with newly rendered messages")
+	})
+
+	t.Run("ResizeSmaller_CanScrollToTop", func(t *testing.T) {
+		// Start with 10 messages in a tall window - everything fits
+		var manyMsg []domain.Message
+		for i := 0; i < 10; i++ {
+			manyMsg = append(manyMsg, domain.Message{Role: domain.RoleUser, Content: "msg"})
+		}
+
+		m := NewModel(manyMsg, cfg, 80, 100) // 100 lines height
+		assert.True(t, m.reachedTop, "Should reach top when all messages fit")
+
+		// Resize to very short window
+		tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 2})
+		m2 := tm.(*Model)
+
+		// With height=2, limit=4 lines. 10 messages won't fit.
+		assert.False(t, m2.reachedTop, "reachedTop should be reset so user can scroll up to load earlier messages")
+		assert.Greater(t, m2.topIdx, 0)
+	})
+}

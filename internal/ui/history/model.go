@@ -75,6 +75,7 @@ func (m *Model) initializeContent() {
 		return
 	}
 
+	m.reachedTop = false
 	m.bottomIdx = len(m.messages) - 1
 	m.topIdx = m.bottomIdx
 
@@ -155,13 +156,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
+		newWidth := m.calculateWidth(msg.Width)
+		if newWidth != m.width {
+			m.width = newWidth
+			m.renderer, _ = ui.NewGlamourRenderer(m.width, m.isDark)
+			// Reset rendered cache only on width change as it affects wrapping.
+			m.renderedMessages = make(map[int]string)
+		}
 		m.height = msg.Height
-		m.width = m.calculateWidth(msg.Width)
-		m.renderer, _ = ui.NewGlamourRenderer(m.width, m.isDark)
 		m.viewport.Width = m.width
 		m.viewport.Height = m.height
-		// Reset everything on resize.
-		m.renderedMessages = make(map[int]string)
+		// Always re-initialize content to fill the new viewport and anchor to bottom,
+		// but it will be fast if the cache wasn't cleared.
 		m.initializeContent()
 	}
 

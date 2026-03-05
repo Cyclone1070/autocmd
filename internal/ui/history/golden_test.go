@@ -1,0 +1,186 @@
+package history
+
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/stretchr/testify/assert"
+)
+
+var update = flag.Bool("update", false, "update golden files")
+
+type TestElement struct {
+	ID   string
+	Msg  domain.Message
+	Desc string
+}
+
+func getHistoryElements() []TestElement {
+	captured := "output line 1\noutput line 2"
+	return []TestElement{
+		{
+			ID: "TXT",
+			Msg: domain.Message{
+				Role:    domain.RoleAssistant,
+				Content: "This is a paragraph of text.",
+			},
+		},
+		{
+			ID: "QUOTE",
+			Msg: domain.Message{
+				Role:    domain.RoleAssistant,
+				Content: "> This is a blockquote.\n> It has multiple lines.",
+			},
+		},
+		{
+			ID: "LIST",
+			Msg: domain.Message{
+				Role:    domain.RoleAssistant,
+				Content: "- Item 1\n- Item 2\n  - Nested Item",
+			},
+		},
+		{
+			ID: "CODE",
+			Msg: domain.Message{
+				Role:    domain.RoleAssistant,
+				Content: "```go\nfunc hello() {\n\tfmt.Println(\"world\")\n}\n```",
+			},
+		},
+		{ID: "H1", Msg: domain.Message{Role: domain.RoleAssistant, Content: "# Header 1"}},
+		{ID: "H2", Msg: domain.Message{Role: domain.RoleAssistant, Content: "## Header 2"}},
+		{ID: "H3", Msg: domain.Message{Role: domain.RoleAssistant, Content: "### Header 3"}},
+		{ID: "H4", Msg: domain.Message{Role: domain.RoleAssistant, Content: "#### Header 4"}},
+		{ID: "H5", Msg: domain.Message{Role: domain.RoleAssistant, Content: "##### Header 5"}},
+		{ID: "H6", Msg: domain.Message{Role: domain.RoleAssistant, Content: "###### Header 6"}},
+		{
+			ID: "TOOL_OK",
+			Msg: domain.Message{
+				Role: domain.RoleAssistant,
+				ToolCalls: []domain.ToolCall{
+					{ID: "tc-ok", Name: "shell"},
+				},
+				ToolDisplays: map[string]domain.ToolDisplay{
+					"tc-ok": domain.ShellDisplay{
+						TypeField:      "shell",
+						Header:         "Running Tests",
+						Command:        "go test ./...",
+						CapturedOutput: &captured,
+					},
+				},
+			},
+		},
+		{
+			ID: "TOOL_ERR",
+			Msg: domain.Message{
+				Role: domain.RoleAssistant,
+				ToolCalls: []domain.ToolCall{
+					{ID: "tc-err", Name: "shell"},
+				},
+				ToolDisplays: map[string]domain.ToolDisplay{
+					"tc-err": domain.ShellDisplay{
+						TypeField: "shell",
+						Header:    "Failing Command",
+						Command:   "false",
+					},
+				},
+			},
+		},
+		{
+			ID: "THINK",
+			Msg: domain.Message{
+				Role:    domain.RoleAssistant,
+				Content: "✔ Thought for 1s",
+			},
+		},
+	}
+}
+
+func TestHistory_GoldenCombinations(t *testing.T) {
+	elements := getHistoryElements()
+	theme := newTestTheme()
+	width := 80
+	isDark := true
+	renderer := ui.NewGlamourRenderer(width, isDark)
+
+	var goldenOutput bytes.Buffer
+
+	// 1. Singles
+	for _, e := range elements {
+		name := fmt.Sprintf("SINGLE_%s", e.ID)
+		msg := createHistoryMessage(e)
+		renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+	}
+
+	// 2. Pairs
+	for _, e1 := range elements {
+		for _, e2 := range elements {
+			name := fmt.Sprintf("PAIR_%s_%s", e1.ID, e2.ID)
+			msg := createHistoryMessage(e1, e2)
+			renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+		}
+	}
+
+	// 3. Triples
+	for _, e1 := range elements {
+		for _, e2 := range elements {
+			for _, e3 := range elements {
+				name := fmt.Sprintf("TRIPLE_%s_%s_%s", e1.ID, e2.ID, e3.ID)
+				msg := createHistoryMessage(e1, e2, e3)
+				renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+			}
+		}
+	}
+
+	goldenPath := filepath.Join("testdata", "history_combos.golden")
+	if *update {
+		err := os.MkdirAll("testdata", 0755)
+		assert.NoError(t, err)
+		err = os.WriteFile(goldenPath, goldenOutput.Bytes(), 0644)
+		assert.NoError(t, err)
+		t.Logf("Updated golden file: %s", goldenPath)
+	} else {
+		expected, err := os.ReadFile(goldenPath)
+		if err != nil {
+			t.Fatalf("Failed to read golden file: %v. Run with -update to create it.", err)
+		}
+		assert.Equal(t, string(expected), goldenOutput.String(), "History UI regression detected! Rendered combinations do not match golden file.")
+	}
+}
+func createHistoryMessage(elems ...TestElement) domain.Message {
+	var contents []string
+	var calls []domain.ToolCall
+	displays := make(map[string]domain.ToolDisplay)
+
+	for _, e := range elems {
+		if e.Msg.Content != "" {
+			contents = append(contents, e.Msg.Content)
+		}
+		calls = append(calls, e.Msg.ToolCalls...)
+		for k, v := range e.Msg.ToolDisplays {
+			displays[k] = v
+		}
+	}
+
+	return domain.Message{
+		Role:         domain.RoleAssistant,
+		Content:      strings.Join(contents, "\n\n"),
+		ToolCalls:    calls,
+		ToolDisplays: displays,
+	}
+}
+
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []domain.Message, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
+	var sb strings.Builder
+	renderAssistantMessage(&sb, msgs, 0, renderer, theme, width, isDark)
+
+	w.WriteString(fmt.Sprintf("=== START [%s] ===\n", name))
+	w.WriteString(sb.String())
+	w.WriteString(fmt.Sprintf("\n=== END [%s] ===\n\n", name))
+}

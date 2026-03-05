@@ -1,11 +1,14 @@
 package history
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -140,4 +143,34 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 
 	// Should contain the error prefix indicator (X or similar depending on theme)
 	assert.Contains(t, rendered, "✗")
+}
+
+func TestDivider_Color(t *testing.T) {
+	// Force color profile for consistent testing of escape codes
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii) // Reset after test
+
+	cfg := config.DefaultConfig().UI
+	theme := ui.NewTheme(cfg)
+
+	// Create expected USER divider (primary color)
+	primaryStyle := lipgloss.NewStyle().Foreground(theme.PrimaryColor())
+	expectedUserDivider := primaryStyle.Render(strings.Repeat("-", 80))
+
+	// Create expected ASSISTANT divider (muted color)
+	mutedStyle := lipgloss.NewStyle().Foreground(theme.MutedColor())
+	expectedAssistantDivider := mutedStyle.Render(strings.Repeat("-", 80))
+
+	messages := []domain.Message{
+		{Role: domain.RoleUser, Content: "user content"},
+		{Role: domain.RoleAssistant, Content: "assistant content"},
+	}
+
+	// Render USER message
+	renderedUser := RenderMessage(messages, 0, nil, theme, 80, false)
+	assert.Contains(t, renderedUser, expectedUserDivider, "USER divider should use primary color")
+
+	// Render ASSISTANT message
+	renderedAssistant := RenderMessage(messages, 1, nil, theme, 80, true)
+	assert.Contains(t, renderedAssistant, expectedAssistantDivider, "ASSISTANT divider should use muted color")
 }

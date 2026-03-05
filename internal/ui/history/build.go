@@ -36,9 +36,9 @@ func RenderMessage(messages []domain.Message, idx int, renderer ui.Renderer, the
 	return sb.String()
 }
 
-func renderDivider(sb *strings.Builder, theme *ui.Theme, width int, includeLeadingNewline bool) {
+func renderDivider(sb *strings.Builder, theme *ui.Theme, width int, color lipgloss.AdaptiveColor, includeLeadingNewline bool) {
 	line := strings.Repeat("-", width)
-	style := lipgloss.NewStyle().Foreground(theme.MutedColor())
+	style := lipgloss.NewStyle().Foreground(color)
 	prefix := ""
 	if includeLeadingNewline {
 		prefix = "\n"
@@ -47,7 +47,7 @@ func renderDivider(sb *strings.Builder, theme *ui.Theme, width int, includeLeadi
 }
 
 func renderUserMessage(sb *strings.Builder, msg domain.Message, idx int, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
-	renderDivider(sb, theme, width, includeLeadingNewline)
+	renderDivider(sb, theme, width, theme.PrimaryColor(), includeLeadingNewline)
 
 	style := lipgloss.NewStyle().
 		Foreground(theme.PrimaryColor()).
@@ -75,7 +75,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 	}
 
 	if printHeader {
-		renderDivider(sb, theme, width, includeLeadingNewline)
+		renderDivider(sb, theme, width, theme.MutedColor(), includeLeadingNewline)
 
 		style := lipgloss.NewStyle().
 			Foreground(theme.MutedColor()).

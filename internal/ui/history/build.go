@@ -143,7 +143,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		}
 
 		if rendered != "" {
-			fmt.Fprintf(sb, "%s\n", theme.Box(rendered, boxWidth, status))
+			fmt.Fprint(sb, theme.Box(rendered, boxWidth, status))
 		}
 	}
 }

@@ -42,8 +42,8 @@ func NewTheme(cfg config.UIConfig) *Theme {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.muted).
 		Padding(0, 0).
-		MarginTop(1).
-		MarginBottom(1)
+		MarginTop(0).
+		MarginBottom(0)
 
 	return t
 }
@@ -71,7 +71,7 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 
 func (t *Theme) Box(content string, width int, status ToolStatus) string {
 	borderColor := t.colorForStatus(status)
-	return t.box.BorderForeground(borderColor).Width(width).Render(content)
+	return "\n" + t.box.BorderForeground(borderColor).Width(width).Render(content) + "\n"
 }
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {

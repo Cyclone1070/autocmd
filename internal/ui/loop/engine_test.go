@@ -1249,3 +1249,29 @@ func TestThinking_Cancelled(t *testing.T) {
 	style := lipgloss.NewStyle().Foreground(m.theme.ErrorColor())
 	assert.Contains(t, history, style.Render("Thought for 5s"))
 }
+
+func TestModel_ToolSpacingConsistency(t *testing.T) {
+	events := make(chan domain.Event)
+	m := NewModel(events, config.DefaultConfig().UI)
+	// Force a consistent width for testing
+	m.width = 80
+
+	// Test the Theme block directly
+	rendered := m.theme.Box("content", 78, ui.StatusSuccess)
+
+	// 1. Check for leading and trailing newlines (self-contained block)
+	assert.True(t, strings.HasPrefix(rendered, "\n"), "Theme.Box should start with a newline to provide gap")
+	assert.True(t, strings.HasSuffix(rendered, "\n"), "Theme.Box should end with a newline to reset cursor")
+
+	// 2. Check for exactly one blank line between two tools joined together
+	double := rendered + rendered
+	assert.Contains(t, double, "\n\n", "Joined boxes should have exactly one blank line gap")
+
+	// 3. Verify no space-based margins remaining in theme style
+	styleLines := strings.Split(rendered, "\n")
+	for _, l := range styleLines {
+		if l != "" && strings.TrimSpace(l) == "" {
+			assert.Fail(t, "Found a line of spaces (Lipgloss margin). Use real newlines instead.")
+		}
+	}
+}

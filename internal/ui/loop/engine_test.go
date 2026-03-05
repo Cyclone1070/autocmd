@@ -95,12 +95,12 @@ func (o *outputTracker) handleMsg(msg tea.Msg) {
 }
 
 // NewTestModel creates a model with a mock renderer for literal string matching.
-func NewTestModel(events chan domain.Event) *Model {
+func NewTestModel(events chan domain.Event, tracker *outputTracker) *Model {
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
 	m := NewModel(events, cfg, WithFlush(func(content string) tea.Cmd {
-		if currentTracker != nil {
-			currentTracker.signals = append(currentTracker.signals, content)
+		if tracker != nil {
+			tracker.signals = append(tracker.signals, content)
 		}
 		// We still execute the actual printf so history capture works too
 		return tea.Printf("%s", content)
@@ -111,8 +111,9 @@ func NewTestModel(events chan domain.Event) *Model {
 
 // msgQueue is a simple queue for processing messages sequentially in tests.
 type msgQueue struct {
-	m    *Model
-	msgs []tea.Msg
+	m       *Model
+	msgs    []tea.Msg
+	tracker *outputTracker
 }
 
 func (q *msgQueue) push(cmds ...tea.Cmd) {
@@ -128,8 +129,8 @@ func (q *msgQueue) step() bool {
 	msg := q.msgs[0]
 	q.msgs = q.msgs[1:]
 
-	if currentTracker != nil {
-		currentTracker.handleMsg(msg)
+	if q.tracker != nil {
+		q.tracker.handleMsg(msg)
 	}
 
 	tm, cmd := q.m.Update(msg)
@@ -148,9 +149,10 @@ func (q *msgQueue) drain() {
 	}
 }
 
-var currentTracker *outputTracker
+// Removed global currentTracker
 
 func TestModel_Update_SmoothStreaming(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
@@ -196,6 +198,7 @@ func extractTickFromMsgs(msgs []tea.Msg) tea.Msg {
 }
 
 func TestModel_Update_TextEvent(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
@@ -223,6 +226,7 @@ func TestModel_Update_TextEvent(t *testing.T) {
 }
 
 func TestModel_View_Truncation(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 	m.height = 5
@@ -245,6 +249,7 @@ func TestModel_View_Truncation(t *testing.T) {
 }
 
 func TestModel_Update_ThinkingEvent(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -304,6 +309,7 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 }
 
 func TestModel_Update_EventLoopContinuity(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -347,6 +353,7 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 }
 
 func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -392,6 +399,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 }
 
 func TestModel_Update_ToolLifecycle(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -468,16 +476,14 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 }
 
 func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
 
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
-
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 	q.push(func() tea.Msg { return eventMsg{event: domain.ThinkingEvent{}} })
 	q.drain()
 	_ = q.m
@@ -537,18 +543,16 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 }
 
 func TestModel_Update_DoneEvent_Flush(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
-
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
 	// 1. Send text but don't tick it yet
 	text := "Final unflushed text"
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: text}} })
 	q.drain()
 
@@ -573,15 +577,14 @@ func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 }
 
 func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Start Text 1 (Turn 1)
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 1"}} })
@@ -619,15 +622,14 @@ func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 }
 
 func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Text 1 (Turn 1)
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 1"}} })
@@ -662,15 +664,14 @@ func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 }
 
 func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Send text that will take multiple ticks
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Slowly being printed text"}} })
@@ -686,15 +687,14 @@ func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
 }
 
 func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 20)
-	m := NewModel(events, config.DefaultConfig().UI)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
-	q := &msgQueue{m: m}
+	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Text (Turn 1)
 	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Busy text"}} })
@@ -728,11 +728,10 @@ func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
 }
 
 func TestFlush_Natural(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	// 1. Send text that contains a finished block (H1) and an unfinished tail (Block 2).
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "## H1\n\nBETA"}})
@@ -756,11 +755,10 @@ func TestFlush_Natural(t *testing.T) {
 }
 
 func TestFlush_OnThinkingStart(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	// 1. Send text and pulse it into the buffer (as unsafe tail)
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "ALPHA"}})
@@ -786,11 +784,10 @@ func TestFlush_OnThinkingStart(t *testing.T) {
 }
 
 func TestFlush_OnThinkingEnd(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	m.isThinking = true
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "BETA"}})
@@ -814,11 +811,10 @@ func TestFlush_OnThinkingEnd(t *testing.T) {
 }
 
 func TestFlush_OnToolStart(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "GAMMA"}})
 	m = tm.(*Model)
@@ -840,11 +836,10 @@ func TestFlush_OnToolStart(t *testing.T) {
 }
 
 func TestFlush_OnToolEnd(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	m.activeTools["T1"] = &toolState{id: "T1", status: ui.StatusRunning}
 	m.toolOrder = []string{"T1"}
@@ -868,11 +863,10 @@ func TestFlush_OnToolEnd(t *testing.T) {
 }
 
 func TestFlush_OnDone(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "EPSILON"}})
 	m = tm.(*Model)
@@ -894,11 +888,10 @@ func TestFlush_OnDone(t *testing.T) {
 }
 
 func TestFlush_OnInterrupt(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	// 1. Send text and pulse once to split between buffer and queue
 	tm, _ := m.Update(eventMsg{event: domain.TextEvent{Text: "KEEPDISCARD"}})
@@ -925,12 +918,10 @@ func TestFlush_OnInterrupt(t *testing.T) {
 }
 
 func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
-	m.isThinking = true // Ensure spinner.Update is called
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	// 1. Manually seed printQueue as if a handler forgot to flush
 	// (or as if we want to ensure any branch flushes)
@@ -948,8 +939,10 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 }
 
 func TestIssue_RenderingFallback(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 
 	// 1. Setup a renderer that fails
 	m.stream.renderer = &engineMockRenderer{
@@ -957,9 +950,6 @@ func TestIssue_RenderingFallback(t *testing.T) {
 			return markdown
 		},
 	}
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
 	// 2. Put something in the buffer
 	m.stream.buffer = "RAW_MARKDOWN"
@@ -976,6 +966,7 @@ func TestIssue_RenderingFallback(t *testing.T) {
 }
 
 func TestIssue_PureView_DeterministicDuration(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -996,6 +987,7 @@ func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 }
 
 func TestModel_Spinner_Clockwise(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event)
 	m := NewModel(events, config.DefaultConfig().UI)
 
@@ -1004,8 +996,10 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 }
 
 func TestModel_ParallelTools(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 
 	// 1. Start Tool A
 	tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
@@ -1034,9 +1028,6 @@ func TestModel_ParallelTools(t *testing.T) {
 	m = tm.(*Model)
 
 	// 4. End Tool B (Parallel finishing)
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
 	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{
 		CallID: "B",
@@ -1066,8 +1057,10 @@ func TestModel_ParallelTools(t *testing.T) {
 }
 
 func TestModel_OrderedFlushing(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
 
 	// 1. Start 3 tools: A, B, C
 	for _, id := range []string{"A", "B", "C"} {
@@ -1077,10 +1070,6 @@ func TestModel_OrderedFlushing(t *testing.T) {
 		}})
 		m = tm.(*Model)
 	}
-
-	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
 
 	// 2. End Tool B (Middle)
 	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "B"}})
@@ -1126,8 +1115,9 @@ func (o *outputTracker) allHistory() string {
 }
 
 func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
+	m := NewTestModel(events, nil)
 
 	// Send a BigTextEvent
 	msg := eventMsg{event: domain.TextEvent{Text: "1234567890"}} // 10 chars
@@ -1190,15 +1180,14 @@ func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 }
 
 func TestThinking_Colors(t *testing.T) {
+	t.Parallel()
 	origProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(origProfile)
 
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	// 1. Running state
 	m.isThinking = true
@@ -1224,15 +1213,14 @@ func TestThinking_Colors(t *testing.T) {
 }
 
 func TestThinking_Cancelled(t *testing.T) {
+	t.Parallel()
 	origProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(origProfile)
 
 	events := make(chan domain.Event, 10)
-	m := NewTestModel(events)
 	tracker := &outputTracker{}
-	currentTracker = tracker
-	defer func() { currentTracker = nil }()
+	m := NewTestModel(events, tracker)
 
 	m.isThinking = true
 	m.thinkStart = time.Now().Add(-5 * time.Second)
@@ -1251,6 +1239,7 @@ func TestThinking_Cancelled(t *testing.T) {
 }
 
 func TestModel_ToolSpacingConsistency(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event)
 	m := NewModel(events, config.DefaultConfig().UI)
 	// Force a consistent width for testing

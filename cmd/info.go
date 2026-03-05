@@ -59,15 +59,20 @@ var infoCmd = &cobra.Command{
 
 		contextWindow := llmInstance.ContextWindow()
 		usedTokens := 0
+		var computeErr error
 		if len(sessMessages) > 0 {
-			usedTokens, _ = llmInstance.ComputeTokens(ctx, sessMessages)
+			usedTokens, computeErr = llmInstance.ComputeTokens(ctx, sessMessages)
 		}
 
-		percentage := 0.0
-		if contextWindow > 0 {
-			percentage = float64(usedTokens) / float64(contextWindow) * 100
+		if computeErr != nil {
+			cmd.Printf("Context Window: ?/%d tokens (token count failed)\n", contextWindow)
+		} else {
+			percentage := 0.0
+			if contextWindow > 0 {
+				percentage = float64(usedTokens) / float64(contextWindow) * 100
+			}
+			cmd.Printf("Context Window: %.1f%% used (%d/%d tokens)\n", percentage, usedTokens, contextWindow)
 		}
-		cmd.Printf("Context Window: %.1f%% used (%d/%d tokens)\n", percentage, usedTokens, contextWindow)
 
 		return nil
 	},

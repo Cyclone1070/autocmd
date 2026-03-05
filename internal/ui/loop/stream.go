@@ -28,53 +28,47 @@ func NewStream(renderer ui.Renderer) *Stream {
 }
 
 // Append adds a chunk of text and returns any complete blocks that are safe to flush.
-func (s *Stream) Append(chunk string) ([]string, error) {
+func (s *Stream) Append(chunk string) []string {
 	s.buffer += chunk
 
 	split := s.findSafeSplit()
 	if split <= 0 {
-		return nil, nil
+		return nil
 	}
 
 	safeContent := s.buffer[:split]
 
 	// Perform Delta Rendering
-	rendered, err := s.renderDelta(safeContent)
-	if err != nil {
-		return nil, err
-	}
+	rendered := s.renderDelta(safeContent)
 
 	strippedRendered, margin := splitTrailingNewlines(rendered)
 	s.lastMargin = margin
 
 	// Update lastBlock context for next block.
 	s.lastBlock = s.extractLastBlockSource(safeContent)
-	lastANSI, _ := s.renderer.Render(s.lastBlock)
+	lastANSI := s.renderer.Render(s.lastBlock)
 	s.lastBlockANSI, _ = splitTrailingNewlines(lastANSI)
 
 	s.buffer = s.buffer[split:]
-	return []string{strippedRendered}, nil
+	return []string{strippedRendered}
 }
 
 // Flush returns any remaining content in the buffer.
-func (s *Stream) Flush() ([]string, error) {
+func (s *Stream) Flush() []string {
 	if s.buffer == "" {
 		if s.lastMargin != "" {
 			m := s.lastMargin
 			s.lastMargin = ""
-			return []string{m}, nil
+			return []string{m}
 		}
-		return nil, nil
+		return nil
 	}
-	rendered, err := s.renderDelta(s.buffer)
-	if err != nil {
-		return nil, err
-	}
+	rendered := s.renderDelta(s.buffer)
 	s.buffer = ""
 	s.lastBlock = "" // Reset context
 	s.lastBlockANSI = ""
 	s.lastMargin = ""
-	return []string{rendered}, nil
+	return []string{rendered}
 }
 
 // Pending returns the temporary rendered ANSI for the dynamic view.
@@ -82,7 +76,7 @@ func (s *Stream) Pending() string {
 	if s.buffer == "" {
 		return s.lastMargin
 	}
-	rendered, _ := s.renderDelta(s.buffer)
+	rendered := s.renderDelta(s.buffer) // Removed error handling
 	return rendered
 }
 
@@ -301,19 +295,16 @@ func (s *Stream) extractLastBlockSource(content string) string {
 }
 
 // renderDelta renders newContent with correct spacing relative to lastBlock.
-func (s *Stream) renderDelta(newContent string) (string, error) {
+func (s *Stream) renderDelta(newContent string) string {
 	if s.lastBlock == "" {
 		return s.renderer.Render(newContent)
 	}
 
 	full := s.lastBlock + newContent
-	fullANSI, err := s.renderer.Render(full)
-	if err != nil {
-		return "", err
-	}
+	fullANSI := s.renderer.Render(full)
 
 	if strings.HasPrefix(fullANSI, s.lastBlockANSI) {
-		return fullANSI[len(s.lastBlockANSI):], nil
+		return fullANSI[len(s.lastBlockANSI):]
 	}
 
 	// Fallback to fresh render if context-aware delta fails (Issue 6)

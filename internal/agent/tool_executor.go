@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -26,7 +27,10 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	t, ok := e.registry.Get(tc.Name)
 	if !ok {
 		decls := e.declarations()
-		declsJSON, _ := json.MarshalIndent(decls, "", "  ")
+		declsJSON, jerr := json.MarshalIndent(decls, "", "  ")
+		if jerr != nil {
+			slog.Warn("Failed to marshal tool declarations for LLM prompt", "err", jerr)
+		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Name, declsJSON)
 
 		return domain.Message{
@@ -42,7 +46,10 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		if ctx.Err() != nil {
 			return domain.Message{}, nil, ctx.Err()
 		}
-		declJSON, _ := json.MarshalIndent(t.Declaration(), "", "  ")
+		declJSON, jerr := json.MarshalIndent(t.Declaration(), "", "  ")
+		if jerr != nil {
+			slog.Warn("Failed to marshal tool declaration", "tool", t.Name(), "err", jerr)
+		}
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Name, err, declJSON)
 
 		return domain.Message{

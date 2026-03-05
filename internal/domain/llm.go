@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 )
 
 // LLM is a self-contained language model instance.
@@ -65,6 +66,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 				Type string `json:"type"`
 			}
 			if err := json.Unmarshal(raw, &typeExtract); err != nil {
+				slog.Warn("Failed to extract type from tool display entry", "id", id, "err", err)
 				continue
 			}
 
@@ -73,16 +75,22 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 				var d StringDisplay
 				if err := json.Unmarshal(raw, &d); err == nil {
 					m.ToolDisplays[id] = d
+				} else {
+					slog.Warn("Failed to unmarshal StringDisplay", "id", id, "err", err)
 				}
 			case "diff":
 				var d DiffDisplay
 				if err := json.Unmarshal(raw, &d); err == nil {
 					m.ToolDisplays[id] = d
+				} else {
+					slog.Warn("Failed to unmarshal DiffDisplay", "id", id, "err", err)
 				}
 			case "shell":
 				var d ShellDisplay
 				if err := json.Unmarshal(raw, &d); err == nil {
 					m.ToolDisplays[id] = d
+				} else {
+					slog.Warn("Failed to unmarshal ShellDisplay", "id", id, "err", err)
 				}
 			}
 		}

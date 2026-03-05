@@ -86,7 +86,7 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 	}
 
 	isDark := lipgloss.HasDarkBackground()
-	renderer, _ := ui.NewGlamourRenderer(width, isDark)
+	renderer := ui.NewGlamourRenderer(width, isDark)
 
 	s := spinner.New()
 	s.Spinner = spinner.Spinner{
@@ -130,8 +130,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.queue = nil
 			m.isStreaming = false
 			// DISCARD buffered text, only flush currently visible tail (stream buffer)
-			safe, _ := m.stream.Flush()
-			m.printQueue = append(m.printQueue, safe...)
+			flushed := m.stream.Flush()
+			m.printQueue = append(m.printQueue, flushed...)
 
 			m.flushThinking(ui.StatusError)
 
@@ -275,12 +275,9 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) flushAll() {
-	safe, err := m.stream.Flush()
-	if err != nil {
-		m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-		m.stream.ClearBuffer()
-	} else if len(safe) > 0 {
-		m.printQueue = append(m.printQueue, safe...)
+	flushed := m.stream.Flush()
+	if len(flushed) > 0 {
+		m.printQueue = append(m.printQueue, flushed...)
 	}
 
 	// Force graduate everything remaining (e.g. on DoneEvent)
@@ -303,12 +300,9 @@ func (m *Model) flushFinishedTools() {
 		}
 
 		// Flush any pending text before tool box to preserve sequence
-		safe, err := m.stream.Flush()
-		if err != nil {
-			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-			m.stream.ClearBuffer()
-		} else if len(safe) > 0 {
-			m.printQueue = append(m.printQueue, safe...)
+		flushed := m.stream.Flush()
+		if len(flushed) > 0 {
+			m.printQueue = append(m.printQueue, flushed...)
 		}
 
 		m.printQueue = append(m.printQueue, m.renderTool(ts))
@@ -332,36 +326,23 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 	switch ev := event.(type) {
 	case domain.ThinkingEvent:
 		// Flush any pending text before switching to thinking state
-		safe, err := m.stream.Flush()
-		if err != nil {
-			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-			m.stream.ClearBuffer()
-		} else {
-			m.printQueue = append(m.printQueue, safe...)
-		}
+		flushed := m.stream.Flush()
+		m.printQueue = append(m.printQueue, flushed...)
 
 		m.isThinking = true
 		m.thinkStart = time.Now()
 		cmds = append(cmds, m.spinner.Tick)
 
 	case domain.TextEvent:
-		safe, err := m.stream.Append(ev.Text)
-		if err != nil {
-			// Fallback: append raw chunk if rendering fails
-			m.printQueue = append(m.printQueue, ev.Text)
-		} else if len(safe) > 0 {
-			m.printQueue = append(m.printQueue, safe...)
+		flushed := m.stream.Append(ev.Text)
+		if len(flushed) > 0 {
+			m.printQueue = append(m.printQueue, flushed...)
 		}
 
 	case domain.ToolStartEvent:
 		// Flush any pending text before starting a tool
-		safe, err := m.stream.Flush()
-		if err != nil {
-			m.printQueue = append(m.printQueue, m.stream.RawBuffer())
-			m.stream.ClearBuffer()
-		} else {
-			m.printQueue = append(m.printQueue, safe...)
-		}
+		flushed := m.stream.Flush()
+		m.printQueue = append(m.printQueue, flushed...)
 
 		ts := &toolState{
 			id:      ev.CallID,

@@ -60,12 +60,7 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 	}
 
 	if m.renderer == nil {
-		var err error
-		m.renderer, err = ui.NewGlamourRenderer(m.width, m.isDark)
-		if err != nil {
-			// Fall back to no renderer, which triggers raw markdown display
-			m.renderer = nil
-		}
+		m.renderer = ui.NewGlamourRenderer(m.width, m.isDark)
 	}
 
 	m.viewport = viewport.New(m.width, height)
@@ -164,11 +159,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newWidth := m.calculateWidth(msg.Width)
 		if newWidth != m.width {
 			m.width = newWidth
-			var err error
-			m.renderer, err = ui.NewGlamourRenderer(m.width, m.isDark)
-			if err != nil {
-				m.renderer = nil
-			}
+			m.renderer = ui.NewGlamourRenderer(m.width, m.isDark)
 			// Reset rendered cache only on width change as it affects wrapping.
 			m.renderedMessages = make(map[int]string)
 		}

@@ -58,9 +58,7 @@ func renderUserMessage(sb *strings.Builder, msg domain.Message, idx int, rendere
 
 	content := msg.Content
 	if renderer != nil {
-		if rendered, err := renderer.Render(msg.Content); err == nil {
-			content = rendered
-		}
+		content = renderer.Render(msg.Content)
 	}
 	fmt.Fprintf(sb, "%s", content)
 }
@@ -90,9 +88,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 	if msg.Content != "" {
 		content := msg.Content
 		if renderer != nil {
-			if rendered, err := renderer.Render(msg.Content); err == nil {
-				content = rendered
-			}
+			content = renderer.Render(msg.Content)
 		}
 		fmt.Fprintf(sb, "%s", content)
 	}

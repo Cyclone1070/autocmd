@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -27,10 +29,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var debug bool
+
 var rootCmd = &cobra.Command{
 	Use:   "iav [prompt]",
 	Short: "IAV is an agentic AI coding assistant",
 	Args:  cobra.ArbitraryArgs,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		setupLogging()
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -44,6 +51,10 @@ var rootCmd = &cobra.Command{
 		input := strings.Join(args, " ")
 		return runAgent(cfg, input)
 	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging to ~/.config/iav/debug.log")
 }
 
 func Execute() {
@@ -160,4 +171,29 @@ func runAgent(cfg *config.Config, input string) error {
 
 	namingWg.Wait()
 	return nil
+}
+
+func setupLogging() {
+	if !debug {
+		slog.SetDefault(slog.New(slog.DiscardHandler))
+		return
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	logDir := filepath.Join(home, ".config", config.ConfigDir)
+	_ = os.MkdirAll(logDir, 0755)
+	logPath := filepath.Join(logDir, "debug.log")
+
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+
+	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(logger)
+	slog.Debug("Logging initialized")
 }

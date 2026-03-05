@@ -12,8 +12,8 @@ import (
 // mockRenderer just returns the input as is
 type mockRenderer struct{}
 
-func (m mockRenderer) Render(markdown string) (string, error) {
-	return markdown, nil
+func (m mockRenderer) Render(markdown string) string {
+	return markdown
 }
 
 // makeBlock returns a unique block of the given type with an index.
@@ -120,10 +120,7 @@ func TestStream_Split(t *testing.T) {
 				toAppend = gap + chunk
 			}
 
-			flushed, err := s.Append(toAppend)
-			if err != nil {
-				t.Fatalf("Step %d Append failed: %v", i, err)
-			}
+			flushed := s.Append(toAppend)
 			for _, f := range flushed {
 				accFlush.WriteString(f)
 			}
@@ -222,10 +219,7 @@ func TestStream_RenderConsistency(t *testing.T) {
 		t.Run(fmt.Sprintf("Giant_Stream_Gap_%q", gap), func(t *testing.T) {
 			t.Parallel()
 
-			renderer, err := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
-			if err != nil {
-				t.Fatalf("Failed to create renderer: %v", err)
-			}
+			renderer := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
 			s := NewStream(renderer)
 
 			var types []string
@@ -241,10 +235,7 @@ func TestStream_RenderConsistency(t *testing.T) {
 			}
 
 			fullMD := strings.Join(blocks, gap)
-			wantOut, err := renderer.Render(fullMD)
-			if err != nil {
-				t.Fatalf("Render failed: %v", err)
-			}
+			wantOut := renderer.Render(fullMD)
 
 			var streamedOut strings.Builder
 			for i := 0; i < len(blocks); i++ {
@@ -254,18 +245,12 @@ func TestStream_RenderConsistency(t *testing.T) {
 				} else {
 					toAppend = gap + blocks[i]
 				}
-				flushed, err := s.Append(toAppend)
-				if err != nil {
-					t.Fatalf("Append failed: %v", err)
-				}
+				flushed := s.Append(toAppend)
 				for _, f := range flushed {
 					streamedOut.WriteString(f)
 				}
 			}
-			finalFlush, err := s.Flush()
-			if err != nil {
-				t.Fatalf("Flush failed: %v", err)
-			}
+			finalFlush := s.Flush()
 			for _, f := range finalFlush {
 				streamedOut.WriteString(f)
 			}

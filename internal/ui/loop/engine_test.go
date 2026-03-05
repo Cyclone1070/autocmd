@@ -18,14 +18,14 @@ import (
 )
 
 type engineMockRenderer struct {
-	renderFunc func(markdown string) (string, error)
+	renderFunc func(markdown string) string
 }
 
-func (m *engineMockRenderer) Render(markdown string) (string, error) {
+func (m *engineMockRenderer) Render(markdown string) string {
 	if m.renderFunc != nil {
 		return m.renderFunc(markdown)
 	}
-	return markdown, nil
+	return markdown
 }
 
 // executeCmd recursively unwraps batches and executes each command.
@@ -230,7 +230,7 @@ func TestModel_View_Truncation(t *testing.T) {
 	longText := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
-	_, _ = m.stream.Append(longText)
+	_ = m.stream.Append(longText)
 
 	view := m.View()
 
@@ -953,8 +953,8 @@ func TestIssue_RenderingFallback(t *testing.T) {
 
 	// 1. Setup a renderer that fails
 	m.stream.renderer = &engineMockRenderer{
-		renderFunc: func(markdown string) (string, error) {
-			return "", fmt.Errorf("glamour failure")
+		renderFunc: func(markdown string) string {
+			return markdown
 		},
 	}
 	tracker := &outputTracker{}

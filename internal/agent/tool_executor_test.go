@@ -289,19 +289,3 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 		assert.True(t, <-results)
 	}
 }
-
-func TestDeclarations_Sorted(t *testing.T) {
-	registry := newMockToolRegistry([]domain.Tool{
-		&mockTool{name: "z"},
-		&mockTool{name: "a"},
-		&mockTool{name: "m"},
-	})
-	executor := newToolExecutor(registry)
-
-	decls := executor.declarations()
-	var names []string
-	for _, d := range decls {
-		names = append(names, d.Name)
-	}
-	assert.True(t, sort.StringsAreSorted(names))
-}

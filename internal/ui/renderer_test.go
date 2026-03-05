@@ -1,16 +1,130 @@
 package ui
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/stretchr/testify/assert"
 )
+
+// stripANSI removes ANSI escape codes from a string.
+func stripANSI(str string) string {
+	re := regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+	return re.ReplaceAllString(str, "")
+}
+
+func TestRenderer_RedBarSymmetry(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	markdown := "```go\nfunc hello() {}\n```"
+	rendered := r.Render(markdown)
+
+	lines := strings.Split(rendered, "\n")
+
+	// Check for the red bar character ┃
+	var barIndices []int
+	for i, line := range lines {
+		if strings.Contains(line, "┃") {
+			barIndices = append(barIndices, i)
+		}
+	}
+
+	// 1. Bar should exist
+	assert.NotEmpty(t, barIndices, "Should have a red vertical bar for code blocks")
+
+	// 2. Bar should be symmetric (at least one blank barred line at top and bottom)
+	topBlanks := 0
+	for i := 0; i < len(barIndices); i++ {
+		stripped := stripANSI(lines[barIndices[i]])
+		// Content is everything after the bar
+		content := strings.TrimSpace(strings.Replace(stripped, "┃", "", 1))
+		if content == "" {
+			topBlanks++
+		} else {
+			break
+		}
+	}
+
+	bottomBlanks := 0
+	for i := len(barIndices) - 1; i >= 0; i-- {
+		stripped := stripANSI(lines[barIndices[i]])
+		content := strings.TrimSpace(strings.Replace(stripped, "┃", "", 1))
+		if content == "" {
+			bottomBlanks++
+		} else {
+			break
+		}
+	}
+
+	assert.Equal(t, 1, topBlanks, "Should have exactly one blank barred line at top")
+	assert.Equal(t, 1, bottomBlanks, "Should have exactly one blank barred line at bottom")
+}
+
+func TestRenderer_BlockquoteAlignment(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	markdown := "> blockquote\n\n```go\ncode\n```"
+	rendered := r.Render(markdown)
+
+	lines := strings.Split(rendered, "\n")
+
+	var quoteBarPos = -1
+	var codeBarPos = -1
+
+	for _, line := range lines {
+		stripped := stripANSI(line)
+		if strings.Contains(stripped, "│") && quoteBarPos == -1 {
+			quoteBarPos = strings.Index(stripped, "│")
+		}
+		if strings.Contains(stripped, "┃") && codeBarPos == -1 {
+			codeBarPos = strings.Index(stripped, "┃")
+		}
+	}
+
+	assert.NotEqual(t, -1, quoteBarPos, "Should find blockquote bar")
+	assert.NotEqual(t, -1, codeBarPos, "Should find code block bar")
+	assert.Equal(t, quoteBarPos, codeBarPos, "Code bar should align perfectly with blockquote bar")
+}
+
+func TestRenderer_CodeBlockTrailingSpacing(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	markdown := "```go\ncode\n```\nFollow up text."
+	rendered := r.Render(markdown)
+
+	// We expect a sequence like:
+	// ... barred line ...
+	// (blank line)
+	// Follow up text.
+
+	lines := strings.Split(rendered, "\n")
+	var lastBarIdx = -1
+	for i, line := range lines {
+		if strings.Contains(line, "┃") {
+			lastBarIdx = i
+		}
+	}
+
+	assert.NotEqual(t, -1, lastBarIdx, "Should find code block bar")
+
+	// Check lines after the last bar
+	remaining := lines[lastBarIdx+1:]
+
+	// Filter out completely empty strings resulting from trailing newlines in Join
+	var nonEmtpy []string
+	for _, s := range remaining {
+		if s != "" {
+			nonEmtpy = append(nonEmtpy, s)
+		}
+	}
+
+	assert.GreaterOrEqual(t, len(nonEmtpy), 2, "Should have a blank line and then text after code block")
+	assert.Contains(t, stripANSI(nonEmtpy[len(nonEmtpy)-1]), "Follow up text", "Final line should be follow up text")
+
+	// The line immediately after the last bar should be blank (white space only)
+	assert.True(t, strings.TrimSpace(stripANSI(remaining[0])) == "", "Line immediately after code block should be blank")
+}
 
 // WrapGlamour adapts an existing glamour.TermRenderer to Renderer (for tests).
 func WrapGlamour(tr *glamour.TermRenderer) Renderer {
 	return &GlamourRenderer{tr: tr}
-}
-
-func TestPlaceHolder(t *testing.T) {
-	// Simple placeholder test to make the file valid and lint-free if needed
 }

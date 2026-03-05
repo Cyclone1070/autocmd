@@ -3,9 +3,17 @@ package ui
 import (
 	"log/slog"
 
+	"regexp"
+	"strings"
+
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
+)
+
+const (
+	codeStartMarker = "_IAV_CODE_START_"
+	codeEndMarker   = "_IAV_CODE_END_"
 )
 
 // Renderer renders markdown to ANSI strings. Failure should be handled internally.
@@ -15,7 +23,8 @@ type Renderer interface {
 
 // GlamourRenderer wraps glamour.TermRenderer to implement Renderer.
 type GlamourRenderer struct {
-	tr *glamour.TermRenderer
+	tr     *glamour.TermRenderer
+	isDark bool
 }
 
 // Render implements Renderer. On error, it returns the original markdown and logs.
@@ -25,7 +34,62 @@ func (g *GlamourRenderer) Render(markdown string) string {
 		slog.Warn("glamour render failed, falling back to raw text", "err", err)
 		return markdown
 	}
-	return rendered
+
+	// Post-process ONLY content between markers to add the red bar.
+	// We capture the entire line prefix to ensure absolute alignment with glamour's document layout.
+	re := regexp.MustCompile(`(?sm)^([^\n]*?)` + regexp.QuoteMeta(codeStartMarker) + `(.*?)\n?^([^\n]*?)` + regexp.QuoteMeta(codeEndMarker))
+
+	// Red color for the bar
+	red := "\x1b[38;2;240;93;94m" // #F05D5E (Light)
+	if g.isDark {
+		red = "\x1b[38;2;255;102;102m" // #FF6666 (Dark)
+	}
+	bar := red + "┃" + "\x1b[0m"
+
+	return re.ReplaceAllStringFunc(rendered, func(match string) string {
+		sub := re.FindStringSubmatch(match)
+		if len(sub) < 4 {
+			return match
+		}
+		prefix := sub[1]
+		if prefix == "" {
+			prefix = "  " // Fallback to standard document margin if marker was at start of line
+		}
+		content := sub[2]
+		lines := strings.Split(content, "\n")
+
+		// Helper to check if a line is blank (ignoring ANSI codes)
+		isBlank := func(s string) bool {
+			reANSI := regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+			stripped := reANSI.ReplaceAllString(s, "")
+			return strings.TrimSpace(stripped) == ""
+		}
+
+		// Trim leading/trailing empty lines from the code block itself
+		start := 0
+		for start < len(lines) && isBlank(lines[start]) {
+			start++
+		}
+		end := len(lines)
+		for end > start && isBlank(lines[end-1]) {
+			end--
+		}
+		coreLines := lines[start:end]
+
+		// Build the barred block
+		var result []string
+		// Add one blank barred line at top for symmetry
+		result = append(result, prefix+bar)
+		for _, line := range coreLines {
+			// Remove glamour's right-side padding before adding our bar
+			trimmedLine := strings.TrimRight(line, " ")
+			result = append(result, prefix+bar+" "+trimmedLine)
+		}
+		// Add one blank barred line at bottom
+		result = append(result, prefix+bar)
+
+		return strings.Join(result, "\n") + "\n"
+	})
 }
 
 // PassthroughRenderer is a no-op renderer that returns markdown as-is.
@@ -58,6 +122,13 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 	// Disable document end padding
 	style.Document.BlockSuffix = ""
 
+	// Set markers and disable default indentation/margin for precise post-processing
+	style.CodeBlock.BlockPrefix = codeStartMarker
+	style.CodeBlock.BlockSuffix = codeEndMarker
+	zero := uint(0)
+	style.CodeBlock.Indent = &zero
+	style.CodeBlock.Margin = &zero
+
 	tr, err := glamour.NewTermRenderer(
 		glamour.WithStyles(style),
 		glamour.WithWordWrap(width),
@@ -66,5 +137,5 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 		slog.Warn("failed to create glamour renderer, using passthrough", "err", err)
 		return &PassthroughRenderer{}
 	}
-	return &GlamourRenderer{tr: tr}
+	return &GlamourRenderer{tr: tr, isDark: isDark}
 }

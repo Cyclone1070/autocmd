@@ -321,6 +321,28 @@ func TestReadFile(t *testing.T) {
 		assertContains(t, output, "00002| line2")
 		assertContains(t, output, "(End of file - total 2 lines)")
 	})
+
+	t.Run("windows line endings normalization", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForRead(cfg)
+		checksumManager := newMockChecksumManagerForRead()
+		// Use Windows line endings
+		content := []byte("line1\r\nline2")
+		fs.createFile("/workspace/test.txt", content)
+
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		output, err := executeRead(t, readTool, &ReadFileRequest{Path: "test.txt"})
+		if err != nil {
+			t.Fatalf("Execute failed: %v", err)
+		}
+
+		// Verify output doesn't contain \r (it should be stripped if normalized)
+		if strings.Contains(output, "\r") {
+			t.Errorf("output still contains \\r: %q", output)
+		}
+		assertContains(t, output, "00001| line1")
+		assertContains(t, output, "00002| line2")
+	})
 }
 
 func assertContains(t *testing.T, s, substr string) {

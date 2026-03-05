@@ -167,7 +167,7 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
 	checksum := i.checksumManager.Compute([]byte(normalized))
 	i.checksumManager.Update(i.absPath, checksum)
 
-	lines := content.SplitLines(string(data))
+	lines := content.SplitLines(normalized)
 	paginatedLines, pagRes := pagination.ApplyPagination(lines, i.offset, i.limit)
 
 	startLine := i.offset + 1

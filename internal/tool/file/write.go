@@ -95,9 +95,7 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (do
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
 	}
-	if req.Content == "" {
-		return nil, fmt.Errorf("content is required")
-	}
+	/* Empty content allowed */
 	if int64(len(req.Content)) > t.config.Tools.MaxFileSize {
 		return nil, fmt.Errorf("content too large: %d bytes exceeds limit %d",
 			len(req.Content), t.config.Tools.MaxFileSize)

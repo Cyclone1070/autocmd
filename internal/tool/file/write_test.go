@@ -324,4 +324,26 @@ func TestWriteFile(t *testing.T) {
 			t.Errorf("expected error message about directories, got: %s", result)
 		}
 	})
+
+	t.Run("empty content allowed", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForWrite(cfg)
+		checksumManager := newMockChecksumManagerForWrite()
+
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		req := &WriteFileRequest{Path: "empty.txt", Content: ""}
+		_, err := executeWrite(t, writeTool, req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		data, err := fs.ReadFile("/workspace/empty.txt")
+		if err != nil {
+			t.Fatalf("failed to read created empty file: %v", err)
+		}
+		if len(data) != 0 {
+			t.Errorf("expected empty content, got %q", string(data))
+		}
+	})
 }

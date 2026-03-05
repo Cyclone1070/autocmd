@@ -116,16 +116,16 @@ func TestRenderShell_Error(t *testing.T) {
 }
 
 func TestPad_WithPrefix(t *testing.T) {
-	output := pad("Line1\nLine2", "->")
+	output := Pad("Line1\nLine2", "->")
 	assertGolden(t, "Pad_With_Prefix", output)
 }
 
 func TestPad_WithoutPrefix(t *testing.T) {
-	output := pad("Line1\nLine2", "")
+	output := Pad("Line1\nLine2", "")
 	assertGolden(t, "Pad_Without_Prefix", output)
 }
 
 func TestPad_EmptyInput(t *testing.T) {
-	output := pad("", "->")
+	output := Pad("", "->")
 	assertGolden(t, "Pad_Empty_Input", output)
 }

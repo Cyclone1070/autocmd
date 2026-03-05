@@ -13,10 +13,6 @@ import (
 
 // Pad adds the status prefix to the first line and standard indentation to others.
 func Pad(s string, prefix string) string {
-	return pad(s, prefix)
-}
-
-func pad(s string, prefix string) string {
 	lines := strings.Split(s, "\n")
 	w := lipgloss.Width(prefix)
 	if w == 0 {
@@ -44,7 +40,7 @@ func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err stri
 	if status == StatusError {
 		s = formatError(s, err, th)
 	}
-	return pad(s, prefix)
+	return Pad(s, prefix)
 }
 
 // RenderDiff renders DiffDisplay.
@@ -63,7 +59,7 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 	}
 
 	diffContent := colorizeDiff(d.Diff, th)
-	paddedDiff := pad(diffContent, "")
+	paddedDiff := Pad(diffContent, "")
 	sep := th.Separator(width, status)
 
 	return fmt.Sprintf(" %s %s \n%s\n%s",
@@ -86,7 +82,7 @@ func colorizeDiff(diff string, th *Theme) string {
 func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
 	sep := th.Separator(width, status)
 	header := d.Header
-	cmdLine := pad(fmt.Sprintf("$ %s", d.Command), "")
+	cmdLine := Pad(fmt.Sprintf("$ %s", d.Command), "")
 	if status == StatusError {
 		header = formatError(header, err, th)
 		return fmt.Sprintf(" %s %s \n%s\n%s", prefix, header, sep, cmdLine)
@@ -101,7 +97,7 @@ func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay,
 	}
 
 	content := strings.Join(visibleLines, "\n")
-	paddedContent := pad(content, "")
+	paddedContent := Pad(content, "")
 
 	return fmt.Sprintf(" %s %s \n%s\n%s\n%s\n%s",
 		prefix,

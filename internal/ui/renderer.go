@@ -51,9 +51,9 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 
 	// Match H1 foreground to other headings (H2) and restore bold/underline
 	style.H1.Color = style.H2.Color
-	style.H1.Bold = ptr(true)
-	style.H1.Underline = ptr(true)
-	style.H1.Upper = ptr(true)
+	style.H1.Bold = new(true)
+	style.H1.Underline = new(true)
+	style.H1.Upper = new(true)
 
 	// Disable document end padding
 	style.Document.BlockSuffix = ""
@@ -67,8 +67,4 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 		return &PassthroughRenderer{}
 	}
 	return &GlamourRenderer{tr: tr}
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }

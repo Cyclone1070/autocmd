@@ -151,10 +151,18 @@ func runAgent(cfg *config.Config, input string) error {
 	done := make(chan error, 1)
 	go func() {
 		err := agentLoop.Run(ctx, sess, input)
-		broker.Close()
-		events <- domain.DoneEvent{}
-		close(events)
+		// 1. DATA SAFETY FIRST: Save history immediately after loop returns.
+		// This ensures history is persisted even if the UI/Broker shutdown hangs.
 		_ = store.Save(sess)
+
+		// 2. UI CLEANUP: Signal the UI to finish up.
+		broker.Close()
+		select {
+		case events <- domain.DoneEvent{}:
+		default:
+			// UI already gone or buffer full, skip sentinel
+		}
+		close(events)
 		done <- err
 	}()
 

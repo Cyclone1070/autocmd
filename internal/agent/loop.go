@@ -57,9 +57,6 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			}
 		}
 
-		if l.events != nil {
-			// DoneEvent is now emitted by the caller (root.go)
-		}
 	}()
 
 	maxIterations := l.cfg.Tools.MaxIterations

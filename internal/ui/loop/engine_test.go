@@ -149,8 +149,6 @@ func (q *msgQueue) drain() {
 	}
 }
 
-// Removed global currentTracker
-
 func TestModel_Update_SmoothStreaming(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.Event, 10)
@@ -922,6 +920,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	events := make(chan domain.Event, 10)
 	tracker := &outputTracker{}
 	m := NewTestModel(events, tracker)
+	m.isThinking = true
 
 	// 1. Manually seed printQueue as if a handler forgot to flush
 	// (or as if we want to ensure any branch flushes)
@@ -1139,6 +1138,7 @@ func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 }
 
 func TestModel_Update_WindowSize_NoResize(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event)
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
@@ -1155,6 +1155,7 @@ func TestModel_Update_WindowSize_NoResize(t *testing.T) {
 }
 
 func TestModel_RenderTool_WidthConstraint(t *testing.T) {
+	t.Parallel()
 	events := make(chan domain.Event)
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80

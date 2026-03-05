@@ -69,8 +69,14 @@ func (b *EventBroker) run() {
 		case ev, ok := <-in:
 			if !ok {
 				// Input closed. Drain remaining queue then exit.
+				// We use a non-blocking send for the drain to prevent deadlocks
+				// if the UI has already stopped reading (e.g. on Ctrl+C).
 				for _, qe := range queue {
-					b.out <- qe
+					select {
+					case b.out <- qe:
+					default:
+						return
+					}
 				}
 				return
 			}

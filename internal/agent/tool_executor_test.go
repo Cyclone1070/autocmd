@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
@@ -267,6 +269,58 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
 	assert.Equal(t, "Execution failed", end.Error)
+}
+
+func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
+	t.Parallel()
+	// Mock an invocation that acts like a shell tool:
+	// It has an output stream and it returns an error in Execute.
+	output := io.NopCloser(strings.NewReader("some output"))
+
+	mt := &mockTool{
+		name: "shell",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: domain.NewShellDisplay("Header", "cmd", output, nil),
+				execute: func(ctx context.Context) (string, error) {
+					// Simulate execution failure
+					return "error content", fmt.Errorf("execution failed")
+				},
+			}, nil
+		},
+	}
+
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+	sender := newMockEventSender(10)
+
+	_, _, err := executor.execute(context.Background(), domain.ToolCall{
+		ID:   "call-1",
+		Name: "shell",
+	}, sender)
+
+	assert.NoError(t, err)
+
+	// Collect events sent to the UI
+	var endEvents []domain.ToolEndEvent
+	// Drain the sender channel to see what we received
+loop:
+	for {
+		select {
+		case ev := <-sender.events:
+			if ee, ok := ev.(domain.ToolEndEvent); ok {
+				endEvents = append(endEvents, ee)
+			}
+		case <-time.After(50 * time.Millisecond):
+			break loop
+		}
+	}
+
+	// REGRESSION SPECIFICATION:
+	// 1. Should receive EXACTLY one completion event.
+	// 2. The event MUST contain the true error status from Execute().
+	assert.Equal(t, 1, len(endEvents), "Must receive exactly ONE completion event (avoid race override). Got: %v", endEvents)
+	assert.Equal(t, "Execution failed", endEvents[0].Error, "Completion event must retain the execution error status")
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {

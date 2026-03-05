@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -73,8 +74,11 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	// We no longer wait for streaming to complete before returning from execute.
 	// The broker/Loop will handle the async nature of streaming.
 
+	var streamWG sync.WaitGroup
 	if sh, ok := display.(domain.ShellDisplay); ok && sh.Output != nil && events != nil {
+		streamWG.Add(1)
 		go func() {
+			defer streamWG.Done()
 			buf := make([]byte, 4096)
 			for {
 				n, err := sh.Output.Read(buf)
@@ -89,10 +93,6 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 				}
 			}
 
-			// ToolEndEvent is now sent by the goroutine after streaming finishes
-			events.Send(domain.ToolEndEvent{
-				CallID: tc.ID,
-			})
 		}()
 	}
 
@@ -118,9 +118,11 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		}, display, nil
 	}
 
-	// For non-streaming tools, we send the end event now.
-	// For streaming tools (shell), the goroutine above sends it.
-	if _, ok := display.(domain.ShellDisplay); !ok && events != nil {
+	// Ensure all streaming chunks are sent before sending the end event
+	streamWG.Wait()
+
+	// Always send the end event after Execute returns (regardless of tool type)
+	if events != nil {
 		events.Send(domain.ToolEndEvent{
 			CallID: tc.ID,
 		})

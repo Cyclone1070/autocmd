@@ -176,14 +176,12 @@ type shellInvocation struct {
 }
 
 func (i *shellInvocation) Display() domain.ToolDisplay {
-	d := domain.NewShellDisplay(
+	return domain.NewShellDisplay(
 		i.description,
 		i.commandStr,
 		i.streamCmd.Output(),
+		i.capturedOutput,
 	)
-	// Override the default empty capture with our shared pointer
-	d.CapturedOutput = i.capturedOutput
-	return d
 }
 
 func (i *shellInvocation) Execute(ctx context.Context) (string, error) {

@@ -398,7 +398,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	// 1. Tool Start
 	startEv := domain.ToolStartEvent{
 		CallID:  "123",
-		Display: domain.NewShellDisplay("Run tests", "go test ./...", nil),
+		Display: domain.NewShellDisplay("Run tests", "go test ./...", nil, nil),
 	}
 	m2, cmd := m.Update(eventMsg{event: startEv})
 	m = m2.(*Model)

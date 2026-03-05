@@ -106,13 +106,13 @@ func (ShellDisplay) isToolDisplay() {}
 func (s ShellDisplay) Type() string { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
-func NewShellDisplay(header, command string, output io.Reader) ShellDisplay {
+func NewShellDisplay(header, command string, output io.Reader, capturedOutput *string) ShellDisplay {
 	return ShellDisplay{
 		TypeField:      "shell",
 		Header:         header,
 		Command:        command,
 		Output:         output,
-		CapturedOutput: nil,
+		CapturedOutput: capturedOutput,
 	}
 }
 

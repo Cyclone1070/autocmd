@@ -100,20 +100,18 @@ type ShellDisplay struct {
 	Command        string    `json:"command"`         // The command being run (e.g. "npm install")
 	CapturedOutput *string   `json:"captured_output"` // Pointer to raw output captured after execution (baked)
 	Output         io.Reader `json:"-"`               // Stream stdout/stderr (transient)
-	Wait           func()    `json:"-"`               // Wait for execution to finish (transient)
 }
 
 func (ShellDisplay) isToolDisplay() {}
 func (s ShellDisplay) Type() string { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
-func NewShellDisplay(header, command string, output io.Reader, wait func()) ShellDisplay {
+func NewShellDisplay(header, command string, output io.Reader) ShellDisplay {
 	return ShellDisplay{
 		TypeField:      "shell",
 		Header:         header,
 		Command:        command,
 		Output:         output,
-		Wait:           wait,
 		CapturedOutput: nil,
 	}
 }

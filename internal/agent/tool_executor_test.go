@@ -200,7 +200,7 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Command finished",
-				display: domain.NewShellDisplay("ls", "ls", strings.NewReader("file1\nfile2\n"), func() {}),
+				display: domain.NewShellDisplay("ls", "ls", strings.NewReader("file1\nfile2\n")),
 			}, nil
 		},
 	}

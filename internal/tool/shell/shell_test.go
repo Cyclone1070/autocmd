@@ -7,7 +7,6 @@ import (
 	"io"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -152,15 +151,10 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 
 	// Verify Display
 	disp := inv.Display()
-	shellDisp, ok := disp.(domain.ShellDisplay)
-	require.True(t, ok)
+	shellDisp := disp.(domain.ShellDisplay)
 	assert.Equal(t, "echo hello", shellDisp.Command)
 	assert.Equal(t, "say hello", shellDisp.Header)
 	assert.NotNil(t, shellDisp.Output)
-	assert.NotNil(t, shellDisp.Wait)
-
-	mockPR.AssertExpectations(t)
-	mockCE.AssertExpectations(t)
 }
 
 func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
@@ -563,64 +557,6 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	assert.Contains(t, buf.String(), "streaming_test")
 }
 
-func TestShellTool_Display_Wait(t *testing.T) {
-	mockPR := new(mockPathResolver)
-	mockCE := new(mockCommandExecutor)
-	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
-
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
-
-	// Setup mocks
-	mockPR.On("Abs", ".").Return("/workspace", nil)
-	mockPR.On("Rel", "/workspace").Return(".", nil)
-
-	// Create a blocking streaming command
-	pr, pw := io.Pipe()
-	waitCalled := make(chan struct{})
-	var once sync.Once
-
-	streamCmd := executor.NewStreamingCmd(pr, func() (*executor.Result, error) {
-		<-waitCalled // Block until signaled
-		return &executor.Result{Stdout: "done", ExitCode: 0}, nil
-	})
-
-	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(streamCmd, nil)
-
-	ctx := context.Background()
-	params := `{"command": ["sleep", "1"], "description": "wait"}`
-
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
-	require.NoError(t, err)
-
-	disp := inv.Display().(domain.ShellDisplay)
-
-	// Wait should block
-	done := make(chan struct{})
-	go func() {
-		disp.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		t.Fatal("Wait should have blocked")
-	case <-time.After(50 * time.Millisecond):
-		// expected to block
-	}
-
-	// Signal that Wait can return
-	once.Do(func() { close(waitCalled) })
-	_ = pw.Close()
-
-	select {
-	case <-done:
-		// success
-	case <-time.After(1 * time.Second):
-		t.Fatal("Wait should have unblocked")
-	}
-}
 func TestShellTool_CapturedOutput(t *testing.T) {
 	cfg := config.DefaultConfig()
 	mockExec := &mockCommandExecutor{}

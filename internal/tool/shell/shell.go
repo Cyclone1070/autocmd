@@ -180,10 +180,6 @@ func (i *shellInvocation) Display() domain.ToolDisplay {
 		i.description,
 		i.commandStr,
 		i.streamCmd.Output(),
-		func() {
-			// Block until command completes by calling Wait (result discarded here)
-			_, _ = i.streamCmd.Wait()
-		},
 	)
 	// Override the default empty capture with our shared pointer
 	d.CapturedOutput = i.capturedOutput

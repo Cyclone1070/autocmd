@@ -140,7 +140,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if ts, ok := m.activeTools[id]; ok {
 					ts.status = ui.StatusError
 					ts.err = "Cancelled"
-					m.printQueue = append(m.printQueue, m.renderTool(ts))
+					m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
 				}
 			}
 
@@ -284,7 +284,7 @@ func (m *Model) flushAll() {
 	for len(m.toolOrder) > 0 {
 		id := m.toolOrder[0]
 		ts := m.activeTools[id]
-		m.printQueue = append(m.printQueue, m.renderTool(ts))
+		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -305,7 +305,7 @@ func (m *Model) flushFinishedTools() {
 			m.printQueue = append(m.printQueue, flushed...)
 		}
 
-		m.printQueue = append(m.printQueue, m.renderTool(ts))
+		m.printQueue = append(m.printQueue, m.renderTool(ts)+"\n")
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}

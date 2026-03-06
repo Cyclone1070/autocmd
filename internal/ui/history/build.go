@@ -54,7 +54,7 @@ func renderUserMessage(sb *strings.Builder, msg domain.Message, idx int, rendere
 		Bold(true)
 
 	// Divider already handles vertical spacing
-	fmt.Fprintf(sb, "%s\n", style.Render("YOU:"))
+	fmt.Fprintf(sb, "%s\n", style.Render("USER:"))
 
 	content := msg.Content
 	if renderer != nil {

@@ -213,3 +213,35 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	assert.Greater(t, borderIdx, 0, "Top border should not be at the very start")
 	assert.Equal(t, uint8('\n'), rendered[borderIdx-1], "Top border should be preceded by a newline")
 }
+
+func TestMessageHeaders(t *testing.T) {
+	// Force color profile for consistent testing
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	theme := newTestTheme()
+	width := 80
+
+	messages := []domain.Message{
+		{Role: domain.RoleUser, Content: "hello"},
+		{Role: domain.RoleAssistant, Content: "hi"},
+	}
+
+	t.Run("Assistant Header", func(t *testing.T) {
+		rendered := RenderMessage(messages, 1, nil, theme, width, false)
+
+		// Should contain "ASSISTANT:" in bold
+		style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
+		expected := style.Render("ASSISTANT:")
+		assert.Contains(t, rendered, expected)
+	})
+
+	t.Run("User Header", func(t *testing.T) {
+		rendered := RenderMessage(messages, 0, nil, theme, width, false)
+
+		// Should contain "USER:" in bold
+		style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
+		expected := style.Render("USER:")
+		assert.Contains(t, rendered, expected)
+	})
+}

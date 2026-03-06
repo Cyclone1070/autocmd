@@ -60,7 +60,7 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 		Target: "Edit align.go",
 		Diff:   "\n-line1\n+line2",
 	}
-	output := RenderDiff(60, th, diff, StatusRunning, "", "⣾")
+	output := RenderDiff(60, 10, th, diff, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderDiff_DiffBody_Alignment", output)
 }
 
@@ -73,7 +73,7 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 		Removed: 2,
 		Diff:    "-old\n+new",
 	}
-	output := RenderDiff(60, th, diff, StatusSuccess, "", "✓")
+	output := RenderDiff(60, 10, th, diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Success_WithStats", output)
 }
 
@@ -83,7 +83,7 @@ func TestRenderDiff_Error(t *testing.T) {
 		Header: "Missing file",
 		Target: "Edit file.go",
 	}
-	output := RenderDiff(60, th, diff, StatusError, "file not found", "✗")
+	output := RenderDiff(60, 10, th, diff, StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", output)
 }
 
@@ -96,7 +96,7 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 		Removed: 5,
 		Diff:    "+ new auth logic\n- old auth logic",
 	}
-	output := RenderDiff(80, th, diff, StatusSuccess, "", "✓")
+	output := RenderDiff(80, 10, th, diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_ThreePartLayout", output)
 }
 
@@ -129,6 +129,18 @@ func TestRenderShell_Error(t *testing.T) {
 	}
 	output := RenderShell(40, 12, th, display, "", StatusError, "exit status 1", "✗")
 	assertGolden(t, "RenderShell_Error", output)
+}
+
+func TestRenderDiff_LongDiffTruncation(t *testing.T) {
+	th := newTestTheme(t)
+	diff := domain.DiffDisplay{
+		Header: "Massive Change",
+		Target: "Edit big.go",
+		Diff:   "line 1\nline 2\nline 3\nline 4\nline 5",
+	}
+	// Limit to 2 lines, should show truncation indicator
+	output := RenderDiff(60, 2, th, diff, StatusSuccess, "", "✓")
+	assertGolden(t, "RenderDiff_Long_Diff_Truncation", output)
 }
 
 func TestPad_WithPrefix(t *testing.T) {

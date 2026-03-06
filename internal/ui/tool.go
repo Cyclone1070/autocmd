@@ -44,7 +44,7 @@ func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err stri
 }
 
 // RenderDiff renders DiffDisplay.
-func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
+func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
 	header := d.Header
 	target := d.Target
 	if target == "" {
@@ -54,7 +54,8 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 	if status == StatusError {
 		header = formatError(header, err, th)
 		header = th.Muted("# " + header)
-		return Pad(header, prefix)
+		parts := []string{header, target}
+		return Pad(strings.Join(parts, "\n\n"), prefix)
 	}
 
 	// Add stats to target if success
@@ -67,6 +68,15 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 
 	header = th.Muted("# " + header)
 	diffContent := colorizeDiff(d.Diff, th)
+
+	// Apply truncation if needed
+	lines := strings.Split(diffContent, "\n")
+	if len(lines) > maxDiffHeight && maxDiffHeight > 0 {
+		overflow := len(lines) - maxDiffHeight
+		visible := lines[overflow:]
+		indicator := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
+		diffContent = indicator + "\n" + strings.Join(visible, "\n")
+	}
 
 	// Build parts with blank line separation
 	parts := []string{
@@ -107,12 +117,18 @@ func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay,
 
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	var visibleLines []string
-	if len(lines) > shellOutputHeight {
-		visibleLines = lines[len(lines)-shellOutputHeight:]
+	var indicator string
+	if len(lines) > shellOutputHeight && shellOutputHeight > 0 {
+		overflow := len(lines) - shellOutputHeight
+		visibleLines = lines[overflow:]
+		indicator = fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
 	} else {
 		visibleLines = lines
 	}
 	shellOutput := strings.Join(visibleLines, "\n")
+	if indicator != "" {
+		shellOutput = indicator + "\n" + shellOutput
+	}
 
 	// Build parts with blank line separation
 	parts := []string{

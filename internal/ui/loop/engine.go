@@ -90,7 +90,7 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 
 	s := spinner.New()
 	s.Spinner = spinner.Spinner{
-		Frames: []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "},
+		Frames: []string{"⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"},
 		FPS:    time.Second / 10,
 	}
 	s.Style = lipgloss.NewStyle().Foreground(theme.PrimaryColor())
@@ -459,7 +459,7 @@ func (m *Model) renderTool(ts *toolState) string {
 	case domain.ShellDisplay:
 		content = ui.RenderShell(m.width-2, 12, m.theme, d, ts.output, ts.status, ts.err, prefix)
 	case domain.DiffDisplay:
-		content = ui.RenderDiff(m.width-2, m.theme, d, ts.status, ts.err, prefix)
+		content = ui.RenderDiff(m.width-2, 12, m.theme, d, ts.status, ts.err, prefix)
 	case domain.StringDisplay:
 		content = ui.RenderString(m.theme, d, ts.status, ts.err, prefix)
 	}

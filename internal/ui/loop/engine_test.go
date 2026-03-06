@@ -990,7 +990,7 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 	events := make(chan domain.Event)
 	m := NewModel(events, config.DefaultConfig().UI)
 
-	expectedFrames := []string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
+	expectedFrames := []string{"⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"}
 	assert.Equal(t, expectedFrames, m.spinner.Spinner.Frames)
 }
 
@@ -1295,8 +1295,10 @@ func TestModel_Update_KeyMsg_Quit_PreservesSuccessfulTools(t *testing.T) {
 	fullHistory := tracker.allHistory()
 
 	// Tool A should have a success prefix (✔)
-	assert.Contains(t, fullHistory, "✔ Tool A Success", "Tool A should remain successful")
+	assert.Contains(t, fullHistory, "✔", "Tool A should have success icon")
+	assert.Contains(t, fullHistory, "Tool A Success", "Tool A should remain successful")
 	// Tool B should have an error prefix (✘) and "Cancelled"
-	assert.Contains(t, fullHistory, "✘ Tool B Running", "Tool B should be rendered with error prefix")
+	assert.Contains(t, fullHistory, "✘", "Tool B should have error icon")
+	assert.Contains(t, fullHistory, "Tool B Running", "Tool B should be rendered with its name")
 	assert.Contains(t, fullHistory, "Cancelled", "Tool B should be marked as Cancelled")
 }

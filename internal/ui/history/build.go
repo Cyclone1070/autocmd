@@ -132,7 +132,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		case domain.StringDisplay:
 			rendered = ui.RenderString(theme, d, status, toolErr, prefix)
 		case domain.DiffDisplay:
-			rendered = ui.RenderDiff(boxWidth, theme, d, status, toolErr, prefix)
+			rendered = ui.RenderDiff(boxWidth, 10, theme, d, status, toolErr, prefix)
 		case domain.ShellDisplay:
 			// Prefer baked captured output over the decorated toolOutput (which includes exit codes for LLM)
 			output := toolOutput

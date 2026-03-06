@@ -73,7 +73,7 @@ func NewStringDisplay(content string) StringDisplay {
 // DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
 	TypeField string `json:"type"`
-	Header    string `json:"header"`  // User-friendly description (e.g. "Updating auth")
+	Comment   string `json:"comment"` // User-friendly description (e.g. "Updating auth")
 	Target    string `json:"target"`  // Technical action (e.g. "Edit auth.go")
 	Added     int    `json:"added"`   // Lines added
 	Removed   int    `json:"removed"` // Lines removed
@@ -84,10 +84,10 @@ func (DiffDisplay) isToolDisplay() {}
 func (d DiffDisplay) Type() string { return d.TypeField }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
-func NewDiffDisplay(header, target string, added, removed int, diff string) DiffDisplay {
+func NewDiffDisplay(comment, target string, added, removed int, diff string) DiffDisplay {
 	return DiffDisplay{
 		TypeField: "diff",
-		Header:    header,
+		Comment:   comment,
 		Target:    target,
 		Added:     added,
 		Removed:   removed,
@@ -98,7 +98,7 @@ func NewDiffDisplay(header, target string, added, removed int, diff string) Diff
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
 	TypeField      string    `json:"type"`
-	Header         string    `json:"header"`          // Description from tool (e.g. "Installing dependencies")
+	Comment        string    `json:"comment"`         // Description from tool (e.g. "Installing dependencies")
 	Command        string    `json:"command"`         // The command being run (e.g. "npm install")
 	CapturedOutput *string   `json:"captured_output"` // Pointer to raw output captured after execution (baked)
 	Output         io.Reader `json:"-"`               // Stream stdout/stderr (transient)
@@ -108,10 +108,10 @@ func (ShellDisplay) isToolDisplay() {}
 func (s ShellDisplay) Type() string { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
-func NewShellDisplay(header, command string, output io.Reader, capturedOutput *string) ShellDisplay {
+func NewShellDisplay(comment, command string, output io.Reader, capturedOutput *string) ShellDisplay {
 	return ShellDisplay{
 		TypeField:      "shell",
-		Header:         header,
+		Comment:        comment,
 		Command:        command,
 		Output:         output,
 		CapturedOutput: capturedOutput,

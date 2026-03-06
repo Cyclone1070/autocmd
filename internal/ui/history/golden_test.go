@@ -69,7 +69,7 @@ func getHistoryElements() []TestElement {
 				ToolDisplays: map[string]domain.ToolDisplay{
 					"tc-ok": domain.ShellDisplay{
 						TypeField:      "shell",
-						Header:         "Running Tests",
+						Comment:         "Running Tests",
 						Command:        "go test ./...",
 						CapturedOutput: &captured,
 					},
@@ -86,7 +86,7 @@ func getHistoryElements() []TestElement {
 				ToolDisplays: map[string]domain.ToolDisplay{
 					"tc-err": domain.ShellDisplay{
 						TypeField: "shell",
-						Header:    "Failing Command",
+						Comment:    "Failing Command",
 						Command:   "false",
 					},
 				},

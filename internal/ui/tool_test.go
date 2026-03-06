@@ -56,7 +56,7 @@ func TestRenderString_ErrorWrap(t *testing.T) {
 func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header: "Aligning logic",
+		Comment: "Aligning logic",
 		Target: "Edit align.go",
 		Diff:   "\n-line1\n+line2",
 	}
@@ -67,7 +67,7 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 func TestRenderDiff_SuccessWithStats(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header:  "Updating stats",
+		Comment:  "Updating stats",
 		Target:  "Edit file.go",
 		Added:   5,
 		Removed: 2,
@@ -80,7 +80,7 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 func TestRenderDiff_Error(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header: "Missing file",
+		Comment: "Missing file",
 		Target: "Edit file.go",
 	}
 	output := RenderDiff(60, 10, th, diff, StatusError, "file not found", "✗")
@@ -90,7 +90,7 @@ func TestRenderDiff_Error(t *testing.T) {
 func TestRenderDiff_ThreePartLayout(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header:  "Adding authentication middleware",
+		Comment:  "Adding authentication middleware",
 		Target:  "Edit auth.go",
 		Added:   10,
 		Removed: 5,
@@ -103,7 +103,7 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 func TestRenderShell_Running_Command(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Header:  "List Files",
+		Comment:  "List Files",
 		Command: "ls -la",
 	}
 	output := RenderShell(40, 12, th, display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
@@ -113,7 +113,7 @@ func TestRenderShell_Running_Command(t *testing.T) {
 func TestRenderShell_LongOutputTruncation(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Header:  "Log",
+		Comment:  "Log",
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
@@ -124,7 +124,7 @@ func TestRenderShell_LongOutputTruncation(t *testing.T) {
 func TestRenderShell_Error(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Header:  "List Files",
+		Comment:  "List Files",
 		Command: "ls -la",
 	}
 	output := RenderShell(40, 12, th, display, "", StatusError, "exit status 1", "✗")
@@ -134,7 +134,7 @@ func TestRenderShell_Error(t *testing.T) {
 func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header: "Massive Change",
+		Comment: "Massive Change",
 		Target: "Edit big.go",
 		Diff:   "line 1\nline 2\nline 3\nline 4\nline 5",
 	}

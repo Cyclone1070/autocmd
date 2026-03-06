@@ -45,7 +45,7 @@ func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err stri
 
 // RenderDiff renders DiffDisplay.
 func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
-	header := d.Header
+	header := d.Comment
 	target := d.Target
 	if target == "" {
 		target = header
@@ -103,7 +103,7 @@ func colorizeDiff(diff string, th *Theme) string {
 
 // RenderShell renders ShellDisplay.
 func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
-	header := d.Header
+	header := d.Comment
 	if status == StatusError {
 		header = formatError(header, err, th)
 		header = th.Muted("# " + header)

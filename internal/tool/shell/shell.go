@@ -88,12 +88,12 @@ func (t *ShellTool) Declaration() domain.Declaration {
 						Type: domain.TypeString,
 					},
 				},
-				"description": {
+				"comment": {
 					Type:        domain.TypeString,
-					Description: "Description of the command for display purposes.",
+					Description: "A brief comment describing the purpose of the command for display purposes.",
 				},
 			},
-			Required: []string{"command", "description"},
+			Required: []string{"command", "comment"},
 		},
 	}
 }
@@ -107,7 +107,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 		TimeoutSeconds int               `json:"timeout_seconds"`
 		Env            map[string]string `json:"env"`
 		EnvFiles       []string          `json:"env_files"`
-		Description    string            `json:"description"`
+		Comment        string            `json:"comment"`
 	}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -163,7 +163,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 	return &shellInvocation{
 		streamCmd:      streamCmd,
 		commandStr:     strings.Join(req.Command, " "),
-		description:    req.Description,
+		comment:        req.Comment,
 		capturedOutput: &empty,
 	}, nil
 }
@@ -171,13 +171,13 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 type shellInvocation struct {
 	streamCmd      *executor.StreamingCmd
 	commandStr     string
-	description    string
+	comment        string
 	capturedOutput *string
 }
 
 func (i *shellInvocation) Display() domain.ToolDisplay {
 	return domain.NewShellDisplay(
-		i.description,
+		i.comment,
 		i.commandStr,
 		i.streamCmd.Output(),
 		i.capturedOutput,

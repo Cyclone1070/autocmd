@@ -58,7 +58,7 @@ var historyCmd = &cobra.Command{
 		}
 
 		isDark := lipgloss.HasDarkBackground()
-		m := history.NewModel(session.Messages, cfg.UI, width, height, history.WithIsDark(isDark))
+		m := history.NewModel(session.Messages, session.ToolDisplays, cfg.UI, width, height, history.WithIsDark(isDark))
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run history viewer: %w", err)

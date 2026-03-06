@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -116,6 +117,52 @@ func NewShellDisplay(comment, command string, output io.Reader, capturedOutput *
 		Output:         output,
 		CapturedOutput: capturedOutput,
 	}
+}
+
+// ToolDisplays is a helper type for polymorphic JSON unmarshaling of ToolDisplay maps.
+type ToolDisplays map[string]ToolDisplay
+
+func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
+	var raws map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return err
+	}
+
+	*m = make(ToolDisplays)
+	for id, raw := range raws {
+		var peek struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &peek); err != nil {
+			return err
+		}
+
+		var display ToolDisplay
+		switch peek.Type {
+		case "string":
+			var d StringDisplay
+			if err := json.Unmarshal(raw, &d); err != nil {
+				return err
+			}
+			display = d
+		case "diff":
+			var d DiffDisplay
+			if err := json.Unmarshal(raw, &d); err != nil {
+				return err
+			}
+			display = d
+		case "shell":
+			var d ShellDisplay
+			if err := json.Unmarshal(raw, &d); err != nil {
+				return err
+			}
+			display = d
+		default:
+			return fmt.Errorf("unknown display type: %s", peek.Type)
+		}
+		(*m)[id] = display
+	}
+	return nil
 }
 
 // Tool defines the interface for individual tools.

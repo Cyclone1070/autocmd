@@ -17,9 +17,10 @@ import (
 var update = flag.Bool("update", false, "update golden files")
 
 type TestElement struct {
-	ID   string
-	Msg  domain.Message
-	Desc string
+	ID       string
+	Msg      domain.Message
+	Displays domain.ToolDisplays
+	Desc     string
 }
 
 func getHistoryElements() []TestElement {
@@ -61,13 +62,13 @@ func getHistoryElements() []TestElement {
 				ToolCalls: []domain.ToolCall{
 					{ID: "tc-ok", Name: "shell"},
 				},
-				ToolDisplays: map[string]domain.ToolDisplay{
-					"tc-ok": domain.ShellDisplay{
-						TypeField:      "shell",
-						Comment:        "Running Tests",
-						Command:        "go test ./...",
-						CapturedOutput: &captured,
-					},
+			},
+			Displays: domain.ToolDisplays{
+				"tc-ok": domain.ShellDisplay{
+					TypeField:      "shell",
+					Comment:        "Running Tests",
+					Command:        "go test ./...",
+					CapturedOutput: &captured,
 				},
 			},
 		},
@@ -77,12 +78,12 @@ func getHistoryElements() []TestElement {
 				ToolCalls: []domain.ToolCall{
 					{ID: "tc-err", Name: "shell"},
 				},
-				ToolDisplays: map[string]domain.ToolDisplay{
-					"tc-err": domain.ShellDisplay{
-						TypeField: "shell",
-						Comment:   "Failing Command",
-						Command:   "false",
-					},
+			},
+			Displays: domain.ToolDisplays{
+				"tc-err": domain.ShellDisplay{
+					TypeField: "shell",
+					Comment:   "Failing Command",
+					Command:   "false",
 				},
 			},
 		},
@@ -107,16 +108,16 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	// 1. Singles
 	for _, e := range elements {
 		name := fmt.Sprintf("SINGLE_%s", e.ID)
-		msg := createHistoryMessage(e)
-		renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+		msgs, displays := createHistoryData(e)
+		renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
 	}
 
 	// 2. Pairs
 	for _, e1 := range elements {
 		for _, e2 := range elements {
 			name := fmt.Sprintf("PAIR_%s_%s", e1.ID, e2.ID)
-			msg := createHistoryMessage(e1, e2)
-			renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+			msgs, displays := createHistoryData(e1, e2)
+			renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
 		}
 	}
 
@@ -125,8 +126,8 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		for _, e2 := range elements {
 			for _, e3 := range elements {
 				name := fmt.Sprintf("TRIPLE_%s_%s_%s", e1.ID, e2.ID, e3.ID)
-				msg := createHistoryMessage(e1, e2, e3)
-				renderHistoryToGolden(&goldenOutput, name, []domain.Message{msg}, renderer, theme, width, isDark)
+				msgs, displays := createHistoryData(e1, e2, e3)
+				renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
 			}
 		}
 	}
@@ -146,10 +147,10 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		assert.Equal(t, string(expected), goldenOutput.String(), "History UI regression detected! Rendered combinations do not match golden file.")
 	}
 }
-func createHistoryMessage(elems ...TestElement) domain.Message {
+func createHistoryData(elems ...TestElement) ([]domain.Message, domain.ToolDisplays) {
 	var contents []string
 	var calls []domain.ToolCall
-	displays := make(map[string]domain.ToolDisplay)
+	displays := make(domain.ToolDisplays)
 
 	for _, e := range elems {
 		if am, ok := e.Msg.(domain.AssistantMessage); ok {
@@ -157,22 +158,22 @@ func createHistoryMessage(elems ...TestElement) domain.Message {
 				contents = append(contents, am.Content)
 			}
 			calls = append(calls, am.ToolCalls...)
-			for k, v := range am.ToolDisplays {
-				displays[k] = v
-			}
+		}
+		for k, v := range e.Displays {
+			displays[k] = v
 		}
 	}
 
-	return domain.AssistantMessage{
-		Content:      strings.Join(contents, "\n\n"),
-		ToolCalls:    calls,
-		ToolDisplays: displays,
+	msg := domain.AssistantMessage{
+		Content:   strings.Join(contents, "\n\n"),
+		ToolCalls: calls,
 	}
+	return []domain.Message{msg}, displays
 }
 
-func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []domain.Message, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []domain.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
 	var sb strings.Builder
-	renderAssistantMessage(&sb, msgs, 0, renderer, theme, width, isDark)
+	renderAssistantMessage(&sb, msgs, 0, displays, renderer, theme, width, isDark)
 
 	w.WriteString(fmt.Sprintf("=== START [%s] ===\n", name))
 	w.WriteString(sb.String())

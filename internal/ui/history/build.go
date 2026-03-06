@@ -10,11 +10,13 @@ import (
 )
 
 // BuildHistory constructs a pre-rendered string representation of the session history.
-func BuildHistory(messages []domain.Message, renderer ui.Renderer, theme *ui.Theme, width int) string {
+func BuildHistory(session *domain.Session, renderer ui.Renderer, theme *ui.Theme, width int) string {
 	var sb strings.Builder
+	messages := session.Messages
+	displays := session.ToolDisplays
 
 	for i := range messages {
-		sb.WriteString(RenderMessage(messages, i, renderer, theme, width, i > 0))
+		sb.WriteString(RenderMessage(messages, i, displays, renderer, theme, width, i > 0))
 	}
 
 	return sb.String()
@@ -22,7 +24,7 @@ func BuildHistory(messages []domain.Message, renderer ui.Renderer, theme *ui.The
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func RenderMessage(messages []domain.Message, idx int, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
+func RenderMessage(messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -30,7 +32,7 @@ func RenderMessage(messages []domain.Message, idx int, renderer ui.Renderer, the
 	case domain.UserMessage:
 		renderUserMessage(&sb, m, idx, renderer, theme, width, includeLeadingNewline)
 	case domain.AssistantMessage:
-		renderAssistantMessage(&sb, messages, idx, renderer, theme, width, includeLeadingNewline)
+		renderAssistantMessage(&sb, messages, idx, displays, renderer, theme, width, includeLeadingNewline)
 	}
 
 	return sb.String()
@@ -63,7 +65,7 @@ func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, idx int, ren
 	fmt.Fprintf(sb, "%s", content)
 }
 
-func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx int, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
+func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
 	msg := messages[idx]
 
 	printHeader := true
@@ -100,7 +102,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 	}
 
 	for _, tc := range assistantMsg.ToolCalls {
-		display, ok := assistantMsg.ToolDisplays[tc.ID]
+		display, ok := displays[tc.ID]
 		if !ok {
 			continue
 		}

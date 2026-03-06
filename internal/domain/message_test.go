@@ -25,6 +25,15 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 		},
 	}
 
+	displays := ToolDisplays{
+		"call-1": ShellDisplay{
+			TypeField:      "shell",
+			Comment:        "Listing files",
+			Command:        "ls",
+			CapturedOutput: nil,
+		},
+	}
+
 	// 1. Marshal the slice of interfaces
 	data, err := json.Marshal(messages)
 	require.NoError(t, err)
@@ -38,16 +47,27 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	assert.Equal(t, "tool", raw[2]["role"])
 
 	// 2. Unmarshal back into interface slice using the helper type
-	var decoded Messages
-	err = json.Unmarshal(data, &decoded)
+	var decodedMessages Messages
+	err = json.Unmarshal(data, &decodedMessages)
 	require.NoError(t, err)
 
-	require.Len(t, decoded, 3)
-	assert.IsType(t, UserMessage{}, decoded[0])
-	assert.IsType(t, AssistantMessage{}, decoded[1])
-	assert.IsType(t, ToolMessage{}, decoded[2])
+	dataDisp, err := json.Marshal(displays)
+	require.NoError(t, err)
 
-	assert.Equal(t, "Hello from user", decoded[0].(UserMessage).Content)
-	assert.Equal(t, "Assistant response", decoded[1].(AssistantMessage).Content)
-	assert.Equal(t, "call-1", decoded[2].(ToolMessage).ToolCallID)
+	var decodedDisplays ToolDisplays
+	err = json.Unmarshal(dataDisp, &decodedDisplays)
+	require.NoError(t, err)
+
+	require.Len(t, decodedMessages, 3)
+	assert.IsType(t, UserMessage{}, decodedMessages[0])
+	assert.IsType(t, AssistantMessage{}, decodedMessages[1])
+	assert.IsType(t, ToolMessage{}, decodedMessages[2])
+
+	assert.Equal(t, "Hello from user", decodedMessages[0].(UserMessage).Content)
+	assert.Equal(t, "Assistant response", decodedMessages[1].(AssistantMessage).Content)
+	assert.Equal(t, "call-1", decodedMessages[2].(ToolMessage).ToolCallID)
+
+	require.Len(t, decodedDisplays, 1)
+	assert.IsType(t, ShellDisplay{}, decodedDisplays["call-1"])
+	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(ShellDisplay).Comment)
 }

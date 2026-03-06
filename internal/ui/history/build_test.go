@@ -27,13 +27,6 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
-			ToolDisplays: map[string]domain.ToolDisplay{
-				"tc-1": domain.ShellDisplay{
-					TypeField:      "shell",
-					Command:        "ls",
-					CapturedOutput: &captured,
-				},
-			},
 		},
 		domain.ToolMessage{
 			ToolCallID: "tc-1",
@@ -41,7 +34,15 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(messages, nil, theme, 80)
+	displays := domain.ToolDisplays{
+		"tc-1": domain.ShellDisplay{
+			TypeField:      "shell",
+			Command:        "ls",
+			CapturedOutput: &captured,
+		},
+	}
+
+	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
 
 	// Should contain the captured output
 	assert.Contains(t, rendered, "output line 1")
@@ -59,13 +60,6 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
-			ToolDisplays: map[string]domain.ToolDisplay{
-				"tc-1": domain.ShellDisplay{
-					TypeField:      "shell",
-					Command:        "touch t.txt",
-					CapturedOutput: &empty,
-				},
-			},
 		},
 		domain.ToolMessage{
 			ToolCallID: "tc-1",
@@ -73,7 +67,15 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(messages, nil, theme, 80)
+	displays := domain.ToolDisplays{
+		"tc-1": domain.ShellDisplay{
+			TypeField:      "shell",
+			Command:        "touch t.txt",
+			CapturedOutput: &empty,
+		},
+	}
+
+	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
 
 	// Should NOT contain the exit code decoration
 	// THIS TEST IS EXPECTED TO FAIL IN THE RED PHASE
@@ -88,13 +90,6 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
-			ToolDisplays: map[string]domain.ToolDisplay{
-				"tc-1": domain.ShellDisplay{
-					TypeField:      "shell",
-					Command:        "ls",
-					CapturedOutput: nil, // Legacy session
-				},
-			},
 		},
 		domain.ToolMessage{
 			ToolCallID: "tc-1",
@@ -102,7 +97,15 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(messages, nil, theme, 80)
+	displays := domain.ToolDisplays{
+		"tc-1": domain.ShellDisplay{
+			TypeField:      "shell",
+			Command:        "ls",
+			CapturedOutput: nil, // Legacy session
+		},
+	}
+
+	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
 
 	// Should fall back to tool response content
 	assert.Contains(t, rendered, "fallback output")
@@ -118,13 +121,6 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
-			ToolDisplays: map[string]domain.ToolDisplay{
-				"tc-1": domain.ShellDisplay{
-					TypeField:      "shell",
-					Command:        "false",
-					CapturedOutput: &empty,
-				},
-			},
 		},
 		domain.ToolMessage{
 			ToolCallID: "tc-1",
@@ -133,7 +129,15 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(messages, nil, theme, 80)
+	displays := domain.ToolDisplays{
+		"tc-1": domain.ShellDisplay{
+			TypeField:      "shell",
+			Command:        "false",
+			CapturedOutput: &empty,
+		},
+	}
+
+	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
 
 	// Should contain the error prefix indicator (X or similar depending on theme)
 	assert.Contains(t, rendered, "✘")
@@ -161,11 +165,11 @@ func TestDivider_Color(t *testing.T) {
 	}
 
 	// Render USER message
-	renderedUser := RenderMessage(messages, 0, nil, theme, 80, false)
+	renderedUser := RenderMessage(messages, 0, nil, nil, theme, 80, false)
 	assert.Contains(t, renderedUser, expectedUserDivider, "USER divider should use primary color")
 
 	// Render ASSISTANT message
-	renderedAssistant := RenderMessage(messages, 1, nil, theme, 80, true)
+	renderedAssistant := RenderMessage(messages, 1, nil, nil, theme, 80, true)
 	assert.Contains(t, renderedAssistant, expectedAssistantDivider, "ASSISTANT divider should use muted color")
 }
 func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
@@ -183,13 +187,14 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 				Name: "shell",
 			},
 		},
-		ToolDisplays: map[string]domain.ToolDisplay{
-			tcID: domain.NewShellDisplay("header", "ls", nil, nil),
-		},
+	}
+	messages := []domain.Message{msg}
+	displays := domain.ToolDisplays{
+		tcID: domain.NewShellDisplay("header", "ls", nil, nil),
 	}
 
 	var sb strings.Builder
-	renderAssistantMessage(&sb, []domain.Message{msg}, 0, renderer, theme, width, false)
+	renderAssistantMessage(&sb, messages, 0, displays, renderer, theme, width, false)
 	rendered := sb.String()
 
 	// Re-rendering a box to see its start
@@ -221,7 +226,7 @@ func TestMessageHeaders(t *testing.T) {
 	}
 
 	t.Run("Assistant Header", func(t *testing.T) {
-		rendered := RenderMessage(messages, 1, nil, theme, width, false)
+		rendered := RenderMessage(messages, 1, nil, nil, theme, width, false)
 
 		// Should contain "ASSISTANT:" in bold
 		style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
@@ -230,7 +235,7 @@ func TestMessageHeaders(t *testing.T) {
 	})
 
 	t.Run("User Header", func(t *testing.T) {
-		rendered := RenderMessage(messages, 0, nil, theme, width, false)
+		rendered := RenderMessage(messages, 0, nil, nil, theme, width, false)
 
 		// Should contain "USER:" in bold
 		style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)

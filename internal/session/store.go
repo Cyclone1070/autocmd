@@ -34,7 +34,8 @@ type sessionInfoDTO struct {
 
 // sessionMessagesDTO is used for the .messages.json file.
 type sessionMessagesDTO struct {
-	Messages domain.Messages `json:"messages"`
+	Messages domain.Messages     `json:"messages"`
+	Displays domain.ToolDisplays `json:"displays,omitempty"`
 }
 
 // Store manages session creation, loading, saving, and listing.
@@ -84,6 +85,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 	// Read messages file
 	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
 	var messages []domain.Message
+	var displays domain.ToolDisplays
 	messagesData, err := st.fs.ReadFile(messagesPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -97,14 +99,16 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 			return nil, fmt.Errorf("unmarshal session messages: %w", err)
 		}
 		messages = messagesDTO.Messages
+		displays = messagesDTO.Displays
 	}
 
 	return &domain.Session{
-		ID:       infoDTO.ID,
-		Name:     infoDTO.Name,
-		Created:  time.UnixMilli(infoDTO.Created),
-		Updated:  time.UnixMilli(infoDTO.Updated),
-		Messages: messages,
+		ID:           infoDTO.ID,
+		Name:         infoDTO.Name,
+		Created:      time.UnixMilli(infoDTO.Created),
+		Updated:      time.UnixMilli(infoDTO.Updated),
+		Messages:     messages,
+		ToolDisplays: displays,
 	}, nil
 }
 
@@ -133,7 +137,8 @@ func (st *Store) Save(s *domain.Session) error {
 	// Write messages file
 	messagesPath := filepath.Join(st.storageDir, s.ID+".messages.json")
 	messagesDTO := sessionMessagesDTO{
-		Messages: domain.Messages(s.Messages),
+		Messages: s.Messages,
+		Displays: s.ToolDisplays,
 	}
 	messagesData, err := json.MarshalIndent(messagesDTO, "", "  ")
 	if err != nil {

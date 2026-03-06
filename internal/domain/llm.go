@@ -54,9 +54,8 @@ func (m UserMessage) MarshalJSON() ([]byte, error) {
 }
 
 type AssistantMessage struct {
-	Content      string                 `json:"content,omitempty"`
-	ToolCalls    []ToolCall             `json:"tool_calls,omitempty"`
-	ToolDisplays map[string]ToolDisplay `json:"tool_displays,omitempty"`
+	Content   string     `json:"content,omitempty"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 func (AssistantMessage) Role() Role { return RoleAssistant }

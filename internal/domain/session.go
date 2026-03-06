@@ -5,11 +5,12 @@ import "time"
 // Session represents a conversation session with message history.
 // Session is a pure data object - use Store for persistence operations.
 type Session struct {
-	ID       string
-	Name     string
-	Created  time.Time
-	Updated  time.Time
-	Messages []Message
+	ID           string
+	Name         string
+	Created      time.Time
+	Updated      time.Time
+	Messages     []Message
+	ToolDisplays ToolDisplays
 }
 
 // SessionSummary contains metadata about a session without messages.

@@ -20,6 +20,7 @@ type Model struct {
 	height   int
 	renderer ui.Renderer
 	viewport viewport.Model
+	displays domain.ToolDisplays
 
 	// Cache for lazy rendering
 	renderedMessages map[int]string
@@ -48,7 +49,7 @@ func WithIsDark(isDark bool) Option {
 }
 
 // NewModel creates a new history model.
-func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int, opts ...Option) *Model {
+func NewModel(messages []domain.Message, displays domain.ToolDisplays, cfg config.UIConfig, width, height int, opts ...Option) *Model {
 	m := &Model{
 		messages:         messages,
 		cfg:              cfg,
@@ -58,6 +59,7 @@ func NewModel(messages []domain.Message, cfg config.UIConfig, width, height int,
 		topIdx:           0,
 		bottomIdx:        0,
 		reachedTop:       false,
+		displays:         displays,
 		isDark:           false, // Default, will be overridden by options or polled on-demand
 	}
 	m.width = m.calculateWidth(width)
@@ -123,7 +125,7 @@ func (m *Model) renderMessage(idx int) string {
 	if r, ok := m.renderedMessages[idx]; ok {
 		return r
 	}
-	rendered := RenderMessage(m.messages, idx, m.renderer, m.theme, m.width, idx > 0)
+	rendered := RenderMessage(m.messages, idx, m.displays, m.renderer, m.theme, m.width, idx > 0)
 	m.renderedMessages[idx] = rendered
 	return rendered
 }

@@ -113,10 +113,10 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 				defer mu.Unlock()
 
 				if disp != nil {
-					if msg.ToolDisplays == nil {
-						msg.ToolDisplays = make(map[string]domain.ToolDisplay)
+					if session.ToolDisplays == nil {
+						session.ToolDisplays = make(domain.ToolDisplays)
 					}
-					msg.ToolDisplays[call.ID] = disp
+					session.ToolDisplays[call.ID] = disp
 				}
 				if resp.ToolCallID != "" {
 					toolResponses[idx] = resp

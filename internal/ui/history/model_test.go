@@ -16,11 +16,11 @@ func TestModel_WidthCapping(t *testing.T) {
 	messages := []domain.Message{}
 
 	// Case 1: Terminal is wider than config -> should cap to config
-	m := NewModel(messages, cfg, 200, 40)
+	m := NewModel(messages, nil, cfg, 200, 40)
 	assert.Equal(t, 80, m.width)
 
 	// Case 2: Terminal is narrower than config -> should cap to terminal
-	m = NewModel(messages, cfg, 40, 40)
+	m = NewModel(messages, nil, cfg, 40, 40)
 	assert.Equal(t, 40, m.width)
 
 	// Case 3: Resize to larger than config -> should stay capped at config
@@ -38,7 +38,7 @@ func TestModel_WidthCapping(t *testing.T) {
 func TestModel_EmptyMessages_NoPanic(t *testing.T) {
 	cfg := config.DefaultConfig().UI
 	messages := []domain.Message{}
-	m := NewModel(messages, cfg, 80, 20)
+	m := NewModel(messages, nil, cfg, 80, 20)
 
 	// Should not panic on resize
 	assert.NotPanics(t, func() {
@@ -57,7 +57,7 @@ func TestModel_ResizeBehavior(t *testing.T) {
 	}
 
 	t.Run("HeightOnlyResize_PreservesCache", func(t *testing.T) {
-		m := NewModel(messages, cfg, 80, 20)
+		m := NewModel(messages, nil, cfg, 80, 20)
 		// Trigger some rendering
 		m.initializeContent()
 		initialCacheSize := len(m.renderedMessages)
@@ -71,7 +71,7 @@ func TestModel_ResizeBehavior(t *testing.T) {
 	})
 
 	t.Run("WidthResize_ClearsCache", func(t *testing.T) {
-		m := NewModel(messages, cfg, 80, 20)
+		m := NewModel(messages, nil, cfg, 80, 20)
 		m.initializeContent()
 
 		// Resize width
@@ -88,7 +88,7 @@ func TestModel_ResizeBehavior(t *testing.T) {
 			manyMsg = append(manyMsg, domain.UserMessage{Content: "msg"})
 		}
 
-		m := NewModel(manyMsg, cfg, 80, 100) // 100 lines height
+		m := NewModel(manyMsg, nil, cfg, 80, 100) // 100 lines height
 		assert.True(t, m.reachedTop, "Should reach top when all messages fit")
 
 		// Resize to very short window
@@ -116,7 +116,7 @@ func TestIssue_History_ViewportGapAccumulation(t *testing.T) {
 
 	// 1. Initialize with height 20.
 	// initializeContent renders from messages backward up to limit=height*2 (40 lines).
-	m := NewModel(messages, cfg, 80, 20)
+	m := NewModel(messages, nil, cfg, 80, 20)
 
 	// 2. refreshViewport triggers if YOffset < height.
 	// It must increment YOffset exactly by the number of mathematical lines added.

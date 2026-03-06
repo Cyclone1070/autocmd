@@ -60,7 +60,7 @@ func (st *Store) Create() (*domain.Session, error) {
 		Name:     "",
 		Created:  now,
 		Updated:  now,
-		Messages: []domain.Message{},
+		Messages: domain.Messages{},
 	}
 	if err := st.Save(s); err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 
 	// Read messages file
 	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
-	var messages []domain.Message
+	var messages domain.Messages
 	var displays domain.ToolDisplays
 	messagesData, err := st.fs.ReadFile(messagesPath)
 	if err != nil {
@@ -92,7 +92,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 			return nil, fmt.Errorf("read session messages: %w", err)
 		}
 		// Messages file doesn't exist yet, use empty slice
-		messages = []domain.Message{}
+		messages = domain.Messages{}
 	} else {
 		var messagesDTO sessionMessagesDTO
 		if err := json.Unmarshal(messagesData, &messagesDTO); err != nil {

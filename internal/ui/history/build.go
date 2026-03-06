@@ -24,7 +24,7 @@ func BuildHistory(session *domain.Session, renderer ui.Renderer, theme *ui.Theme
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func RenderMessage(messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
+func RenderMessage(messages domain.Messages, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -61,7 +61,7 @@ func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, theme *ui.Th
 	fmt.Fprintf(sb, "%s", msg.Content)
 }
 
-func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
+func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages domain.Messages, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
 	printHeader := true
 	if idx > 0 {
 		prevRole := messages[idx-1].Role()

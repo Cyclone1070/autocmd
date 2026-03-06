@@ -11,8 +11,8 @@ type LLM interface {
 	ID() string
 	DisplayName() string
 	ContextWindow() int
-	ComputeTokens(ctx context.Context, msgs []Message) (int, error)
-	Stream(ctx context.Context, msgs []Message, tools []Declaration) (Stream, error)
+	ComputeTokens(ctx context.Context, msgs Messages) (int, error)
+	Stream(ctx context.Context, msgs Messages, tools []Declaration) (Stream, error)
 }
 
 // LLMInfo is metadata for listing language models.

@@ -100,7 +100,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		toolResponses := make([]domain.Message, len(msg.ToolCalls))
+		toolResponses := make(domain.Messages, len(msg.ToolCalls))
 
 		for i, tc := range msg.ToolCalls {
 			wg.Add(1)

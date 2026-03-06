@@ -70,7 +70,7 @@ type historyResult struct {
 
 // toHistory converts domain messages to genai Content.
 // It returns a combined system prompt and the full list of contents.
-func toHistory(msgs []domain.Message) (historyResult, error) {
+func toHistory(msgs domain.Messages) (historyResult, error) {
 	if len(msgs) == 0 {
 		return historyResult{}, fmt.Errorf("empty message list")
 	}

@@ -13,7 +13,7 @@ import (
 
 // Model is the bubbletea model for the history viewer.
 type Model struct {
-	messages []domain.Message
+	messages domain.Messages
 	cfg      config.UIConfig
 	theme    *ui.Theme
 	width    int
@@ -49,7 +49,7 @@ func WithIsDark(isDark bool) Option {
 }
 
 // NewModel creates a new history model.
-func NewModel(messages []domain.Message, displays domain.ToolDisplays, cfg config.UIConfig, width, height int, opts ...Option) *Model {
+func NewModel(messages domain.Messages, displays domain.ToolDisplays, cfg config.UIConfig, width, height int, opts ...Option) *Model {
 	m := &Model{
 		messages:         messages,
 		cfg:              cfg,

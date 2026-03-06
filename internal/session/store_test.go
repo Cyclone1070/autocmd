@@ -178,7 +178,7 @@ func TestGet_Success(t *testing.T) {
 	infoData, _ := json.MarshalIndent(infoDTO, "", "  ")
 
 	messagesDTO := sessionMessagesDTO{
-		Messages: []domain.Message{
+		Messages: domain.Messages{
 			domain.UserMessage{Content: "Hello"},
 			domain.AssistantMessage{Content: "Hi there"},
 		},
@@ -301,7 +301,7 @@ func TestSave_Success(t *testing.T) {
 		Name:    "Test Session",
 		Created: time.Now(),
 		Updated: time.Now(),
-		Messages: []domain.Message{
+		Messages: domain.Messages{
 			domain.UserMessage{Content: "Hello"},
 		},
 	}
@@ -646,7 +646,7 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 
 	// Modify
 	sess.Name = "Roundtrip Test"
-	sess.Messages = []domain.Message{
+	sess.Messages = domain.Messages{
 		domain.UserMessage{Content: "Test message"},
 	}
 
@@ -812,7 +812,7 @@ func TestFindBlank(t *testing.T) {
 	}
 
 	// 4. Add a name - should no longer be blank
-	sess.Messages = []domain.Message{}
+	sess.Messages = domain.Messages{}
 	sess.Name = "Named Session"
 	_ = store.Save(sess)
 

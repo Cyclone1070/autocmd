@@ -34,7 +34,7 @@ func TestToTools(t *testing.T) {
 
 func TestToHistory(t *testing.T) {
 	// Test basic case (system + user)
-	msgs := []domain.Message{
+	msgs := domain.Messages{
 		domain.SystemMessage{Content: "Be helpful"},
 		domain.UserMessage{Content: "Hi"},
 	}
@@ -59,7 +59,7 @@ func TestToHistory(t *testing.T) {
 	}
 
 	// Test roles and multiple turns
-	msgs = []domain.Message{
+	msgs = domain.Messages{
 		domain.UserMessage{Content: "A"},      // 0
 		domain.AssistantMessage{Content: "B"}, // 1
 		domain.UserMessage{Content: "C"},      // 2
@@ -93,7 +93,7 @@ func TestToHistory(t *testing.T) {
 
 func TestToHistory_ToolCall(t *testing.T) {
 	args := json.RawMessage(`{"location":"Paris"}`)
-	msgs := []domain.Message{
+	msgs := domain.Messages{
 		domain.AssistantMessage{
 			Content: "",
 			ToolCalls: []domain.ToolCall{

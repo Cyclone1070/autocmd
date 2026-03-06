@@ -147,7 +147,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		assert.Equal(t, string(expected), goldenOutput.String(), "History UI regression detected! Rendered combinations do not match golden file.")
 	}
 }
-func createHistoryData(elems ...TestElement) ([]domain.Message, domain.ToolDisplays) {
+func createHistoryData(elems ...TestElement) (domain.Messages, domain.ToolDisplays) {
 	var contents []string
 	var calls []domain.ToolCall
 	displays := make(domain.ToolDisplays)
@@ -168,10 +168,10 @@ func createHistoryData(elems ...TestElement) ([]domain.Message, domain.ToolDispl
 		Content:   strings.Join(contents, "\n\n"),
 		ToolCalls: calls,
 	}
-	return []domain.Message{msg}, displays
+	return domain.Messages{msg}, displays
 }
 
-func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []domain.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs domain.Messages, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
 	var sb strings.Builder
 	am, ok := msgs[0].(domain.AssistantMessage)
 	if !ok {

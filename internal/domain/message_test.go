@@ -9,7 +9,7 @@ import (
 )
 
 func TestMessageJSON_RoundTrip(t *testing.T) {
-	messages := []Message{
+	messages := Messages{
 		UserMessage{Content: "Hello from user"},
 		AssistantMessage{
 			Content: "Assistant response",

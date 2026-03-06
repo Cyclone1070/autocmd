@@ -22,7 +22,7 @@ func GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, inp
 
 	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.UserMessage{Content: prompt},
 	}
 

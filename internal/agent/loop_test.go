@@ -26,11 +26,11 @@ func (m *mockLLM) ID() string          { return m.id }
 func (m *mockLLM) DisplayName() string { return m.displayName }
 func (m *mockLLM) ContextWindow() int  { return m.contextWindow }
 
-func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+func (m *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
 	return 100, nil
 }
 
-func (m *mockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
 	if m.streamErr != nil && len(m.streams) == 0 {
 		return nil, m.streamErr
 	}

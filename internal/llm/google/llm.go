@@ -28,7 +28,7 @@ func (m *geminiLLM) ContextWindow() int {
 	return m.contextWindow
 }
 
-func (m *geminiLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (int, error) {
+func (m *geminiLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
 	hist, err := toHistory(msgs)
 	if err != nil {
 		return 0, fmt.Errorf("convert history: %w", err)
@@ -42,7 +42,7 @@ func (m *geminiLLM) ComputeTokens(ctx context.Context, msgs []domain.Message) (i
 	return int(result.TotalTokens), nil
 }
 
-func (m *geminiLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *geminiLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
 	hist, err := toHistory(msgs)
 	if err != nil {
 		return nil, fmt.Errorf("convert history: %w", err)

@@ -9,7 +9,7 @@ type Session struct {
 	Name         string
 	Created      time.Time
 	Updated      time.Time
-	Messages     []Message
+	Messages     Messages
 	ToolDisplays ToolDisplays
 }
 

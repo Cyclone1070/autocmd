@@ -22,7 +22,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	theme := newTestTheme()
 	captured := "output line 1\noutput line 2"
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
@@ -55,7 +55,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	theme := newTestTheme()
 	empty := ""
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
@@ -85,7 +85,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 	theme := newTestTheme()
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
@@ -116,7 +116,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 	theme := newTestTheme()
 	empty := ""
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
@@ -159,7 +159,7 @@ func TestDivider_Color(t *testing.T) {
 	mutedStyle := lipgloss.NewStyle().Foreground(theme.MutedColor())
 	expectedAssistantDivider := mutedStyle.Render(strings.Repeat("-", 80))
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.UserMessage{Content: "user content"},
 		domain.AssistantMessage{Content: "assistant content"},
 	}
@@ -188,7 +188,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 			},
 		},
 	}
-	messages := []domain.Message{msg}
+	messages := domain.Messages{msg}
 	displays := domain.ToolDisplays{
 		tcID: domain.NewShellDisplay("header", "ls", nil, nil),
 	}
@@ -220,7 +220,7 @@ func TestMessageHeaders(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.UserMessage{Content: "hello"},
 		domain.AssistantMessage{Content: "hi"},
 	}

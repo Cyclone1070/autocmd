@@ -13,7 +13,7 @@ type mockLLM struct {
 	streams []*mockStream
 }
 
-func (m *mockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []domain.Declaration) (domain.Stream, error) {
+func (m *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
 	if len(m.streams) == 0 {
 		return nil, nil
 	}
@@ -113,7 +113,7 @@ func TestGenerateName(t *testing.T) {
 		}
 
 		sess := &domain.Session{
-			Messages: []domain.Message{
+			Messages: domain.Messages{
 				domain.UserMessage{Content: "This is the first message"},
 			},
 		}

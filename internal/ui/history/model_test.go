@@ -13,7 +13,7 @@ func TestModel_WidthCapping(t *testing.T) {
 	cfg := config.UIConfig{
 		ChatWindowWidth: 80,
 	}
-	messages := []domain.Message{}
+	messages := domain.Messages{}
 
 	// Case 1: Terminal is wider than config -> should cap to config
 	m := NewModel(messages, nil, cfg, 200, 40)
@@ -37,7 +37,7 @@ func TestModel_WidthCapping(t *testing.T) {
 
 func TestModel_EmptyMessages_NoPanic(t *testing.T) {
 	cfg := config.DefaultConfig().UI
-	messages := []domain.Message{}
+	messages := domain.Messages{}
 	m := NewModel(messages, nil, cfg, 80, 20)
 
 	// Should not panic on resize
@@ -49,7 +49,7 @@ func TestModel_EmptyMessages_NoPanic(t *testing.T) {
 
 func TestModel_ResizeBehavior(t *testing.T) {
 	cfg := config.UIConfig{ChatWindowWidth: 100}
-	messages := []domain.Message{
+	messages := domain.Messages{
 		domain.UserMessage{Content: "hello"},
 		domain.AssistantMessage{Content: "hi there"},
 		domain.UserMessage{Content: "how are you?"},
@@ -83,7 +83,7 @@ func TestModel_ResizeBehavior(t *testing.T) {
 
 	t.Run("ResizeSmaller_CanScrollToTop", func(t *testing.T) {
 		// Start with 10 messages in a tall window - everything fits
-		var manyMsg []domain.Message
+		var manyMsg domain.Messages
 		for i := 0; i < 10; i++ {
 			manyMsg = append(manyMsg, domain.UserMessage{Content: "msg"})
 		}
@@ -108,7 +108,7 @@ func TestIssue_History_ViewportGapAccumulation(t *testing.T) {
 	// the joined string rather than individual heights.
 
 	cfg := config.DefaultConfig().UI
-	var messages []domain.Message
+	var messages domain.Messages
 	// Provide many messages to ensure we have content to prepend.
 	for i := 0; i < 50; i++ {
 		messages = append(messages, domain.UserMessage{Content: "filler\n"})

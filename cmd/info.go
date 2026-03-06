@@ -33,7 +33,7 @@ var infoCmd = &cobra.Command{
 		}
 
 		sessionName := "None"
-		var sessMessages []domain.Message
+		var sessMessages domain.Messages
 		if cfg.Session.CurrentSessionID != "" {
 			sess, err := store.Get(cfg.Session.CurrentSessionID)
 			if err == nil {

@@ -225,6 +225,45 @@ func TestMessageHeaders(t *testing.T) {
 		domain.AssistantMessage{Content: "hi"},
 	}
 
+	t.Run("User Message Formatting", func(t *testing.T) {
+		theme := newTestTheme()
+		width := 80
+		renderer := &mockRenderer{}
+		messages := domain.Messages{
+			domain.UserMessage{Content: "Hello World"},
+		}
+
+		rendered := RenderMessage(messages, 0, nil, renderer, theme, width, false)
+
+		// Assert EXACTLY one blank line (header + one newline from build.go, then one newline from renderer)
+		assert.Contains(t, rendered, "USER:", "Should contain USER: header")
+		// \x1b\[[0-9;]*m matches any ANSI escape code
+		assert.Regexp(t, `USER:(\x1b\[[0-9;]*m)?\n\nHello World\[rendered\]`, rendered)
+		assert.NotRegexp(t, `USER:(\x1b\[[0-9;]*m)?\n\n\n`, rendered)
+		assert.Contains(t, rendered, "Hello World[rendered]", "User message content should be processed by renderer")
+	})
+
+	t.Run("Assistant Message Spacing", func(t *testing.T) {
+		theme := newTestTheme()
+		width := 80
+		tcID := "tc-1"
+		messages := domain.Messages{
+			domain.AssistantMessage{
+				ToolCalls: []domain.ToolCall{{ID: tcID, Name: "shell"}},
+			},
+		}
+		displays := domain.ToolDisplays{
+			tcID: domain.NewShellDisplay("header", "ls", nil, nil),
+		}
+
+		rendered := RenderMessage(messages, 0, displays, nil, theme, width, false)
+
+		// Assert exactly one blank line (ASSISTANT:\n + Box start \n)
+		assert.Contains(t, rendered, "ASSISTANT:", "Should contain ASSISTANT: header")
+		assert.Regexp(t, `ASSISTANT:(\x1b\[[0-9;]*m)?\n\n(\x1b\[[0-9;]*m)?╭`, rendered)
+		assert.NotRegexp(t, `ASSISTANT:(\x1b\[[0-9;]*m)?\n\n\n`, rendered)
+	})
+
 	t.Run("Assistant Header", func(t *testing.T) {
 		rendered := RenderMessage(messages, 1, nil, nil, theme, width, false)
 
@@ -242,4 +281,11 @@ func TestMessageHeaders(t *testing.T) {
 		expected := style.Render("USER:")
 		assert.Contains(t, rendered, expected)
 	})
+}
+
+type mockRenderer struct{}
+
+func (m *mockRenderer) Render(s string) string {
+	// Real Glamour renderer adds a leading newline
+	return "\n" + s + "[rendered]"
 }

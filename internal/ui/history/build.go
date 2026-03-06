@@ -30,7 +30,7 @@ func RenderMessage(messages domain.Messages, idx int, displays domain.ToolDispla
 
 	switch m := msg.(type) {
 	case domain.UserMessage:
-		renderUserMessage(&sb, m, theme, width, includeLeadingNewline)
+		renderUserMessage(&sb, m, renderer, theme, width, includeLeadingNewline)
 	case domain.AssistantMessage:
 		renderAssistantMessage(&sb, m, messages, idx, displays, renderer, theme, width, includeLeadingNewline)
 	}
@@ -48,7 +48,7 @@ func renderDivider(sb *strings.Builder, theme *ui.Theme, width int, color lipglo
 	fmt.Fprintf(sb, "%s%s\n", prefix, style.Render(line))
 }
 
-func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, theme *ui.Theme, width int, includeLeadingNewline bool) {
+func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
 	renderDivider(sb, theme, width, theme.PrimaryColor(), includeLeadingNewline)
 
 	style := lipgloss.NewStyle().
@@ -58,7 +58,11 @@ func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, theme *ui.Th
 	// Divider already handles vertical spacing
 	fmt.Fprintf(sb, "%s\n", style.Render("USER:"))
 
-	fmt.Fprintf(sb, "%s", msg.Content)
+	content := msg.Content
+	if renderer != nil {
+		content = renderer.Render(msg.Content)
+	}
+	fmt.Fprintf(sb, "%s", content)
 }
 
 func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages domain.Messages, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {

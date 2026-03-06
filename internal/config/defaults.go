@@ -86,6 +86,7 @@ func DefaultConfig() *Config {
 			MutedColor:        ColorConfig{Light: "#D9DCCF", Dark: "#888888"},
 			ChatWindowWidth:   80,
 			ShellOutputHeight: 12,
+			ShortToolbox:      false,
 		},
 		Model: "google/gemini-2.5-flash",
 	}

@@ -14,4 +14,5 @@ type UIConfig struct {
 	MutedColor        ColorConfig `json:"muted_color"`   // Default: Gray (borders, metadata)
 	ChatWindowWidth   int         `json:"chat_window_width"`
 	ShellOutputHeight int         `json:"shell_output_height"` // Visible lines in shell tool output (Default: 12)
+	ShortToolbox      bool        `json:"short_toolbox"`       // Show compact tool output (Default: false)
 }

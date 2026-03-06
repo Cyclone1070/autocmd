@@ -15,6 +15,7 @@ import (
 func newTestTheme(t *testing.T) *Theme {
 	t.Helper()
 	cfg := config.DefaultConfig()
+	cfg.UI.ShortToolbox = false // Default tests to full mode
 	return NewTheme(cfg.UI)
 }
 
@@ -57,8 +58,8 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Comment: "Aligning logic",
-		Target: "Edit align.go",
-		Diff:   "\n-line1\n+line2",
+		Target:  "Edit align.go",
+		Diff:    "\n-line1\n+line2",
 	}
 	output := RenderDiff(60, 10, th, diff, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderDiff_DiffBody_Alignment", output)
@@ -67,7 +68,7 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 func TestRenderDiff_SuccessWithStats(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Comment:  "Updating stats",
+		Comment: "Updating stats",
 		Target:  "Edit file.go",
 		Added:   5,
 		Removed: 2,
@@ -81,7 +82,7 @@ func TestRenderDiff_Error(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Comment: "Missing file",
-		Target: "Edit file.go",
+		Target:  "Edit file.go",
 	}
 	output := RenderDiff(60, 10, th, diff, StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", output)
@@ -90,7 +91,7 @@ func TestRenderDiff_Error(t *testing.T) {
 func TestRenderDiff_ThreePartLayout(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Comment:  "Adding authentication middleware",
+		Comment: "Adding authentication middleware",
 		Target:  "Edit auth.go",
 		Added:   10,
 		Removed: 5,
@@ -103,7 +104,7 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 func TestRenderShell_Running_Command(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Comment:  "List Files",
+		Comment: "List Files",
 		Command: "ls -la",
 	}
 	output := RenderShell(40, 12, th, display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
@@ -113,7 +114,7 @@ func TestRenderShell_Running_Command(t *testing.T) {
 func TestRenderShell_LongOutputTruncation(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Comment:  "Log",
+		Comment: "Log",
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
@@ -124,7 +125,7 @@ func TestRenderShell_LongOutputTruncation(t *testing.T) {
 func TestRenderShell_Error(t *testing.T) {
 	th := newTestTheme(t)
 	display := domain.ShellDisplay{
-		Comment:  "List Files",
+		Comment: "List Files",
 		Command: "ls -la",
 	}
 	output := RenderShell(40, 12, th, display, "", StatusError, "exit status 1", "✗")
@@ -135,8 +136,8 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
 		Comment: "Massive Change",
-		Target: "Edit big.go",
-		Diff:   "line 1\nline 2\nline 3\nline 4\nline 5",
+		Target:  "Edit big.go",
+		Diff:    "line 1\nline 2\nline 3\nline 4\nline 5",
 	}
 	// Limit to 2 lines, should show truncation indicator
 	output := RenderDiff(60, 2, th, diff, StatusSuccess, "", "✓")
@@ -156,4 +157,30 @@ func TestPad_WithoutPrefix(t *testing.T) {
 func TestPad_EmptyInput(t *testing.T) {
 	output := Pad("", "->")
 	assertGolden(t, "Pad_Empty_Input", output)
+}
+func TestRenderDiff_ShortMode(t *testing.T) {
+	th := newTestTheme(t)
+	th.ShortToolbox = true
+	diff := domain.DiffDisplay{
+		Comment: "Massive Change",
+		Target:  "Edit big.go",
+		Diff:    "line 1\nline 2\nline 3",
+	}
+	output := RenderDiff(60, 10, th, diff, StatusSuccess, "", "✔")
+	assert.NotContains(t, output, "line 1")
+	assert.Contains(t, output, "Massive Change")
+	assert.Contains(t, output, "Edit big.go")
+}
+
+func TestRenderShell_ShortMode(t *testing.T) {
+	th := newTestTheme(t)
+	th.ShortToolbox = true
+	display := domain.ShellDisplay{
+		Comment: "List Files",
+		Command: "ls -la",
+	}
+	output := RenderShell(40, 12, th, display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
+	assert.NotContains(t, output, "file1.txt")
+	assert.Contains(t, output, "List Files")
+	assert.Contains(t, output, "ls -la")
 }

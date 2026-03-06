@@ -82,7 +82,9 @@ func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, statu
 	parts := []string{
 		header,
 		target,
-		diffContent,
+	}
+	if !th.ShortToolbox {
+		parts = append(parts, diffContent)
 	}
 
 	content := strings.Join(parts, "\n\n")
@@ -135,7 +137,7 @@ func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay,
 		header,
 		cmdLine,
 	}
-	if shellOutput != "" {
+	if shellOutput != "" && !th.ShortToolbox {
 		parts = append(parts, shellOutput)
 	}
 

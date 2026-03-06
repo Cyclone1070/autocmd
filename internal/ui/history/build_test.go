@@ -13,7 +13,9 @@ import (
 )
 
 func newTestTheme() *ui.Theme {
-	return ui.NewTheme(config.DefaultConfig().UI)
+	cfg := config.DefaultConfig()
+	cfg.UI.ShortToolbox = false
+	return ui.NewTheme(cfg.UI)
 }
 
 func TestShellHistory_UseCapturedOutput(t *testing.T) {

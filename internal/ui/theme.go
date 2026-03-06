@@ -26,26 +26,25 @@ type Theme struct {
 	success lipgloss.AdaptiveColor
 	err     lipgloss.AdaptiveColor
 
-	box lipgloss.Style
+	box          lipgloss.Style
+	ShortToolbox bool
 }
 
 // NewTheme creates a theme from config.
 func NewTheme(cfg config.UIConfig) *Theme {
-	t := &Theme{
-		muted:   lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark},
-		primary: lipgloss.AdaptiveColor{Light: cfg.PrimaryColor.Light, Dark: cfg.PrimaryColor.Dark},
-		success: lipgloss.AdaptiveColor{Light: cfg.SuccessColor.Light, Dark: cfg.SuccessColor.Dark},
-		err:     lipgloss.AdaptiveColor{Light: cfg.ErrorColor.Light, Dark: cfg.ErrorColor.Dark},
+	return &Theme{
+		muted:        lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark},
+		primary:      lipgloss.AdaptiveColor{Light: cfg.PrimaryColor.Light, Dark: cfg.PrimaryColor.Dark},
+		success:      lipgloss.AdaptiveColor{Light: cfg.SuccessColor.Light, Dark: cfg.SuccessColor.Dark},
+		err:          lipgloss.AdaptiveColor{Light: cfg.ErrorColor.Light, Dark: cfg.ErrorColor.Dark},
+		ShortToolbox: cfg.ShortToolbox,
+		box: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark}).
+			Padding(0, 0).
+			MarginTop(0).
+			MarginBottom(0),
 	}
-
-	t.box = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(t.muted).
-		Padding(0, 0).
-		MarginTop(0).
-		MarginBottom(0)
-
-	return t
 }
 
 func (t *Theme) Success(s string) string {

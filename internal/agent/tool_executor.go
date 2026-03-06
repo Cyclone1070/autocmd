@@ -45,7 +45,13 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	inv, err := t.Prepare(ctx, tc.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{}, nil, ctx.Err()
+			return domain.Message{
+				Role:       domain.RoleTool,
+				ToolCallID: tc.ID,
+				ToolName:   tc.Name,
+				Content:    "execution cancelled",
+				ToolError:  true,
+			}, nil, ctx.Err()
 		}
 		declJSON, jerr := json.MarshalIndent(t.Declaration(), "", "  ")
 		if jerr != nil {
@@ -99,7 +105,13 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{}, nil, err
+			return domain.Message{
+				Role:       domain.RoleTool,
+				ToolCallID: tc.ID,
+				ToolName:   tc.Name,
+				Content:    "execution cancelled",
+				ToolError:  true,
+			}, display, err
 		}
 
 		if events != nil {

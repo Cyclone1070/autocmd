@@ -1265,3 +1265,38 @@ func TestModel_ToolSpacingConsistency(t *testing.T) {
 		}
 	}
 }
+
+func TestModel_Update_KeyMsg_Quit_PreservesSuccessfulTools(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.Event, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, tracker)
+
+	// 1. Tool A finished successfully (but not flushed because we are simulating a blocked queue)
+	m.activeTools["A"] = &toolState{
+		id:      "A",
+		status:  ui.StatusSuccess,
+		display: domain.NewStringDisplay("Tool A Success"),
+	}
+	// 2. Tool B is still running
+	m.activeTools["B"] = &toolState{
+		id:      "B",
+		status:  ui.StatusRunning,
+		display: domain.NewStringDisplay("Tool B Running"),
+	}
+	m.toolOrder = []string{"A", "B"}
+
+	// 3. Trigger Ctrl+C
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = tm.(*Model)
+	tracker.capture(cmd)
+
+	// 4. ASSERT: History contains Tool A as success and Tool B as cancelled
+	fullHistory := tracker.allHistory()
+
+	// Tool A should have a success prefix (✔)
+	assert.Contains(t, fullHistory, "✔ Tool A Success", "Tool A should remain successful")
+	// Tool B should have an error prefix (✘) and "Cancelled"
+	assert.Contains(t, fullHistory, "✘ Tool B Running", "Tool B should be rendered with error prefix")
+	assert.Contains(t, fullHistory, "Cancelled", "Tool B should be marked as Cancelled")
+}

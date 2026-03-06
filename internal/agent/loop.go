@@ -110,12 +110,6 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 				defer wg.Done()
 
 				resp, disp, err := l.toolExecutor.execute(ctx, call, l.events)
-				if err != nil {
-					// We've already handled individual tool errors inside toolExecutor.execute
-					// which returns a domain.Message with the error for the LLM.
-					// If there's a serious infrastructure error (context cancelled), we stop.
-					return
-				}
 
 				mu.Lock()
 				defer mu.Unlock()
@@ -126,7 +120,16 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 					}
 					msg.ToolDisplays[call.ID] = disp
 				}
-				toolResponses[idx] = resp
+				if resp.Role != "" {
+					toolResponses[idx] = resp
+				}
+
+				if err != nil {
+					// We've already handled individual tool errors inside toolExecutor.execute
+					// which returns a domain.Message with the error for the LLM.
+					// If there's a serious infrastructure error (context cancelled), we stop.
+					return
+				}
 			}(i, tc)
 		}
 

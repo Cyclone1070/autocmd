@@ -27,6 +27,9 @@ func (mt *mockTool) Declaration() domain.Declaration {
 	return domain.Declaration{Name: mt.name, Description: mt.description}
 }
 func (mt *mockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if mt.prepare != nil {
 		return mt.prepare(ctx, params)
 	}
@@ -41,6 +44,9 @@ type mockInvocation struct {
 }
 
 func (m *mockInvocation) Execute(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if m.execute != nil {
 		return m.execute(ctx)
 	}
@@ -342,4 +348,24 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	for range 10 {
 		assert.True(t, <-results)
 	}
+}
+
+func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	mt := &mockTool{name: "test"}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+
+	res, _, err := executor.execute(ctx, domain.ToolCall{
+		ID:   "tc-cancel",
+		Name: "test",
+	}, nil)
+
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, domain.RoleTool, res.Role)
+	assert.Equal(t, "tc-cancel", res.ToolCallID)
+	assert.True(t, res.ToolError)
+	assert.Equal(t, "execution cancelled", res.Content)
 }

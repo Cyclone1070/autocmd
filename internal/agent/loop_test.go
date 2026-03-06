@@ -246,3 +246,63 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
 	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
 }
+
+func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []domain.StreamChunk{
+				domain.ToolCall{ID: "tc-1", Name: "t1"},
+				domain.ToolCall{ID: "tc-2", Name: "t2"},
+			}},
+		},
+	}
+
+	mt1 := &mockTool{
+		name: "t1",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				execute: func(ctx context.Context) (string, error) {
+					// Give enough time for the parallel executor to start both
+					time.Sleep(50 * time.Millisecond)
+					cancel()
+					return "", ctx.Err()
+				},
+			}, nil
+		},
+	}
+	mt2 := &mockTool{
+		name: "t2",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				execute: func(ctx context.Context) (string, error) {
+					// Should be cancelled by mt1
+					<-ctx.Done()
+					return "", ctx.Err()
+				},
+			}, nil
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{mt1, mt2}, m, nil)
+	session := &domain.Session{}
+
+	err := l.Run(ctx, session, "run")
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// User message + Assistant (with 2 calls) + 2 Tool responses + User cancellation message
+	// Wait, loop.go appends a cancellation message in a defer.
+	// We expect 5 messages:
+	// 0: User input
+	// 1: Assistant with tool calls
+	// 2: Tool 1 response (cancelled)
+	// 3: Tool 2 response (cancelled)
+	// 4: [Session cancelled by user]
+	assert.Equal(t, 5, len(session.Messages))
+	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
+	assert.True(t, session.Messages[2].ToolError)
+	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
+	assert.True(t, session.Messages[3].ToolError)
+}

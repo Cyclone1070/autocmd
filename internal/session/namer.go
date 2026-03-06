@@ -10,8 +10,13 @@ import (
 
 // GenerateName creates a short title for a session based on the first user message.
 // It uses the provided LLM to generate the title.
-func GenerateName(ctx context.Context, llm domain.LLM, firstUserMessage string) (string, error) {
-	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", firstUserMessage)
+func GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
+	target := input
+	if len(sess.Messages) > 0 {
+		target = sess.Messages[0].Content
+	}
+
+	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 
 	messages := []domain.Message{
 		{Role: domain.RoleUser, Content: prompt},
@@ -19,7 +24,7 @@ func GenerateName(ctx context.Context, llm domain.LLM, firstUserMessage string) 
 
 	stream, err := llm.Stream(ctx, messages, nil)
 	if err != nil || stream == nil {
-		return fallbackName(firstUserMessage), nil
+		return fallbackName(target), nil
 	}
 
 	var sb strings.Builder
@@ -30,12 +35,12 @@ func GenerateName(ctx context.Context, llm domain.LLM, firstUserMessage string) 
 	}
 
 	if err := stream.Err(); err != nil {
-		return fallbackName(firstUserMessage), nil
+		return fallbackName(target), nil
 	}
 
 	name := strings.TrimSpace(sb.String())
 	if name == "" {
-		return fallbackName(firstUserMessage), nil
+		return fallbackName(target), nil
 	}
 
 	// Remove any surrounding quotes the LLM might have included

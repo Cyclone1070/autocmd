@@ -24,11 +24,19 @@ func (m *mockLLM) Stream(ctx context.Context, msgs []domain.Message, tools []dom
 
 type mockStream struct {
 	domain.Stream
+	ctx    context.Context
 	chunks []domain.StreamChunk
 	index  int
 }
 
 func (m *mockStream) Next() bool {
+	if m.ctx != nil {
+		select {
+		case <-m.ctx.Done():
+			return false
+		default:
+		}
+	}
 	if m.index < len(m.chunks) {
 		m.index++
 		return true
@@ -40,10 +48,40 @@ func (m *mockStream) Chunk() domain.StreamChunk {
 	return m.chunks[m.index-1]
 }
 
-func (m *mockStream) Err() error { return nil }
+func (m *mockStream) Err() error {
+	if m.ctx != nil {
+		select {
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		default:
+		}
+	}
+	return nil
+}
 
 func TestGenerateName(t *testing.T) {
 	ctx := context.Background()
+
+	t.Run("Context cancellation falls back immediately", func(t *testing.T) {
+		cancelCtx, cancel := context.WithCancel(ctx)
+
+		ms := &mockStream{
+			ctx: cancelCtx,
+			chunks: []domain.StreamChunk{
+				domain.TextChunk{Text: "Partial "},
+				domain.TextChunk{Text: "response"},
+			},
+		}
+		m := &mockLLM{
+			streams: []*mockStream{ms},
+		}
+
+		cancel() // Cancel BEFORE calling
+		name, err := GenerateName(cancelCtx, m, &domain.Session{}, "Cancelled message")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "Cancelled message", name) // Should fallback on cancellation
+	})
 
 	t.Run("Success", func(t *testing.T) {
 		m := &mockLLM{
@@ -58,9 +96,31 @@ func TestGenerateName(t *testing.T) {
 			},
 		}
 
-		name, err := GenerateName(ctx, m, "I have a bug in my UI")
+		name, err := GenerateName(ctx, m, &domain.Session{}, "I have a bug in my UI")
 		assert.NoError(t, err)
 		assert.Equal(t, "Fixing UI Bugs", name)
+	})
+
+	t.Run("Use first message content", func(t *testing.T) {
+		m := &mockLLM{
+			streams: []*mockStream{
+				{
+					chunks: []domain.StreamChunk{
+						domain.TextChunk{Text: "Summary of First"},
+					},
+				},
+			},
+		}
+
+		sess := &domain.Session{
+			Messages: []domain.Message{
+				{Content: "This is the first message"},
+			},
+		}
+
+		name, err := GenerateName(ctx, m, sess, "This is the second message")
+		assert.NoError(t, err)
+		assert.Equal(t, "Summary of First", name)
 	})
 
 	t.Run("Empty response fallback", func(t *testing.T) {
@@ -70,7 +130,7 @@ func TestGenerateName(t *testing.T) {
 			},
 		}
 
-		name, err := GenerateName(ctx, m, "Short message")
+		name, err := GenerateName(ctx, m, &domain.Session{}, "Short message")
 		assert.NoError(t, err)
 		assert.Equal(t, "Short message", name)
 	})
@@ -80,7 +140,7 @@ func TestGenerateName(t *testing.T) {
 			streams: nil, // Will trigger error in Stream
 		}
 
-		name, err := GenerateName(ctx, m, "Very long message that should be truncated when used as a fallback because it is too long for a session name")
+		name, err := GenerateName(ctx, m, &domain.Session{}, "Very long message that should be truncated when used as a fallback because it is too long for a session name")
 		assert.NoError(t, err)
 		assert.Equal(t, "Very long message that should be truncated when us...", name)
 	})

@@ -139,9 +139,9 @@ func runAgent(cfg *config.Config, input string) error {
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
 		namingWg.Go(func() {
-			name, err := session.GenerateName(context.Background(), llmInstance, input)
+			name, err := session.GenerateName(ctx, llmInstance, sess, input)
 			if err == nil {
-				_ = store.Rename(sess.ID, name)
+				sess.Name = name
 			}
 		})
 	}
@@ -151,6 +151,9 @@ func runAgent(cfg *config.Config, input string) error {
 	done := make(chan error, 1)
 	go func() {
 		err := agentLoop.Run(ctx, sess, input)
+		// Wait for auto-naming to finish or be canceled before saving
+		namingWg.Wait()
+
 		// 1. DATA SAFETY FIRST: Save history immediately after loop returns.
 		// This ensures history is persisted even if the UI/Broker shutdown hangs.
 		_ = store.Save(sess)
@@ -177,7 +180,6 @@ func runAgent(cfg *config.Config, input string) error {
 		return fmt.Errorf("agent failed: %w", agentErr)
 	}
 
-	namingWg.Wait()
 	return nil
 }
 

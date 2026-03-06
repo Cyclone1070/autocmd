@@ -20,44 +20,37 @@ var sessionNewCmd = &cobra.Command{
 			return err
 		}
 
+		state, err := config.LoadState()
+		if err != nil {
+			return err
+		}
+
 		store, err := buildSessionStore(cfg)
 		if err != nil {
 			return err
 		}
 
-		// Check if we are already on a blank session
-		if cfg.Session.CurrentSessionID != "" {
-			curr, err := store.Get(cfg.Session.CurrentSessionID)
-			if err == nil && curr.Name == "" && len(curr.Messages) == 0 {
+		// Check if current session is already blank
+		if state.CurrentSessionID != "" {
+			sess, err := store.Get(state.CurrentSessionID)
+			if err == nil && len(sess.Messages) == 0 {
 				fmt.Println("Already on a blank session.")
 				return nil
 			}
 		}
 
-		// Look for an existing blank session to reuse
-		blank, err := store.FindBlank()
+		// Create new session
+		sess, err := store.Create()
 		if err != nil {
 			return err
 		}
 
-		var id string
-		if blank != nil {
-			id = blank.ID
-			fmt.Printf("Switched to existing blank session: %s\n", id)
-		} else {
-			sess, err := store.Create()
-			if err != nil {
-				return err
-			}
-			id = sess.ID
-			fmt.Printf("Created new blank session: %s\n", id)
+		state.CurrentSessionID = sess.ID
+		if err := config.SaveState(state); err != nil {
+			return fmt.Errorf("failed to save state: %w", err)
 		}
 
-		cfg.Session.CurrentSessionID = id
-		if err := config.Save(cfg); err != nil {
-			return fmt.Errorf("failed to save config: %w", err)
-		}
-
+		fmt.Printf("Created new session: %s\n", sess.ID)
 		return nil
 	},
 }

@@ -31,17 +31,21 @@ var historyCmd = &cobra.Command{
 		}
 
 		var sessionID string
-		if cfg.Session.CurrentSessionID != "" {
-			sessionID = cfg.Session.CurrentSessionID
+		if len(args) > 0 {
+			sessionID = args[0]
 		} else {
-			// Fallback to most recent session if none active
-			summaries, err := store.List()
+			state, err := config.LoadState()
 			if err != nil {
 				return err
 			}
-			if len(summaries) == 0 {
-				fmt.Println("No sessions found.")
-				return nil
+			sessionID = state.CurrentSessionID
+		}
+
+		if sessionID == "" {
+			// Fallback: try most recent session if no active one
+			summaries, err := store.List()
+			if err != nil || len(summaries) == 0 {
+				return fmt.Errorf("no current session found and no history available")
 			}
 			sessionID = summaries[0].ID
 		}

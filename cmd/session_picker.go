@@ -15,6 +15,7 @@ import (
 
 type sessionPickerWrapper struct {
 	cfg          *config.Config
+	state        *config.State
 	store        *session.Store
 	picker       *picker.Picker
 	renaming     bool
@@ -78,7 +79,7 @@ func (w *sessionPickerWrapper) mapSessionsToItems(sessions []domain.SessionSumma
 			ID:     s.ID,
 			Label:  name,
 			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
-			Active: s.ID == w.cfg.Session.CurrentSessionID,
+			Active: s.ID == w.state.CurrentSessionID,
 			Group:  getDateGroup(s.Updated),
 		})
 	}
@@ -119,11 +120,17 @@ func runSessionPicker() error {
 		return err
 	}
 
+	state, err := config.LoadState()
+	if err != nil {
+		return err
+	}
+
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
 
 	wrapper := &sessionPickerWrapper{
 		cfg:       cfg,
+		state:     state,
 		store:     store,
 		textInput: ti,
 	}
@@ -140,8 +147,8 @@ func runSessionPicker() error {
 					if err != nil {
 						return nil
 					}
-					cfg.Session.CurrentSessionID = sess.ID
-					_ = config.Save(cfg)
+					state.CurrentSessionID = sess.ID
+					_ = config.SaveState(state)
 					return tea.Quit
 				},
 			},
@@ -177,8 +184,8 @@ func runSessionPicker() error {
 	}
 
 	if selected, ok := wrapper.picker.Selected(); ok {
-		cfg.Session.CurrentSessionID = selected.ID
-		_ = config.Save(cfg)
+		state.CurrentSessionID = selected.ID
+		_ = config.SaveState(state)
 		fmt.Printf("\nSelected session: %s\n", selected.ID)
 	}
 

@@ -27,6 +27,11 @@ var infoCmd = &cobra.Command{
 		cmd.Printf("Model:          %s\n", cfg.Model)
 
 		// 2. Session Name
+		state, err := config.LoadState()
+		if err != nil {
+			return fmt.Errorf("failed to load state: %w", err)
+		}
+
 		store, err := buildSessionStore(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to build session store: %w", err)
@@ -34,8 +39,8 @@ var infoCmd = &cobra.Command{
 
 		sessionName := "None"
 		var sessMessages domain.Messages
-		if cfg.Session.CurrentSessionID != "" {
-			sess, err := store.Get(cfg.Session.CurrentSessionID)
+		if state.CurrentSessionID != "" {
+			sess, err := store.Get(state.CurrentSessionID)
 			if err == nil {
 				sessionName = sess.Name
 				if sessionName == "" {

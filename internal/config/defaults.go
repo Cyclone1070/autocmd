@@ -16,9 +16,13 @@ type Config struct {
 	Model   string        `json:"model"` // e.g., "google/gemini-2.5-flash"
 }
 
+// State holds application persistent state that is managed by the app.
+type State struct {
+	CurrentSessionID string `json:"current_session_id" github:"current_session_id"`
+}
+
 type SessionConfig struct {
-	StorageDir       string `json:"storage_dir"`        // Default: ~/.iav/sessions
-	CurrentSessionID string `json:"current_session_id"` // Last used session
+	StorageDir string `json:"storage_dir"` // Default: ~/.iav/sessions
 }
 
 type ToolsConfig struct {

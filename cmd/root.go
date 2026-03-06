@@ -105,14 +105,19 @@ func runAgent(cfg *config.Config, input string) error {
 		return err
 	}
 
+	state, err := config.LoadState()
+	if err != nil {
+		return err
+	}
+
 	store, err := buildSessionStore(cfg)
 	if err != nil {
 		return err
 	}
 
 	var sess *domain.Session
-	if cfg.Session.CurrentSessionID != "" {
-		sess, err = store.Get(cfg.Session.CurrentSessionID)
+	if state.CurrentSessionID != "" {
+		sess, err = store.Get(state.CurrentSessionID)
 		if err != nil {
 			// If session not found, create a new one
 			sess, err = store.Create()
@@ -126,9 +131,9 @@ func runAgent(cfg *config.Config, input string) error {
 	}
 
 	// Persist the session ID if it changed or was empty
-	if cfg.Session.CurrentSessionID != sess.ID {
-		cfg.Session.CurrentSessionID = sess.ID
-		_ = config.Save(cfg)
+	if state.CurrentSessionID != sess.ID {
+		state.CurrentSessionID = sess.ID
+		_ = config.SaveState(state)
 	}
 
 	events := make(chan domain.Event, 100)

@@ -12,6 +12,8 @@ const (
 	ConfigDir = "iav"
 	// ConfigFile is the config file name
 	ConfigFile = "config.json"
+	// StateFile is the state file name
+	StateFile = "state.json"
 )
 
 // FileSystem abstracts file operations for testability
@@ -94,6 +96,73 @@ func (l *Loader) Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// LoadState reads application state from ~/.config/iav/state.json
+func (l *Loader) LoadState() (*State, error) {
+	state := &State{}
+
+	homeDir, err := l.fs.UserHomeDir()
+	if err != nil {
+		return state, nil // Use empty state if can't get home dir
+	}
+
+	statePath := filepath.Join(homeDir, ".config", ConfigDir, StateFile)
+
+	data, err := l.fs.ReadFile(statePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return state, nil // Use empty state if file doesn't exist
+		}
+		return nil, err
+	}
+
+	if err := json.Unmarshal(data, state); err != nil {
+		return nil, err
+	}
+
+	return state, nil
+}
+
+// SaveState writes application state to ~/.config/iav/state.json
+func (l *Loader) SaveState(state *State) error {
+	if state == nil {
+		return fmt.Errorf("state is nil")
+	}
+
+	homeDir, err := l.fs.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home dir: %w", err)
+	}
+
+	configDir := filepath.Join(homeDir, ".config", ConfigDir)
+	statePath := filepath.Join(configDir, StateFile)
+
+	// Ensure directory exists
+	if err := l.fs.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("create config dir: %w", err)
+	}
+
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal state: %w", err)
+	}
+
+	if err := l.fs.WriteFile(statePath, data, 0644); err != nil {
+		return fmt.Errorf("write state file: %w", err)
+	}
+
+	return nil
+}
+
+// LoadState is a convenience function using the default loader
+func LoadState() (*State, error) {
+	return NewLoader().LoadState()
+}
+
+// SaveState is a convenience function using the default loader
+func SaveState(state *State) error {
+	return NewLoader().SaveState(state)
 }
 
 // Load is a convenience function using the default loader

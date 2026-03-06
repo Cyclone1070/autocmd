@@ -8,6 +8,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/history"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
+	"os"
 )
 
 func init() {
@@ -53,7 +55,8 @@ var historyCmd = &cobra.Command{
 			return fmt.Errorf("failed to load session %s: %w", sessionID, err)
 		}
 
-		m := history.NewModel(sess.Messages, sess.ToolDisplays, cfg.UI, 0, 0)
+		width, height, _ := term.GetSize(int(os.Stdout.Fd()))
+		m := history.NewModel(sess.Messages, sess.ToolDisplays, cfg.UI, width, height)
 		p := tea.NewProgram(m, tea.WithAltScreen())
 
 		if _, err := p.Run(); err != nil {

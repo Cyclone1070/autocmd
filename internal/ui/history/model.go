@@ -185,6 +185,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.WindowSizeMsg:
 		newWidth := m.calculateWidth(msg.Width)
+		if newWidth == m.width && msg.Height == m.height {
+			return m, nil
+		}
+
 		if newWidth != m.width {
 			m.width = newWidth
 			m.renderer = ui.NewGlamourRenderer(m.width, m.isDark)
@@ -194,7 +198,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.viewport.Width = m.width
 		m.viewport.Height = m.height
-		// Always re-initialize content to fill the new viewport and anchor to bottom
+		// Re-initialize content to fill the new viewport and anchor to bottom
 		m.initializeContent()
 	}
 

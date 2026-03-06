@@ -119,9 +119,9 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		}
 
 		var rendered string
-		prefix := "✓"
+		prefix := lipgloss.NewStyle().Foreground(theme.SuccessColor()).Render("✔")
 		if status == ui.StatusError {
-			prefix = "✗"
+			prefix = lipgloss.NewStyle().Foreground(theme.ErrorColor()).Render("✘")
 		}
 
 		// Use width-2 for the content to account for the box borders,

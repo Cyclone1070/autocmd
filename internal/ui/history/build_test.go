@@ -142,7 +142,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 	rendered := BuildHistory(messages, nil, theme, 80)
 
 	// Should contain the error prefix indicator (X or similar depending on theme)
-	assert.Contains(t, rendered, "✗")
+	assert.Contains(t, rendered, "✘")
 }
 
 func TestDivider_Color(t *testing.T) {

@@ -364,7 +364,7 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	}, nil)
 
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, domain.RoleTool, res.Role)
+	assert.Equal(t, domain.RoleTool, res.Role())
 	assert.Equal(t, "tc-cancel", res.ToolCallID)
 	assert.True(t, res.ToolError)
 	assert.Equal(t, "execution cancelled", res.Content)

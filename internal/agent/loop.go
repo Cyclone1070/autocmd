@@ -41,17 +41,16 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		return fmt.Errorf("session is required")
 	}
 
-	session.Messages = append(session.Messages, domain.Message{
-		Role:    domain.RoleUser,
+	session.Messages = append(session.Messages, domain.UserMessage{
 		Content: input,
 	})
 
 	defer func() {
 		if ctx.Err() != nil {
 			msgs := session.Messages
-			if len(msgs) == 0 || msgs[len(msgs)-1].Content != "[Session cancelled by user]" {
-				session.Messages = append(session.Messages, domain.Message{
-					Role:    domain.RoleUser,
+			lastMsg, ok := msgs[len(msgs)-1].(domain.UserMessage)
+			if !ok || lastMsg.Content != "[Session cancelled by user]" {
+				session.Messages = append(session.Messages, domain.UserMessage{
 					Content: "[Session cancelled by user]",
 				})
 			}
@@ -74,8 +73,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			return fmt.Errorf("LLM.Stream: %w", err)
 		}
 
-		var msg domain.Message
-		msg.Role = domain.RoleAssistant
+		var msg domain.AssistantMessage
 
 		for stream.Next() {
 			switch c := stream.Chunk().(type) {
@@ -120,7 +118,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 					}
 					msg.ToolDisplays[call.ID] = disp
 				}
-				if resp.Role != "" {
+				if resp.ToolCallID != "" {
 					toolResponses[idx] = resp
 				}
 
@@ -139,14 +137,13 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		session.Messages[len(session.Messages)-1] = msg
 		// Append all responses in the correct order
 		for _, r := range toolResponses {
-			if r.Role != "" {
+			if r != nil {
 				session.Messages = append(session.Messages, r)
 			}
 		}
 	}
 
-	session.Messages = append(session.Messages, domain.Message{
-		Role:    domain.RoleUser,
+	session.Messages = append(session.Messages, domain.UserMessage{
 		Content: "[Max iterations reached]",
 	})
 

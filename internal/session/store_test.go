@@ -179,8 +179,8 @@ func TestGet_Success(t *testing.T) {
 
 	messagesDTO := sessionMessagesDTO{
 		Messages: []domain.Message{
-			{Role: domain.RoleUser, Content: "Hello"},
-			{Role: domain.RoleAssistant, Content: "Hi there"},
+			domain.UserMessage{Content: "Hello"},
+			domain.AssistantMessage{Content: "Hi there"},
 		},
 	}
 	messagesData, _ := json.MarshalIndent(messagesDTO, "", "  ")
@@ -302,7 +302,7 @@ func TestSave_Success(t *testing.T) {
 		Created: time.Now(),
 		Updated: time.Now(),
 		Messages: []domain.Message{
-			{Role: domain.RoleUser, Content: "Hello"},
+			domain.UserMessage{Content: "Hello"},
 		},
 	}
 
@@ -647,7 +647,7 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 	// Modify
 	sess.Name = "Roundtrip Test"
 	sess.Messages = []domain.Message{
-		{Role: domain.RoleUser, Content: "Test message"},
+		domain.UserMessage{Content: "Test message"},
 	}
 
 	// Save
@@ -672,8 +672,18 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 	if len(loaded.Messages) != len(sess.Messages) {
 		t.Errorf("Messages count mismatch: got %d, want %d", len(loaded.Messages), len(sess.Messages))
 	}
-	if len(loaded.Messages) > 0 && loaded.Messages[0].Content != sess.Messages[0].Content {
-		t.Errorf("Message content mismatch: got %q, want %q", loaded.Messages[0].Content, sess.Messages[0].Content)
+	if len(loaded.Messages) > 0 {
+		var content string
+		if m, ok := loaded.Messages[0].(domain.UserMessage); ok {
+			content = m.Content
+		}
+		var sessContent string
+		if m, ok := sess.Messages[0].(domain.UserMessage); ok {
+			sessContent = m.Content
+		}
+		if content != sessContent {
+			t.Errorf("Message content mismatch: got %q, want %q", content, sessContent)
+		}
 	}
 }
 
@@ -790,7 +800,7 @@ func TestFindBlank(t *testing.T) {
 	}
 
 	// 3. Add a message - should no longer be blank
-	sess.Messages = append(sess.Messages, domain.Message{Role: domain.RoleUser, Content: "hi"})
+	sess.Messages = append(sess.Messages, domain.UserMessage{Content: "hi"})
 	_ = store.Save(sess)
 
 	blank, err = store.FindBlank()

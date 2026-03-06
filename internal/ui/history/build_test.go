@@ -23,8 +23,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	captured := "output line 1\noutput line 2"
 
 	messages := []domain.Message{
-		{
-			Role: domain.RoleAssistant,
+		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
@@ -36,8 +35,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 				},
 			},
 		},
-		{
-			Role:       domain.RoleTool,
+		domain.ToolMessage{
 			ToolCallID: "tc-1",
 			Content:    "output line 1\noutput line 2\n\n(Exit code: 0)",
 		},
@@ -57,8 +55,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	empty := ""
 
 	messages := []domain.Message{
-		{
-			Role: domain.RoleAssistant,
+		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
@@ -70,8 +67,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 				},
 			},
 		},
-		{
-			Role:       domain.RoleTool,
+		domain.ToolMessage{
 			ToolCallID: "tc-1",
 			Content:    "\n\n(Exit code: 0)",
 		},
@@ -88,8 +84,7 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 	theme := newTestTheme()
 
 	messages := []domain.Message{
-		{
-			Role: domain.RoleAssistant,
+		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
@@ -101,8 +96,7 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 				},
 			},
 		},
-		{
-			Role:       domain.RoleTool,
+		domain.ToolMessage{
 			ToolCallID: "tc-1",
 			Content:    "fallback output\n\n(Exit code: 0)",
 		},
@@ -120,8 +114,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 	empty := ""
 
 	messages := []domain.Message{
-		{
-			Role: domain.RoleAssistant,
+		domain.AssistantMessage{
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "shell"},
 			},
@@ -133,8 +126,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 				},
 			},
 		},
-		{
-			Role:       domain.RoleTool,
+		domain.ToolMessage{
 			ToolCallID: "tc-1",
 			Content:    "Error: Execution failed",
 			ToolError:  true,
@@ -164,8 +156,8 @@ func TestDivider_Color(t *testing.T) {
 	expectedAssistantDivider := mutedStyle.Render(strings.Repeat("-", 80))
 
 	messages := []domain.Message{
-		{Role: domain.RoleUser, Content: "user content"},
-		{Role: domain.RoleAssistant, Content: "assistant content"},
+		domain.UserMessage{Content: "user content"},
+		domain.AssistantMessage{Content: "assistant content"},
 	}
 
 	// Render USER message
@@ -183,8 +175,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	renderer := ui.NewGlamourRenderer(width, true)
 
 	tcID := "1"
-	msg := domain.Message{
-		Role:    domain.RoleAssistant,
+	msg := domain.AssistantMessage{
 		Content: "thought",
 		ToolCalls: []domain.ToolCall{
 			{
@@ -225,8 +216,8 @@ func TestMessageHeaders(t *testing.T) {
 	width := 80
 
 	messages := []domain.Message{
-		{Role: domain.RoleUser, Content: "hello"},
-		{Role: domain.RoleAssistant, Content: "hi"},
+		domain.UserMessage{Content: "hello"},
+		domain.AssistantMessage{Content: "hi"},
 	}
 
 	t.Run("Assistant Header", func(t *testing.T) {

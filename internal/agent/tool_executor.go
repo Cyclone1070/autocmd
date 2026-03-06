@@ -24,7 +24,7 @@ func (e *toolExecutor) declarations() []domain.Declaration {
 	return e.registry.Declarations()
 }
 
-func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events eventSender) (domain.Message, domain.ToolDisplay, error) {
+func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events eventSender) (domain.ToolMessage, domain.ToolDisplay, error) {
 	t, ok := e.registry.Get(tc.Name)
 	if !ok {
 		decls := e.declarations()
@@ -34,8 +34,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Name, declsJSON)
 
-		return domain.Message{
-			Role:       domain.RoleTool,
+		return domain.ToolMessage{
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    errMsg,
@@ -45,8 +44,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	inv, err := t.Prepare(ctx, tc.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{
-				Role:       domain.RoleTool,
+			return domain.ToolMessage{
 				ToolCallID: tc.ID,
 				ToolName:   tc.Name,
 				Content:    "execution cancelled",
@@ -59,8 +57,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		}
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Name, err, declJSON)
 
-		return domain.Message{
-			Role:       domain.RoleTool,
+		return domain.ToolMessage{
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    errMsg,
@@ -105,8 +102,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.Message{
-				Role:       domain.RoleTool,
+			return domain.ToolMessage{
 				ToolCallID: tc.ID,
 				ToolName:   tc.Name,
 				Content:    "execution cancelled",
@@ -121,8 +117,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 			})
 		}
 
-		return domain.Message{
-			Role:       domain.RoleTool,
+		return domain.ToolMessage{
 			ToolCallID: tc.ID,
 			ToolName:   tc.Name,
 			Content:    llmContent,
@@ -140,8 +135,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		})
 	}
 
-	return domain.Message{
-		Role:       domain.RoleTool,
+	return domain.ToolMessage{
 		ToolCallID: tc.ID,
 		ToolName:   tc.Name,
 		Content:    llmContent,

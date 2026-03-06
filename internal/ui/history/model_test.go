@@ -50,10 +50,10 @@ func TestModel_EmptyMessages_NoPanic(t *testing.T) {
 func TestModel_ResizeBehavior(t *testing.T) {
 	cfg := config.UIConfig{ChatWindowWidth: 100}
 	messages := []domain.Message{
-		{Role: domain.RoleUser, Content: "hello"},
-		{Role: domain.RoleAssistant, Content: "hi there"},
-		{Role: domain.RoleUser, Content: "how are you?"},
-		{Role: domain.RoleAssistant, Content: "i am good"},
+		domain.UserMessage{Content: "hello"},
+		domain.AssistantMessage{Content: "hi there"},
+		domain.UserMessage{Content: "how are you?"},
+		domain.AssistantMessage{Content: "i am good"},
 	}
 
 	t.Run("HeightOnlyResize_PreservesCache", func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestModel_ResizeBehavior(t *testing.T) {
 		// Start with 10 messages in a tall window - everything fits
 		var manyMsg []domain.Message
 		for i := 0; i < 10; i++ {
-			manyMsg = append(manyMsg, domain.Message{Role: domain.RoleUser, Content: "msg"})
+			manyMsg = append(manyMsg, domain.UserMessage{Content: "msg"})
 		}
 
 		m := NewModel(manyMsg, cfg, 80, 100) // 100 lines height
@@ -111,7 +111,7 @@ func TestIssue_History_ViewportGapAccumulation(t *testing.T) {
 	var messages []domain.Message
 	// Provide many messages to ensure we have content to prepend.
 	for i := 0; i < 50; i++ {
-		messages = append(messages, domain.Message{Role: domain.RoleUser, Content: "filler\n"})
+		messages = append(messages, domain.UserMessage{Content: "filler\n"})
 	}
 
 	// 1. Initialize with height 20.

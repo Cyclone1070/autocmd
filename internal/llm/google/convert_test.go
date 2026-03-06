@@ -35,8 +35,8 @@ func TestToTools(t *testing.T) {
 func TestToHistory(t *testing.T) {
 	// Test basic case (system + user)
 	msgs := []domain.Message{
-		{Role: domain.RoleSystem, Content: "Be helpful"},
-		{Role: domain.RoleUser, Content: "Hi"},
+		domain.SystemMessage{Content: "Be helpful"},
+		domain.UserMessage{Content: "Hi"},
 	}
 
 	hist, err := toHistory(msgs)
@@ -60,9 +60,9 @@ func TestToHistory(t *testing.T) {
 
 	// Test roles and multiple turns
 	msgs = []domain.Message{
-		{Role: domain.RoleUser, Content: "A"},      // 0
-		{Role: domain.RoleAssistant, Content: "B"}, // 1
-		{Role: domain.RoleUser, Content: "C"},      // 2
+		domain.UserMessage{Content: "A"},      // 0
+		domain.AssistantMessage{Content: "B"}, // 1
+		domain.UserMessage{Content: "C"},      // 2
 	}
 
 	hist, err = toHistory(msgs)
@@ -94,14 +94,13 @@ func TestToHistory(t *testing.T) {
 func TestToHistory_ToolCall(t *testing.T) {
 	args := json.RawMessage(`{"location":"Paris"}`)
 	msgs := []domain.Message{
-		{
-			Role: domain.RoleAssistant,
+		domain.AssistantMessage{
+			Content: "",
 			ToolCalls: []domain.ToolCall{
 				{ID: "tc-1", Name: "get_weather", Arguments: args},
 			},
 		},
-		{
-			Role:       domain.RoleTool,
+		domain.ToolMessage{
 			ToolCallID: "tc-1",
 			ToolName:   "get_weather",
 			Content:    "Sunny",

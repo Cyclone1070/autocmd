@@ -34,7 +34,7 @@ type sessionInfoDTO struct {
 
 // sessionMessagesDTO is used for the .messages.json file.
 type sessionMessagesDTO struct {
-	Messages []domain.Message `json:"messages"`
+	Messages domain.Messages `json:"messages"`
 }
 
 // Store manages session creation, loading, saving, and listing.
@@ -133,7 +133,7 @@ func (st *Store) Save(s *domain.Session) error {
 	// Write messages file
 	messagesPath := filepath.Join(st.storageDir, s.ID+".messages.json")
 	messagesDTO := sessionMessagesDTO{
-		Messages: s.Messages,
+		Messages: domain.Messages(s.Messages),
 	}
 	messagesData, err := json.MarshalIndent(messagesDTO, "", "  ")
 	if err != nil {

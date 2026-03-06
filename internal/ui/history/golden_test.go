@@ -27,49 +27,44 @@ func getHistoryElements() []TestElement {
 	return []TestElement{
 		{
 			ID: "TXT",
-			Msg: domain.Message{
-				Role:    domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				Content: "This is a paragraph of text.",
 			},
 		},
 		{
 			ID: "QUOTE",
-			Msg: domain.Message{
-				Role:    domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				Content: "> This is a blockquote.\n> It has multiple lines.",
 			},
 		},
 		{
 			ID: "LIST",
-			Msg: domain.Message{
-				Role:    domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				Content: "- Item 1\n- Item 2\n  - Nested Item",
 			},
 		},
 		{
 			ID: "CODE",
-			Msg: domain.Message{
-				Role:    domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				Content: "```go\nfunc hello() {\n\tfmt.Println(\"world\")\n}\n```",
 			},
 		},
-		{ID: "H1", Msg: domain.Message{Role: domain.RoleAssistant, Content: "# Header 1"}},
-		{ID: "H2", Msg: domain.Message{Role: domain.RoleAssistant, Content: "## Header 2"}},
-		{ID: "H3", Msg: domain.Message{Role: domain.RoleAssistant, Content: "### Header 3"}},
-		{ID: "H4", Msg: domain.Message{Role: domain.RoleAssistant, Content: "#### Header 4"}},
-		{ID: "H5", Msg: domain.Message{Role: domain.RoleAssistant, Content: "##### Header 5"}},
-		{ID: "H6", Msg: domain.Message{Role: domain.RoleAssistant, Content: "###### Header 6"}},
+		{ID: "H1", Msg: domain.AssistantMessage{Content: "# Header 1"}},
+		{ID: "H2", Msg: domain.AssistantMessage{Content: "## Header 2"}},
+		{ID: "H3", Msg: domain.AssistantMessage{Content: "### Header 3"}},
+		{ID: "H4", Msg: domain.AssistantMessage{Content: "#### Header 4"}},
+		{ID: "H5", Msg: domain.AssistantMessage{Content: "##### Header 5"}},
+		{ID: "H6", Msg: domain.AssistantMessage{Content: "###### Header 6"}},
 		{
 			ID: "TOOL_OK",
-			Msg: domain.Message{
-				Role: domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				ToolCalls: []domain.ToolCall{
 					{ID: "tc-ok", Name: "shell"},
 				},
 				ToolDisplays: map[string]domain.ToolDisplay{
 					"tc-ok": domain.ShellDisplay{
 						TypeField:      "shell",
-						Comment:         "Running Tests",
+						Comment:        "Running Tests",
 						Command:        "go test ./...",
 						CapturedOutput: &captured,
 					},
@@ -78,15 +73,14 @@ func getHistoryElements() []TestElement {
 		},
 		{
 			ID: "TOOL_ERR",
-			Msg: domain.Message{
-				Role: domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				ToolCalls: []domain.ToolCall{
 					{ID: "tc-err", Name: "shell"},
 				},
 				ToolDisplays: map[string]domain.ToolDisplay{
 					"tc-err": domain.ShellDisplay{
 						TypeField: "shell",
-						Comment:    "Failing Command",
+						Comment:   "Failing Command",
 						Command:   "false",
 					},
 				},
@@ -94,8 +88,7 @@ func getHistoryElements() []TestElement {
 		},
 		{
 			ID: "THINK",
-			Msg: domain.Message{
-				Role:    domain.RoleAssistant,
+			Msg: domain.AssistantMessage{
 				Content: "✔ Thought for 1s",
 			},
 		},
@@ -159,17 +152,18 @@ func createHistoryMessage(elems ...TestElement) domain.Message {
 	displays := make(map[string]domain.ToolDisplay)
 
 	for _, e := range elems {
-		if e.Msg.Content != "" {
-			contents = append(contents, e.Msg.Content)
-		}
-		calls = append(calls, e.Msg.ToolCalls...)
-		for k, v := range e.Msg.ToolDisplays {
-			displays[k] = v
+		if am, ok := e.Msg.(domain.AssistantMessage); ok {
+			if am.Content != "" {
+				contents = append(contents, am.Content)
+			}
+			calls = append(calls, am.ToolCalls...)
+			for k, v := range am.ToolDisplays {
+				displays[k] = v
+			}
 		}
 	}
 
-	return domain.Message{
-		Role:         domain.RoleAssistant,
+	return domain.AssistantMessage{
 		Content:      strings.Join(contents, "\n\n"),
 		ToolCalls:    calls,
 		ToolDisplays: displays,

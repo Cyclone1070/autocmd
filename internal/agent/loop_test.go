@@ -171,7 +171,8 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "max iterations (3) reached")
-	assert.Equal(t, "[Max iterations reached]", session.Messages[len(session.Messages)-1].Content)
+	lastMsg := session.Messages[len(session.Messages)-1].(domain.UserMessage)
+	assert.Equal(t, "[Max iterations reached]", lastMsg.Content)
 }
 
 func TestRun_ContextCancelled(t *testing.T) {
@@ -190,7 +191,8 @@ func TestRun_ContextCancelled(t *testing.T) {
 	err := l.Run(ctx, session, "hi")
 
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "[Session cancelled by user]", session.Messages[len(session.Messages)-1].Content)
+	lastMsg := session.Messages[len(session.Messages)-1].(domain.UserMessage)
+	assert.Equal(t, "[Session cancelled by user]", lastMsg.Content)
 }
 
 func TestRun_ParallelToolCalls(t *testing.T) {
@@ -243,8 +245,10 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	assert.Less(t, duration, 140*time.Millisecond)
 
 	// Verify order in session messages
-	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
-	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
+	m2 := session.Messages[2].(domain.ToolMessage)
+	m3 := session.Messages[3].(domain.ToolMessage)
+	assert.Equal(t, "tc-1", m2.ToolCallID)
+	assert.Equal(t, "tc-2", m3.ToolCallID)
 }
 
 func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
@@ -301,8 +305,10 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	// 3: Tool 2 response (cancelled)
 	// 4: [Session cancelled by user]
 	assert.Equal(t, 5, len(session.Messages))
-	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
-	assert.True(t, session.Messages[2].ToolError)
-	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
-	assert.True(t, session.Messages[3].ToolError)
+	m2 := session.Messages[2].(domain.ToolMessage)
+	m3 := session.Messages[3].(domain.ToolMessage)
+	assert.Equal(t, "tc-1", m2.ToolCallID)
+	assert.True(t, m2.ToolError)
+	assert.Equal(t, "tc-2", m3.ToolCallID)
+	assert.True(t, m3.ToolError)
 }

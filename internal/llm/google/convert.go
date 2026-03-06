@@ -78,11 +78,11 @@ func toHistory(msgs []domain.Message) (historyResult, error) {
 	var result historyResult
 
 	for _, m := range msgs {
-		if m.Role == domain.RoleSystem {
+		if sm, ok := m.(domain.SystemMessage); ok {
 			if result.SystemPrompt != "" {
 				result.SystemPrompt += "\n"
 			}
-			result.SystemPrompt += m.Content
+			result.SystemPrompt += sm.Content
 			continue
 		}
 
@@ -92,10 +92,10 @@ func toHistory(msgs []domain.Message) (historyResult, error) {
 		}
 
 		role := "user"
-		switch m.Role {
-		case domain.RoleAssistant:
+		switch m.(type) {
+		case domain.AssistantMessage:
 			role = "model"
-		case domain.RoleTool:
+		case domain.ToolMessage:
 			role = "function"
 		}
 
@@ -111,37 +111,44 @@ func toHistory(msgs []domain.Message) (historyResult, error) {
 func toParts(m domain.Message) ([]*genai.Part, error) {
 	var parts []*genai.Part
 
-	if m.Content != "" && m.Role != domain.RoleTool {
-		parts = append(parts, &genai.Part{Text: m.Content})
-	}
-
-	for _, tc := range m.ToolCalls {
-		// Ensure arguments are a map for the SDK
-		var args map[string]any
-		if len(tc.Arguments) > 0 {
-			if err := json.Unmarshal(tc.Arguments, &args); err != nil {
-				return nil, fmt.Errorf("invalid tool arguments json: %w", err)
+	switch msg := m.(type) {
+	case domain.UserMessage:
+		if msg.Content != "" {
+			parts = append(parts, &genai.Part{Text: msg.Content})
+		}
+	case domain.AssistantMessage:
+		if msg.Content != "" {
+			parts = append(parts, &genai.Part{Text: msg.Content})
+		}
+		for _, tc := range msg.ToolCalls {
+			var args map[string]any
+			if len(tc.Arguments) > 0 {
+				if err := json.Unmarshal(tc.Arguments, &args); err != nil {
+					return nil, fmt.Errorf("invalid tool arguments json: %w", err)
+				}
 			}
+			parts = append(parts, &genai.Part{
+				FunctionCall: &genai.FunctionCall{
+					Name: tc.Name,
+					Args: args,
+				},
+			})
 		}
-		parts = append(parts, &genai.Part{
-			FunctionCall: &genai.FunctionCall{
-				Name: tc.Name,
-				Args: args,
-			},
-		})
-	}
-
-	if m.Role == domain.RoleTool {
+	case domain.ToolMessage:
 		resp := map[string]any{
-			"result": m.Content,
+			"result": msg.Content,
 		}
-
 		parts = append(parts, &genai.Part{
 			FunctionResponse: &genai.FunctionResponse{
-				Name:     m.ToolName,
+				Name:     msg.ToolName,
 				Response: resp,
 			},
 		})
+	case domain.SystemMessage:
+		// System messages are handled in toHistory, but for completeness:
+		if msg.Content != "" {
+			parts = append(parts, &genai.Part{Text: msg.Content})
+		}
 	}
 
 	return parts, nil

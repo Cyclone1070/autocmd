@@ -114,7 +114,7 @@ func TestGenerateName(t *testing.T) {
 
 		sess := &domain.Session{
 			Messages: []domain.Message{
-				{Content: "This is the first message"},
+				domain.UserMessage{Content: "This is the first message"},
 			},
 		}
 

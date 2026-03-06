@@ -13,13 +13,17 @@ import (
 func GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
 	target := input
 	if len(sess.Messages) > 0 {
-		target = sess.Messages[0].Content
+		if msg, ok := sess.Messages[0].(domain.UserMessage); ok {
+			target = msg.Content
+		} else if msg, ok := sess.Messages[0].(domain.AssistantMessage); ok {
+			target = msg.Content
+		}
 	}
 
 	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 
 	messages := []domain.Message{
-		{Role: domain.RoleUser, Content: prompt},
+		domain.UserMessage{Content: prompt},
 	}
 
 	stream, err := llm.Stream(ctx, messages, nil)

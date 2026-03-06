@@ -3,7 +3,7 @@ package domain
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"fmt"
 )
 
 // LLM is a self-contained language model instance.
@@ -32,70 +32,132 @@ const (
 )
 
 // Message represents a single turn in conversation history.
-type Message struct {
-	Role      Role       `json:"role"`
-	Content   string     `json:"content,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"` // for assistant messages
+type Message interface {
+	Role() Role
+}
 
-	// Fields for tool response
-	ToolCallID string `json:"tool_call_id,omitempty"` // for tool messages
-	ToolName   string `json:"tool_name,omitempty"`    // for tools that match by name (Gemini)
-	ToolError  bool   `json:"tool_error,omitempty"`   // True if the tool execution failed
+type UserMessage struct {
+	Content string `json:"content"`
+}
 
-	// NEW: Baked UI representation of tool calls
+func (UserMessage) Role() Role { return RoleUser }
+
+func (m UserMessage) MarshalJSON() ([]byte, error) {
+	type Alias UserMessage
+	return json.Marshal(&struct {
+		Role Role `json:"role"`
+		*Alias
+	}{
+		Role:  RoleUser,
+		Alias: (*Alias)(&m),
+	})
+}
+
+type AssistantMessage struct {
+	Content      string                 `json:"content,omitempty"`
+	ToolCalls    []ToolCall             `json:"tool_calls,omitempty"`
 	ToolDisplays map[string]ToolDisplay `json:"tool_displays,omitempty"`
 }
 
-// UnmarshalJSON implements custom unmarshaling for Message to handle polymorphic ToolDisplays.
-func (m *Message) UnmarshalJSON(data []byte) error {
-	type Alias Message
-	aux := &struct {
-		ToolDisplays map[string]json.RawMessage `json:"tool_displays"`
+func (AssistantMessage) Role() Role { return RoleAssistant }
+
+func (m AssistantMessage) MarshalJSON() ([]byte, error) {
+	type Alias AssistantMessage
+	return json.Marshal(&struct {
+		Role Role `json:"role"`
 		*Alias
 	}{
-		Alias: (*Alias)(m),
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
+		Role:  RoleAssistant,
+		Alias: (*Alias)(&m),
+	})
+}
+
+type ToolMessage struct {
+	ToolCallID string `json:"tool_call_id"`
+	ToolName   string `json:"tool_name"`
+	Content    string `json:"content"`
+	ToolError  bool   `json:"tool_error,omitempty"`
+}
+
+func (ToolMessage) Role() Role { return RoleTool }
+
+func (m ToolMessage) MarshalJSON() ([]byte, error) {
+	type Alias ToolMessage
+	return json.Marshal(&struct {
+		Role Role `json:"role"`
+		*Alias
+	}{
+		Role:  RoleTool,
+		Alias: (*Alias)(&m),
+	})
+}
+
+type SystemMessage struct {
+	Content string `json:"content"`
+}
+
+func (SystemMessage) Role() Role { return RoleSystem }
+
+func (m SystemMessage) MarshalJSON() ([]byte, error) {
+	type Alias SystemMessage
+	return json.Marshal(&struct {
+		Role Role `json:"role"`
+		*Alias
+	}{
+		Role:  RoleSystem,
+		Alias: (*Alias)(&m),
+	})
+}
+
+// Messages is a helper type for polymorphic JSON unmarshaling of Message slices.
+type Messages []Message
+
+func (m *Messages) UnmarshalJSON(data []byte) error {
+	var raws []json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
 		return err
 	}
 
-	if len(aux.ToolDisplays) > 0 {
-		m.ToolDisplays = make(map[string]ToolDisplay)
-		for id, raw := range aux.ToolDisplays {
-			var typeExtract struct {
-				Type string `json:"type"`
-			}
-			if err := json.Unmarshal(raw, &typeExtract); err != nil {
-				slog.Warn("Failed to extract type from tool display entry", "id", id, "err", err)
-				continue
-			}
-
-			switch typeExtract.Type {
-			case "string":
-				var d StringDisplay
-				if err := json.Unmarshal(raw, &d); err == nil {
-					m.ToolDisplays[id] = d
-				} else {
-					slog.Warn("Failed to unmarshal StringDisplay", "id", id, "err", err)
-				}
-			case "diff":
-				var d DiffDisplay
-				if err := json.Unmarshal(raw, &d); err == nil {
-					m.ToolDisplays[id] = d
-				} else {
-					slog.Warn("Failed to unmarshal DiffDisplay", "id", id, "err", err)
-				}
-			case "shell":
-				var d ShellDisplay
-				if err := json.Unmarshal(raw, &d); err == nil {
-					m.ToolDisplays[id] = d
-				} else {
-					slog.Warn("Failed to unmarshal ShellDisplay", "id", id, "err", err)
-				}
-			}
+	*m = make(Messages, len(raws))
+	for i, raw := range raws {
+		var peek struct {
+			Role Role `json:"role"`
 		}
-	}
+		if err := json.Unmarshal(raw, &peek); err != nil {
+			return err
+		}
 
+		var msg Message
+		switch peek.Role {
+		case RoleUser:
+			var u UserMessage
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return err
+			}
+			msg = u
+		case RoleAssistant:
+			var a AssistantMessage
+			if err := json.Unmarshal(raw, &a); err != nil {
+				return err
+			}
+			msg = a
+		case RoleTool:
+			var t ToolMessage
+			if err := json.Unmarshal(raw, &t); err != nil {
+				return err
+			}
+			msg = t
+		case RoleSystem:
+			var s SystemMessage
+			if err := json.Unmarshal(raw, &s); err != nil {
+				return err
+			}
+			msg = s
+		default:
+			return fmt.Errorf("unknown message role: %s", peek.Role)
+		}
+		(*m)[i] = msg
+	}
 	return nil
 }
 

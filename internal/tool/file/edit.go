@@ -36,8 +36,9 @@ type EditOperation struct {
 
 // EditFileRequest is the input for EditFileTool.
 type EditFileRequest struct {
-	Path       string          `json:"path"`
-	Operations []EditOperation `json:"operations"`
+	Path        string          `json:"path"`
+	Description string          `json:"description"`
+	Operations  []EditOperation `json:"operations"`
 }
 
 // EditFileTool handles file editing operations.
@@ -86,7 +87,8 @@ func (t *EditFileTool) Declaration() domain.Declaration {
 		Parameters: &domain.Schema{
 			Type: domain.TypeObject,
 			Properties: map[string]*domain.Schema{
-				"path": {Type: domain.TypeString, Description: "Path to file"},
+				"path":        {Type: domain.TypeString, Description: "Path to file"},
+				"description": {Type: domain.TypeString, Description: "A high-level description of what this edit accomplishes (e.g. 'Adding auth middleware')"},
 				"operations": {
 					Type:        domain.TypeArray,
 					Description: "List of edit operations",
@@ -101,7 +103,7 @@ func (t *EditFileTool) Declaration() domain.Declaration {
 					},
 				},
 			},
-			Required: []string{"path", "operations"},
+			Required: []string{"path", "description", "operations"},
 		},
 	}
 }
@@ -115,6 +117,9 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
+	}
+	if req.Description == "" {
+		return nil, fmt.Errorf("description is required")
 	}
 	if len(req.Operations) == 0 {
 		return nil, fmt.Errorf("operations are required")
@@ -216,6 +221,7 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		originalPerm:     info.Mode(),
 		expectedChecksum: currentChecksum,
 		display: domain.NewDiffDisplay(
+			req.Description,
 			fmt.Sprintf("Edit %s", filepath.Base(abs)),
 			added,
 			removed,

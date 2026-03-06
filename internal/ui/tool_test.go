@@ -56,7 +56,8 @@ func TestRenderString_ErrorWrap(t *testing.T) {
 func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header: "align.go",
+		Header: "Aligning logic",
+		Target: "Edit align.go",
 		Diff:   "\n-line1\n+line2",
 	}
 	output := RenderDiff(60, th, diff, StatusRunning, "", "⣾")
@@ -66,7 +67,8 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 func TestRenderDiff_SuccessWithStats(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header:  "file.go",
+		Header:  "Updating stats",
+		Target:  "Edit file.go",
 		Added:   5,
 		Removed: 2,
 		Diff:    "-old\n+new",
@@ -78,10 +80,24 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 func TestRenderDiff_Error(t *testing.T) {
 	th := newTestTheme(t)
 	diff := domain.DiffDisplay{
-		Header: "file.go",
+		Header: "Missing file",
+		Target: "Edit file.go",
 	}
 	output := RenderDiff(60, th, diff, StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", output)
+}
+
+func TestRenderDiff_ThreePartLayout(t *testing.T) {
+	th := newTestTheme(t)
+	diff := domain.DiffDisplay{
+		Header:  "Adding authentication middleware",
+		Target:  "Edit auth.go",
+		Added:   10,
+		Removed: 5,
+		Diff:    "+ new auth logic\n- old auth logic",
+	}
+	output := RenderDiff(80, th, diff, StatusSuccess, "", "✓")
+	assertGolden(t, "RenderDiff_ThreePartLayout", output)
 }
 
 func TestRenderShell_Running_Command(t *testing.T) {

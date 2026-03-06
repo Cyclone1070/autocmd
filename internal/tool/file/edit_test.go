@@ -63,7 +63,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err == nil {
 			t.Fatal("expected conflict error")
@@ -88,7 +88,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -126,7 +126,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -166,7 +166,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err == nil {
 			t.Fatal("expected mismatch error")
@@ -198,7 +198,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -227,7 +227,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err == nil {
 			t.Fatal("expected snippet not found error")
@@ -250,7 +250,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -283,7 +283,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -313,7 +313,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err == nil {
 			t.Fatal("expected mismatch error for append with count > 1")
@@ -338,7 +338,7 @@ func TestEditFile(t *testing.T) {
 			},
 		}
 
-		editReq := &EditFileRequest{Path: "test.txt", Operations: ops}
+		editReq := &EditFileRequest{Path: "test.txt", Description: "test", Operations: ops}
 		output, err := executeEdit(t, editTool, editReq)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -360,7 +360,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
-		req := &EditFileRequest{Path: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
+		req := &EditFileRequest{Path: "", Description: "test", Operations: []EditOperation{{Before: "old", After: "new"}}}
 		_, err := executeEdit(t, editTool, req)
 		if err == nil {
 			t.Error("expected error for empty path")
@@ -374,7 +374,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
-		req := &EditFileRequest{Path: "test.txt", Operations: []EditOperation{}}
+		req := &EditFileRequest{Path: "test.txt", Description: "test", Operations: []EditOperation{}}
 		_, err := executeEdit(t, editTool, req)
 		if err == nil {
 			t.Error("expected error for empty operations")
@@ -390,8 +390,9 @@ func TestEditFile(t *testing.T) {
 		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &EditFileRequest{
-			Path:       "test.txt",
-			Operations: []EditOperation{{Before: "foo", After: "baz", ExpectedReplacements: -1}},
+			Path:        "test.txt",
+			Description: "test",
+			Operations:  []EditOperation{{Before: "foo", After: "baz", ExpectedReplacements: -1}},
 		}
 		// Defaults to 1, but there are 2 occurrences — should error
 		output, err := executeEdit(t, editTool, req)
@@ -407,7 +408,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
-		req := &EditFileRequest{Path: "../outside.txt", Operations: []EditOperation{{Before: "a", After: "b"}}}
+		req := &EditFileRequest{Path: "../outside.txt", Description: "test", Operations: []EditOperation{{Before: "a", After: "b"}}}
 		_, err := executeEdit(t, editTool, req)
 		if err == nil {
 			t.Error("expected error for path outside workspace")
@@ -425,8 +426,9 @@ func TestEditFile(t *testing.T) {
 
 		// Prepare the edit
 		req := &EditFileRequest{
-			Path:       "test.txt",
-			Operations: []EditOperation{{Before: "original", After: "modified"}},
+			Path:        "test.txt",
+			Description: "test",
+			Operations:  []EditOperation{{Before: "original", After: "modified"}},
 		}
 		params, _ := json.Marshal(req)
 		inv, err := editTool.Prepare(context.Background(), params)
@@ -454,8 +456,9 @@ func TestEditFile(t *testing.T) {
 		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
 
 		req := &EditFileRequest{
-			Path:       "test.txt",
-			Operations: []EditOperation{{Before: "old", After: "new"}},
+			Path:        "test.txt",
+			Description: "test",
+			Operations:  []EditOperation{{Before: "old", After: "new"}},
 		}
 		params, _ := json.Marshal(req)
 		inv, err := editTool.Prepare(context.Background(), params)
@@ -478,5 +481,19 @@ func TestEditFile(t *testing.T) {
 		if diffDisplay.Diff == "" {
 			t.Error("expected non-empty Diff")
 		}
+	})
+
+	t.Run("missing description returns error", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fs := newMockFileSystemForWrite(cfg)
+		checksumManager := newMockChecksumManagerForWrite()
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+
+		req := &EditFileRequest{Path: "test.txt", Description: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
+		_, err := executeEdit(t, editTool, req)
+		if err == nil {
+			t.Error("expected error for empty description")
+		}
+		assertContains(t, err.Error(), "description is required")
 	})
 }

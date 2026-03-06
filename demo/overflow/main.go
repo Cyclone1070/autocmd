@@ -50,13 +50,8 @@ func main() {
 
 		// 2. DiffDisplay Overflow
 		events <- domain.ToolStartEvent{
-			CallID: "diff-overflow",
-			Display: domain.DiffDisplay{
-				Header:  longHeader,
-				Diff:    "+ " + longString + "\n- " + longString,
-				Added:   1,
-				Removed: 1,
-			},
+			CallID:  "diff-overflow",
+			Display: domain.NewDiffDisplay(longHeader, "Edit "+longString, 1, 1, "+ "+longString+"\n- "+longString),
 		}
 		time.Sleep(500 * time.Millisecond)
 		events <- domain.ToolEndEvent{CallID: "diff-overflow"}
@@ -64,11 +59,8 @@ func main() {
 
 		// 3. ShellDisplay Overflow (All parts)
 		events <- domain.ToolStartEvent{
-			CallID: "shell-overflow",
-			Display: domain.ShellDisplay{
-				Header:  longHeader,
-				Command: longCommand,
-			},
+			CallID:  "shell-overflow",
+			Display: domain.NewShellDisplay(longHeader, longCommand, nil, nil),
 		}
 		time.Sleep(500 * time.Millisecond)
 		events <- domain.ToolStreamEvent{

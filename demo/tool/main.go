@@ -48,15 +48,15 @@ func main() {
 
 		// 2. Diff Suite
 		runSuite("DIFF",
-			domain.DiffDisplay{Header: "file.txt", Diff: "- old\n+ new"},
-			domain.DiffDisplay{Header: "fast.txt", Diff: "- fast\n+ gone"},
-			domain.DiffDisplay{Header: "med.txt", Diff: "- error here\n+ failed"})
+			domain.NewDiffDisplay("Updating file.txt", "Edit file.txt", 1, 1, "- old\n+ new"),
+			domain.NewDiffDisplay("Fixing fast.txt", "Edit fast.txt", 1, 1, "- fast\n+ gone"),
+			domain.NewDiffDisplay("Fixing med.txt", "Edit med.txt", 1, 1, "- error here\n+ failed"))
 
 		// 3. Shell Suite (with more streaming)
 		events <- domain.TextEvent{Text: "\n### SUITE: SHELL (Heavy Streaming)\n"}
-		events <- domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.ShellDisplay{Command: "slow-cmd", Header: "Slow Shell"}}
-		events <- domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.ShellDisplay{Command: "fast-cmd", Header: "Fast Shell"}}
-		events <- domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.ShellDisplay{Command: "med-cmd", Header: "Medium Shell (Fail)"}}
+		events <- domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", nil, nil)}
+		events <- domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", nil, nil)}
+		events <- domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", nil, nil)}
 
 		// Heavy streaming
 		for i := 1; i <= 20; i++ {

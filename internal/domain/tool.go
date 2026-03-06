@@ -73,7 +73,8 @@ func NewStringDisplay(content string) StringDisplay {
 // DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
 	TypeField string `json:"type"`
-	Header    string `json:"header"`  // e.g. "Edit config.yaml"
+	Header    string `json:"header"`  // User-friendly description (e.g. "Updating auth")
+	Target    string `json:"target"`  // Technical action (e.g. "Edit auth.go")
 	Added     int    `json:"added"`   // Lines added
 	Removed   int    `json:"removed"` // Lines removed
 	Diff      string `json:"diff"`    // Unified diff content
@@ -83,10 +84,11 @@ func (DiffDisplay) isToolDisplay() {}
 func (d DiffDisplay) Type() string { return d.TypeField }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
-func NewDiffDisplay(header string, added, removed int, diff string) DiffDisplay {
+func NewDiffDisplay(header, target string, added, removed int, diff string) DiffDisplay {
 	return DiffDisplay{
 		TypeField: "diff",
 		Header:    header,
+		Target:    target,
 		Added:     added,
 		Removed:   removed,
 		Diff:      diff,

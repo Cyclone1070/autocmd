@@ -46,9 +46,15 @@ func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err stri
 // RenderDiff renders DiffDisplay.
 func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
 	header := d.Header
+	target := d.Target
+	if target == "" {
+		target = header
+	}
+
+	// Add stats to target if success
 	if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
-		header = fmt.Sprintf("%s (%s, %s)",
-			d.Header,
+		target = fmt.Sprintf("%s (%s, %s)",
+			target,
 			th.Success(fmt.Sprintf("+%d", d.Added)),
 			th.Error(fmt.Sprintf("-%d", d.Removed)))
 	}
@@ -61,9 +67,10 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 	diffContent := colorizeDiff(d.Diff, th)
 	paddedDiff := Pad(diffContent, "")
 	sep := th.Separator(width, status)
+	paddedTarget := Pad(target, "")
 
-	return fmt.Sprintf(" %s %s \n%s\n%s",
-		prefix, header, sep, paddedDiff)
+	return fmt.Sprintf(" %s %s \n%s\n%s\n%s\n%s",
+		prefix, header, sep, paddedTarget, sep, paddedDiff)
 }
 
 func colorizeDiff(diff string, th *Theme) string {

@@ -45,31 +45,22 @@ func main() {
 
 		// 3. Parallel Tool Calls (3 tools)
 		events <- domain.ToolStartEvent{
-			CallID: "tool-1",
-			Display: domain.ShellDisplay{
-				Header:  "Finish last",
-				Command: "npm list --depth=0",
-			},
+			CallID:  "tool-1",
+			Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", nil, nil),
 		}
 		time.Sleep(400 * time.Millisecond)
 
 		events <- domain.ToolStartEvent{
-			CallID: "tool-2",
-			Display: domain.ShellDisplay{
-				Header:  "Finish first",
-				Command: "eslint .",
-			},
+			CallID:  "tool-2",
+			Display: domain.NewShellDisplay("Finish first", "eslint .", nil, nil),
 		}
 		time.Sleep(200 * time.Millisecond)
 		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}
 		time.Sleep(400 * time.Millisecond)
 
 		events <- domain.ToolStartEvent{
-			CallID: "tool-3",
-			Display: domain.ShellDisplay{
-				Header:  "Finish second",
-				Command: "go test ./...",
-			},
+			CallID:  "tool-3",
+			Display: domain.NewShellDisplay("Finish second", "go test ./...", nil, nil),
 		}
 		time.Sleep(400 * time.Millisecond)
 

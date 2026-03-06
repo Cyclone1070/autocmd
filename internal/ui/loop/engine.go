@@ -431,7 +431,7 @@ func (m *Model) flushThinking(status ui.ToolStatus) {
 	}
 
 	style := lipgloss.NewStyle().Foreground(textColor)
-	m.printQueue = append(m.printQueue, fmt.Sprintf("\n  %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
+	m.printQueue = append(m.printQueue, fmt.Sprintf("\n %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
 }
 
 func (m *Model) waitForEvent() tea.Cmd {

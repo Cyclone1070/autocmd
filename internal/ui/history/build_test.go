@@ -194,7 +194,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	renderAssistantMessage(&sb, messages, 0, displays, renderer, theme, width, false)
+	renderAssistantMessage(&sb, msg, messages, 0, displays, renderer, theme, width, false)
 	rendered := sb.String()
 
 	// Re-rendering a box to see its start

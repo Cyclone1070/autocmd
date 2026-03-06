@@ -30,9 +30,9 @@ func RenderMessage(messages []domain.Message, idx int, displays domain.ToolDispl
 
 	switch m := msg.(type) {
 	case domain.UserMessage:
-		renderUserMessage(&sb, m, idx, renderer, theme, width, includeLeadingNewline)
+		renderUserMessage(&sb, m, theme, width, includeLeadingNewline)
 	case domain.AssistantMessage:
-		renderAssistantMessage(&sb, messages, idx, displays, renderer, theme, width, includeLeadingNewline)
+		renderAssistantMessage(&sb, m, messages, idx, displays, renderer, theme, width, includeLeadingNewline)
 	}
 
 	return sb.String()
@@ -48,7 +48,7 @@ func renderDivider(sb *strings.Builder, theme *ui.Theme, width int, color lipglo
 	fmt.Fprintf(sb, "%s%s\n", prefix, style.Render(line))
 }
 
-func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, idx int, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
+func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, theme *ui.Theme, width int, includeLeadingNewline bool) {
 	renderDivider(sb, theme, width, theme.PrimaryColor(), includeLeadingNewline)
 
 	style := lipgloss.NewStyle().
@@ -58,16 +58,10 @@ func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, idx int, ren
 	// Divider already handles vertical spacing
 	fmt.Fprintf(sb, "%s\n", style.Render("USER:"))
 
-	content := msg.Content
-	if renderer != nil {
-		content = renderer.Render(msg.Content)
-	}
-	fmt.Fprintf(sb, "%s", content)
+	fmt.Fprintf(sb, "%s", msg.Content)
 }
 
-func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
-	msg := messages[idx]
-
+func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages []domain.Message, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) {
 	printHeader := true
 	if idx > 0 {
 		prevRole := messages[idx-1].Role()
@@ -87,7 +81,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		fmt.Fprintf(sb, "%s\n", style.Render("ASSISTANT:"))
 	}
 
-	if am, ok := msg.(domain.AssistantMessage); ok && am.Content != "" {
+	if am.Content != "" {
 		content := am.Content
 		if renderer != nil {
 			content = renderer.Render(am.Content)
@@ -95,13 +89,7 @@ func renderAssistantMessage(sb *strings.Builder, messages []domain.Message, idx 
 		fmt.Fprintf(sb, "%s", content)
 	}
 
-	// Always render tool calls if present, using their baked displays
-	assistantMsg, ok := msg.(domain.AssistantMessage)
-	if !ok {
-		return
-	}
-
-	for _, tc := range assistantMsg.ToolCalls {
+	for _, tc := range am.ToolCalls {
 		display, ok := displays[tc.ID]
 		if !ok {
 			continue

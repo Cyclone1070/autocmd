@@ -173,7 +173,12 @@ func createHistoryData(elems ...TestElement) ([]domain.Message, domain.ToolDispl
 
 func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []domain.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
 	var sb strings.Builder
-	renderAssistantMessage(&sb, msgs, 0, displays, renderer, theme, width, isDark)
+	am, ok := msgs[0].(domain.AssistantMessage)
+	if !ok {
+		// This golden test only renders assistant messages for now
+		return
+	}
+	renderAssistantMessage(&sb, am, msgs, 0, displays, renderer, theme, width, isDark)
 
 	w.WriteString(fmt.Sprintf("=== START [%s] ===\n", name))
 	w.WriteString(sb.String())

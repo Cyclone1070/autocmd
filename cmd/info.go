@@ -3,9 +3,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -17,47 +20,47 @@ var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Display current configuration and state",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
 		cfg, err := config.Load()
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			return err
 		}
 
-		// 1. Model
-		cmd.Printf("Model:          %s\n", cfg.Model)
-
-		// 2. Session Name
-		state, err := config.LoadState()
+		appState, err := state.Load()
 		if err != nil {
-			return fmt.Errorf("failed to load state: %w", err)
+			return err
 		}
 
-		store, err := buildSessionStore(cfg)
-		if err != nil {
-			return fmt.Errorf("failed to build session store: %w", err)
-		}
+		fmt.Printf("Model:   %s\n", appState.Model)
+		fmt.Printf("Config:  %s\n", filepath.Join(os.Getenv("HOME"), ".config", "iav", "config.json"))
+		fmt.Printf("State:   %s\n", filepath.Join(os.Getenv("HOME"), ".config", "iav", "state.json"))
+		fmt.Printf("Storage: %s\n", cfg.Session.StorageDir)
 
-		sessionName := "None"
 		var sessMessages domain.Messages
-		if state.CurrentSessionID != "" {
-			sess, err := store.Get(state.CurrentSessionID)
+		if appState.CurrentSessionID != "" {
+			store, err := buildSessionStore(cfg)
 			if err == nil {
-				sessionName = sess.Name
-				if sessionName == "" {
-					sessionName = "Untitled (" + sess.ID[:8] + ")"
+				sess, err := store.Get(appState.CurrentSessionID)
+				if err == nil {
+					fmt.Printf("Current Session: %s (%d messages, last updated %s)\n",
+						appState.CurrentSessionID,
+						len(sess.Messages),
+						sess.Updated.Format("Jan 02 15:04"))
+					sessMessages = sess.Messages
+				} else {
+					fmt.Printf("Current Session: %s (not found)\n", appState.CurrentSessionID)
 				}
-				sessMessages = sess.Messages
 			}
+		} else {
+			fmt.Println("Current Session: none")
 		}
-		cmd.Printf("Session Name:   %s\n", sessionName)
 
-		// 3. Context Window
+		ctx := context.Background()
 		llmRegistry, err := buildLLMRegistry(ctx, cfg)
 		if err != nil {
 			return fmt.Errorf("failed to build LLM registry: %w", err)
 		}
 
-		llmInstance, err := llmRegistry.Get(ctx, cfg.Model)
+		llmInstance, err := llmRegistry.Get(ctx, appState.Model)
 		if err != nil {
 			return fmt.Errorf("failed to get LLM instance: %w", err)
 		}

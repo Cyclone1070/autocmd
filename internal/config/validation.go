@@ -109,9 +109,6 @@ func (c *Config) Validate() error {
 		errs = append(errs, "ui.shell_output_height must be >= 1")
 	}
 
-	if c.Model == "" {
-		errs = append(errs, "model must not be empty")
-	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %v", errs)

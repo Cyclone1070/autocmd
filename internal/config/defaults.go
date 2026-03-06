@@ -13,16 +13,11 @@ type Config struct {
 	Tools   ToolsConfig   `json:"tools"`
 	Session SessionConfig `json:"session"`
 	UI      UIConfig      `json:"ui"`
-	Model   string        `json:"model"` // e.g., "google/gemini-2.5-flash"
 }
 
-// State holds application persistent state that is managed by the app.
-type State struct {
-	CurrentSessionID string `json:"current_session_id" github:"current_session_id"`
-}
 
 type SessionConfig struct {
-	StorageDir string `json:"storage_dir"` // Default: ~/.iav/sessions
+	StorageDir string `json:"storage_dir"` // Default: ~/.config/iav/sessions
 }
 
 type ToolsConfig struct {
@@ -81,7 +76,7 @@ func DefaultConfig() *Config {
 			MaxIterations:               20,
 		},
 		Session: SessionConfig{
-			StorageDir: filepath.Join(os.Getenv("HOME"), ".iav", "sessions"),
+			StorageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
 		},
 		UI: UIConfig{
 			PrimaryColor:      ColorConfig{Light: "#0EA5E9", Dark: "#38BDF8"}, // Sky Blue (Tailwind 500/400)
@@ -92,6 +87,5 @@ func DefaultConfig() *Config {
 			ShellOutputHeight: 12,
 			ShortToolbox:      false,
 		},
-		Model: "google/gemini-2.5-flash",
 	}
 }

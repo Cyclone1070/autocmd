@@ -8,16 +8,30 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/session"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
 )
 
+func init() {
+	sessionCmd.AddCommand(listCmd)
+}
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List and manage chat sessions",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSessionPicker()
+	},
+}
+
 type sessionPickerWrapper struct {
-	cfg          *config.Config
-	state        *config.State
-	store        *session.Store
 	picker       *picker.Picker
+	cfg          *config.Config
+	state        *state.State
+	store        *session.Store
 	renaming     bool
 	renameItemID string
 	textInput    textinput.Model
@@ -110,6 +124,11 @@ func runSessionPicker() error {
 		return err
 	}
 
+	appState, err := state.Load()
+	if err != nil {
+		return err
+	}
+
 	store, err := buildSessionStore(cfg)
 	if err != nil {
 		return err
@@ -120,17 +139,12 @@ func runSessionPicker() error {
 		return err
 	}
 
-	state, err := config.LoadState()
-	if err != nil {
-		return err
-	}
-
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
 
 	wrapper := &sessionPickerWrapper{
 		cfg:       cfg,
-		state:     state,
+		state:     appState,
 		store:     store,
 		textInput: ti,
 	}
@@ -147,8 +161,8 @@ func runSessionPicker() error {
 					if err != nil {
 						return nil
 					}
-					state.CurrentSessionID = sess.ID
-					_ = config.SaveState(state)
+					appState.CurrentSessionID = sess.ID
+					_ = state.Save(appState)
 					return tea.Quit
 				},
 			},
@@ -184,8 +198,8 @@ func runSessionPicker() error {
 	}
 
 	if selected, ok := wrapper.picker.Selected(); ok {
-		state.CurrentSessionID = selected.ID
-		_ = config.SaveState(state)
+		appState.CurrentSessionID = selected.ID
+		_ = state.Save(appState)
 		fmt.Printf("\nSelected session: %s\n", selected.ID)
 	}
 

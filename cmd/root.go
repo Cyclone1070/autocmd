@@ -15,6 +15,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/session"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -100,12 +101,12 @@ func runAgent(cfg *config.Config, input string) error {
 		return err
 	}
 
-	llmInstance, err := llmRegistry.Get(ctx, cfg.Model)
+	appState, err := state.Load()
 	if err != nil {
 		return err
 	}
 
-	state, err := config.LoadState()
+	llmInstance, err := llmRegistry.Get(ctx, appState.Model)
 	if err != nil {
 		return err
 	}
@@ -115,25 +116,32 @@ func runAgent(cfg *config.Config, input string) error {
 		return err
 	}
 
+	var sessionID string
+	// For the main agent command, we always use the current session from state.
+	// (Unless we add session selection flags later).
+	sessionID = appState.CurrentSessionID
+
 	var sess *domain.Session
-	if state.CurrentSessionID != "" {
-		sess, err = store.Get(state.CurrentSessionID)
+	if sessionID == "" {
+		sess, err = store.Create()
 		if err != nil {
-			// If session not found, create a new one
-			sess, err = store.Create()
+			return err
+		}
+		appState.CurrentSessionID = sess.ID
+		if err := state.Save(appState); err != nil {
+			slog.Warn("failed to save state", "error", err)
 		}
 	} else {
-		sess, err = store.Create()
-	}
-
-	if err != nil {
-		return err
-	}
-
-	// Persist the session ID if it changed or was empty
-	if state.CurrentSessionID != sess.ID {
-		state.CurrentSessionID = sess.ID
-		_ = config.SaveState(state)
+		sess, err = store.Get(sessionID)
+		if err != nil {
+			return err
+		}
+		if appState.CurrentSessionID != sess.ID {
+			appState.CurrentSessionID = sess.ID
+			if err := state.Save(appState); err != nil {
+				slog.Warn("failed to save state", "error", err)
+			}
+		}
 	}
 
 	events := make(chan domain.Event, 100)
@@ -143,12 +151,14 @@ func runAgent(cfg *config.Config, input string) error {
 	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
-		namingWg.Go(func() {
+		namingWg.Add(1) // Increment counter for the goroutine
+		go func() {
+			defer namingWg.Done() // Decrement counter when goroutine finishes
 			name, err := session.GenerateName(ctx, llmInstance, sess, input)
 			if err == nil {
 				sess.Name = name
 			}
-		})
+		}()
 	}
 
 	m := loop.NewModel(events, cfg.UI)

@@ -51,6 +51,12 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 		target = header
 	}
 
+	if status == StatusError {
+		header = formatError(header, err, th)
+		header = th.Muted("# " + header)
+		return Pad(header, prefix)
+	}
+
 	// Add stats to target if success
 	if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
 		target = fmt.Sprintf("%s (%s, %s)",
@@ -59,18 +65,18 @@ func RenderDiff(width int, th *Theme, d domain.DiffDisplay, status ToolStatus, e
 			th.Error(fmt.Sprintf("-%d", d.Removed)))
 	}
 
-	if status == StatusError {
-		header = formatError(header, err, th)
-		return fmt.Sprintf(" %s %s ", prefix, header)
+	header = th.Muted("# " + header)
+	diffContent := colorizeDiff(d.Diff, th)
+
+	// Build parts with blank line separation
+	parts := []string{
+		header,
+		target,
+		diffContent,
 	}
 
-	diffContent := colorizeDiff(d.Diff, th)
-	paddedDiff := Pad(diffContent, "")
-	sep := th.Separator(width, status)
-	paddedTarget := Pad(target, "")
-
-	return fmt.Sprintf(" %s %s \n%s\n%s\n%s\n%s",
-		prefix, header, sep, paddedTarget, sep, paddedDiff)
+	content := strings.Join(parts, "\n\n")
+	return Pad(content, prefix)
 }
 
 func colorizeDiff(diff string, th *Theme) string {
@@ -87,13 +93,17 @@ func colorizeDiff(diff string, th *Theme) string {
 
 // RenderShell renders ShellDisplay.
 func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
-	sep := th.Separator(width, status)
 	header := d.Header
-	cmdLine := Pad(fmt.Sprintf("$ %s", d.Command), "")
 	if status == StatusError {
 		header = formatError(header, err, th)
-		return fmt.Sprintf(" %s %s \n%s\n%s", prefix, header, sep, cmdLine)
+		header = th.Muted("# " + header)
+		cmdLine := fmt.Sprintf("$ %s", d.Command)
+		content := strings.Join([]string{header, cmdLine}, "\n\n")
+		return Pad(content, prefix)
 	}
+
+	header = th.Muted("# " + header)
+	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	var visibleLines []string
@@ -102,15 +112,17 @@ func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay,
 	} else {
 		visibleLines = lines
 	}
+	shellOutput := strings.Join(visibleLines, "\n")
 
-	content := strings.Join(visibleLines, "\n")
-	paddedContent := Pad(content, "")
-
-	return fmt.Sprintf(" %s %s \n%s\n%s\n%s\n%s",
-		prefix,
+	// Build parts with blank line separation
+	parts := []string{
 		header,
-		sep,
 		cmdLine,
-		sep,
-		paddedContent)
+	}
+	if shellOutput != "" {
+		parts = append(parts, shellOutput)
+	}
+
+	content := strings.Join(parts, "\n\n")
+	return Pad(content, prefix)
 }

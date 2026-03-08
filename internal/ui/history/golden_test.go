@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/stretchr/testify/assert"
@@ -98,7 +99,7 @@ func getHistoryElements() []TestElement {
 
 func TestHistory_GoldenCombinations(t *testing.T) {
 	elements := getHistoryElements()
-	theme := newTestTheme()
+	theme := ui.NewTheme(config.DefaultConfig().UI) // Simple theme for testing
 	width := 80
 	isDark := true
 	renderer := ui.NewGlamourRenderer(width, isDark)
@@ -147,6 +148,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		assert.Equal(t, string(expected), goldenOutput.String(), "History UI regression detected! Rendered combinations do not match golden file.")
 	}
 }
+
 func createHistoryData(elems ...TestElement) (domain.Messages, domain.ToolDisplays) {
 	var contents []string
 	var calls []domain.ToolCall

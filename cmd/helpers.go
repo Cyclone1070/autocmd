@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"fmt"
 	"os"
 
 	"github.com/Cyclone1070/iav/internal/auth"
@@ -20,7 +18,7 @@ func buildFS(cfg *config.Config) *fs.OSFileSystem {
 }
 
 func buildPathResolver() (*path.Resolver, error) {
-	canonicalRoot, err := path.CanonicaliseRoot(".")
+	canonicalRoot, err := path.CanonicaliseRoot(path.OSFileSystem{}, ".")
 	if err != nil {
 		return nil, err
 	}
@@ -32,27 +30,35 @@ func buildSessionStore(cfg *config.Config) (*session.Store, error) {
 	return session.NewStore(cfg, fileSystem), nil
 }
 
-func buildLLMRegistry(ctx context.Context, cfg *config.Config) (*llm.Registry, error) {
-	cred := resolveCredential("google")
-	if cred == nil {
-		return nil, fmt.Errorf("no credentials found for google. Set GEMINI_API_KEY")
-	}
-
-	googleProvider, err := google.NewProvider(ctx, cred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create google provider: %w", err)
-	}
-
-	return llm.NewRegistry(googleProvider), nil
+func buildLLMRegistry() *llm.Registry {
+	return llm.NewRegistry(google.NewProvider())
 }
 
-func resolveCredential(providerID string) *domain.Credential {
-	if providerID == "google" {
-		if key := os.Getenv("GEMINI_API_KEY"); key != "" {
-			return &domain.Credential{Type: "api_key", APIKey: key}
+func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {
+	osFS := fs.NewOSFileSystem(cfg)
+	storePath, err := auth.DefaultStorePath()
+	if err != nil {
+		return nil, err
+	}
+	return auth.NewManager(osFS, storePath), nil
+}
+
+func resolveCredential(authMgr *auth.Manager, providerID string) *domain.Credential {
+	// Priority 1: auth.json (from iav auth)
+	cred, err := authMgr.Get(providerID)
+	if err == nil && cred != nil {
+		// Only return if it actually has an API key (avoid "zombie" entries)
+		if cred.APIKey != "" {
+			return cred
 		}
 	}
 
-	cred, _ := auth.Get(providerID)
-	return cred
+	// Priority 2: Environment Variables (Fallback)
+	if providerID == domain.ProviderGoogle {
+		if key := os.Getenv("GEMINI_API_KEY"); key != "" {
+			return &domain.Credential{Type: domain.AuthMethodEnv, APIKey: key}
+		}
+	}
+
+	return nil
 }

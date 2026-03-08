@@ -191,7 +191,8 @@ func (m *Picker) View() string {
 
 		detailText := fadedStyle.Render(item.Detail)
 
-		fmt.Fprintf(&s, " %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText)
+		line := fmt.Sprintf(" %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText)
+		s.WriteString(line)
 	}
 
 	return s.String()
@@ -199,6 +200,14 @@ func (m *Picker) View() string {
 
 func (m *Picker) Selected() (*Item, bool) {
 	return m.selected, m.selected != nil
+}
+
+func (m *Picker) CursorItem() (Item, bool) {
+	if len(m.selectableIndices) == 0 {
+		return Item{}, false
+	}
+	idx := m.selectableIndices[m.cursor]
+	return m.items[idx], true
 }
 
 // RefreshItems allows the caller to update the list (e.g. after a rename or delete)

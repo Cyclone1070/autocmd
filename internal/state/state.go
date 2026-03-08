@@ -54,15 +54,13 @@ func NewLoaderWithFS(fs FileSystem) *Loader {
 // Default returns the default application state
 func Default() *State {
 	return &State{
-		Model: "google/gemini-2.5-flash",
+		Model: "",
 	}
 }
 
 // Validate checks state values for correctness.
 func (s *State) Validate() error {
-	if s.Model == "" {
-		return fmt.Errorf("state validation failed: model must not be empty")
-	}
+	// Root command will handle uninitialized state gracefully with a friendly message.
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,36 +26,41 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
+		authMgr, err := buildAuthManager(cfg)
+		if err != nil {
+			return err
+		}
+
 		appState, err := state.Load()
 		if err != nil {
 			return err
 		}
 
 		ctx := context.Background()
-		registry, err := buildLLMRegistry(ctx, cfg)
-		if err != nil {
-			return err
+		registry := buildLLMRegistry()
+
+		// For listing, we should try to resolve all credentials
+		creds := make(map[string]*domain.Credential)
+		for _, pID := range registry.ListProviders() {
+			creds[pID] = resolveCredential(authMgr, pID)
 		}
 
-		models, err := registry.List(ctx)
+		models, err := registry.List(ctx, creds)
 		if err != nil {
 			return err
 		}
 
 		var items []picker.Item
-		for _, m := range models {
-			parts := strings.SplitN(m.ID, "/", 2)
-			provider := "unknown"
-			if len(parts) == 2 {
-				provider = parts[0]
+		for _, mi := range models {
+			providerID := strings.SplitN(mi.ID, domain.ModelIDSeparator, 2)[0]
+			if creds[providerID] == nil {
+				continue
 			}
-
 			items = append(items, picker.Item{
-				ID:     m.ID,
-				Label:  m.DisplayName,
-				Detail: m.ID,
-				Active: m.ID == appState.Model,
-				Group:  provider,
+				ID:     mi.ID,
+				Label:  mi.DisplayName,
+				Detail: mi.ID,
+				Active: mi.ID == appState.Model,
 			})
 		}
 

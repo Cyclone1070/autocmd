@@ -44,7 +44,7 @@ func TestLoad_NoFile_ReturnsDefault(t *testing.T) {
 
 	s, err := loader.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "google/gemini-2.5-flash", s.Model) // Default model
+	assert.Equal(t, "", s.Model) // Default model should be empty
 	assert.Equal(t, "", s.CurrentSessionID)
 }
 

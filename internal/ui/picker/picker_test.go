@@ -95,7 +95,7 @@ func TestPicker_EmptyList(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	assert.Equal(t, 0, m.cursor)
 
-	// View should not crash
-	view := m.View()
-	assert.Contains(t, view, "No entries found.")
+	v := m.View()
+	assert.Contains(t, v, "No entries found.")
 }
+

@@ -2,7 +2,6 @@ package path
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -147,41 +146,59 @@ func TestRel(t *testing.T) {
 	}
 }
 
+type mockFileInfo struct {
+	os.FileInfo
+	isDir bool
+}
+
+func (m mockFileInfo) IsDir() bool { return m.isDir }
+
+type mockFS struct {
+	abs          func(string) (string, error)
+	evalSymlinks func(string) (string, error)
+	stat         func(string) (os.FileInfo, error)
+}
+
+func (m mockFS) Abs(p string) (string, error)          { return m.abs(p) }
+func (m mockFS) EvalSymlinks(p string) (string, error) { return m.evalSymlinks(p) }
+func (m mockFS) Stat(p string) (os.FileInfo, error)    { return m.stat(p) }
+
 func TestCanonicaliseRoot(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "pathutil-test")
-	if err != nil {
-		t.Fatalf("failed to create tmp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	resolvedTmpDir, err := filepath.EvalSymlinks(tmpDir)
-	if err != nil {
-		t.Fatalf("failed to resolve tmp dir: %v", err)
-	}
-
 	t.Run("valid directory", func(t *testing.T) {
-		got, err := CanonicaliseRoot(resolvedTmpDir)
+		fs := mockFS{
+			abs:          func(p string) (string, error) { return "/abs/path", nil },
+			evalSymlinks: func(p string) (string, error) { return "/resolved/path", nil },
+			stat:         func(p string) (os.FileInfo, error) { return mockFileInfo{isDir: true}, nil },
+		}
+		got, err := CanonicaliseRoot(fs, "rel")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != resolvedTmpDir {
-			t.Errorf("expected %q, got %q", resolvedTmpDir, got)
+		if got != "/resolved/path" {
+			t.Errorf("expected /resolved/path, got %q", got)
 		}
 	})
 
 	t.Run("non-existent path", func(t *testing.T) {
-		_, err := CanonicaliseRoot(filepath.Join(resolvedTmpDir, "non-existent"))
+		fs := mockFS{
+			abs:  func(p string) (string, error) { return "/abs/path", nil },
+			stat: func(p string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		}
+		// CanonicaliseRoot calls EvalSymlinks first.
+		fs.evalSymlinks = func(p string) (string, error) { return "/abs/path", os.ErrNotExist }
+		_, err := CanonicaliseRoot(fs, "non-existent")
 		if err == nil {
 			t.Fatal("expected error for non-existent path")
 		}
 	})
 
 	t.Run("file instead of directory", func(t *testing.T) {
-		tmpFile := filepath.Join(resolvedTmpDir, "file.txt")
-		if err := os.WriteFile(tmpFile, []byte("test"), 0o644); err != nil {
-			t.Fatalf("failed to create tmp file: %v", err)
+		fs := mockFS{
+			abs:          func(p string) (string, error) { return "/abs/path", nil },
+			evalSymlinks: func(p string) (string, error) { return "/abs/path", nil },
+			stat:         func(p string) (os.FileInfo, error) { return mockFileInfo{isDir: false}, nil },
 		}
-		_, err := CanonicaliseRoot(tmpFile)
+		_, err := CanonicaliseRoot(fs, "file")
 		if err == nil {
 			t.Fatal("expected error for file instead of directory")
 		}

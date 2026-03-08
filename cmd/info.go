@@ -3,9 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"strings"
 
+	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
@@ -18,70 +18,82 @@ func init() {
 
 var infoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "Display current configuration and state",
+	Short: "Show information about the current configuration and state",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
 			return err
 		}
-
 		appState, err := state.Load()
 		if err != nil {
 			return err
 		}
-
-		fmt.Printf("Model:   %s\n", appState.Model)
-		fmt.Printf("Config:  %s\n", filepath.Join(os.Getenv("HOME"), ".config", "iav", "config.json"))
-		fmt.Printf("State:   %s\n", filepath.Join(os.Getenv("HOME"), ".config", "iav", "state.json"))
-		fmt.Printf("Storage: %s\n", cfg.Session.StorageDir)
-
-		var sessMessages domain.Messages
-		if appState.CurrentSessionID != "" {
-			store, err := buildSessionStore(cfg)
-			if err == nil {
-				sess, err := store.Get(appState.CurrentSessionID)
-				if err == nil {
-					fmt.Printf("Current Session: %s (%d messages, last updated %s)\n",
-						appState.CurrentSessionID,
-						len(sess.Messages),
-						sess.Updated.Format("Jan 02 15:04"))
-					sessMessages = sess.Messages
-				} else {
-					fmt.Printf("Current Session: %s (not found)\n", appState.CurrentSessionID)
-				}
-			}
-		} else {
-			fmt.Println("Current Session: none")
-		}
-
-		ctx := context.Background()
-		llmRegistry, err := buildLLMRegistry(ctx, cfg)
+		authMgr, err := buildAuthManager(cfg)
 		if err != nil {
-			return fmt.Errorf("failed to build LLM registry: %w", err)
+			return err
 		}
 
-		llmInstance, err := llmRegistry.Get(ctx, appState.Model)
-		if err != nil {
-			return fmt.Errorf("failed to get LLM instance: %w", err)
-		}
-
-		contextWindow := llmInstance.ContextWindow()
-		usedTokens := 0
-		var computeErr error
-		if len(sessMessages) > 0 {
-			usedTokens, computeErr = llmInstance.ComputeTokens(ctx, sessMessages)
-		}
-
-		if computeErr != nil {
-			cmd.Printf("Context Window: ?/%d tokens (token count failed)\n", contextWindow)
-		} else {
-			percentage := 0.0
-			if contextWindow > 0 {
-				percentage = float64(usedTokens) / float64(contextWindow) * 100
-			}
-			cmd.Printf("Context Window: %.1f%% used (%d/%d tokens)\n", percentage, usedTokens, contextWindow)
-		}
-
-		return nil
+		return runInfo(cmd, cfg, appState, authMgr)
 	},
+}
+
+func runInfo(cmd *cobra.Command, cfg *config.Config, appState *state.State, authMgr *auth.Manager) error {
+	llmRegistry := buildLLMRegistry()
+
+	// Authorized Providers
+	var authorized []string
+	for _, pID := range llmRegistry.ListProviders() {
+		if cred := resolveCredential(authMgr, pID); cred != nil {
+			authorized = append(authorized, fmt.Sprintf("%s (%s)", pID, cred.Type))
+		}
+	}
+
+	// Model Section
+	if appState.Model != "" {
+		cmd.Printf("\033[1m%-22s\033[0m %s\n", "Model:", appState.Model)
+	}
+
+	var sessMessages domain.Messages
+	if appState.CurrentSessionID != "" {
+		store, err := buildSessionStore(cfg)
+		if err == nil {
+			sess, err := store.Get(appState.CurrentSessionID)
+			if err == nil {
+				display := sess.Name
+				if display == "" {
+					display = sess.ID
+				}
+				cmd.Printf("\033[1m%-22s\033[0m %s\n", "Current Session:", display)
+				sessMessages = sess.Messages
+			} else {
+				cmd.Printf("\033[1m%-22s\033[0m %s (not found)\n", "Current Session:", appState.CurrentSessionID)
+			}
+		}
+	} else {
+		cmd.Printf("\033[1m%-22s\033[0m %s\n", "Current Session:", "none")
+	}
+
+	// Optional LLM Info (if authed)
+	providerID := strings.SplitN(appState.Model, domain.ModelIDSeparator, 2)[0]
+	if cred := resolveCredential(authMgr, providerID); cred != nil && appState.Model != "" {
+		ctx := context.Background()
+		llmInstance, err := llmRegistry.Get(ctx, appState.Model, cred)
+		if err == nil && llmInstance != nil {
+			contextWindow := llmInstance.ContextWindow()
+			if appState.CurrentSessionID != "" && len(sessMessages) > 0 {
+				usage, err := llmInstance.ComputeTokens(ctx, sessMessages)
+				if err == nil {
+					cmd.Printf("\033[1m%-22s\033[0m %d tokens (%.1f%% of %d context)\n", "Session Usage:", usage, float64(usage)/float64(contextWindow)*100, contextWindow)
+				}
+			} else {
+				cmd.Printf("\033[1m%-22s\033[0m %d tokens\n", "Context Window:", contextWindow)
+			}
+		}
+	}
+
+	if len(authorized) > 0 {
+		cmd.Printf("\033[1m%-22s\033[0m %s\n", "Authorized Providers:", strings.Join(authorized, ", "))
+	}
+
+	return nil
 }

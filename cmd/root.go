@@ -44,13 +44,17 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		appState, err := state.Load()
+		if err != nil {
+			return err
+		}
 
 		if len(args) == 0 {
 			return cmd.Help()
 		}
 
 		input := strings.Join(args, " ")
-		return runAgent(cfg, input)
+		return runAgent(cmd.Context(), cfg, appState, input)
 	},
 }
 
@@ -64,9 +68,10 @@ func Execute() {
 	}
 }
 
-func runAgent(cfg *config.Config, input string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, input string) error {
+	if appState.Model == "" {
+		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started.")
+	}
 
 	pathResolver, err := buildPathResolver()
 	if err != nil {
@@ -96,19 +101,19 @@ func runAgent(cfg *config.Config, input string) error {
 	}
 	toolRegistry := tool.NewRegistry(tools)
 
-	llmRegistry, err := buildLLMRegistry(ctx, cfg)
+	authMgr, err := buildAuthManager(cfg)
 	if err != nil {
 		return err
 	}
 
-	appState, err := state.Load()
-	if err != nil {
-		return err
-	}
+	// Resolve credential based on provider ID (e.g., "google")
+	providerID := strings.SplitN(appState.Model, domain.ModelIDSeparator, 2)[0]
+	cred := resolveCredential(authMgr, providerID)
 
-	llmInstance, err := llmRegistry.Get(ctx, appState.Model)
+	llmRegistry := buildLLMRegistry()
+	llmInstance, err := llmRegistry.Get(ctx, appState.Model, cred)
 	if err != nil {
-		return err
+		return fmt.Errorf("initialize LLM: %w", err)
 	}
 
 	store, err := buildSessionStore(cfg)
@@ -118,7 +123,6 @@ func runAgent(cfg *config.Config, input string) error {
 
 	var sessionID string
 	// For the main agent command, we always use the current session from state.
-	// (Unless we add session selection flags later).
 	sessionID = appState.CurrentSessionID
 
 	var sess *domain.Session
@@ -151,9 +155,9 @@ func runAgent(cfg *config.Config, input string) error {
 	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
-		namingWg.Add(1) // Increment counter for the goroutine
+		namingWg.Add(1)
 		go func() {
-			defer namingWg.Done() // Decrement counter when goroutine finishes
+			defer namingWg.Done()
 			name, err := session.GenerateName(ctx, llmInstance, sess, input)
 			if err == nil {
 				sess.Name = name
@@ -166,19 +170,14 @@ func runAgent(cfg *config.Config, input string) error {
 	done := make(chan error, 1)
 	go func() {
 		err := agentLoop.Run(ctx, sess, input)
-		// Wait for auto-naming to finish or be canceled before saving
 		namingWg.Wait()
 
-		// 1. DATA SAFETY FIRST: Save history immediately after loop returns.
-		// This ensures history is persisted even if the UI/Broker shutdown hangs.
 		_ = store.Save(sess)
 
-		// 2. UI CLEANUP: Signal the UI to finish up.
 		broker.Close()
 		select {
 		case events <- domain.DoneEvent{}:
 		default:
-			// UI already gone or buffer full, skip sentinel
 		}
 		close(events)
 		done <- err
@@ -189,7 +188,6 @@ func runAgent(cfg *config.Config, input string) error {
 		fmt.Fprintf(os.Stderr, "UI failed: %v\n", err)
 	}
 
-	cancel()
 	agentErr := <-done
 	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
 		return fmt.Errorf("agent failed: %w", agentErr)

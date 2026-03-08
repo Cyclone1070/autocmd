@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+
 type engineMockRenderer struct {
 	renderFunc func(markdown string) string
 }

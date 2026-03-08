@@ -9,3 +9,18 @@ type Credential struct {
 	Project  string `json:"project,omitempty"`
 	Location string `json:"location,omitempty"`
 }
+
+// AuthField defines a single input field required for an authentication method.
+type AuthField struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Placeholder string `json:"placeholder"`
+	IsSecret    bool   `json:"is_secret"`
+}
+
+// AuthMethod defines a grouping of fields required for a specific authentication type.
+type AuthMethod struct {
+	ID     string      `json:"id"`
+	Label  string      `json:"label"`
+	Fields []AuthField `json:"fields"`
+}

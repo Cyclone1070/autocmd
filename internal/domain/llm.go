@@ -21,6 +21,15 @@ type LLMInfo struct {
 	DisplayName string
 }
 
+// Provider represents an LLM service (e.g., Google, OpenAI).
+// It acts as a factory and metadata source for authentication and model listing.
+type Provider interface {
+	ID() string
+	SupportedAuthMethods() []AuthMethod
+	ListLLMs(ctx context.Context, cred *Credential) ([]LLMInfo, error)
+	GetLLM(ctx context.Context, cred *Credential, modelID string) (LLM, error)
+}
+
 // Role represents message roles.
 type Role string
 

@@ -27,21 +27,35 @@ func (r *Resolver) Root() string {
 	return r.workspaceRoot
 }
 
+// FileSystem abstracts filesystem operations for path resolution.
+type FileSystem interface {
+	Abs(path string) (string, error)
+	EvalSymlinks(path string) (string, error)
+	Stat(path string) (os.FileInfo, error)
+}
+
+// OSFileSystem implements FileSystem using the real OS.
+type OSFileSystem struct{}
+
+func (OSFileSystem) Abs(path string) (string, error)          { return filepath.Abs(path) }
+func (OSFileSystem) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
+func (OSFileSystem) Stat(path string) (os.FileInfo, error)    { return os.Stat(path) }
+
 // CanonicaliseRoot canonicalises a workspace root path by making it absolute and resolving symlinks.
 // Returns an error if the path doesn't exist or isn't a directory.
-func CanonicaliseRoot(root string) (string, error) {
-	absRoot, err := filepath.Abs(root)
+func CanonicaliseRoot(fs FileSystem, root string) (string, error) {
+	absRoot, err := fs.Abs(root)
 	if err != nil {
-		return "", fmt.Errorf("invalid workspace root %s: %w", absRoot, err)
+		return "", fmt.Errorf("invalid workspace root %s: %w", root, err)
 	}
 
 	// Resolve symlinks in the workspace root to get canonical path
-	resolved, err := filepath.EvalSymlinks(absRoot)
+	resolved, err := fs.EvalSymlinks(absRoot)
 	if err != nil {
 		return "", fmt.Errorf("invalid workspace root %s: %w", absRoot, err)
 	}
 
-	info, err := os.Stat(resolved)
+	info, err := fs.Stat(resolved)
 	if err != nil {
 		return "", fmt.Errorf("invalid workspace root %s: %w", resolved, err)
 	}

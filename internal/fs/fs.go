@@ -104,9 +104,14 @@ func (fs *OSFileSystem) WriteFileAtomic(path string, content []byte, perm os.Fil
 	return nil
 }
 
-// EnsureDirs creates parent directories recursively if they don't exist.
+// MkdirAll creates a directory and all necessary parents.
+func (fs *OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+
+// EnsureDirs is a legacy alias for MkdirAll on specific paths.
 func (fs *OSFileSystem) EnsureDirs(path string) error {
-	return os.MkdirAll(path, 0o755)
+	return fs.MkdirAll(path, 0o755)
 }
 
 // UserHomeDir returns the current user's home directory.
@@ -123,6 +128,11 @@ func (fs *OSFileSystem) ListDir(path string) ([]os.DirEntry, error) {
 // Stat returns the FileInfo for a file.
 func (fs *OSFileSystem) Stat(path string) (os.FileInfo, error) {
 	return os.Stat(path)
+}
+
+// WriteFile writes the entire content to a file.
+func (fs *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(name, data, perm)
 }
 
 // Remove deletes a file.

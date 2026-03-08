@@ -2,7 +2,6 @@ package auth
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -10,64 +9,83 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAuth(t *testing.T) {
-	// Setup temp auth file
-	tmpDir, err := os.MkdirTemp("", "iav-auth-test-*")
-	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+// mockFileSystem implements auth.FileSystem for testing.
+type mockFileSystem struct {
+	files     map[string][]byte
+	readCount int
+}
 
-	origStorePath := storePath
-	storePath = func() string {
-		return filepath.Join(tmpDir, "auth.json")
+func (m *mockFileSystem) ReadFile(name string) ([]byte, error) {
+	m.readCount++
+	if data, ok := m.files[name]; ok {
+		return data, nil
 	}
-	defer func() { storePath = origStorePath }()
+	return nil, os.ErrNotExist
+}
+
+func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
+	m.files[name] = data
+	return nil
+}
+
+func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
+	return nil
+}
+
+func TestAuth(t *testing.T) {
+	mockFS := &mockFileSystem{files: make(map[string][]byte)}
+	storePath := "/home/user/.config/iav/auth.json"
 
 	t.Run("Get_NotFound", func(t *testing.T) {
-		cred, err := Get("non-existent")
+		mgr := NewManager(mockFS, storePath)
+		cred, err := mgr.Get("non-existent")
 		assert.NoError(t, err)
 		assert.Nil(t, cred)
 	})
 
 	t.Run("SetAndGet", func(t *testing.T) {
+		mgr := NewManager(mockFS, storePath)
 		cred := domain.Credential{
 			Type:   "api_key",
 			APIKey: "test-key",
 		}
-		err := Set("google", cred)
+		err := mgr.Set("google", cred)
 		assert.NoError(t, err)
 
-		got, err := Get("google")
+		got, err := mgr.Get("google")
 		assert.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, cred, *got)
 	})
 
 	t.Run("Set_OverwritesExisting", func(t *testing.T) {
-		err := Set("google", domain.Credential{Type: "api_key", APIKey: "key1"})
+		mgr := NewManager(mockFS, storePath)
+		err := mgr.Set("google", domain.Credential{Type: "api_key", APIKey: "key1"})
 		assert.NoError(t, err)
 
 		newCred := domain.Credential{Type: "api_key", APIKey: "key2"}
-		err = Set("google", newCred)
+		err = mgr.Set("google", newCred)
 		assert.NoError(t, err)
 
-		got, err := Get("google")
+		got, err := mgr.Get("google")
 		assert.NoError(t, err)
 		assert.Equal(t, "key2", got.APIKey)
 	})
 
 	t.Run("All_Empty", func(t *testing.T) {
-		// Clear file for this test
-		_ = os.Remove(storePath())
-		all, err := All()
+		delete(mockFS.files, storePath)
+		mgr := NewManager(mockFS, storePath)
+		all, err := mgr.All()
 		assert.NoError(t, err)
 		assert.Empty(t, all)
 	})
 
 	t.Run("All_MultipleProviders", func(t *testing.T) {
-		require.NoError(t, Set("p1", domain.Credential{Type: "api_key", APIKey: "k1"}))
-		require.NoError(t, Set("p2", domain.Credential{Type: "api_key", APIKey: "k2"}))
+		mgr := NewManager(mockFS, storePath)
+		require.NoError(t, mgr.Set("p1", domain.Credential{Type: "api_key", APIKey: "k1"}))
+		require.NoError(t, mgr.Set("p2", domain.Credential{Type: "api_key", APIKey: "k2"}))
 
-		all, err := All()
+		all, err := mgr.All()
 		assert.NoError(t, err)
 		assert.Len(t, all, 2)
 		assert.Equal(t, "k1", all["p1"].APIKey)
@@ -75,23 +93,65 @@ func TestAuth(t *testing.T) {
 	})
 
 	t.Run("Remove", func(t *testing.T) {
-		require.NoError(t, Set("rem", domain.Credential{Type: "api_key", APIKey: "val"}))
-		err := Remove("rem")
+		mgr := NewManager(mockFS, storePath)
+		require.NoError(t, mgr.Set("rem", domain.Credential{Type: "api_key", APIKey: "val"}))
+		err := mgr.Remove("rem")
 		assert.NoError(t, err)
 
-		got, err := Get("rem")
+		got, err := mgr.Get("rem")
 		assert.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("Remove_NonExistent", func(t *testing.T) {
-		err := Remove("missing")
+		mgr := NewManager(mockFS, storePath)
+		err := mgr.Remove("missing")
 		assert.NoError(t, err)
 	})
 
 	t.Run("Get_CorruptFile", func(t *testing.T) {
-		require.NoError(t, os.WriteFile(storePath(), []byte("invalid json"), 0600))
-		_, err := Get("any")
+		mockFS.files[storePath] = []byte("invalid json")
+		mgr := NewManager(mockFS, storePath)
+		_, err := mgr.Get("any")
 		assert.Error(t, err)
 	})
+}
+
+func TestManager_Caching(t *testing.T) {
+	mockFS := &mockFileSystem{
+		files: map[string][]byte{
+			"/config/auth.json": []byte(`{"p1": {"type": "api_key", "api_key": "k1"}}`),
+		},
+	}
+	mgr := NewManager(mockFS, "/config/auth.json")
+
+	// 1. Initial Get should trigger a read
+	got, err := mgr.Get("p1")
+	assert.NoError(t, err)
+	assert.NotNil(t, got)
+	assert.Equal(t, 1, mockFS.readCount, "Should have read from disk once")
+
+	// 2. Second Get should NOT trigger a read (cached)
+	got2, err := mgr.Get("p1")
+	assert.NoError(t, err)
+	assert.NotNil(t, got2)
+	assert.Equal(t, 1, mockFS.readCount, "Should NOT have read from disk again (cached)")
+
+	// 3. Set should invalidate or update cache
+	err = mgr.Set("p2", domain.Credential{Type: "api_key", APIKey: "k2"})
+	assert.NoError(t, err)
+
+	// 4. Get after Set might trigger a re-read if we invalidate, or use updated if we sync
+	// For simplicity, let's assume we invalidate and re-read, OR just check it's consistent.
+	got3, err := mgr.Get("p2")
+	assert.NoError(t, err)
+	assert.Equal(t, "k2", got3.APIKey)
+
+	// 5. Remove should also keep cache consistent
+	err = mgr.Remove("p1")
+	assert.NoError(t, err)
+
+	got4, err := mgr.Get("p1")
+	assert.NoError(t, err)
+	assert.Nil(t, got4)
 }

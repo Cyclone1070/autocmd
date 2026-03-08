@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+
 func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig()
 	cfg.UI.ShortToolbox = false

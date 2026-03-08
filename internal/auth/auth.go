@@ -10,17 +10,41 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-var (
-	// storePath is a var so it can be overridden in tests
-	storePath = func() string {
-		return filepath.Join(os.Getenv("HOME"), ".iav", "auth.json")
+// FileSystem abstracts filesystem operations for the auth package.
+type FileSystem interface {
+	ReadFile(name string) ([]byte, error)
+	WriteFile(name string, data []byte, perm os.FileMode) error
+	MkdirAll(path string, perm os.FileMode) error
+}
+
+// Manager handles persistent storage of authentication credentials.
+type Manager struct {
+	fs        FileSystem
+	storePath string
+	mu        sync.RWMutex
+	cache     map[string]domain.Credential
+}
+
+// NewManager creates a new Manager with the given filesystem and storage path.
+func NewManager(fs FileSystem, storePath string) *Manager {
+	return &Manager{
+		fs:        fs,
+		storePath: storePath,
 	}
-	mu sync.RWMutex
-)
+}
+
+// DefaultStorePath returns the standard ~/.config/iav/auth.json path.
+func DefaultStorePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "iav", "auth.json"), nil
+}
 
 // Get returns the credential for the given provider.
-func Get(providerID string) (*domain.Credential, error) {
-	all, err := All()
+func (m *Manager) Get(providerID string) (*domain.Credential, error) {
+	all, err := m.All()
 	if err != nil {
 		return nil, err
 	}
@@ -32,33 +56,68 @@ func Get(providerID string) (*domain.Credential, error) {
 }
 
 // Set stores the credential for the given provider.
-func Set(providerID string, cred domain.Credential) error {
-	mu.Lock()
-	defer mu.Unlock()
+func (m *Manager) Set(providerID string, cred domain.Credential) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	all, err := loadAll()
+	all, err := m.loadAll()
 	if err != nil {
 		all = make(map[string]domain.Credential)
 	}
 
 	all[providerID] = cred
 
-	return saveAll(all)
+	if err := m.saveAll(all); err != nil {
+		return err
+	}
+
+	m.cache = all
+	return nil
 }
 
 // All returns all stored credentials.
-func All() (map[string]domain.Credential, error) {
-	mu.RLock()
-	defer mu.RUnlock()
-	return loadAll()
+func (m *Manager) All() (map[string]domain.Credential, error) {
+	m.mu.RLock()
+	if m.cache != nil {
+		res := make(map[string]domain.Credential, len(m.cache))
+		for k, v := range m.cache {
+			res[k] = v
+		}
+		m.mu.RUnlock()
+		return res, nil
+	}
+	m.mu.RUnlock()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cache != nil {
+		res := make(map[string]domain.Credential, len(m.cache))
+		for k, v := range m.cache {
+			res[k] = v
+		}
+		return res, nil
+	}
+
+	all, err := m.loadAll()
+	if err != nil {
+		return nil, err
+	}
+	m.cache = all
+
+	res := make(map[string]domain.Credential, len(all))
+	for k, v := range all {
+		res[k] = v
+	}
+	return res, nil
 }
 
 // Remove deletes the credential for the given provider.
-func Remove(providerID string) error {
-	mu.Lock()
-	defer mu.Unlock()
+func (m *Manager) Remove(providerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	all, err := loadAll()
+	all, err := m.loadAll()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -71,12 +130,16 @@ func Remove(providerID string) error {
 	}
 
 	delete(all, providerID)
-	return saveAll(all)
+	if err := m.saveAll(all); err != nil {
+		return err
+	}
+
+	m.cache = all
+	return nil
 }
 
-func loadAll() (map[string]domain.Credential, error) {
-	path := storePath()
-	data, err := os.ReadFile(path)
+func (m *Manager) loadAll() (map[string]domain.Credential, error) {
+	data, err := m.fs.ReadFile(m.storePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return make(map[string]domain.Credential), nil
@@ -92,9 +155,8 @@ func loadAll() (map[string]domain.Credential, error) {
 	return all, nil
 }
 
-func saveAll(all map[string]domain.Credential) error {
-	path := storePath()
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+func (m *Manager) saveAll(all map[string]domain.Credential) error {
+	if err := m.fs.MkdirAll(filepath.Dir(m.storePath), 0700); err != nil {
 		return fmt.Errorf("create auth dir: %w", err)
 	}
 
@@ -103,7 +165,7 @@ func saveAll(all map[string]domain.Credential) error {
 		return fmt.Errorf("marshal auth: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := m.fs.WriteFile(m.storePath, data, 0600); err != nil {
 		return fmt.Errorf("write auth file: %w", err)
 	}
 

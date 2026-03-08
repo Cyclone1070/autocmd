@@ -8,40 +8,54 @@ import (
 	"google.golang.org/genai"
 )
 
-// Provider implements the internal provider interface for Google Gemini.
-type Provider struct {
-	client *genai.Client
+// Provider implements the domain.Provider interface for Google Gemini.
+type Provider struct{}
+
+// NewProvider creates a new Google provider factory.
+func NewProvider() *Provider {
+	return &Provider{}
 }
 
-// NewProvider creates a new Google provider using the given credential.
-func NewProvider(ctx context.Context, cred *domain.Credential) (*Provider, error) {
-	if cred == nil {
-		return nil, fmt.Errorf("credential is required")
+func (p *Provider) ID() string {
+	return domain.ProviderGoogle
+}
+
+func (p *Provider) SupportedAuthMethods() []domain.AuthMethod {
+	return []domain.AuthMethod{
+		{
+			ID:    domain.AuthMethodAPIKey,
+			Label: "API Key",
+			Fields: []domain.AuthField{
+				{
+					ID:          domain.AuthFieldAPIKey,
+					Label:       "API Key",
+					Placeholder: "Enter your Gemini API Key",
+					IsSecret:    true,
+				},
+			},
+		},
+	}
+}
+
+func (p *Provider) newClient(ctx context.Context, cred *domain.Credential) (*genai.Client, error) {
+	if cred == nil || cred.APIKey == "" {
+		return nil, fmt.Errorf("google provider requires an API key")
 	}
 
 	cfg := &genai.ClientConfig{
 		APIKey: cred.APIKey,
 	}
 
-	// Future: handle Vertex AI specific fields from cred (Project, Location, etc.)
 	if cred.Project != "" || cred.Location != "" {
 		cfg.Backend = genai.BackendVertexAI
 		cfg.Project = cred.Project
 		cfg.Location = cred.Location
 	}
 
-	client, err := genai.NewClient(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create genai client: %w", err)
-	}
-	return &Provider{client: client}, nil
+	return genai.NewClient(ctx, cfg)
 }
 
-func (p *Provider) Name() string {
-	return "google"
-}
-
-func (p *Provider) ListLLMs(ctx context.Context) ([]domain.LLMInfo, error) {
+func (p *Provider) ListLLMs(ctx context.Context, cred *domain.Credential) ([]domain.LLMInfo, error) {
 	return []domain.LLMInfo{
 		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash Lite"},
 		{ID: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash"},
@@ -51,15 +65,20 @@ func (p *Provider) ListLLMs(ctx context.Context) ([]domain.LLMInfo, error) {
 	}, nil
 }
 
-func (p *Provider) GetLLM(ctx context.Context, id string) (domain.LLM, error) {
+func (p *Provider) GetLLM(ctx context.Context, cred *domain.Credential, id string) (domain.LLM, error) {
+	client, err := p.newClient(ctx, cred)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get LLM info from API for context window
-	info, err := p.client.Models.Get(ctx, id, nil)
+	info, err := client.Models.Get(ctx, id, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get LLM info: %w", err)
 	}
 
 	return &geminiLLM{
-		client:        p.client,
+		client:        client,
 		id:            id,
 		displayName:   info.DisplayName,
 		contextWindow: int(info.InputTokenLimit),

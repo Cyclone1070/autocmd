@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
@@ -111,7 +112,7 @@ func (fs *OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
 
 // EnsureDirs is a legacy alias for MkdirAll on specific paths.
 func (fs *OSFileSystem) EnsureDirs(path string) error {
-	return fs.MkdirAll(path, 0o755)
+	return fs.MkdirAll(path, domain.DefaultDirPerm)
 }
 
 // UserHomeDir returns the current user's home directory.

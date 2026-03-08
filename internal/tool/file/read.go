@@ -14,6 +14,10 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
 )
 
+const (
+	defaultReadFileLimit = 2000
+)
+
 // fileReader defines the minimal filesystem operations needed for reading files.
 type fileReader interface {
 	ReadFile(path string) ([]byte, error)
@@ -104,7 +108,7 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		req.Offset = 0
 	}
 	if req.Limit <= 0 {
-		req.Limit = t.config.Tools.DefaultReadFileLimit
+		req.Limit = defaultReadFileLimit
 	}
 
 	abs, err := t.pathResolver.Abs(req.Path)

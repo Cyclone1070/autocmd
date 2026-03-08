@@ -278,10 +278,9 @@ func TestReadFile(t *testing.T) {
 		assertContains(t, output, "00001| line1")
 	})
 
-	t.Run("zero limit defaults to config", func(t *testing.T) {
+	t.Run("zero limit defaults to constant", func(t *testing.T) {
 		cfg := config.DefaultConfig()
 		cfg.Tools.MaxFileSize = maxFileSize
-		cfg.Tools.DefaultReadFileLimit = 1
 		fs := newMockFileSystemForRead(cfg)
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2\nline3"))
@@ -295,9 +294,11 @@ func TestReadFile(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		// Should only show 1 line (defaulted from config)
+		// Should show all lines as they are within the default limit (2000)
 		assertContains(t, output, "00001| line1")
-		assertContains(t, output, "(File has more lines. Use offset=1 to read more)")
+		assertContains(t, output, "00002| line2")
+		assertContains(t, output, "00003| line3")
+		assertContains(t, output, "(End of file - total 3 lines)")
 	})
 
 	t.Run("high limit is accepted", func(t *testing.T) {

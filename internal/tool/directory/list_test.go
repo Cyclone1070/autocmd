@@ -321,9 +321,8 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	cfg.Tools.MaxListDirectoryResults = 100 // Ensure limit is 100
-
 	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance.maxResults = 100 // Override for testing truncation
 
 	req := ListDirRequest{Path: "big"}
 	jsonParams, _ := json.Marshal(req)

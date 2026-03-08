@@ -21,12 +21,12 @@ func TestValidate_Tools(t *testing.T) {
 		assert.Contains(t, err.Error(), "max_file_size")
 	})
 
-	t.Run("Zero Docker Retry Fails", func(t *testing.T) {
+	t.Run("Zero Iterations Fails", func(t *testing.T) {
 		cfg := DefaultConfig()
-		cfg.Tools.DockerRetryAttempts = 0
+		cfg.Tools.MaxIterations = 0
 		err := cfg.Validate()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "docker_retry_attempts")
+		assert.Contains(t, err.Error(), "max_iterations")
 	})
 }
 
@@ -41,66 +41,4 @@ func TestValidate_MultipleErrors_ReportsAll(t *testing.T) {
 	msg := err.Error()
 	assert.Contains(t, msg, "max_file_size")
 	assert.Contains(t, msg, "default_shell_timeout")
-}
-
-func TestValidate_SearchAndFindTools(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*Config)
-	}{
-		{"Zero_MaxLineLength_Fails", func(c *Config) { c.Tools.MaxLineLength = 0 }},
-		{"Zero_MaxSearchContentResults_Fails", func(c *Config) { c.Tools.MaxSearchContentResults = 0 }},
-		{"Zero_DefaultSearchContentLimit_Fails", func(c *Config) { c.Tools.DefaultSearchContentLimit = 0 }},
-		{"Zero_MaxSearchContentLimit_Fails", func(c *Config) { c.Tools.MaxSearchContentLimit = 0 }},
-		{"Zero_MaxFindFileResults_Fails", func(c *Config) { c.Tools.MaxFindFileResults = 0 }},
-		{"Zero_DefaultFindFileLimit_Fails", func(c *Config) { c.Tools.DefaultFindFileLimit = 0 }},
-		{"Zero_MaxFindFileLimit_Fails", func(c *Config) { c.Tools.MaxFindFileLimit = 0 }},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := DefaultConfig()
-			tt.mutate(cfg)
-			if err := cfg.Validate(); err == nil {
-				t.Error("expected validation error")
-			}
-		})
-	}
-}
-
-func TestValidate_SemanticConstraints(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*Config)
-	}{
-		{"DefaultListDir_ExceedsMax_Fails", func(c *Config) {
-			c.Tools.DefaultListDirectoryLimit = 20000
-			c.Tools.MaxListDirectoryLimit = 10000
-		}},
-		{"DefaultSearch_ExceedsMax_Fails", func(c *Config) {
-			c.Tools.DefaultSearchContentLimit = 2000
-			c.Tools.MaxSearchContentLimit = 1000
-		}},
-		{"DefaultFindFile_ExceedsMax_Fails", func(c *Config) {
-			c.Tools.DefaultFindFileLimit = 2000
-			c.Tools.MaxFindFileLimit = 1000
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := DefaultConfig()
-			tt.mutate(cfg)
-			if err := cfg.Validate(); err == nil {
-				t.Error("expected validation error")
-			}
-		})
-	}
-
-	t.Run("Default_Equals_Max_ShouldPass", func(t *testing.T) {
-		cfg := DefaultConfig()
-		cfg.Tools.DefaultListDirectoryLimit = 5000
-		cfg.Tools.MaxListDirectoryLimit = 5000
-		if err := cfg.Validate(); err != nil {
-			t.Errorf("Default == Max should pass: %v", err)
-		}
-	})
 }

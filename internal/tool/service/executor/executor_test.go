@@ -66,8 +66,8 @@ func TestRun(t *testing.T) {
 
 	t.Run("LargeOutput", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		cfg.Tools.DefaultMaxCommandOutputSize = 10
 		exec := NewOSCommandExecutor(cfg)
+		exec.maxOutputSize = 10
 
 		res, err := exec.Run(context.Background(), []string{"echo", "123456789012345"}, "", nil)
 		if err != nil {
@@ -84,8 +84,8 @@ func TestRun(t *testing.T) {
 
 func TestRunWithTimeout(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Tools.DockerGracefulShutdownMs = 100
 	exec := NewOSCommandExecutor(cfg)
+	exec.dockerGracefulShutdownMs = 100
 
 	t.Run("CompletesBeforeTimeout", func(t *testing.T) {
 		res, err := exec.RunWithTimeout(context.Background(), []string{"echo", "hi"}, "", nil, 1*time.Second)
@@ -126,8 +126,8 @@ func TestRunWithTimeout(t *testing.T) {
 
 func TestRunStreaming(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Tools.DockerGracefulShutdownMs = 100
 	exec := NewOSCommandExecutor(cfg)
+	exec.dockerGracefulShutdownMs = 100
 
 	t.Run("SimpleCommand", func(t *testing.T) {
 		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil, 5*time.Second)

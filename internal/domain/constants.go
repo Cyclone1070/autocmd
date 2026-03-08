@@ -16,3 +16,17 @@ const (
 const (
 	ModelIDSeparator = "/"
 )
+
+// Application Metadata
+const (
+	AppName       = "iav"
+	ConfigBaseDir = ".config"
+)
+
+// Standard Permissions (Unix)
+const (
+	DefaultDirPerm  = 0o755
+	DefaultFilePerm = 0o644
+	PrivateDirPerm  = 0o700
+	PrivateFilePerm = 0o600
+)

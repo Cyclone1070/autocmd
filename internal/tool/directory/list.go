@@ -14,6 +14,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const (
+	defaultMaxResults  = 50000
+	fallbackMaxResults = 100
+)
+
 // directoryEntry is an internal helper for directory entries.
 type directoryEntry struct {
 	Name  string
@@ -27,6 +32,8 @@ type ListDirTool struct {
 	pathResolver pathResolver
 	// ignoreMatcher is optional (can be nil)
 	ignoreMatcher ignoreMatcher
+
+	maxResults int // Internal cap, can be overridden in tests
 }
 
 // NewListDirectoryTool creates a new ListDirTool.
@@ -50,6 +57,7 @@ func NewListDirectoryTool(
 		config:        cfg,
 		pathResolver:  pathResolver,
 		ignoreMatcher: ignoreMatcher,
+		maxResults:    defaultMaxResults,
 	}
 }
 
@@ -96,6 +104,7 @@ type listDirInvocation struct {
 	resolvedPath   string
 	ignorePatterns []string
 	display        domain.ToolDisplay
+	maxResults     int
 }
 
 // Prepare validates path existence and returns an Invocation.
@@ -138,6 +147,7 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (doma
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
 		display:        domain.NewStringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
+		maxResults:     t.maxResults,
 	}, nil
 }
 
@@ -214,9 +224,9 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 	})
 
 	// 5. Truncate
-	maxResults := i.config.Tools.MaxListDirectoryResults
+	maxResults := i.maxResults
 	if maxResults <= 0 {
-		maxResults = 100
+		maxResults = fallbackMaxResults
 	}
 
 	truncated := false

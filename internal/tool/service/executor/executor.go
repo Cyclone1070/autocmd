@@ -13,6 +13,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 )
 
+const (
+	defaultMaxOutputSize            = 10 * 1024 * 1024 // 10MB
+	defaultDockerGracefulShutdownMs = 2000
+)
+
 // Result represents the outcome of a command execution.
 // For RunStreaming, Stdout contains combined stdout/stderr output and Stderr is empty.
 type Result struct {
@@ -61,6 +66,9 @@ func NewStreamingCmd(output io.Reader, wait func() (*Result, error)) *StreamingC
 // OSCommandExecutor implements command execution using os/exec for real system commands.
 type OSCommandExecutor struct {
 	config *config.Config
+
+	maxOutputSize            int64
+	dockerGracefulShutdownMs int
 }
 
 // NewOSCommandExecutor creates a new OSCommandExecutor with injected config.
@@ -68,7 +76,11 @@ func NewOSCommandExecutor(cfg *config.Config) *OSCommandExecutor {
 	if cfg == nil {
 		panic("cfg is required")
 	}
-	return &OSCommandExecutor{config: cfg}
+	return &OSCommandExecutor{
+		config:                   cfg,
+		maxOutputSize:            defaultMaxOutputSize,
+		dockerGracefulShutdownMs: defaultDockerGracefulShutdownMs,
+	}
 }
 
 // Run executes a command and returns the result. It buffers output internally.
@@ -163,7 +175,7 @@ func (f *OSCommandExecutor) RunWithTimeout(ctx context.Context, command []string
 		select {
 		case <-done:
 			execErr = ErrTimeout
-		case <-time.After(time.Duration(f.config.Tools.DockerGracefulShutdownMs) * time.Millisecond):
+		case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
 			_ = cmd.Process.Kill()
 			execErr = ErrTimeout
 		}
@@ -232,7 +244,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 	pr, pw := io.Pipe()
 
 	// Buffer to capture output for final Result
-	maxBytes := int(f.config.Tools.DefaultMaxCommandOutputSize)
+	maxBytes := int(f.maxOutputSize)
 	collector := newCollector(maxBytes, 8000)
 	var collectorMu sync.Mutex
 
@@ -289,7 +301,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 				_ = cmd.Process.Signal(os.Interrupt)
 				select {
 				case <-done:
-				case <-time.After(time.Duration(f.config.Tools.DockerGracefulShutdownMs) * time.Millisecond):
+				case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
 					_ = cmd.Process.Kill()
 					<-done
 				}
@@ -333,7 +345,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 }
 
 func (f *OSCommandExecutor) collectOutput(stdout, stderr io.Reader) (string, string, bool) {
-	maxBytes := int(f.config.Tools.DefaultMaxCommandOutputSize)
+	maxBytes := int(f.maxOutputSize)
 
 	stdoutCollector := newCollector(maxBytes, 8000)
 	stderrCollector := newCollector(maxBytes, 8000)

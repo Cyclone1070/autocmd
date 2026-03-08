@@ -12,6 +12,10 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const (
+	maxFindResults = 100
+)
+
 // FindFileRequest represents the parameters for a FindFile operation
 type FindFileRequest struct {
 	Pattern string `json:"pattern"`
@@ -179,7 +183,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("fd exit code %d", res.ExitCode)
 	}
 
-	maxResults := 100
+	maxResults := maxFindResults
 	var matches []string
 	hitMaxResults := false
 	lines := strings.SplitSeq(res.Stdout, "\n")

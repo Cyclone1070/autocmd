@@ -305,7 +305,8 @@ func TestSearchContent_LineLengthLimit(t *testing.T) {
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
 	cfg := config.DefaultConfig()
-	cfg.Tools.MaxLineLength = 10
+	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool.maxLineLength = 10
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	pathResolver.On("Rel", "/root/file.txt").Return("file.txt", nil)
@@ -318,8 +319,6 @@ func TestSearchContent_LineLengthLimit(t *testing.T) {
 		"/root",
 		([]string)(nil),
 	).Return(executor.Result{Stdout: rgOutput, ExitCode: 0}, nil)
-
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)

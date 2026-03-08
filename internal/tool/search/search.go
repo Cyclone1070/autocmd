@@ -12,6 +12,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const (
+	maxSearchResults     = 100
+	defaultMaxLineLength = 10000
+)
+
 // SearchContentRequest matches OpenCode's input schema.
 type SearchContentRequest struct {
 	Pattern string `json:"pattern"`
@@ -25,6 +30,8 @@ type SearchContentTool struct {
 	commandExecutor commandExecutor
 	config          *config.Config
 	pathResolver    pathResolver
+
+	maxLineLength int // For testing
 }
 
 // NewSearchContentTool creates a new SearchContentTool with injected dependencies.
@@ -51,6 +58,7 @@ func NewSearchContentTool(
 		commandExecutor: commandExecutor,
 		config:          cfg,
 		pathResolver:    pathResolver,
+		maxLineLength:   defaultMaxLineLength,
 	}
 }
 
@@ -124,6 +132,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 		pattern:         req.Pattern,
 		include:         req.Include,
 		display:         domain.NewStringDisplay(fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
+		maxLineLength:   t.maxLineLength,
 	}, nil
 }
 
@@ -136,6 +145,7 @@ type searchContentInvocation struct {
 	pattern         string
 	include         string
 	display         domain.ToolDisplay
+	maxLineLength   int
 }
 
 func (i *searchContentInvocation) Display() domain.ToolDisplay {
@@ -159,8 +169,8 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), err
 	}
 
-	maxResults := 100 // Hard limit matching OpenCode behavior
-	maxLineLength := i.config.Tools.MaxLineLength
+	maxResults := maxSearchResults
+	maxLineLength := i.maxLineLength
 
 	// Build ripgrep command
 	// rg --json [--glob=<include>] [--] <pattern> <path>

@@ -39,7 +39,7 @@ func DefaultStorePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "iav", "auth.json"), nil
+	return filepath.Join(home, domain.ConfigBaseDir, domain.AppName, "auth.json"), nil
 }
 
 // Get returns the credential for the given provider.
@@ -156,7 +156,7 @@ func (m *Manager) loadAll() (map[string]domain.Credential, error) {
 }
 
 func (m *Manager) saveAll(all map[string]domain.Credential) error {
-	if err := m.fs.MkdirAll(filepath.Dir(m.storePath), 0700); err != nil {
+	if err := m.fs.MkdirAll(filepath.Dir(m.storePath), domain.PrivateDirPerm); err != nil {
 		return fmt.Errorf("create auth dir: %w", err)
 	}
 
@@ -165,7 +165,7 @@ func (m *Manager) saveAll(all map[string]domain.Credential) error {
 		return fmt.Errorf("marshal auth: %w", err)
 	}
 
-	if err := m.fs.WriteFile(m.storePath, data, 0600); err != nil {
+	if err := m.fs.WriteFile(m.storePath, data, domain.PrivateFilePerm); err != nil {
 		return fmt.Errorf("write auth file: %w", err)
 	}
 

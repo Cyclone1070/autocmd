@@ -59,7 +59,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging to ~/.config/iav/debug.log")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, fmt.Sprintf("Enable debug logging to ~/%s/%s/debug.log", domain.ConfigBaseDir, domain.AppName))
 }
 
 func Execute() {
@@ -207,11 +207,11 @@ func setupLogging() {
 		return
 	}
 
-	logDir := filepath.Join(home, ".config", config.ConfigDir)
-	_ = os.MkdirAll(logDir, 0755)
+	logDir := filepath.Join(home, domain.ConfigBaseDir, domain.AppName)
+	_ = os.MkdirAll(logDir, domain.DefaultDirPerm)
 	logPath := filepath.Join(logDir, "debug.log")
 
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, domain.DefaultFilePerm)
 	if err != nil {
 		return
 	}

@@ -40,7 +40,7 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Started new session: %s\n", sess.ID)
+		fmt.Printf("Started new session\n")
 		return nil
 	},
 }

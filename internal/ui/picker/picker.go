@@ -22,6 +22,7 @@ type Action struct {
 	Key   string
 	Label string
 	Fn    func(item Item) tea.Cmd
+	Quit  bool
 }
 
 // Config configures the picker.
@@ -94,6 +95,11 @@ func (m *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			item := m.items[idx]
 			for _, action := range m.actions {
 				if msg.String() == action.Key {
+					if action.Quit {
+						m.quit = true
+						_ = action.Fn(item)
+						return m, tea.Quit
+					}
 					return m, action.Fn(item)
 				}
 			}

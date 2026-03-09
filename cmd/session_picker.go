@@ -34,7 +34,8 @@ type sessionPickerWrapper struct {
 	store        *session.Store
 	renaming     bool
 	renameItemID string
-	textInput    textinput.Model
+	textInput          textinput.Model
+	newSessionCreated  bool
 }
 
 func (w *sessionPickerWrapper) Init() tea.Cmd {
@@ -156,6 +157,7 @@ func runSessionPicker() error {
 			{
 				Key:   "n",
 				Label: "new",
+				Quit:  true,
 				Fn: func(item picker.Item) tea.Cmd {
 					sess, err := store.Create()
 					if err != nil {
@@ -163,7 +165,8 @@ func runSessionPicker() error {
 					}
 					appState.CurrentSessionID = sess.ID
 					_ = state.Save(appState)
-					return tea.Quit
+					wrapper.newSessionCreated = true
+					return nil
 				},
 			},
 			{
@@ -182,6 +185,10 @@ func runSessionPicker() error {
 				Label: "delete",
 				Fn: func(item picker.Item) tea.Cmd {
 					_ = store.Delete(item.ID)
+					if item.ID == appState.CurrentSessionID {
+						appState.CurrentSessionID = ""
+						_ = state.Save(appState)
+					}
 					summaries, _ := store.List()
 					wrapper.picker.RefreshItems(wrapper.mapSessionsToItems(summaries))
 					return nil
@@ -197,10 +204,12 @@ func runSessionPicker() error {
 		return err
 	}
 
-	if selected, ok := wrapper.picker.Selected(); ok {
+	if wrapper.newSessionCreated {
+		fmt.Printf("Started new session\n")
+	} else if selected, ok := wrapper.picker.Selected(); ok {
 		appState.CurrentSessionID = selected.ID
 		_ = state.Save(appState)
-		fmt.Printf("\nSelected session: %s\n", selected.ID)
+		fmt.Printf("Selected session\n")
 	}
 
 	return nil

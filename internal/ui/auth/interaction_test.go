@@ -57,8 +57,8 @@ func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod {
 		},
 	}
 }
-func (m *mockProvider) ListLLMs(ctx context.Context, cred *domain.Credential) ([]domain.LLMInfo, error) {
-	return nil, nil
+func (m *mockProvider) ListLLMs() []domain.LLMInfo {
+	return nil
 }
 func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
 	return nil, nil
@@ -81,8 +81,8 @@ func (m *mockProviderMultiField) SupportedAuthMethods() []domain.AuthMethod {
 		},
 	}
 }
-func (m *mockProviderMultiField) ListLLMs(ctx context.Context, cred *domain.Credential) ([]domain.LLMInfo, error) {
-	return nil, nil
+func (m *mockProviderMultiField) ListLLMs() []domain.LLMInfo {
+	return nil
 }
 func (m *mockProviderMultiField) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
 	return nil, nil
@@ -90,9 +90,10 @@ func (m *mockProviderMultiField) GetLLM(ctx context.Context, cred *domain.Creden
 
 func TestInteractionFlowNoQuit(t *testing.T) {
 	p := &mockProvider{id: "google"}
-	registry := llm.NewRegistry(p)
 	fs := &mockFileSystem{files: make(map[string][]byte)}
-	model := authui.NewModel(registry, newTestAuthManager(fs), newTestState())
+	authMgr := newTestAuthManager(fs)
+	registry := llm.NewRegistry(authMgr, p)
+	model := authui.NewModel(registry, authMgr, newTestState())
 
 	// 1. Initial State: Provider Selection
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -135,9 +136,10 @@ func TestInteractionFlowNoQuit(t *testing.T) {
 
 func TestMultiFieldInteraction(t *testing.T) {
 	p := &mockProviderMultiField{id: "vertex"}
-	registry := llm.NewRegistry(p)
 	fs := &mockFileSystem{files: make(map[string][]byte)}
-	model := authui.NewModel(registry, newTestAuthManager(fs), newTestState())
+	authMgr := newTestAuthManager(fs)
+	registry := llm.NewRegistry(authMgr, p)
+	model := authui.NewModel(registry, authMgr, newTestState())
 
 	enter := tea.KeyMsg{Type: tea.KeyEnter}
 	input := func(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
@@ -176,13 +178,13 @@ func isQuit(cmd tea.Cmd) bool {
 }
 
 func TestInteraction_BugFixes(t *testing.T) {
-	// ... tests ...
 	p := &mockProvider{id: "google"}
-	registry := llm.NewRegistry(p)
+	fs := &mockFileSystem{files: make(map[string][]byte)}
+	authMgr := newTestAuthManager(fs)
+	registry := llm.NewRegistry(authMgr, p)
 	
 	t.Run("Issue 1: q key should quit and clear screen", func(t *testing.T) {
-		fs := &mockFileSystem{files: make(map[string][]byte)}
-		model := authui.NewModel(registry, newTestAuthManager(fs), newTestState())
+		model := authui.NewModel(registry, authMgr, newTestState())
 		m, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		if !isQuit(cmd) {
 			t.Errorf("expected quit on 'q' key")
@@ -195,8 +197,7 @@ func TestInteraction_BugFixes(t *testing.T) {
 	})
 
 	t.Run("Issue 3: empty input validation", func(t *testing.T) {
-		fs := &mockFileSystem{files: make(map[string][]byte)}
-		model := authui.NewModel(registry, newTestAuthManager(fs), newTestState())
+		model := authui.NewModel(registry, authMgr, newTestState())
 		// Advance to field collection
 		m, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter}) // Select Provider
 		model = m.(*authui.Model)
@@ -217,8 +218,7 @@ func TestInteraction_BugFixes(t *testing.T) {
 	})
 
 	t.Run("Issue 4: Panic on completion render", func(t *testing.T) {
-		fs := &mockFileSystem{files: make(map[string][]byte)}
-		model := authui.NewModel(registry, newTestAuthManager(fs), newTestState())
+		model := authui.NewModel(registry, authMgr, newTestState())
 		
 		// 1. Select provider
 		m, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -248,19 +248,19 @@ func TestInteraction_BugFixes(t *testing.T) {
 
 	t.Run("Feature: Authorized status labels and deletion", func(t *testing.T) {
 		p := &mockProvider{id: "google"}
-		registry := llm.NewRegistry(p)
 		fs := &mockFileSystem{files: make(map[string][]byte)}
+		authMgr := newTestAuthManager(fs)
+		registry := llm.NewRegistry(authMgr, p)
 		appState := &state.State{Model: "google/gemini"}
 		
 		// 1. Initially NOT authorized
-		model := authui.NewModel(registry, newTestAuthManager(fs), appState)
+		model := authui.NewModel(registry, authMgr, appState)
 		view := model.View()
 		if strings.Contains(strings.ToLower(view), "authorized") {
 			t.Errorf("expected no authorized label initially")
 		}
 
 		// 2. Authorize
-		authMgr := newTestAuthManager(fs)
 		authMgr.Set("google", domain.Credential{Type: "api_key", APIKey: "key"})
 		
 		// Refresh model

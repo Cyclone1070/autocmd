@@ -26,7 +26,7 @@ type LLMInfo struct {
 type Provider interface {
 	ID() string
 	SupportedAuthMethods() []AuthMethod
-	ListLLMs(ctx context.Context, cred *Credential) ([]LLMInfo, error)
+	ListLLMs() []LLMInfo
 	GetLLM(ctx context.Context, cred *Credential, modelID string) (LLM, error)
 }
 

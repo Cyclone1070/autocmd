@@ -15,6 +15,7 @@ type AuthField struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	Placeholder string `json:"placeholder"`
+	EnvVar      string `json:"env_var,omitempty"` // Fallback environment variable name
 	IsSecret    bool   `json:"is_secret"`
 }
 

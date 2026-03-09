@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/state"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
@@ -22,9 +24,9 @@ var authCmd = &cobra.Command{
 		}
 		authMgr, err := buildAuthManager(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("build auth manager: %w", err)
 		}
-		registry := buildLLMRegistry()
+		registry := buildLLMRegistry(authMgr)
 		s, err := state.Load()
 		if err != nil {
 			return err

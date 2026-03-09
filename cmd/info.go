@@ -38,13 +38,18 @@ var infoCmd = &cobra.Command{
 }
 
 func runInfo(cmd *cobra.Command, cfg *config.Config, appState *state.State, authMgr *auth.Manager) error {
-	llmRegistry := buildLLMRegistry()
+	ctx := context.Background()
+	llmRegistry := buildLLMRegistry(authMgr)
 
 	// Authorized Providers
 	var authorized []string
-	for _, pID := range llmRegistry.ListProviders() {
-		if cred := resolveCredential(authMgr, pID); cred != nil {
-			authorized = append(authorized, fmt.Sprintf("%s (%s)", pID, cred.Type))
+	providers, err := llmRegistry.ListProviders(ctx)
+	if err != nil {
+		return fmt.Errorf("list providers: %w", err)
+	}
+	for _, p := range providers {
+		if p.Credential != nil {
+			authorized = append(authorized, fmt.Sprintf("%s (%s)", p.ID, p.Credential.Type))
 		}
 	}
 
@@ -74,10 +79,8 @@ func runInfo(cmd *cobra.Command, cfg *config.Config, appState *state.State, auth
 	}
 
 	// Optional LLM Info (if authed)
-	providerID := strings.SplitN(appState.Model, domain.ModelIDSeparator, 2)[0]
-	if cred := resolveCredential(authMgr, providerID); cred != nil && appState.Model != "" {
-		ctx := context.Background()
-		llmInstance, err := llmRegistry.Get(ctx, appState.Model, cred)
+	if appState.Model != "" {
+		llmInstance, err := llmRegistry.Get(ctx, appState.Model)
 		if err == nil && llmInstance != nil {
 			contextWindow := llmInstance.ContextWindow()
 			if appState.CurrentSessionID != "" && len(sessMessages) > 0 {

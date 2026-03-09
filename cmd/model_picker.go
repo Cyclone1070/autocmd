@@ -3,10 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,25 +35,15 @@ var modelCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		registry := buildLLMRegistry()
+		registry := buildLLMRegistry(authMgr)
 
-		// For listing, we should try to resolve all credentials
-		creds := make(map[string]*domain.Credential)
-		for _, pID := range registry.ListProviders() {
-			creds[pID] = resolveCredential(authMgr, pID)
-		}
-
-		models, err := registry.List(ctx, creds)
+		models, err := registry.List(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("list models: %w", err)
 		}
 
 		var items []picker.Item
 		for _, mi := range models {
-			providerID := strings.SplitN(mi.ID, domain.ModelIDSeparator, 2)[0]
-			if creds[providerID] == nil {
-				continue
-			}
 			items = append(items, picker.Item{
 				ID:     mi.ID,
 				Label:  mi.DisplayName,

@@ -2,19 +2,15 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-
-	"github.com/Cyclone1070/iav/internal/agent"
+ 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
@@ -25,7 +21,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
@@ -107,13 +103,11 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 	}
 
 	// Resolve credential based on provider ID (e.g., "google")
-	providerID := strings.SplitN(appState.Model, domain.ModelIDSeparator, 2)[0]
-	cred := resolveCredential(authMgr, providerID)
+	llmRegistry := buildLLMRegistry(authMgr)
 
-	llmRegistry := buildLLMRegistry()
-	llmInstance, err := llmRegistry.Get(ctx, appState.Model, cred)
+	llmInstance, err := llmRegistry.Get(ctx, appState.Model)
 	if err != nil {
-		return fmt.Errorf("initialize LLM: %w", err)
+		return fmt.Errorf("get llm: %w", err)
 	}
 
 	store, err := buildSessionStore(cfg)
@@ -121,79 +115,24 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 		return err
 	}
 
-	var sessionID string
-	// For the main agent command, we always use the current session from state.
-	sessionID = appState.CurrentSessionID
-
-	var sess *domain.Session
-	if sessionID == "" {
-		sess, err = store.Create()
-		if err != nil {
-			return err
-		}
-		appState.CurrentSessionID = sess.ID
-		if err := state.Save(appState); err != nil {
-			slog.Warn("failed to save state", "error", err)
-		}
-	} else {
-		sess, err = store.Get(sessionID)
-		if err != nil {
-			return err
-		}
-		if appState.CurrentSessionID != sess.ID {
-			appState.CurrentSessionID = sess.ID
-			if err := state.Save(appState); err != nil {
-				slog.Warn("failed to save state", "error", err)
-			}
-		}
+	deps := &workflow.PromptDeps{
+		Config:       cfg,
+		State:        appState,
+		Store:        store,
+		LLM:          llmInstance,
+		ToolRegistry: toolRegistry,
+		Runner:       realUIRunner{},
 	}
 
-	events := make(chan domain.Event, 100)
-	broker := agent.NewEventBroker(events)
-	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, broker)
+	return workflow.RunPrompt(ctx, input, deps)
+}
 
-	var namingWg sync.WaitGroup
-	// Trigger auto-naming if this is a new session (no name yet)
-	if sess.Name == "" {
-		namingWg.Add(1)
-		go func() {
-			defer namingWg.Done()
-			name, err := session.GenerateName(ctx, llmInstance, sess, input)
-			if err == nil {
-				sess.Name = name
-			}
-		}()
-	}
+type realUIRunner struct{}
 
-	m := loop.NewModel(events, cfg.UI)
-
-	done := make(chan error, 1)
-	go func() {
-		err := agentLoop.Run(ctx, sess, input)
-		namingWg.Wait()
-
-		_ = store.Save(sess)
-
-		broker.Close()
-		select {
-		case events <- domain.DoneEvent{}:
-		default:
-		}
-		close(events)
-		done <- err
-	}()
-
+func (realUIRunner) Run(m tea.Model) error {
 	p := tea.NewProgram(m)
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "UI failed: %v\n", err)
-	}
-
-	agentErr := <-done
-	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
-		return fmt.Errorf("agent failed: %w", agentErr)
-	}
-
-	return nil
+	_, err := p.Run()
+	return err
 }
 
 func setupLogging() {

@@ -30,6 +30,7 @@ func (p *Provider) SupportedAuthMethods() []domain.AuthMethod {
 					ID:          domain.AuthFieldAPIKey,
 					Label:       "API Key",
 					Placeholder: "Enter your Gemini API Key",
+					EnvVar:      "GEMINI_API_KEY",
 					IsSecret:    true,
 				},
 			},
@@ -55,14 +56,14 @@ func (p *Provider) newClient(ctx context.Context, cred *domain.Credential) (*gen
 	return genai.NewClient(ctx, cfg)
 }
 
-func (p *Provider) ListLLMs(ctx context.Context, cred *domain.Credential) ([]domain.LLMInfo, error) {
+func (p *Provider) ListLLMs() []domain.LLMInfo {
 	return []domain.LLMInfo{
 		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash Lite"},
 		{ID: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash"},
 		{ID: "gemini-3-flash-preview", DisplayName: "Gemini 3.0 Flash"},
 		{ID: "gemini-2.5-pro", DisplayName: "Gemini 2.5 Pro"},
 		{ID: "gemini-3-pro-preview", DisplayName: "Gemini 3.0 Pro Preview"},
-	}, nil
+	}
 }
 
 func (p *Provider) GetLLM(ctx context.Context, cred *domain.Credential, id string) (domain.LLM, error) {

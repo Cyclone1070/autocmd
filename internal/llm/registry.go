@@ -8,15 +8,22 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// Registry resolves LLM IDs to LLM instances using provider-specific credentials.
-type Registry struct {
-	providers map[string]domain.Provider
+// CredentialStore defines the interface for active credential resolution.
+type CredentialStore interface {
+	GetWithFallback(p domain.Provider) (*domain.Credential, error)
 }
 
-// NewRegistry creates a Registry from providers.
-func NewRegistry(providers ...domain.Provider) *Registry {
+// Registry resolves LLM IDs to LLM instances using provider-specific credentials.
+type Registry struct {
+	providers   map[string]domain.Provider
+	authManager CredentialStore
+}
+
+// NewRegistry creates a Registry from providers and an optional auth manager.
+func NewRegistry(authManager CredentialStore, providers ...domain.Provider) *Registry {
 	r := &Registry{
-		providers: make(map[string]domain.Provider),
+		providers:   make(map[string]domain.Provider),
+		authManager: authManager,
 	}
 	for _, p := range providers {
 		if p != nil {
@@ -32,41 +39,78 @@ func (r *Registry) GetProvider(id string) (domain.Provider, bool) {
 	return p, ok
 }
 
-// ListProviders returns the IDs of all registered providers.
-func (r *Registry) ListProviders() []string {
-	var ids []string
-	for id := range r.providers {
-		ids = append(ids, id)
-	}
-	return ids
+// ProviderInfo contains a provider's ID and its resolved credential (if any).
+type ProviderInfo struct {
+	ID         string
+	Credential *domain.Credential
 }
 
-// Get resolves "google/gemini-2.5-flash" to an LLM using the provided credential.
-func (r *Registry) Get(ctx context.Context, id string, cred *domain.Credential) (domain.LLM, error) {
+// ListProviders returns information about all registered providers, including resolved credentials.
+func (r *Registry) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
+	var infos []ProviderInfo
+	for id, p := range r.providers {
+		cred := (*domain.Credential)(nil)
+		if r.authManager != nil {
+			resolved, _ := r.authManager.GetWithFallback(p)
+			cred = resolved
+		}
+		infos = append(infos, ProviderInfo{
+			ID:         id,
+			Credential: cred,
+		})
+	}
+	return infos, nil
+}
+
+// Get resolves "google/gemini-2.5-flash" to an LLM.
+// It tries to resolve it using the internal auth manager.
+func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 	parts := strings.SplitN(id, domain.ModelIDSeparator, 2)
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid LLM ID format: %s (expected provider/model)", id)
 	}
-	p, ok := r.providers[parts[0]]
+
+	pID := parts[0]
+	mID := parts[1]
+
+	p, ok := r.providers[pID]
 	if !ok {
-		return nil, fmt.Errorf("unknown provider: %s", parts[0])
+		return nil, fmt.Errorf("unknown provider: %s", pID)
 	}
-	return p.GetLLM(ctx, cred, parts[1])
+
+	// Active Resolution
+	var cred *domain.Credential
+	if r.authManager != nil {
+		resolved, err := r.authManager.GetWithFallback(p)
+		if err != nil {
+			return nil, fmt.Errorf("resolve credential for %s: %w", pID, err)
+		}
+		cred = resolved
+	}
+
+	if cred == nil {
+		return nil, fmt.Errorf("no credential provided or found for %s", pID)
+	}
+
+	return p.GetLLM(ctx, cred, mID)
 }
 
-// List returns all LLMs from all providers. Only returns models for providers with valid credentials.
-func (r *Registry) List(ctx context.Context, creds map[string]*domain.Credential) ([]domain.LLMInfo, error) {
+// List returns all LLMs from all providers.
+// It tries to resolve credentials for all providers using the internal auth manager.
+func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 	var all []domain.LLMInfo
 	for id, p := range r.providers {
-		cred := creds[id]
+		var cred *domain.Credential
+		if r.authManager != nil {
+			resolved, _ := r.authManager.GetWithFallback(p)
+			cred = resolved
+		}
+
 		if cred == nil || ((cred.Type == domain.AuthMethodAPIKey || cred.Type == domain.AuthMethodEnv) && cred.APIKey == "") {
 			continue
 		}
 
-		llms, err := p.ListLLMs(ctx, cred)
-		if err != nil {
-			return nil, fmt.Errorf("list LLMs from %s: %w", id, err)
-		}
+		llms := p.ListLLMs()
 		for _, m := range llms {
 			all = append(all, domain.LLMInfo{
 				ID:          id + domain.ModelIDSeparator + m.ID,

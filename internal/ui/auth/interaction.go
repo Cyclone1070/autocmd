@@ -1,6 +1,7 @@
 package authui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -65,22 +66,20 @@ func NewModel(registry *llm.Registry, authMgr *auth.Manager, appState *state.Sta
 }
 
 func (m *Model) initProviderPicker() {
-	ids := m.registry.ListProviders()
+	infos, _ := m.registry.ListProviders(context.Background())
 	var items []picker.Item
-	for _, id := range ids {
-		label := id
+	for _, info := range infos {
+		label := info.ID
 		active := false
 		detail := ""
 
-		// Check if authorized
-		cred, _ := m.authMgr.Get(id)
-		if cred != nil {
+		if info.Credential != nil {
 			active = true
 			detail = "(Authorized)"
 		}
 
 		items = append(items, picker.Item{
-			ID:     id,
+			ID:     info.ID,
 			Label:  label,
 			Active: active,
 			Detail: detail,

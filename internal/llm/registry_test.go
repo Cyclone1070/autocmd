@@ -1,35 +1,44 @@
-package llm_test
+package llm
 
 import (
 	"context"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/llm"
+	"github.com/stretchr/testify/assert"
 )
 
 type mockProvider struct {
 	id string
 }
 
-func (m *mockProvider) ID() string { return m.id }
-func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod { return nil }
-func (m *mockProvider) ListLLMs(ctx context.Context, cred *domain.Credential) ([]domain.LLMInfo, error) {
-	return []domain.LLMInfo{{ID: "model", DisplayName: "Model"}}, nil
+func (m *mockProvider) ID() string                                     { return m.id }
+func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod      { return nil }
+func (m *mockProvider) ListLLMs() []domain.LLMInfo {
+	return []domain.LLMInfo{{ID: "model", DisplayName: "Model"}}
 }
 func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
 	return nil, nil
 }
 
+type mockStore struct {
+	creds map[string]*domain.Credential
+}
+
+func (s *mockStore) GetWithFallback(p domain.Provider) (*domain.Credential, error) {
+	return s.creds[p.ID()], nil
+}
+
 func TestRegistry(t *testing.T) {
 	p := &mockProvider{id: "mock"}
-	r := llm.NewRegistry(p)
+	store := &mockStore{creds: make(map[string]*domain.Credential)}
+	r := NewRegistry(store, p)
 
 	t.Run("ListProviders", func(t *testing.T) {
-		providers := r.ListProviders()
-		if len(providers) != 1 || providers[0] != "mock" {
-			t.Errorf("expected ['mock'], got %v", providers)
-		}
+		providers, err := r.ListProviders(context.Background())
+		assert.NoError(t, err)
+		assert.Len(t, providers, 1)
+		assert.Equal(t, "mock", providers[0].ID)
 	})
 
 	t.Run("GetProvider", func(t *testing.T) {
@@ -39,24 +48,27 @@ func TestRegistry(t *testing.T) {
 		}
 	})
 
-	t.Run("GetLLMWithCred", func(t *testing.T) {
-		cred := &domain.Credential{APIKey: "key"}
-		_, err := r.Get(context.Background(), "mock/model", cred)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
+	t.Run("Get with Direct Credential - REMOVED", func(t *testing.T) {
+		// This test is no longer valid as we removed the explicit cred argument
+		// We'll rely on the auto-resolution tests
 	})
 
-	t.Run("ListWithCreds", func(t *testing.T) {
-		creds := map[string]*domain.Credential{
-			"mock": {APIKey: "key"},
-		}
-		models, err := r.List(context.Background(), creds)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(models) != 1 || models[0].ID != "mock/model" {
-			t.Errorf("expected ['mock/model'], got %v", models)
-		}
+	t.Run("Get with Auto-Resolution", func(t *testing.T) {
+		store.creds["mock"] = &domain.Credential{APIKey: "auto"}
+		// No cred argument
+		_, err := r.Get(context.Background(), "mock/model")
+		assert.NoError(t, err)
+	})
+
+	t.Run("List with Auto-Resolution", func(t *testing.T) {
+		store.creds["mock"] = &domain.Credential{APIKey: "auto", Type: "api_key"}
+		// No creds map argument
+		llms, err := r.List(context.Background())
+		assert.NoError(t, err)
+		assert.NotEmpty(t, llms)
+	})
+
+	t.Run("ListWithCreds - REMOVED", func(t *testing.T) {
+		// This test is no longer valid as we removed the explicit creds argument
 	})
 }

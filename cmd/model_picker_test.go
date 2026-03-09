@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/auth"
-	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,13 +42,8 @@ func TestModelAuthAwareness(t *testing.T) {
 		os.Unsetenv("GEMINI_API_KEY")
 		delete(mockFS.files, storePath)
 
-		registry := buildLLMRegistry()
-		creds := make(map[string]*domain.Credential)
-		for _, pID := range registry.ListProviders() {
-			creds[pID] = resolveCredential(mgr, pID)
-		}
-
-		models, err := registry.List(context.Background(), creds)
+		registry := buildLLMRegistry(mgr)
+		models, err := registry.List(context.Background())
 		require.NoError(t, err)
 
 		assert.Empty(t, models, "Should return no models if no providers are authed")
@@ -60,13 +54,8 @@ func TestModelAuthAwareness(t *testing.T) {
 		os.Setenv("GEMINI_API_KEY", "test-key")
 		defer os.Unsetenv("GEMINI_API_KEY")
 
-		registry := buildLLMRegistry()
-		creds := make(map[string]*domain.Credential)
-		for _, pID := range registry.ListProviders() {
-			creds[pID] = resolveCredential(mgr, pID)
-		}
-
-		models, err := registry.List(context.Background(), creds)
+		registry := buildLLMRegistry(mgr)
+		models, err := registry.List(context.Background())
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, models)

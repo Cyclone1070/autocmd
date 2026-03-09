@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -154,4 +155,95 @@ func TestManager_Caching(t *testing.T) {
 	got4, err := mgr.Get("p1")
 	assert.NoError(t, err)
 	assert.Nil(t, got4)
+}
+
+type authMockProvider struct {
+	id      string
+	methods []domain.AuthMethod
+}
+
+func (p *authMockProvider) ID() string                                     { return p.id }
+func (p *authMockProvider) SupportedAuthMethods() []domain.AuthMethod      { return p.methods }
+func (p *authMockProvider) ListLLMs() []domain.LLMInfo {
+	return nil
+}
+func (p *authMockProvider) GetLLM(context.Context, *domain.Credential, string) (domain.LLM, error) {
+	return nil, nil
+}
+
+func TestManager_GetWithFallback_RED(t *testing.T) {
+	mockFS := &mockFileSystem{files: make(map[string][]byte)}
+	storePath := "/home/user/.config/iav/auth.json"
+	mgr := NewManager(mockFS, storePath)
+
+	provider := &authMockProvider{
+		id: "test-provider",
+		methods: []domain.AuthMethod{
+			{
+				ID: domain.AuthMethodAPIKey,
+				Fields: []domain.AuthField{
+					{ID: domain.AuthFieldAPIKey, EnvVar: "TEST_API_KEY"},
+				},
+			},
+		},
+	}
+
+	t.Run("Priority 1: Disk Over Env", func(t *testing.T) {
+		os.Setenv("TEST_API_KEY", "env-value")
+		defer os.Unsetenv("TEST_API_KEY")
+
+		// Save to disk
+		mgr.Set("test-provider", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "disk-value"})
+
+		got, err := mgr.GetWithFallback(provider)
+		assert.NoError(t, err)
+		assert.Equal(t, "disk-value", got.APIKey)
+		assert.Equal(t, domain.AuthMethodAPIKey, got.Type)
+	})
+
+	t.Run("Priority 2: Fallback to Env", func(t *testing.T) {
+		os.Setenv("TEST_API_KEY", "env-value")
+		defer os.Unsetenv("TEST_API_KEY")
+
+		// Remove from disk
+		mgr.Remove("test-provider")
+
+		got, err := mgr.GetWithFallback(provider)
+		assert.NoError(t, err)
+		assert.Equal(t, "env-value", got.APIKey)
+		assert.Equal(t, domain.AuthMethodEnv, got.Type)
+	})
+
+	t.Run("Fallback to Env with Multiple Fields", func(t *testing.T) {
+		pComplex := &authMockProvider{
+			id: "complex",
+			methods: []domain.AuthMethod{
+				{
+					ID: "complex",
+					Fields: []domain.AuthField{
+						{ID: domain.AuthFieldAPIKey, EnvVar: "VAL1"},
+						{ID: domain.AuthFieldProject, EnvVar: "VAL2"},
+					},
+				},
+			},
+		}
+		os.Setenv("VAL1", "v1")
+		os.Setenv("VAL2", "v2")
+		defer os.Unsetenv("VAL1")
+		defer os.Unsetenv("VAL2")
+
+		got, err := mgr.GetWithFallback(pComplex)
+		assert.NoError(t, err)
+		assert.Equal(t, "v1", got.APIKey)
+		assert.Equal(t, "v2", got.Project)
+	})
+
+	t.Run("Returns Nil if neither exists", func(t *testing.T) {
+		os.Unsetenv("TEST_API_KEY")
+		mgr.Remove("test-provider")
+
+		got, err := mgr.GetWithFallback(provider)
+		assert.NoError(t, err)
+		assert.Nil(t, got)
+	})
 }

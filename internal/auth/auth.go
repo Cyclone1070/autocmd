@@ -55,6 +55,51 @@ func (m *Manager) Get(providerID string) (*domain.Credential, error) {
 	return &cred, nil
 }
 
+// GetWithFallback returns the credential for the given provider,
+// prioritizing stored credentials over environment variable fallbacks.
+func (m *Manager) GetWithFallback(p domain.Provider) (*domain.Credential, error) {
+	// 1. Try stored credentials first
+	cred, err := m.Get(p.ID())
+	if err != nil {
+		return nil, err
+	}
+	if cred != nil && cred.APIKey != "" {
+		return cred, nil
+	}
+
+	// 2. Try environment variable fallbacks from metadata
+	fallback := &domain.Credential{Type: domain.AuthMethodEnv}
+	found := false
+
+	for _, method := range p.SupportedAuthMethods() {
+		for _, field := range method.Fields {
+			if field.EnvVar == "" {
+				continue
+			}
+			val := os.Getenv(field.EnvVar)
+			if val == "" {
+				continue
+			}
+
+			found = true
+			switch field.ID {
+			case domain.AuthFieldAPIKey:
+				fallback.APIKey = val
+			case domain.AuthFieldProject:
+				fallback.Project = val
+			case domain.AuthFieldLocation:
+				fallback.Location = val
+			}
+		}
+	}
+
+	if found {
+		return fallback, nil
+	}
+
+	return nil, nil
+}
+
 // Set stores the credential for the given provider.
 func (m *Manager) Set(providerID string, cred domain.Credential) error {
 	m.mu.Lock()

@@ -9,7 +9,9 @@ const (
 const (
 	AuthMethodAPIKey = "api_key"
 	AuthMethodEnv    = "env"
-	AuthFieldAPIKey  = "api_key"
+	AuthFieldAPIKey   = "api_key"
+	AuthFieldProject  = "project"
+	AuthFieldLocation = "location"
 )
 
 // UI and Formatting

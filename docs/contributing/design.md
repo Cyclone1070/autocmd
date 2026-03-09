@@ -150,6 +150,33 @@
 
 ---
 
+## 5. Constants and Configuration
+
+**Goal**: Keep user configuration minimal and use hardcoded, tiered constants for technical parameters.
+
+We follow a **Constant Promotion Strategy** to decide where a literal should live based on its scope and reuse.
+
+*   **Tier 1: Inline Literals** (Default)
+    *   **Rule**: Use if the value is unique to a single function or logical block.
+    *   **Examples**: Tool names (`"read_file"`), internal regex patterns, one-off CLI flag defaults.
+    *   **Why**: Defining a constant for a single-use string adds noise without providing reuse or categorization benefits.
+
+*   **Tier 2: Package-Level Constants**
+    *   **Rule**: Use if the value is shared across multiple files within the same package, or if it provides a technical limit that needs to be adjustable for testing.
+    *   **Examples**: `defaultReadFileLimit` in `internal/tool/file`, `maxSearchResults` in `internal/tool/search`.
+    *   **Why**: Encapsulates component-specific limits where they are used. These should usually be **private** to the package.
+
+*   **Tier 3: Domain-Level Constants**
+    *   **Rule**: Use for values that define application identity, shared infrastructure, or cross-package protocols.
+    *   **Examples**: `AppName`, `ConfigBaseDir`, standard Unix permissions (`DefaultFilePerm`).
+    *   **File**: [internal/domain/constants.go](file:///Users/mac/Desktop/repos/iav/internal/domain/constants.go).
+    *   **Why**: Provides a single source of truth for cross-cutting concerns, preventing drift across the codebase.
+
+> [!IMPORTANT]
+> **Technical Parameters MUST be internal constants**. If a user will likely never change it, it doesn't belong in the config file.
+
+---
+
 ## Pre-Commit Checklist
 
 Before submitting code, verify **every** item.

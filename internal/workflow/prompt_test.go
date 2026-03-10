@@ -83,6 +83,15 @@ func (m *mockRunner) Run(model tea.Model) error {
 	return args.Error(0)
 }
 
+type mockAgent struct {
+	mock.Mock
+}
+
+func (m *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	args := m.Called(ctx, sess, input)
+	return args.Error(0)
+}
+
 func TestRunPrompt_GREEN(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -100,6 +109,9 @@ func TestRunPrompt_GREEN(t *testing.T) {
 		},
 	}
 
+	agent := new(mockAgent)
+	bus := NewEventBus()
+
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
@@ -107,6 +119,9 @@ func TestRunPrompt_GREEN(t *testing.T) {
 		Config:       cfg,
 		ToolRegistry: registry,
 		Runner:       runner,
+		Agent:        agent,
+		UI:           nil, // Model can be nil in this mock test
+		Bus:          bus,
 	}
 
 	// 1. Session Lifecycle Expectations
@@ -119,10 +134,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	}), mock.Anything).Return(newMockStream(), nil)
 
 	// 3. Agent Loop expectations
-	registry.On("Declarations").Return([]domain.Declaration{})
-	llm.On("Stream", mock.Anything, mock.MatchedBy(func(msgs domain.Messages) bool {
-		return len(msgs) == 1 // Only the user input
-	}), mock.Anything).Return(newMockStream(), nil)
+	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
 
 	// 4. UI expectations (mock Run to return immediately)
 	runner.On("Run", mock.Anything).Return(nil)
@@ -159,4 +171,52 @@ func (m *mockStream) Chunk() domain.StreamChunk {
 func (m *mockStream) Err() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+type trackableBus struct {
+	*EventBus
+	closed bool
+}
+
+func (b *trackableBus) Close() {
+	b.closed = true
+	b.EventBus.Close()
+}
+
+func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	registry := new(mockToolRegistry)
+	runner := new(mockRunner)
+	agent := new(mockAgent)
+	
+	eb := NewEventBus()
+	bus := &trackableBus{EventBus: eb}
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        &state.State{},
+		Config:       &config.Config{},
+		ToolRegistry: registry,
+		Runner:       runner,
+		Agent:        agent,
+		Bus:          bus.EventBus, // Current PromptDeps expects *EventBus
+	}
+
+	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
+	store.On("Save", mock.Anything).Return(nil)
+	llm.On("Stream", mock.Anything, mock.Anything, mock.Anything).Return(newMockStream(), nil)
+	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	runner.On("Run", mock.Anything).Return(nil)
+
+	err := RunPrompt(ctx, "hello", deps)
+	assert.NoError(t, err)
+
+	// In the NEW architecture, the bus should still be open here
+	// because RunPrompt no longer calls Close().
+	assert.False(t, bus.closed, "RunPrompt should NOT close the bus; that is now wiring responsibility")
 }

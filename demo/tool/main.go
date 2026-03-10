@@ -1,89 +1,168 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	events := make(chan domain.Event)
-	m := loop.NewModel(events, config.DefaultConfig().UI)
+	bus := workflow.NewEventBus()
+	cfg := config.DefaultConfig()
+	cfg.UI.ChatWindowWidth = 80
+	m := loop.NewModel(bus, cfg.UI)
 
-	p := tea.NewProgram(m)
+	deps := &workflow.PromptDeps{
+		Config:       cfg,
+		State:        &state.State{},
+		Store:        &mockStore{},
+		LLM:          &mockLLM{},
+		Runner:       &realRunner{},
+		Agent:        &mockAgent{bus: bus},
+		UI:           m,
+		Bus:          bus,
+		ToolRegistry: &mockRegistry{},
+	}
 
-	go func() {
-		runSuite := func(name string, display1, display2, display3 domain.ToolDisplay) {
-			events <- domain.TextEvent{Text: fmt.Sprintf("\n### SUITE: %s\n", name)}
-
-			// Start all three
-			events <- domain.ToolStartEvent{CallID: name + "-1", Display: display1}
-			events <- domain.ToolStartEvent{CallID: name + "-2", Display: display2}
-			events <- domain.ToolStartEvent{CallID: name + "-3", Display: display3}
-
-			// Finishes: 2 (0.5s), 3 (1.5s), 1 (3s)
-			// Tool 3 is the "middle" finisher - make it fail.
-			time.Sleep(500 * time.Millisecond)
-			events <- domain.ToolEndEvent{CallID: name + "-2"}
-
-			time.Sleep(1000 * time.Millisecond)
-			events <- domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"}
-
-			time.Sleep(1500 * time.Millisecond)
-			events <- domain.ToolEndEvent{CallID: name + "-1"}
-		}
-
-		events <- domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n"}
-
-		// 1. String Suite
-		runSuite("STRING",
-			domain.NewStringDisplay("String 1 (Slow)"),
-			domain.NewStringDisplay("String 2 (Fast)"),
-			domain.NewStringDisplay("String 3 (Medium/Fail)"))
-
-		// 2. Diff Suite
-		runSuite("DIFF",
-			domain.NewDiffDisplay("Updating file.txt", "Edit file.txt", 1, 1, "- old\n+ new"),
-			domain.NewDiffDisplay("Fixing fast.txt", "Edit fast.txt", 1, 1, "- fast\n+ gone"),
-			domain.NewDiffDisplay("Fixing med.txt", "Edit med.txt", 1, 1, "- error here\n+ failed"))
-
-		// 3. Shell Suite (with more streaming)
-		events <- domain.TextEvent{Text: "\n### SUITE: SHELL (Heavy Streaming)\n"}
-		events <- domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", nil, nil)}
-		events <- domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", nil, nil)}
-		events <- domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", nil, nil)}
-
-		// Heavy streaming
-		for i := 1; i <= 20; i++ {
-			if i <= 15 {
-				events <- domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast output line %d - working quickly...\n", i)}
-			}
-			if i <= 20 {
-				events <- domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time...\n", i)}
-			}
-			if i <= 18 {
-				events <- domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...\n", i)}
-			}
-			time.Sleep(300 * time.Millisecond)
-		}
-
-		// Finishes
-		events <- domain.ToolEndEvent{CallID: "SHELL-2"} // Fast
-		time.Sleep(1000 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "SHELL-3", Error: "exit status 1: middle tool error"} // Medium/Fail
-		time.Sleep(1000 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "SHELL-1"} // Slow
-
-		events <- domain.DoneEvent{}
-	}()
-
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running program: %v\n", err)
+	if err := workflow.RunPrompt(context.Background(), "", deps); err != nil {
+		fmt.Printf("Error running workflow: %v\n", err)
 		os.Exit(1)
 	}
 }
+
+type mockAgent struct {
+	bus *workflow.EventBus
+}
+
+func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	runSuite := func(name string, display1, display2, display3 domain.ToolDisplay) error {
+		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("\n### SUITE: %s\n", name)})
+
+		// Start all three
+		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-1", Display: display1})
+		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-2", Display: display2})
+		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-3", Display: display3})
+
+		// Finishes: 2 (0.5s), 3 (1.5s), 1 (3s)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1000 * time.Millisecond):
+			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1500 * time.Millisecond):
+			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+		}
+		return nil
+	}
+
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n"})
+
+	// 1. String Suite
+	if err := runSuite("STRING",
+		domain.NewStringDisplay("String 1 (Slow)"),
+		domain.NewStringDisplay("String 2 (Fast)"),
+		domain.NewStringDisplay("String 3 (Medium/Fail)")); err != nil {
+		return err
+	}
+
+	// 2. Diff Suite
+	if err := runSuite("DIFF",
+		domain.NewDiffDisplay("Updating file.txt", "Edit file.txt", 1, 1, "- old\n+ new"),
+		domain.NewDiffDisplay("Fixing fast.txt", "Edit fast.txt", 1, 1, "- fast\n+ gone"),
+		domain.NewDiffDisplay("Fixing med.txt", "Edit med.txt", 1, 1, "- error here\n+ failed")); err != nil {
+		return err
+	}
+
+	// 3. Shell Suite (with more streaming)
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "\n### SUITE: SHELL (Heavy Streaming)\n"})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", nil, nil)})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", nil, nil)})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", nil, nil)})
+
+	// Heavy streaming
+	for i := 1; i <= 20; i++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(300 * time.Millisecond):
+			if i <= 15 {
+				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast output line %d - working quickly...\n", i)})
+			}
+			if i <= 20 {
+				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time...\n", i)})
+			}
+			if i <= 18 {
+				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...\n", i)})
+			}
+		}
+	}
+
+	// Finishes
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-2"}) // Fast
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1000 * time.Millisecond):
+		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-3", Error: "exit status 1: middle tool error"}) // Medium/Fail
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1000 * time.Millisecond):
+		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-1"}) // Slow
+	}
+
+	return nil
+}
+
+type mockStore struct{}
+
+func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
+func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
+func (s *mockStore) Save(sess *domain.Session) error       { return nil }
+
+type mockLLM struct{}
+
+func (l *mockLLM) ID() string          { return "mock" }
+func (l *mockLLM) DisplayName() string { return "Mock LLM" }
+func (l *mockLLM) ContextWindow() int  { return 1000 }
+func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
+	return 0, nil
+}
+func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
+	return nil, nil
+}
+
+type realRunner struct{}
+
+func (r *realRunner) Run(m tea.Model) error {
+	p := tea.NewProgram(m)
+	_, err := p.Run()
+	return err
+}
+
+type mockRegistry struct{}
+
+func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

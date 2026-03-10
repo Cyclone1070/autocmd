@@ -1,47 +1,115 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	events := make(chan domain.Event)
-	m := loop.NewModel(events, config.DefaultConfig().UI)
+	bus := workflow.NewEventBus()
+	cfg := config.DefaultConfig()
+	m := loop.NewModel(bus, cfg.UI)
 
-	p := tea.NewProgram(m)
+	deps := &workflow.PromptDeps{
+		Config:       cfg,
+		State:        &state.State{},
+		Store:        &mockStore{},
+		LLM:          &mockLLM{},
+		Runner:       &realRunner{},
+		Agent:        &mockAgent{bus: bus},
+		UI:           m,
+		Bus:          bus,
+		ToolRegistry: &mockRegistry{},
+	}
 
-	// Simulate workflow in background
-	go func() {
-		// 1. Thinking
-		events <- domain.ThinkingEvent{}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.TextEvent{Text: "This text should be above tool call at all stages of the display."}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.ToolStartEvent{
-			CallID:  "tool-0",
-			Display: domain.NewStringDisplay("This tool call display should be sandwiched."),
-		}
-		time.Sleep(1 * time.Second)
-		events <- domain.ToolEndEvent{CallID: "tool-0"}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.TextEvent{Text: "This text should be bellow tool call at all stages of the display."}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.DoneEvent{}
-	}()
-
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running program: %v\n", err)
+	if err := workflow.RunPrompt(context.Background(), "", deps); err != nil {
+		fmt.Printf("Error running workflow: %v\n", err)
 		os.Exit(1)
 	}
 }
+
+type mockAgent struct {
+	bus *workflow.EventBus
+}
+
+func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	// 1. Thinking
+	a.bus.SendUIUpdate(domain.ThinkingEvent{})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "This text should be above tool call at all stages of the display."})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	a.bus.SendUIUpdate(domain.ToolStartEvent{
+		CallID:  "tool-0",
+		Display: domain.NewStringDisplay("This tool call display should be sandwiched."),
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "This text should be bellow tool call at all stages of the display."})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	return nil
+}
+
+type mockStore struct{}
+
+func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
+func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
+func (s *mockStore) Save(sess *domain.Session) error       { return nil }
+
+type mockLLM struct{}
+
+func (l *mockLLM) ID() string          { return "mock" }
+func (l *mockLLM) DisplayName() string { return "Mock LLM" }
+func (l *mockLLM) ContextWindow() int  { return 1000 }
+func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
+	return 0, nil
+}
+func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
+	return nil, nil
+}
+
+type realRunner struct{}
+
+func (r *realRunner) Run(m tea.Model) error {
+	p := tea.NewProgram(m)
+	_, err := p.Run()
+	return err
+}
+
+type mockRegistry struct{}
+
+func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

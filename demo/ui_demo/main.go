@@ -1,95 +1,199 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	events := make(chan domain.Event)
-	m := loop.NewModel(events, config.DefaultConfig().UI)
+	bus := workflow.NewEventBus()
+	cfg := config.DefaultConfig()
+	m := loop.NewModel(bus, cfg.UI)
 
-	p := tea.NewProgram(m)
+	deps := &workflow.PromptDeps{
+		Config:       cfg,
+		State:        &state.State{},
+		Store:        &mockStore{},
+		LLM:          &mockLLM{},
+		Runner:       &realRunner{},
+		Agent:        &mockAgent{bus: bus},
+		UI:           m,
+		Bus:          bus,
+		ToolRegistry: &mockRegistry{},
+	}
 
-	// Simulate workflow in background
-	go func() {
-		// 1. Text Stream
-		markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
-		events <- domain.TextEvent{Text: markdown}
-		time.Sleep(400 * time.Millisecond)
-
-		// 2. Thinking
-		events <- domain.ThinkingEvent{}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.TextEvent{Text: "Here's a readfile tool call."}
-
-		events <- domain.ThinkingEvent{}
-		time.Sleep(1 * time.Second)
-
-		events <- domain.ToolStartEvent{
-			CallID:  "tool-0",
-			Display: domain.NewStringDisplay("Reading main.go"),
-		}
-		time.Sleep(1 * time.Second)
-		events <- domain.ToolEndEvent{CallID: "tool-0"}
-
-		events <- domain.TextEvent{Text: "Now let's run some tools in parallel. Tools will be displayed in toolStart order."}
-		time.Sleep(400 * time.Millisecond)
-
-		// 3. Parallel Tool Calls (3 tools)
-		events <- domain.ToolStartEvent{
-			CallID:  "tool-1",
-			Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", nil, nil),
-		}
-		time.Sleep(400 * time.Millisecond)
-
-		events <- domain.ToolStartEvent{
-			CallID:  "tool-2",
-			Display: domain.NewShellDisplay("Finish first", "eslint .", nil, nil),
-		}
-		time.Sleep(200 * time.Millisecond)
-		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}
-		time.Sleep(400 * time.Millisecond)
-
-		events <- domain.ToolStartEvent{
-			CallID:  "tool-3",
-			Display: domain.NewShellDisplay("Finish second", "go test ./...", nil, nil),
-		}
-		time.Sleep(400 * time.Millisecond)
-
-		// 3a. Tool 2 finishes first (blocked)
-		events <- domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"}
-		time.Sleep(400 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "tool-2"}
-		time.Sleep(1 * time.Second)
-
-		// 3b. Tool 3 finishes second (blocked)
-		events <- domain.ToolStreamEvent{CallID: "tool-3", Chunk: "Running tests...\nPASS\n"}
-		time.Sleep(400 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "tool-3"}
-		time.Sleep(1 * time.Second)
-
-		// 3c. Tool 1 finishes last (triggers cascading flush)
-		events <- domain.ToolStreamEvent{CallID: "tool-1", Chunk: "Found 45 dependencies.\n"}
-		time.Sleep(400 * time.Millisecond)
-		events <- domain.ToolEndEvent{CallID: "tool-1"}
-
-		// 6. Final text
-		events <- domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"}
-
-		// 7. Done
-		events <- domain.DoneEvent{}
-	}()
-
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running program: %v\n", err)
+	if err := workflow.RunPrompt(context.Background(), "", deps); err != nil {
+		fmt.Printf("Error running workflow: %v\n", err)
 		os.Exit(1)
 	}
 }
+
+type mockAgent struct {
+	bus *workflow.EventBus
+}
+
+func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	// 1. Text Stream
+	markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
+	a.bus.SendUIUpdate(domain.TextEvent{Text: markdown})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+
+	// 2. Thinking
+	a.bus.SendUIUpdate(domain.ThinkingEvent{})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's a readfile tool call."})
+
+	a.bus.SendUIUpdate(domain.ThinkingEvent{})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	a.bus.SendUIUpdate(domain.ToolStartEvent{
+		CallID:  "tool-0",
+		Display: domain.NewStringDisplay("Reading main.go"),
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
+
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Now let's run some tools in parallel. Tools will be displayed in toolStart order."})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+
+	// 3. Parallel Tool Calls (3 tools)
+	a.bus.SendUIUpdate(domain.ToolStartEvent{
+		CallID:  "tool-1",
+		Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", nil, nil),
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+
+	a.bus.SendUIUpdate(domain.ToolStartEvent{
+		CallID:  "tool-2",
+		Display: domain.NewShellDisplay("Finish first", "eslint .", nil, nil),
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(200 * time.Millisecond):
+		a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"})
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+
+	a.bus.SendUIUpdate(domain.ToolStartEvent{
+		CallID:  "tool-3",
+		Display: domain.NewShellDisplay("Finish second", "go test ./...", nil, nil),
+	})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+
+	// 3a. Tool 2 finishes first (blocked)
+	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-2"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	// 3b. Tool 3 finishes second (blocked)
+	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-3", Chunk: "Running tests...\nPASS\n"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-3"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(1 * time.Second):
+	}
+
+	// 3c. Tool 1 finishes last (triggers cascading flush)
+	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-1", Chunk: "Found 45 dependencies.\n"})
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(400 * time.Millisecond):
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-1"})
+
+	// 6. Final text
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"})
+
+	return nil
+}
+
+type mockStore struct{}
+
+func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
+func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
+func (s *mockStore) Save(sess *domain.Session) error       { return nil }
+
+type mockLLM struct{}
+
+func (l *mockLLM) ID() string          { return "mock" }
+func (l *mockLLM) DisplayName() string { return "Mock LLM" }
+func (l *mockLLM) ContextWindow() int  { return 1000 }
+func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
+	return 0, nil
+}
+func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
+	return nil, nil
+}
+
+type realRunner struct{}
+
+func (r *realRunner) Run(m tea.Model) error {
+	p := tea.NewProgram(m)
+	_, err := p.Run()
+	return err
+}
+
+type mockRegistry struct{}
+
+func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

@@ -65,17 +65,20 @@ func (m *mockStream) Err() error {
 }
 
 type mockEventSender struct {
-	events chan domain.Event
+	events chan domain.UIUpdate
 }
 
-func (m *mockEventSender) Send(ev domain.Event) {
+func (m *mockEventSender) SendUIUpdate(ev domain.UIUpdate) {
 	if m.events != nil {
 		m.events <- ev
 	}
 }
 
+// Ensure mockEventSender implements local eventSender
+var _ eventSender = (*mockEventSender)(nil)
+
 func newMockEventSender(size int) *mockEventSender {
-	return &mockEventSender{events: make(chan domain.Event, size)}
+	return &mockEventSender{events: make(chan domain.UIUpdate, size)}
 }
 
 func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
@@ -144,6 +147,40 @@ func TestRun_SingleToolCall(t *testing.T) {
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
 	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.Equal(t, domain.TextEvent{Text: "It's sunny!"}, <-sender.events)
+}
+
+func TestRun_ToolStreaming_Events(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []domain.StreamChunk{
+				domain.ToolCall{ID: "tc-stream", Name: "bash"},
+			}},
+		},
+	}
+
+	mt := &mockTool{
+		name: "bash",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: domain.NewShellDisplay("Run Bash", "echo chunk", nil, nil),
+				execute: func(ctx context.Context) (string, error) {
+					return "done", nil
+				},
+			}, nil
+		},
+	}
+
+	sender := newMockEventSender(10)
+	l := newTestLoop([]domain.Tool{mt}, m, sender)
+	_ = l.Run(ctx, &domain.Session{}, "run")
+
+	// We don't verify the actual streaming here (that's in tool_executor_test),
+	// but we verify that ToolStart and ToolEnd are sent through the interface.
+	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
+	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
+	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
 }
 
 func TestRun_MaxIterationsExceeded(t *testing.T) {

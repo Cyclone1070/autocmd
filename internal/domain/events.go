@@ -1,37 +1,47 @@
 package domain
 
-// Event is the interface for all workflow events.
-// UI handles events via type switch.
-type Event interface {
-	isEvent()
+// UIUpdate is the interface for all events flowing from Workflow to UI.
+type UIUpdate interface {
+	isUIUpdate()
 }
+
+
+// Action is the interface for all intents flowing from UI to Workflow.
+type Action interface {
+	isAction()
+}
+
+
+// StopAction is a user intent to cancel the current workflow.
+type StopAction struct{}
+
+func (StopAction) isAction() {}
 
 // TextEvent is emitted when the LLM produces text output.
 type TextEvent struct {
 	Text string
 }
 
-func (TextEvent) isEvent() {}
+func (TextEvent) isUIUpdate() {}
 
 // ThinkingEvent is emitted when the LLM is processing.
 type ThinkingEvent struct{}
 
-func (ThinkingEvent) isEvent() {}
+func (ThinkingEvent) isUIUpdate() {}
 
 // DoneEvent is emitted when the workflow loop completes.
 type DoneEvent struct{}
 
-func (DoneEvent) isEvent() {}
+func (DoneEvent) isUIUpdate() {}
 
 // ToolStartEvent is emitted after Prepare succeeds.
-// Display contains rich display data (DiffDisplay, StringDisplay, etc.) for UI.
 type ToolStartEvent struct {
 	CallID   string      // Unique ID from domain.ToolCall.ID
 	ToolName string      // Tool identifier
 	Display  ToolDisplay // Rich display computed during Prepare
 }
 
-func (ToolStartEvent) isEvent() {}
+func (ToolStartEvent) isUIUpdate() {}
 
 // ToolStreamEvent is emitted for streaming tool output (shell commands).
 type ToolStreamEvent struct {
@@ -39,7 +49,7 @@ type ToolStreamEvent struct {
 	Chunk  string
 }
 
-func (ToolStreamEvent) isEvent() {}
+func (ToolStreamEvent) isUIUpdate() {}
 
 // ToolEndEvent is emitted when tool execution completes.
 type ToolEndEvent struct {
@@ -47,4 +57,4 @@ type ToolEndEvent struct {
 	Error  string // Empty = success, non-empty = failure message for UI
 }
 
-func (ToolEndEvent) isEvent() {}
+func (ToolEndEvent) isUIUpdate() {}

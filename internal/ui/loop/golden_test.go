@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "update golden files")
 
 type LoopElement struct {
 	ID     string
-	Events []domain.Event
+	Events []domain.UIUpdate
 	Desc   string
 }
 
@@ -30,37 +30,37 @@ func getLoopElements() []LoopElement {
 	return []LoopElement{
 		{
 			ID: "TXT",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.TextEvent{Text: "This is a paragraph of text."},
 			},
 		},
 		{
 			ID: "QUOTE",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.TextEvent{Text: "> This is a blockquote.\n> It has multiple lines."},
 			},
 		},
 		{
 			ID: "LIST",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.TextEvent{Text: "- Item 1\n- Item 2\n  - Nested Item"},
 			},
 		},
 		{
 			ID: "CODE",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.TextEvent{Text: "```go\nfunc hello() {\n\tfmt.Println(\"world\")\n}\n```"},
 			},
 		},
-		{ID: "H1", Events: []domain.Event{domain.TextEvent{Text: "# Header 1"}}},
-		{ID: "H2", Events: []domain.Event{domain.TextEvent{Text: "## Header 2"}}},
-		{ID: "H3", Events: []domain.Event{domain.TextEvent{Text: "### Header 3"}}},
-		{ID: "H4", Events: []domain.Event{domain.TextEvent{Text: "#### Header 4"}}},
-		{ID: "H5", Events: []domain.Event{domain.TextEvent{Text: "##### Header 5"}}},
-		{ID: "H6", Events: []domain.Event{domain.TextEvent{Text: "###### Header 6"}}},
+		{ID: "H1", Events: []domain.UIUpdate{domain.TextEvent{Text: "# Header 1"}}},
+		{ID: "H2", Events: []domain.UIUpdate{domain.TextEvent{Text: "## Header 2"}}},
+		{ID: "H3", Events: []domain.UIUpdate{domain.TextEvent{Text: "### Header 3"}}},
+		{ID: "H4", Events: []domain.UIUpdate{domain.TextEvent{Text: "#### Header 4"}}},
+		{ID: "H5", Events: []domain.UIUpdate{domain.TextEvent{Text: "##### Header 5"}}},
+		{ID: "H6", Events: []domain.UIUpdate{domain.TextEvent{Text: "###### Header 6"}}},
 		{
 			ID: "TOOL_OK",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.ToolStartEvent{
 					CallID:  tcID,
 					Display: domain.NewShellDisplay("Running Tests", "go test ./...", nil, nil),
@@ -73,7 +73,7 @@ func getLoopElements() []LoopElement {
 		},
 		{
 			ID: "TOOL_ERR",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.ToolStartEvent{
 					CallID:  tcErrID,
 					Display: domain.NewShellDisplay("Failing Command", "false", nil, nil),
@@ -86,7 +86,7 @@ func getLoopElements() []LoopElement {
 		},
 		{
 			ID: "THINK",
-			Events: []domain.Event{
+			Events: []domain.UIUpdate{
 				domain.ThinkingEvent{},
 				domain.TextEvent{Text: "thought 1s"}, // This finishes thinking in the loop logic
 			},
@@ -144,9 +144,14 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 	}
 }
 
+type dummyBus struct{}
+
+func (d dummyBus) UIUpdates() <-chan domain.UIUpdate { return nil }
+func (d dummyBus) SendAction(domain.Action)           {}
+
 func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...LoopElement) {
 	var signals []string
-	m := NewModel(nil, cfg, WithFlush(func(content string) tea.Cmd {
+	m := NewModel(dummyBus{}, cfg, WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))
@@ -154,7 +159,7 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 
 	for _, e := range elems {
 		for _, ev := range e.Events {
-			res, _ := m.Update(eventMsg{event: ev})
+			res, _ := m.Update(eventMsg{update: ev})
 			m = res.(*Model)
 		}
 	}

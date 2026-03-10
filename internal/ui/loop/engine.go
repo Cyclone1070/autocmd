@@ -19,9 +19,12 @@ import (
 // streamTickMsg indicates it's time to drain the text queue.
 type streamTickMsg struct{}
 
-// eventMsg wraps a domain.Event for Bubble Tea.
+// flushDoneMsg indicates that a terminal flush (tea.Printf) has completed.
+type flushDoneMsg struct{}
+
+// eventMsg wraps a domain.UIUpdate for Bubble Tea.
 type eventMsg struct {
-	event domain.Event
+	update domain.UIUpdate
 }
 
 type toolState struct {
@@ -32,9 +35,15 @@ type toolState struct {
 	err     string
 }
 
+// bus defines the communication contract for the UI engine.
+type bus interface {
+	UIUpdates() <-chan domain.UIUpdate
+	SendAction(domain.Action)
+}
+
 // Model is the Bubble Tea model for the UI engine.
 type Model struct {
-	events <-chan domain.Event
+	bus bus
 	stream *Stream
 	theme  *ui.Theme
 	width  int
@@ -51,12 +60,13 @@ type Model struct {
 	toolOrder   []string
 
 	// Single source of truth queue
-	queue       []domain.Event
+	queue       []domain.UIUpdate
 	isStreaming bool
 
 	printQueue []string
 	flush      func(string) tea.Cmd
 	isWaiting  bool
+	isDone     bool
 }
 
 // Option is a functional option for configuring the Model.
@@ -70,7 +80,7 @@ func WithFlush(f func(string) tea.Cmd) Option {
 }
 
 // NewModel creates a new UI engine model.
-func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *Model {
+func NewModel(b bus, cfg config.UIConfig, opts ...Option) *Model {
 	theme := ui.NewTheme(cfg)
 
 	// Detect terminal size
@@ -96,7 +106,7 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 	s.Style = lipgloss.NewStyle().Foreground(theme.PrimaryColor())
 
 	m := &Model{
-		events:      events,
+		bus:         b,
 		stream:      NewStream(renderer),
 		theme:       theme,
 		width:       width,
@@ -104,7 +114,10 @@ func NewModel(events <-chan domain.Event, cfg config.UIConfig, opts ...Option) *
 		spinner:     s,
 		activeTools: make(map[string]*toolState),
 		flush: func(content string) tea.Cmd {
-			return tea.Printf("%s", content)
+			return tea.Sequence(
+				tea.Printf("%s", content),
+				func() tea.Msg { return flushDoneMsg{} },
+			)
 		},
 	}
 
@@ -127,33 +140,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
-			m.queue = nil
-			m.isStreaming = false
-			// DISCARD buffered text, only flush currently visible tail (stream buffer)
-			flushed := m.stream.Flush()
-			m.printQueue = append(m.printQueue, flushed...)
-
-			m.flushThinking(ui.StatusError)
-
-			// Flush any active tool with a cancelled error rather than throwing it away
-			for _, id := range m.toolOrder {
-				if ts, ok := m.activeTools[id]; ok {
-					if ts.status == ui.StatusRunning {
-						ts.status = ui.StatusError
-						ts.err = "Cancelled"
-					}
-					m.printQueue = append(m.printQueue, m.renderTool(ts))
-				}
+			if m.bus != nil {
+				m.bus.SendAction(domain.StopAction{})
 			}
-
-			m.activeTools = make(map[string]*toolState)
-			m.toolOrder = nil
-
-			flushCmd := m.flushPrintQueue()
-			if flushCmd != nil {
-				return m, tea.Sequence(flushCmd, tea.Quit)
-			}
-			return m, tea.Quit
+			return m.handleInterrupt()
 		}
 
 	case spinner.TickMsg:
@@ -169,17 +159,84 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamTickMsg:
 		m.isStreaming = false
-		return m.processQueue()
+		tm, tcmd := m.processQueue()
+		m = tm.(*Model)
+		if tcmd != nil {
+			cmds = append(cmds, tcmd)
+		}
+		if m.isDone && !m.isStreaming && len(m.queue) == 0 {
+			flushCmd := m.flushPrintQueue()
+			if flushCmd == nil && len(cmds) == 0 {
+				return m, tea.Quit
+			}
+			if flushCmd != nil {
+				cmds = append(cmds, flushCmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
 
 	case eventMsg:
 		m.isWaiting = false
-		m.queue = append(m.queue, msg.event)
-		if m.isStreaming {
+		if msg.update == nil {
+			if !m.isDone && !m.isStreaming {
+				panic("unexpected nil UIUpdate: bus closed before DoneEvent or handshake")
+			}
 			return m, nil
 		}
-		return m.processQueue()
+		m.queue = append(m.queue, msg.update)
+		if !m.isStreaming {
+			tm, tcmd := m.processQueue()
+			m = tm.(*Model)
+			if tcmd != nil {
+				cmds = append(cmds, tcmd)
+			}
+		}
+
+	case flushDoneMsg:
+		if m.isDone && !m.isStreaming && len(m.queue) == 0 {
+			return m, tea.Quit
+		}
+		return m, m.ensureEventListener()
 	}
+	if m.isDone && !m.isStreaming && len(m.queue) == 0 {
+		flushCmd := m.flushPrintQueue()
+		if flushCmd == nil && len(cmds) == 0 {
+			return m, tea.Quit
+		}
+		if flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+		return m, tea.Batch(cmds...)
+	}
+
 	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
+}
+
+func (m *Model) handleInterrupt() (tea.Model, tea.Cmd) {
+	m.isDone = true
+	// 1. Flush thinking with error status
+	m.flushThinking(ui.StatusError)
+
+	// 2. Mark all active tools as cancelled/error and flush them
+	for _, id := range m.toolOrder {
+		if ts, ok := m.activeTools[id]; ok {
+			if ts.status == ui.StatusRunning {
+				ts.status = ui.StatusError
+				ts.err = "Cancelled"
+			}
+		}
+	}
+	m.flushAll()
+
+	// 3. Clear transient state
+	m.isStreaming = false
+	m.queue = nil
+
+	flushCmd := m.flushPrintQueue()
+	if flushCmd == nil {
+		return m, tea.Quit
+	}
+	return m, flushCmd
 }
 
 func (m *Model) ensureEventListener() tea.Cmd {
@@ -228,9 +285,9 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 
 			// Sub the big event out for the smaller ones in that exact slot
 			if len(chunks) > 1 {
-				newQueue := make([]domain.Event, 0, len(chunks)+len(m.queue)-1)
+				newQueue := make([]domain.UIUpdate, 0, len(chunks)+len(m.queue)-1)
 				for _, c := range chunks {
-					newQueue = append(newQueue, c) // Convert explicitly
+					newQueue = append(newQueue, c) 
 				}
 				newQueue = append(newQueue, m.queue[1:]...)
 				m.queue = newQueue
@@ -251,13 +308,12 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 			// Text chunk finished, pop
 			m.queue = m.queue[1:]
 
-			// If there's another TextEvent immediately following, wait for a tick
+			// If there are more events following (including DoneEvent), wait for a tick
+			// to allow the terminal to render the current chunk before quitting or starting tools.
 			if len(m.queue) > 0 {
-				if _, nextIsText := m.queue[0].(domain.TextEvent); nextIsText {
-					m.isStreaming = true
-					cmds = append(cmds, m.streamTick())
-					return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener())) // Need to wait for tick
-				}
+				m.isStreaming = true
+				cmds = append(cmds, m.streamTick())
+				return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 			}
 
 			continue
@@ -271,6 +327,17 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		// Continue loop to process next event immediately
+	}
+
+	if m.isDone && !m.isStreaming && len(m.queue) == 0 {
+		flushCmd := m.flushPrintQueue()
+		if flushCmd == nil && len(cmds) == 0 {
+			return m, tea.Quit
+		}
+		if flushCmd != nil {
+			cmds = append(cmds, flushCmd)
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
@@ -313,8 +380,8 @@ func (m *Model) flushFinishedTools() {
 	}
 }
 
-// handleEvent processes a domain event and returns commands.
-func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
+// handleEvent processes a domain UIUpdate and returns commands.
+func (m *Model) handleEvent(event domain.UIUpdate) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	// Logic to end thinking if any substantive event arrives
@@ -372,12 +439,13 @@ func (m *Model) handleEvent(event domain.Event) (tea.Model, tea.Cmd) {
 		}
 
 	case domain.DoneEvent:
+		m.isDone = true
 		m.flushAll()
 		flushCmd := m.flushPrintQueue()
-		if flushCmd != nil {
-			return m, tea.Sequence(flushCmd, tea.Quit)
+		if flushCmd == nil {
+			return m, tea.Quit
 		}
-		return m, tea.Quit
+		return m, flushCmd
 	}
 
 	return m, tea.Batch(cmds...)
@@ -437,11 +505,11 @@ func (m *Model) flushThinking(status ui.ToolStatus) {
 func (m *Model) waitForEvent() tea.Cmd {
 	m.isWaiting = true
 	return func() tea.Msg {
-		ev, ok := <-m.events
+		upd, ok := <-m.bus.UIUpdates()
 		if !ok {
-			return nil
+			return eventMsg{update: nil} // Signal channel closure
 		}
-		return eventMsg{event: ev}
+		return eventMsg{update: upd}
 	}
 }
 

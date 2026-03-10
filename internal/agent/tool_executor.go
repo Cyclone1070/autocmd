@@ -67,7 +67,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	display := inv.Display()
 
 	if events != nil {
-		events.Send(domain.ToolStartEvent{
+		events.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   tc.ID,
 			ToolName: tc.Name,
 			Display:  display,
@@ -86,7 +86,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 			for {
 				n, err := sh.Output.Read(buf)
 				if n > 0 {
-					events.Send(domain.ToolStreamEvent{
+					events.SendUIUpdate(domain.ToolStreamEvent{
 						CallID: tc.ID,
 						Chunk:  string(buf[:n]),
 					})
@@ -111,7 +111,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		}
 
 		if events != nil {
-			events.Send(domain.ToolEndEvent{
+			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
 				Error:  "Execution failed",
 			})
@@ -130,7 +130,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 
 	// Always send the end event after Execute returns (regardless of tool type)
 	if events != nil {
-		events.Send(domain.ToolEndEvent{
+		events.SendUIUpdate(domain.ToolEndEvent{
 			CallID: tc.ID,
 		})
 	}

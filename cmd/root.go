@@ -12,6 +12,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/internal/agent"
+	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -115,6 +117,12 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 		return err
 	}
 
+	// Wiring
+	bus := workflow.NewEventBus()
+	defer bus.Close()
+	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, bus)
+	uiModel := loop.NewModel(bus, cfg.UI)
+
 	deps := &workflow.PromptDeps{
 		Config:       cfg,
 		State:        appState,
@@ -122,6 +130,9 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 		LLM:          llmInstance,
 		ToolRegistry: toolRegistry,
 		Runner:       realUIRunner{},
+		Agent:        agentLoop,
+		UI:           uiModel,
+		Bus:          bus,
 	}
 
 	return workflow.RunPrompt(ctx, input, deps)

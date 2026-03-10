@@ -10,8 +10,7 @@ type toolRegistry interface {
 	Get(name string) (domain.Tool, bool)
 }
 
-// eventSender allows sending domain events.
-// This is the consumer-defined interface injected into Loop.
+// eventSender defines the interface for sending UI updates from the agent.
 type eventSender interface {
-	Send(domain.Event)
+	SendUIUpdate(domain.UIUpdate)
 }

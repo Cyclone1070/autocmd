@@ -49,14 +49,17 @@ func executeCmd(cmd tea.Cmd) []tea.Msg {
 			for _, bcmd := range batch {
 				msgs = append(msgs, executeCmd(bcmd)...)
 			}
-		} else if fmt.Sprintf("%T", msg) == "tea.sequenceMsg" {
-			v := reflect.ValueOf(msg)
-			for i := 0; i < v.Len(); i++ {
-				cmd := v.Index(i).Interface().(tea.Cmd)
-				msgs = append(msgs, executeCmd(cmd)...)
-			}
 		} else {
-			msgs = append(msgs, msg)
+			// Handle internal sequenceMsg (which is a slice of tea.Cmd)
+			v := reflect.ValueOf(msg)
+			if v.Kind() == reflect.Slice && v.Len() > 0 && fmt.Sprintf("%T", v.Index(0).Interface()) == "tea.Cmd" {
+				for i := 0; i < v.Len(); i++ {
+					cmds := executeCmd(v.Index(i).Interface().(tea.Cmd))
+					msgs = append(msgs, cmds...)
+				}
+			} else {
+				msgs = append(msgs, msg)
+			}
 		}
 	case <-time.After(50 * time.Millisecond):
 		// Skip blocking commands
@@ -81,30 +84,54 @@ func (o *outputTracker) handleMsg(msg tea.Msg) {
 	if msg == nil {
 		return
 	}
+	
+	typeName := fmt.Sprintf("%T", msg)
+	if strings.Contains(typeName, "eventMsg") || 
+	   strings.Contains(typeName, "streamTickMsg") || 
+	   strings.Contains(typeName, "TickMsg") || 
+	   strings.Contains(typeName, "flushDoneMsg") {
+		return
+	}
+
 	switch m := msg.(type) {
 	case tea.BatchMsg:
 		for _, c := range m {
 			o.capture(c)
 		}
-	case eventMsg, streamTickMsg, spinner.TickMsg:
-		// Don't track loop-driving messages
 	default:
 		// Capture everything else as a side-effect
 		s := fmt.Sprintf("%v", m)
-		o.history = append(o.history, s)
+		if s != "{}" && s != "" {
+			o.history = append(o.history, s)
+		}
 	}
 }
 
+type mockBus struct {
+	updates chan domain.UIUpdate
+	actions chan domain.Action
+}
+
+func (m *mockBus) UIUpdates() <-chan domain.UIUpdate {
+	return m.updates
+}
+
+func (m *mockBus) SendAction(act domain.Action) {
+	m.actions <- act
+}
+
 // NewTestModel creates a model with a mock renderer for literal string matching.
-func NewTestModel(events chan domain.Event, tracker *outputTracker) *Model {
+func NewTestModel(events chan domain.UIUpdate, actions chan domain.Action, tracker *outputTracker) *Model {
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
-	m := NewModel(events, cfg, WithFlush(func(content string) tea.Cmd {
+	bus := &mockBus{updates: events, actions: actions}
+	m := NewModel(bus, cfg, WithFlush(func(content string) tea.Cmd {
 		if tracker != nil {
 			tracker.signals = append(tracker.signals, content)
+			tracker.history = append(tracker.history, content)
 		}
-		// We still execute the actual printf so history capture works too
-		return tea.Printf("%s", content)
+		// Return handshake immediately in mock
+		return func() tea.Msg { return flushDoneMsg{} }
 	}))
 	m.stream.renderer = &engineMockRenderer{}
 	return m
@@ -152,14 +179,15 @@ func (q *msgQueue) drain() {
 
 func TestModel_Update_SmoothStreaming(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	// Send a TextEvent with multiple chunks worth of characters
 	longText := "12345678" // 8 chars = 2 chunks
-	msg := eventMsg{event: domain.TextEvent{Text: longText}}
+	msg := eventMsg{update: domain.TextEvent{Text: longText}}
 
 	// 1. Send text event
 	tm, cmd := m.Update(msg)
@@ -198,12 +226,13 @@ func extractTickFromMsgs(msgs []tea.Msg) tea.Msg {
 
 func TestModel_Update_TextEvent(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
-	msg := eventMsg{event: domain.TextEvent{Text: "Hello\n\nWorld"}}
+	msg := eventMsg{update: domain.TextEvent{Text: "Hello\n\nWorld"}}
 	_, cmd := m.Update(msg)
 
 	assert.NotNil(t, cmd)
@@ -226,8 +255,9 @@ func TestModel_Update_TextEvent(t *testing.T) {
 
 func TestModel_View_Truncation(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 	m.height = 5
 
 	longText := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
@@ -249,11 +279,12 @@ func TestModel_View_Truncation(t *testing.T) {
 
 func TestModel_Update_ThinkingEvent(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 
 	// 1. Send ThinkingEvent
-	tm, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
+	tm, cmd := m.Update(eventMsg{update: domain.ThinkingEvent{}})
 	m = tm.(*Model)
 	assert.True(t, m.isThinking)
 	assert.NotZero(t, m.thinkStart)
@@ -282,7 +313,7 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 2. Send TextEvent to finish thinking
-	msg := eventMsg{event: domain.TextEvent{Text: "Thinking done"}}
+	msg := eventMsg{update: domain.TextEvent{Text: "Thinking done"}}
 	tm, cmd = m.Update(msg)
 	m = tm.(*Model)
 
@@ -309,11 +340,12 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 
 func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 
 	// 1. ThinkingEvent must batch waitForEvent
-	_, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
+	_, cmd := m.Update(eventMsg{update: domain.ThinkingEvent{}})
 	assert.NotNil(t, cmd)
 
 	events <- domain.DoneEvent{}
@@ -336,8 +368,8 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 2. TextEvent (start of streaming) must NOT batch waitForEvent (it waits for streamDone)
-	m = NewModel(events, config.DefaultConfig().UI)
-	_, cmd = m.Update(eventMsg{event: domain.TextEvent{Text: "Hello"}})
+	m = NewModel(&mockBus{updates: events}, config.DefaultConfig().UI)
+	_, cmd = m.Update(eventMsg{update: domain.TextEvent{Text: "Hello"}})
 	assert.NotNil(t, cmd)
 
 	msgs := executeCmd(cmd)
@@ -353,12 +385,14 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 
 func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	actionsChan := make(chan domain.Action, 1)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, actionsChan, tracker)
 
 	// 1. Fill model with busy state
 	m.isThinking = true
-	m.queue = []domain.Event{domain.TextEvent{Text: "pending text"}}
+	m.queue = []domain.UIUpdate{domain.TextEvent{Text: "pending text"}}
 	m.isStreaming = true
 	m.activeTools["busy-tool"] = &toolState{
 		id:      "busy-tool",
@@ -379,8 +413,15 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 
 	assert.Empty(t, m.printQueue, "printQueue should be empty because it was flushed to tea.Cmd")
 
-	// 5. ASSERT: Quit signal present and cancellation rendered
-	tracker := &outputTracker{}
+	// 4. ASSERT: Action sent to workflow
+	select {
+	case act := <-actionsChan:
+		assert.IsType(t, domain.StopAction{}, act)
+	default:
+		t.Error("StopAction should have been sent to workflow")
+	}
+
+	// 5. ASSERT: Cancellation rendered but NO Quit signal yet
 	tracker.capture(cmd)
 
 	foundCancelledTool := false
@@ -394,20 +435,21 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 		}
 	}
 	assert.True(t, foundCancelledTool, "Should find 'Cancelled' tool output in historical tracker.history")
-	assert.True(t, foundQuit, "Should find Quit message in history/commands")
+	assert.False(t, foundQuit, "Should NOT find Quit message yet - UI waits for workflow closure")
 }
 
 func TestModel_Update_ToolLifecycle(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 
 	// 1. Tool Start
 	startEv := domain.ToolStartEvent{
 		CallID:  "123",
 		Display: domain.NewShellDisplay("Run tests", "go test ./...", nil, nil),
 	}
-	m2, cmd := m.Update(eventMsg{event: startEv})
+	m2, cmd := m.Update(eventMsg{update: startEv})
 	m = m2.(*Model)
 
 	assert.NotNil(t, m.activeTools["123"])
@@ -432,7 +474,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 		CallID: "123",
 		Chunk:  "PASS\n",
 	}
-	m2, cmd = m.Update(eventMsg{event: streamEv})
+	m2, cmd = m.Update(eventMsg{update: streamEv})
 	m = m2.(*Model)
 	assert.Contains(t, m.activeTools["123"].output, "PASS")
 
@@ -452,7 +494,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 		CallID: "123",
 		Error:  "",
 	}
-	m2, cmd = m.Update(eventMsg{event: endEv})
+	m2, cmd = m.Update(eventMsg{update: endEv})
 	m = m2.(*Model)
 
 	assert.Empty(t, m.activeTools)
@@ -476,19 +518,19 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 
 func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 20)
+	events := make(chan domain.UIUpdate, 20)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	q := &msgQueue{m: m, tracker: tracker}
-	q.push(func() tea.Msg { return eventMsg{event: domain.ThinkingEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.ThinkingEvent{}} })
 	q.drain()
 	_ = q.m
 
 	text := "Block 1\n\nBlock 2\n\n"
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: text}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: text}} })
 	q.drain()
 	_ = q.m
 
@@ -497,13 +539,13 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 		CallID:  "tool-seq",
 		Display: domain.NewStringDisplay("SEQUENTIAL TOOL"),
 	}
-	q.push(func() tea.Msg { return eventMsg{event: toolEv} })
+	q.push(func() tea.Msg { return eventMsg{update: toolEv} })
 	q.drain()
 	_ = q.m
 
 	// 3. Send ToolEndEvent immediately
 	endEv := domain.ToolEndEvent{CallID: "tool-seq"}
-	q.push(func() tea.Msg { return eventMsg{event: endEv} })
+	q.push(func() tea.Msg { return eventMsg{update: endEv} })
 	q.drain()
 	_ = q.m
 
@@ -543,20 +585,20 @@ func TestModel_Update_EventOrdering_SequentialHistory(t *testing.T) {
 
 func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	// 1. Send text but don't tick it yet
 	text := "Final unflushed text"
 	q := &msgQueue{m: m, tracker: tracker}
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: text}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: text}} })
 	q.drain()
 
 	// 2. Send DoneEvent
-	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.DoneEvent{}} })
 	q.drain()
 	_ = q.m
 
@@ -577,29 +619,29 @@ func TestModel_Update_DoneEvent_Flush(t *testing.T) {
 
 func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 20)
+	events := make(chan domain.UIUpdate, 20)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Start Text 1 (Turn 1)
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 1"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Text 1"}} })
 
 	// 2. Step once to start ticking. "Text" is taken, " 1" remains.
 	q.step()
 	assert.NotEmpty(t, q.m.queue, "Text should still be in queue")
 
 	// 3. Send Thinking (Turn 2) - should be buffered
-	q.push(func() tea.Msg { return eventMsg{event: domain.ThinkingEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.ThinkingEvent{}} })
 
 	// 4. Send Text 2 (Turn 2) - currently leapfrogs
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 2"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Text 2"}} })
 
 	// 5. Send Done
-	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.DoneEvent{}} })
 
 	// 6. Drain everything
 	q.drain()
@@ -622,29 +664,29 @@ func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 20)
+	events := make(chan domain.UIUpdate, 20)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Text 1 (Turn 1)
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 1"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Text 1"}} })
 	q.step() // Take "Text", " 1" remains in queue
 
 	// 2. Tool (Turn 1)
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "TC1", Display: domain.NewStringDisplay("TOOL 1")}}
+		return eventMsg{update: domain.ToolStartEvent{CallID: "TC1", Display: domain.NewStringDisplay("TOOL 1")}}
 	})
-	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "TC1"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.ToolEndEvent{CallID: "TC1"}} })
 
 	// 3. Text 2 (Turn 2) - currently leapfrogs
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Text 2"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Text 2"}} })
 
 	// 4. Done
-	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.DoneEvent{}} })
 
 	q.drain()
 
@@ -664,19 +706,19 @@ func TestModel_Update_Interleaved_ToolLeapfrog_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 20)
+	events := make(chan domain.UIUpdate, 20)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Send text that will take multiple ticks
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Slowly being printed text"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Slowly being printed text"}} })
 
 	// 2. Send Done immediately
-	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.DoneEvent{}} })
 
 	// 3. Drain and ensure the app didn't quit until all ticks are done
 	q.drain()
@@ -687,32 +729,32 @@ func TestModel_Update_Interleaved_GracefulExit_Done(t *testing.T) {
 
 func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 20)
+	events := make(chan domain.UIUpdate, 20)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
 	q := &msgQueue{m: m, tracker: tracker}
 
 	// 1. Text (Turn 1)
-	q.push(func() tea.Msg { return eventMsg{event: domain.TextEvent{Text: "Busy text"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.TextEvent{Text: "Busy text"}} })
 	q.step()
 
 	// 2. Tool 1
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "T1", Display: domain.NewStringDisplay("TOOL 1")}}
+		return eventMsg{update: domain.ToolStartEvent{CallID: "T1", Display: domain.NewStringDisplay("TOOL 1")}}
 	})
-	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "T1"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.ToolEndEvent{CallID: "T1"}} })
 
 	// 3. Tool 2
 	q.push(func() tea.Msg {
-		return eventMsg{event: domain.ToolStartEvent{CallID: "T2", Display: domain.NewStringDisplay("TOOL 2")}}
+		return eventMsg{update: domain.ToolStartEvent{CallID: "T2", Display: domain.NewStringDisplay("TOOL 2")}}
 	})
-	q.push(func() tea.Msg { return eventMsg{event: domain.ToolEndEvent{CallID: "T2"}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.ToolEndEvent{CallID: "T2"}} })
 
 	// 4. Done
-	q.push(func() tea.Msg { return eventMsg{event: domain.DoneEvent{}} })
+	q.push(func() tea.Msg { return eventMsg{update: domain.DoneEvent{}} })
 
 	q.drain()
 
@@ -728,12 +770,12 @@ func TestModel_Update_Interleaved_ToolSequentiality_Done(t *testing.T) {
 
 func TestFlush_Natural(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Send text that contains a finished block (H1) and an unfinished tail (Block 2).
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "## H1\n\nBETA"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "## H1\n\nBETA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -755,12 +797,12 @@ func TestFlush_Natural(t *testing.T) {
 
 func TestFlush_OnThinkingStart(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Send text and pulse it into the buffer (as unsafe tail)
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "ALPHA"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "ALPHA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 	for range 5 {
@@ -772,7 +814,7 @@ func TestFlush_OnThinkingStart(t *testing.T) {
 	assert.Empty(t, tracker.signals)
 
 	// 2. Send Thinking Event
-	tm, cmd = m.Update(eventMsg{event: domain.ThinkingEvent{}})
+	tm, cmd = m.Update(eventMsg{update: domain.ThinkingEvent{}})
 	_ = tm.(*Model)
 
 	tracker.capture(cmd)
@@ -784,12 +826,12 @@ func TestFlush_OnThinkingStart(t *testing.T) {
 
 func TestFlush_OnThinkingEnd(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	m.isThinking = true
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "BETA"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "BETA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 	for range 5 {
@@ -800,7 +842,7 @@ func TestFlush_OnThinkingEnd(t *testing.T) {
 
 	// 2. Transition out of thinking
 	// We'll simulate a substantive event that ends thinking
-	tm, cmd = m.Update(eventMsg{event: domain.ToolStartEvent{CallID: "T1"}})
+	tm, cmd = m.Update(eventMsg{update: domain.ToolStartEvent{CallID: "T1"}})
 	_ = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -811,11 +853,11 @@ func TestFlush_OnThinkingEnd(t *testing.T) {
 
 func TestFlush_OnToolStart(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "GAMMA"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "GAMMA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 	for range 5 {
@@ -826,7 +868,7 @@ func TestFlush_OnToolStart(t *testing.T) {
 	assert.Empty(t, tracker.signals)
 
 	// 2. Start Tool
-	tm, cmd = m.Update(eventMsg{event: domain.ToolStartEvent{CallID: "T1"}})
+	tm, cmd = m.Update(eventMsg{update: domain.ToolStartEvent{CallID: "T1"}})
 	_ = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -836,13 +878,13 @@ func TestFlush_OnToolStart(t *testing.T) {
 
 func TestFlush_OnToolEnd(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	m.activeTools["T1"] = &toolState{id: "T1", status: ui.StatusRunning}
 	m.toolOrder = []string{"T1"}
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "DELTA"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "DELTA"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 	for range 5 {
@@ -853,7 +895,7 @@ func TestFlush_OnToolEnd(t *testing.T) {
 	assert.Empty(t, tracker.signals)
 
 	// 2. End Tool
-	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "T1"}})
+	tm, cmd = m.Update(eventMsg{update: domain.ToolEndEvent{CallID: "T1"}})
 	_ = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -863,11 +905,11 @@ func TestFlush_OnToolEnd(t *testing.T) {
 
 func TestFlush_OnDone(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "EPSILON"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "EPSILON"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 	for range 5 {
@@ -878,7 +920,7 @@ func TestFlush_OnDone(t *testing.T) {
 	assert.Empty(t, tracker.signals)
 
 	// 2. Done
-	tm, cmd = m.Update(eventMsg{event: domain.DoneEvent{}})
+	tm, cmd = m.Update(eventMsg{update: domain.DoneEvent{}})
 	_ = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -888,12 +930,12 @@ func TestFlush_OnDone(t *testing.T) {
 
 func TestFlush_OnInterrupt(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Send text and pulse once to split between buffer and queue
-	tm, _ := m.Update(eventMsg{event: domain.TextEvent{Text: "KEEPDISCARD"}})
+	tm, _ := m.Update(eventMsg{update: domain.TextEvent{Text: "KEEPDISCARD"}})
 	m = tm.(*Model)
 	// Pulse 4 runes: "KEEP" -> buffer, "DISC", "ARD" -> queue
 	tm, _ = m.Update(streamTickMsg{})
@@ -918,9 +960,9 @@ func TestFlush_OnInterrupt(t *testing.T) {
 
 func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 	m.isThinking = true
 
 	// 1. Manually seed printQueue as if a handler forgot to flush
@@ -940,9 +982,9 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 
 func TestIssue_RenderingFallback(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Setup a renderer that fails
 	m.stream.renderer = &engineMockRenderer{
@@ -955,7 +997,7 @@ func TestIssue_RenderingFallback(t *testing.T) {
 	m.stream.buffer = "RAW_MARKDOWN"
 
 	// 3. Trigger a flush (e.g. via ThinkingEvent)
-	tm, cmd := m.Update(eventMsg{event: domain.ThinkingEvent{}})
+	tm, cmd := m.Update(eventMsg{update: domain.ThinkingEvent{}})
 	_ = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -967,8 +1009,9 @@ func TestIssue_RenderingFallback(t *testing.T) {
 
 func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate, 10)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 
 	m.isThinking = true
 	m.thinkStart = time.Now().Add(-5 * time.Second)
@@ -988,8 +1031,9 @@ func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 
 func TestModel_Spinner_Clockwise(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 
 	expectedFrames := []string{"⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"}
 	assert.Equal(t, expectedFrames, m.spinner.Spinner.Frames)
@@ -997,19 +1041,19 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 
 func TestModel_ParallelTools(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Start Tool A
-	tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
+	tm, _ := m.Update(eventMsg{update: domain.ToolStartEvent{
 		CallID:  "A",
 		Display: domain.NewStringDisplay("Tool A"),
 	}})
 	m = tm.(*Model)
 
 	// 2. Start Tool B
-	tm, _ = m.Update(eventMsg{event: domain.ToolStartEvent{
+	tm, _ = m.Update(eventMsg{update: domain.ToolStartEvent{
 		CallID:  "B",
 		Display: domain.NewStringDisplay("Tool B"),
 	}})
@@ -1021,7 +1065,7 @@ func TestModel_ParallelTools(t *testing.T) {
 	assert.Contains(t, view, "Tool B")
 
 	// 3. Stream to Tool A
-	tm, _ = m.Update(eventMsg{event: domain.ToolStreamEvent{
+	tm, _ = m.Update(eventMsg{update: domain.ToolStreamEvent{
 		CallID: "A",
 		Chunk:  " output A",
 	}})
@@ -1029,7 +1073,7 @@ func TestModel_ParallelTools(t *testing.T) {
 
 	// 4. End Tool B (Parallel finishing)
 
-	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{
+	tm, cmd := m.Update(eventMsg{update: domain.ToolEndEvent{
 		CallID: "B",
 	}})
 	m = tm.(*Model)
@@ -1058,13 +1102,13 @@ func TestModel_ParallelTools(t *testing.T) {
 
 func TestModel_OrderedFlushing(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Start 3 tools: A, B, C
 	for _, id := range []string{"A", "B", "C"} {
-		tm, _ := m.Update(eventMsg{event: domain.ToolStartEvent{
+		tm, _ := m.Update(eventMsg{update: domain.ToolStartEvent{
 			CallID:  id,
 			Display: domain.NewStringDisplay("Tool " + id),
 		}})
@@ -1072,7 +1116,7 @@ func TestModel_OrderedFlushing(t *testing.T) {
 	}
 
 	// 2. End Tool B (Middle)
-	tm, cmd := m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "B"}})
+	tm, cmd := m.Update(eventMsg{update: domain.ToolEndEvent{CallID: "B"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -1081,7 +1125,7 @@ func TestModel_OrderedFlushing(t *testing.T) {
 	assert.Contains(t, m.View(), "Tool B") // Should still be in status area
 
 	// 3. End Tool C (Last)
-	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "C"}})
+	tm, cmd = m.Update(eventMsg{update: domain.ToolEndEvent{CallID: "C"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -1089,7 +1133,7 @@ func TestModel_OrderedFlushing(t *testing.T) {
 	assert.NotContains(t, tracker.allHistory(), "Tool C")
 
 	// 4. End Tool A (Head) -> Should trigger cascading graduation
-	tm, cmd = m.Update(eventMsg{event: domain.ToolEndEvent{CallID: "A"}})
+	tm, cmd = m.Update(eventMsg{update: domain.ToolEndEvent{CallID: "A"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -1116,11 +1160,11 @@ func (o *outputTracker) allHistory() string {
 
 func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
-	m := NewTestModel(events, nil)
+	events := make(chan domain.UIUpdate, 10)
+	m := NewTestModel(events, nil, nil)
 
 	// Send a BigTextEvent
-	msg := eventMsg{event: domain.TextEvent{Text: "1234567890"}} // 10 chars
+	msg := eventMsg{update: domain.TextEvent{Text: "1234567890"}} // 10 chars
 
 	// Process it. It should process "1234", and leave "5678" and "90" as separate TextEvents in the queue.
 	m2, cmd := m.Update(msg)
@@ -1140,11 +1184,11 @@ func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 
 func TestModel_Update_WindowSize_NoResize(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event)
+	events := make(chan domain.UIUpdate)
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
 
-	m := NewModel(events, cfg)
+	m := NewModel(&mockBus{updates: events}, cfg)
 	initialWidth := m.width
 	initialHeight := m.height
 
@@ -1157,11 +1201,11 @@ func TestModel_Update_WindowSize_NoResize(t *testing.T) {
 
 func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event)
+	events := make(chan domain.UIUpdate)
 	cfg := config.DefaultConfig().UI
 	cfg.ChatWindowWidth = 80
 
-	m := NewModel(events, cfg)
+	m := NewModel(&mockBus{updates: events}, cfg)
 
 	ts := &toolState{
 		id:      "test",
@@ -1187,9 +1231,9 @@ func TestThinking_Colors(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(origProfile)
 
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Running state
 	m.isThinking = true
@@ -1204,7 +1248,7 @@ func TestThinking_Colors(t *testing.T) {
 
 	// 2. Success state
 	// Sending TextEvent should trigger thinking completion
-	tm, cmd := m.Update(eventMsg{event: domain.TextEvent{Text: "done"}})
+	tm, cmd := m.Update(eventMsg{update: domain.TextEvent{Text: "done"}})
 	m = tm.(*Model)
 	tracker.capture(cmd)
 
@@ -1220,9 +1264,9 @@ func TestThinking_Cancelled(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(origProfile)
 
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	m.isThinking = true
 	m.thinkStart = time.Now().Add(-5 * time.Second)
@@ -1242,8 +1286,9 @@ func TestThinking_Cancelled(t *testing.T) {
 
 func TestModel_ToolSpacingConsistency(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event)
-	m := NewModel(events, config.DefaultConfig().UI)
+	events := make(chan domain.UIUpdate)
+	bus := &mockBus{updates: events}
+	m := NewModel(bus, config.DefaultConfig().UI)
 	// Force a consistent width for testing
 	m.width = 80
 
@@ -1269,9 +1314,9 @@ func TestModel_ToolSpacingConsistency(t *testing.T) {
 
 func TestModel_Update_KeyMsg_Quit_PreservesSuccessfulTools(t *testing.T) {
 	t.Parallel()
-	events := make(chan domain.Event, 10)
+	events := make(chan domain.UIUpdate, 10)
 	tracker := &outputTracker{}
-	m := NewTestModel(events, tracker)
+	m := NewTestModel(events, nil, tracker)
 
 	// 1. Tool A finished successfully (but not flushed because we are simulating a blocked queue)
 	m.activeTools["A"] = &toolState{
@@ -1302,4 +1347,169 @@ func TestModel_Update_KeyMsg_Quit_PreservesSuccessfulTools(t *testing.T) {
 	assert.Contains(t, fullHistory, "✘", "Tool B should have error icon")
 	assert.Contains(t, fullHistory, "Tool B Running", "Tool B should be rendered with its name")
 	assert.Contains(t, fullHistory, "Cancelled", "Tool B should be marked as Cancelled")
+}
+
+func TestModel_DeterministicHandshake(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, nil, tracker)
+
+	// 1. Manually put something in the print queue to guarantee a flush command
+	m.printQueue = append(m.printQueue, "Force flush content")
+
+	// 2. Trigger flush (DoneEvent calls flushPrintQueue)
+	tm, cmd := m.Update(eventMsg{update: domain.DoneEvent{}})
+	m = tm.(*Model)
+
+	assert.NotNil(t, cmd, "Manual printQueue entry must result in a flush command")
+
+	// 3. Execute flush command and expect flushDoneMsg
+	msgs := executeCmd(cmd)
+	foundHandshake := false
+	for _, msg := range msgs {
+		if _, ok := msg.(flushDoneMsg); ok {
+			foundHandshake = true
+			break
+		}
+	}
+	
+	// RED PHASE: This will fail because current code returns tea.Printf command 
+	// which doesn't return flushDoneMsg.
+	assert.True(t, foundHandshake, "Handshake: Last flush command MUST produce flushDoneMsg")
+}
+
+func TestModel_Race_LostLastFrame(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, nil, tracker)
+
+	// 1. Manually put something in printQueue that hasn't been flushed yet
+	m.printQueue = []string{"Last Frame Content"}
+
+	// 2. UI is ready to quit. Trigger with DoneEvent.
+	tm, cmd := m.Update(eventMsg{update: domain.DoneEvent{}})
+	m = tm.(*Model)
+
+	assert.NotNil(t, cmd)
+	// Execute the command to trigger history capture
+	tracker.capture(cmd)
+
+	// 3. Check history
+	found := false
+	for _, h := range tracker.history {
+		if strings.Contains(h, "Last Frame Content") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Last frame content should be flushed before quitting")
+}
+
+func TestModel_DeterministicExit_Handshake_After_Nil(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, nil, tracker)
+
+	// 1. Set up pending handshake
+	m.printQueue = []string{"Handshake Content"}
+	m.isStreaming = false 
+	tm, cmd := m.Update(eventMsg{update: domain.DoneEvent{}})
+	m = tm.(*Model)
+	assert.True(t, m.isDone)
+
+	// 2. Close bus (nil message) - should be passive because isDone is true
+	tm, nilCmd := m.Update(eventMsg{update: nil})
+	m = tm.(*Model)
+	assert.Nil(t, nilCmd, "Redundant nil after DoneEvent should be ignored")
+
+	// 3. Command should be a Sequence containing Printf and flushDoneMsg
+	msgs := executeCmd(cmd)
+	var handshake tea.Msg
+	for _, msg := range msgs {
+		if _, ok := msg.(flushDoneMsg); ok {
+			handshake = msg
+		}
+	}
+	assert.NotNil(t, handshake, "Flush command must produce a handshake for coordination")
+
+	// 4. Update with handshake -> should finally quit
+	_, quitCmd := m.Update(handshake)
+	assert.NotNil(t, quitCmd)
+	msg := quitCmd()
+	assert.Equal(t, "tea.QuitMsg", fmt.Sprintf("%T", msg), "Only receiving the handshake should result in Quit")
+}
+
+func TestModel_ClosureSignal_Panics(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, nil, tracker)
+
+	// Since DoneEvent must logically come before nil, receiving nil 
+	// means the bus crashed or closed early. This is an abnormal state.
+	assert.Panics(t, func() {
+		m.Update(eventMsg{update: nil})
+	}, "Receiving nil UIUpdate before DoneEvent should panic")
+}
+
+func TestModel_StreamTick_Handshake(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	m := NewTestModel(events, nil, tracker)
+
+	// 1. Manually trigger a state where content is ready to be flushed by DoneEvent
+	m.queue = []domain.UIUpdate{domain.DoneEvent{}}
+	m.stream.Append("Last Block Content")
+
+	// 2. Trigger streamTickMsg
+	tm, cmd := m.Update(streamTickMsg{})
+	m = tm.(*Model)
+
+	// The bug: streamTickMsg sees flushCmd == nil (because processQueue already flushed it into cmds)
+	// and returns tea.Quit, discarding 'cmds'.
+	
+	assert.True(t, m.isDone)
+	assert.NotNil(t, cmd, "streamTick handling DoneEvent SHOULD return a command (the flush + handshake)")
+	
+	msg := cmd()
+	assert.NotEqual(t, "tea.QuitMsg", fmt.Sprintf("%T", msg), "streamTick should NOT return tea.Quit if there are pending flushes in cmds")
+}
+
+func TestModel_DoneEvent_EmptyQueue_Quits(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	actions := make(chan domain.Action, 10)
+	m := NewTestModel(events, actions, tracker)
+
+	// In the case of an empty queue, DoneEvent should return tea.Quit immediately
+	// because there is no flushDoneMsg handshake to wait for.
+	tm, cmd := m.Update(eventMsg{update: domain.DoneEvent{}})
+	m = tm.(*Model)
+
+	assert.True(t, m.isDone)
+	assert.NotNil(t, cmd, "Expected a command on DoneEvent")
+	msg := cmd()
+	assert.Equal(t, "tea.QuitMsg", fmt.Sprintf("%T", msg), "Expected tea.Quit on DoneEvent with empty queue")
+}
+
+func TestModel_Interrupt_EmptyQueue_Quits(t *testing.T) {
+	t.Parallel()
+	events := make(chan domain.UIUpdate, 10)
+	tracker := &outputTracker{}
+	actions := make(chan domain.Action, 10)
+	m := NewTestModel(events, actions, tracker)
+
+	// Similar to DoneEvent, a Ctrl+C interrupt with nothing to flush should quit immediately.
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = tm.(*Model)
+
+	assert.True(t, m.isDone)
+	assert.NotNil(t, cmd, "Expected a command on Interrupt")
+	msg := cmd()
+	assert.Equal(t, "tea.QuitMsg", fmt.Sprintf("%T", msg), "Expected tea.Quit on Interrupt with empty queue")
 }

@@ -8,12 +8,10 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -29,8 +27,18 @@ type toolRegistry interface {
 	Get(name string) (domain.Tool, bool)
 }
 
+type agentRunner interface {
+	Run(ctx context.Context, sess *domain.Session, input string) error
+}
+
 type programRunner interface {
 	Run(m tea.Model) error
+}
+
+// bus defines the interface for the event bus as used by the prompt workflow.
+type bus interface {
+	WorkflowActions() <-chan domain.Action
+	SendUIUpdate(domain.UIUpdate)
 }
 
 // PromptDeps contains the dependencies required to run the agent prompt workflow.
@@ -41,6 +49,9 @@ type PromptDeps struct {
 	LLM          domain.LLM
 	ToolRegistry toolRegistry
 	Runner       programRunner
+	Agent        agentRunner
+	UI           tea.Model
+	Bus          bus
 }
 
 // RunPrompt executes the full agentic flow: session resolution, agent loop, 
@@ -74,42 +85,45 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) error {
 		}
 	}
 
-	events := make(chan domain.Event, 100)
-	broker := NewEventBroker(events)
-	agentLoop := agent.NewLoop(deps.LLM, deps.ToolRegistry, deps.Config, broker)
-
+	// Create a cancellable context for the workflow
+	workflowCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	
 	var namingWg sync.WaitGroup
 	// Trigger auto-naming if this is a new session (no name yet)
 	if sess.Name == "" {
 		namingWg.Add(1)
 		go func() {
 			defer namingWg.Done()
-			name, err := session.GenerateName(ctx, deps.LLM, sess, input)
+			name, err := session.GenerateName(workflowCtx, deps.LLM, sess, input)
 			if err == nil {
 				sess.Name = name
 			}
 		}()
 	}
 
-	m := loop.NewModel(events, deps.Config.UI)
+	// Monitor for workflow actions (e.g. StopAction)
+	go func() {
+		for act := range deps.Bus.WorkflowActions() {
+			switch act.(type) {
+			case domain.StopAction:
+				cancel()
+			}
+		}
+	}()
 
 	done := make(chan error, 1)
 	go func() {
-		err := agentLoop.Run(ctx, sess, input)
+		err := deps.Agent.Run(workflowCtx, sess, input)
 		namingWg.Wait()
 
 		_ = deps.Store.Save(sess)
 
-		broker.Close()
-		select {
-		case events <- domain.DoneEvent{}:
-		default:
-		}
-		close(events)
+		deps.Bus.SendUIUpdate(domain.DoneEvent{})
 		done <- err
 	}()
 
-	if err := deps.Runner.Run(m); err != nil {
+	if err := deps.Runner.Run(deps.UI); err != nil {
 		fmt.Fprintf(os.Stderr, "UI failed: %v\n", err)
 	}
 

@@ -11,10 +11,10 @@ import (
 
 // Loop is the central orchestrator for the execution loop.
 type Loop struct {
-	llm          domain.LLM
-	toolExecutor *toolExecutor
-	events       eventSender
-	cfg          *config.Config
+	llm           domain.LLM
+	toolExecutor  *toolExecutor
+	events        eventSender
+	maxIterations int
 }
 
 // NewLoop creates a new Loop with its dependencies.
@@ -28,10 +28,10 @@ func NewLoop(
 		panic("cfg is required")
 	}
 	return &Loop{
-		llm:          llm,
-		toolExecutor: newToolExecutor(toolRegistry),
-		events:       events,
-		cfg:          cfg,
+		llm:           llm,
+		toolExecutor:  newToolExecutor(toolRegistry),
+		events:        events,
+		maxIterations: cfg.Tools.MaxIterations,
 	}
 }
 
@@ -58,14 +58,13 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 
 	}()
 
-	maxIterations := l.cfg.Tools.MaxIterations
-	for range maxIterations {
+	for range l.maxIterations {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
 		if l.events != nil {
-			l.events.Send(domain.ThinkingEvent{})
+			l.events.SendUIUpdate(domain.ThinkingEvent{})
 		}
 
 		stream, err := l.llm.Stream(ctx, session.Messages, l.toolExecutor.declarations())
@@ -80,7 +79,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			case domain.TextChunk:
 				msg.Content += c.Text
 				if l.events != nil {
-					l.events.Send(domain.TextEvent(c))
+					l.events.SendUIUpdate(domain.TextEvent(c))
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)
@@ -147,5 +146,5 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		Content: "[Max iterations reached]",
 	})
 
-	return fmt.Errorf("max iterations (%d) reached", maxIterations)
+	return fmt.Errorf("max iterations (%d) reached", l.maxIterations)
 }

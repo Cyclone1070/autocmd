@@ -50,8 +50,8 @@ func NewStore(fs fileSystem, storageDir string) *Store {
 }
 
 // GenerateName is a facade for the session.GenerateName function.
-func (st *Store) GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
-	return GenerateName(ctx, llm, sess, input)
+func (st *Store) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
+	return GenerateName(ctx, llm, target)
 }
 
 // Create creates a new session with a unique ID and saves it.

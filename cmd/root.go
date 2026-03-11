@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -143,21 +144,23 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		Store:        store,
 		LLM:          llmInstance,
 		ToolRegistry: toolRegistry,
-		Runner:       realUIRunner{},
 		Agent:        agentLoop,
-		UI:           uiModel,
 		Bus:          bus,
 	}
 
-	return workflow.RunPrompt(ctx, input, deps)
-}
+	done := workflow.RunPrompt(ctx, input, deps)
 
-type realUIRunner struct{}
+	p := tea.NewProgram(uiModel)
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("UI failed: %w", err)
+	}
 
-func (realUIRunner) Run(m tea.Model) error {
-	p := tea.NewProgram(m)
-	_, err := p.Run()
-	return err
+	agentErr := <-done
+	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
+		return fmt.Errorf("agent failed: %w", agentErr)
+	}
+
+	return nil
 }
 
 func setupLogging() {

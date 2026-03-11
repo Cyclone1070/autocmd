@@ -77,7 +77,7 @@ func TestGenerateName(t *testing.T) {
 		}
 
 		cancel() // Cancel BEFORE calling
-		name, err := GenerateName(cancelCtx, m, &domain.Session{}, "Cancelled message")
+		name, err := GenerateName(cancelCtx, m, "Cancelled message")
 
 		assert.NoError(t, err)
 		assert.Equal(t, "Cancelled message", name) // Should fallback on cancellation
@@ -96,7 +96,7 @@ func TestGenerateName(t *testing.T) {
 			},
 		}
 
-		name, err := GenerateName(ctx, m, &domain.Session{}, "I have a bug in my UI")
+		name, err := GenerateName(ctx, m, "I have a bug in my UI")
 		assert.NoError(t, err)
 		assert.Equal(t, "Fixing UI Bugs", name)
 	})
@@ -112,13 +112,7 @@ func TestGenerateName(t *testing.T) {
 			},
 		}
 
-		sess := &domain.Session{
-			Messages: domain.Messages{
-				domain.UserMessage{Content: "This is the first message"},
-			},
-		}
-
-		name, err := GenerateName(ctx, m, sess, "This is the second message")
+		name, err := GenerateName(ctx, m, "This is the first message")
 		assert.NoError(t, err)
 		assert.Equal(t, "Summary of First", name)
 	})
@@ -130,7 +124,7 @@ func TestGenerateName(t *testing.T) {
 			},
 		}
 
-		name, err := GenerateName(ctx, m, &domain.Session{}, "Short message")
+		name, err := GenerateName(ctx, m, "Short message")
 		assert.NoError(t, err)
 		assert.Equal(t, "Short message", name)
 	})
@@ -140,7 +134,7 @@ func TestGenerateName(t *testing.T) {
 			streams: nil, // Will trigger error in Stream
 		}
 
-		name, err := GenerateName(ctx, m, &domain.Session{}, "Very long message that should be truncated when used as a fallback because it is too long for a session name")
+		name, err := GenerateName(ctx, m, "Very long message that should be truncated when used as a fallback because it is too long for a session name")
 		assert.NoError(t, err)
 		assert.Equal(t, "Very long message that should be truncated when us...", name)
 	})

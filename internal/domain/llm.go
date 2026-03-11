@@ -30,6 +30,12 @@ type Provider interface {
 	GetLLM(ctx context.Context, cred *Credential, modelID string) (LLM, error)
 }
 
+// ProviderInfo contains a provider's ID and its resolved credential (if any).
+type ProviderInfo struct {
+	ID         string
+	Credential *Credential
+}
+
 // Role represents message roles.
 type Role string
 

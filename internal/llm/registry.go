@@ -39,22 +39,16 @@ func (r *Registry) GetProvider(id string) (domain.Provider, bool) {
 	return p, ok
 }
 
-// ProviderInfo contains a provider's ID and its resolved credential (if any).
-type ProviderInfo struct {
-	ID         string
-	Credential *domain.Credential
-}
-
 // ListProviders returns information about all registered providers, including resolved credentials.
-func (r *Registry) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
-	var infos []ProviderInfo
+func (r *Registry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
+	var infos []domain.ProviderInfo
 	for id, p := range r.providers {
 		cred := (*domain.Credential)(nil)
 		if r.authManager != nil {
 			resolved, _ := r.authManager.GetWithFallback(p)
 			cred = resolved
 		}
-		infos = append(infos, ProviderInfo{
+		infos = append(infos, domain.ProviderInfo{
 			ID:         id,
 			Credential: cred,
 		})

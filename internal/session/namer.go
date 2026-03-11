@@ -8,17 +8,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// GenerateName creates a short title for a session based on the first user message.
+// GenerateName creates a short title for a session based on the provided text.
 // It uses the provided LLM to generate the title.
-func GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
-	target := input
-	if len(sess.Messages) > 0 {
-		if msg, ok := sess.Messages[0].(domain.UserMessage); ok {
-			target = msg.Content
-		} else if msg, ok := sess.Messages[0].(domain.AssistantMessage); ok {
-			target = msg.Content
-		}
-	}
+func GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 
 	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 

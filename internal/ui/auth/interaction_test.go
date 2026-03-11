@@ -2,39 +2,55 @@ package authui_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/llm"
-	authui "github.com/Cyclone1070/iav/internal/ui/auth"
 	"github.com/Cyclone1070/iav/internal/state"
-	 tea "github.com/charmbracelet/bubbletea"
+	authui "github.com/Cyclone1070/iav/internal/ui/auth"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-type mockFileSystem struct {
-	files map[string][]byte
+type mockAuthManager struct {
+	creds map[string]domain.Credential
 }
 
-func (m *mockFileSystem) ReadFile(name string) ([]byte, error) {
-	if data, ok := m.files[name]; ok {
-		return data, nil
+func newMockAuthManager() *mockAuthManager {
+	return &mockAuthManager{
+		creds: make(map[string]domain.Credential),
 	}
-	return nil, os.ErrNotExist
 }
-func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
-	if m.files == nil {
-		m.files = make(map[string][]byte)
-	}
-	m.files[name] = data
+
+func (m *mockAuthManager) Set(id string, cred domain.Credential) error {
+	m.creds[id] = cred
 	return nil
 }
-func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error { return nil }
 
-func newTestAuthManager(fs auth.FileSystem) *auth.Manager {
-	return auth.NewManager(fs, "/tmp/auth.json")
+func (m *mockAuthManager) Remove(id string) error {
+	delete(m.creds, id)
+	return nil
+}
+
+type mockRegistry struct {
+	provider domain.Provider
+	authMgr  *mockAuthManager
+}
+
+func (m *mockRegistry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
+	cred := (*domain.Credential)(nil)
+	if c, ok := m.authMgr.creds[m.provider.ID()]; ok {
+		cred = &c
+	}
+	return []domain.ProviderInfo{
+		{ID: m.provider.ID(), Credential: cred},
+	}, nil
+}
+
+func (m *mockRegistry) GetProvider(id string) (domain.Provider, bool) {
+	if m.provider.ID() == id {
+		return m.provider, true
+	}
+	return nil, false
 }
 
 func newTestState() *state.State {
@@ -91,9 +107,8 @@ func (m *mockProviderMultiField) GetLLM(ctx context.Context, cred *domain.Creden
 
 func TestInteractionFlowNoQuit(t *testing.T) {
 	p := &mockProvider{id: "google"}
-	fs := &mockFileSystem{files: make(map[string][]byte)}
-	authMgr := newTestAuthManager(fs)
-	registry := llm.NewRegistry(authMgr, p)
+	authMgr := newMockAuthManager()
+	registry := &mockRegistry{provider: p, authMgr: authMgr}
 	model := authui.NewModel(registry, authMgr, newTestState())
 
 	// 1. Initial State: Provider Selection
@@ -130,16 +145,15 @@ func TestInteractionFlowNoQuit(t *testing.T) {
 	}
 
 	// Verify persistence!
-	if len(fs.files["/tmp/auth.json"]) == 0 {
-		t.Errorf("expected auth data to be saved to /tmp/auth.json")
+	if _, ok := authMgr.creds["google"]; !ok {
+		t.Errorf("expected auth data to be saved to mock manager")
 	}
 }
 
 func TestMultiFieldInteraction(t *testing.T) {
 	p := &mockProviderMultiField{id: "vertex"}
-	fs := &mockFileSystem{files: make(map[string][]byte)}
-	authMgr := newTestAuthManager(fs)
-	registry := llm.NewRegistry(authMgr, p)
+	authMgr := newMockAuthManager()
+	registry := &mockRegistry{provider: p, authMgr: authMgr}
 	model := authui.NewModel(registry, authMgr, newTestState())
 
 	enter := tea.KeyMsg{Type: tea.KeyEnter}
@@ -180,9 +194,8 @@ func isQuit(cmd tea.Cmd) bool {
 
 func TestInteraction_BugFixes(t *testing.T) {
 	p := &mockProvider{id: "google"}
-	fs := &mockFileSystem{files: make(map[string][]byte)}
-	authMgr := newTestAuthManager(fs)
-	registry := llm.NewRegistry(authMgr, p)
+	authMgr := newMockAuthManager()
+	registry := &mockRegistry{provider: p, authMgr: authMgr}
 	
 	t.Run("Issue 1: q key should quit and clear screen", func(t *testing.T) {
 		model := authui.NewModel(registry, authMgr, newTestState())
@@ -249,9 +262,8 @@ func TestInteraction_BugFixes(t *testing.T) {
 
 	t.Run("Feature: Authorized status labels and deletion", func(t *testing.T) {
 		p := &mockProvider{id: "google"}
-		fs := &mockFileSystem{files: make(map[string][]byte)}
-		authMgr := newTestAuthManager(fs)
-		registry := llm.NewRegistry(authMgr, p)
+		authMgr := newMockAuthManager()
+		registry := &mockRegistry{provider: p, authMgr: authMgr}
 		appState := &state.State{}
 		appState.SetModel("google/gemini")
 		
@@ -276,10 +288,9 @@ func TestInteraction_BugFixes(t *testing.T) {
 		m, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 		model = m.(*authui.Model)
 		
-		// Verify credential removed from FS
-		cred, _ := authMgr.Get("google")
-		if cred != nil {
-			t.Errorf("expected credential to be removed from auth store")
+		// Verify credential removed from mock
+		if _, ok := authMgr.creds["google"]; ok {
+			t.Errorf("expected credential to be removed from auth manager")
 		}
 
 		// Verify state synced (model cleared)

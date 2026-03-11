@@ -5,13 +5,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/llm"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+type Registry interface {
+	ListProviders(ctx context.Context) ([]domain.ProviderInfo, error)
+	GetProvider(id string) (domain.Provider, bool)
+}
+
+type AuthManager interface {
+	Set(providerID string, cred domain.Credential) error
+	Remove(providerID string) error
+}
 
 type stateManager interface {
 	Model() string
@@ -27,7 +35,7 @@ const (
 	stateFieldCollection
 )
 
-func Run(registry *llm.Registry, authMgr *auth.Manager, appState stateManager) error {
+func Run(registry Registry, authMgr AuthManager, appState stateManager) error {
 	m := NewModel(registry, authMgr, appState)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
@@ -41,8 +49,8 @@ func Run(registry *llm.Registry, authMgr *auth.Manager, appState stateManager) e
 }
 
 type Model struct {
-	registry *llm.Registry
-	authMgr  *auth.Manager
+	registry Registry
+	authMgr  AuthManager
 	appState stateManager
 
 	state    uiState
@@ -58,7 +66,7 @@ type Model struct {
 	err      error
 }
 
-func NewModel(registry *llm.Registry, authMgr *auth.Manager, appState stateManager) *Model {
+func NewModel(registry Registry, authMgr AuthManager, appState stateManager) *Model {
 	m := &Model{
 		registry: registry,
 		authMgr:  authMgr,

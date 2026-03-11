@@ -4,9 +4,9 @@
 
 The `workflow` package is the core orchestrator of the one-shot CLI application. It manages the agent's think-act cycle for a single execution.
 
-**Owns:**
-- Main agent loop: `Run()` (send messages → get response → handle tool calls → repeat)
-- Internal `toolExecutor`: Handles tool execution and display logic
+**Coordinates:**
+- Main agent loop: `Run()` (lives in `agent/` package)
+- Tool execution and display logic (via `agent.ToolExecutor`)
 - Session management: Loading, updating, and saving the session state
 - Event emission: `ThinkingEvent`, `TextEvent`, `DoneEvent`
 

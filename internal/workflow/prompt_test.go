@@ -3,10 +3,10 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -30,8 +30,8 @@ func (m *mockSessionStore) Save(s *domain.Session) error {
 	return args.Error(0)
 }
 
-func (m *mockSessionStore) GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
-	args := m.Called(ctx, llm, sess, input)
+func (m *mockSessionStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
+	args := m.Called(ctx, llm, target)
 	return args.String(0), args.Error(1)
 }
 
@@ -78,15 +78,6 @@ func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
 	return args.Get(0).(domain.Tool), args.Bool(1)
 }
 
-type mockRunner struct {
-	mock.Mock
-}
-
-func (m *mockRunner) Run(model tea.Model) error {
-	args := m.Called(model)
-	return args.Error(0)
-}
-
 type mockAgent struct {
 	mock.Mock
 }
@@ -103,7 +94,6 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
 	registry := new(mockToolRegistry)
-	runner := new(mockRunner)
 
 	appState := &state.State{}
 	// cfg is not needed by PromptDeps
@@ -116,9 +106,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 		LLM:          llm,
 		State:        appState,
 		ToolRegistry: registry,
-		Runner:       runner,
 		Agent:        agent,
-		UI:           nil, // Model can be nil in this mock test
 		Bus:          bus,
 	}
 
@@ -127,21 +115,18 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	store.On("Save", mock.Anything).Return(nil)
 
 	// 2. Auto-naming expectations
-	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything, "hello").Return("New Session", nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, "hello").Return("New Session", nil)
 
 	// 3. Agent Loop expectations
 	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
 
-	// 4. UI expectations (mock Run to return immediately)
-	runner.On("Run", mock.Anything).Return(nil)
-
-	err := RunPrompt(ctx, "hello", deps)
+	done := RunPrompt(ctx, "hello", deps)
+	err := <-done
 
 	assert.NoError(t, err)
 	assert.Equal(t, "new-id", appState.CurrentSessionID())
 	store.AssertExpectations(t)
 	llm.AssertExpectations(t)
-	runner.AssertExpectations(t)
 }
 
 type mockStream struct {
@@ -186,7 +171,6 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
 	registry := new(mockToolRegistry)
-	runner := new(mockRunner)
 	agent := new(mockAgent)
 	
 	eb := NewEventBus()
@@ -197,21 +181,64 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 		LLM:          llm,
 		State:        &state.State{},
 		ToolRegistry: registry,
-		Runner:       runner,
 		Agent:        agent,
-		Bus:          bus.EventBus, // Current PromptDeps expects *EventBus
+		Bus:          bus.EventBus,
 	}
 
 	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
-	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
 	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	runner.On("Run", mock.Anything).Return(nil)
-
-	err := RunPrompt(ctx, "hello", deps)
+	done := RunPrompt(ctx, "hello", deps)
+	err := <-done
 	assert.NoError(t, err)
 
 	// In the NEW architecture, the bus should still be open here
 	// because RunPrompt no longer calls Close().
 	assert.False(t, bus.closed, "RunPrompt should NOT close the bus; that is now wiring responsibility")
+}
+
+func TestRunPrompt_NamingRace(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	registry := new(mockToolRegistry)
+	agent := new(mockAgent)
+	bus := NewEventBus()
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        &state.State{},
+		ToolRegistry: registry,
+		Agent:        agent,
+		Bus:          bus,
+	}
+
+	sess := &domain.Session{ID: "race-id"}
+	store.On("Create").Return(sess, nil)
+	store.On("Save", mock.Anything).Return(nil)
+
+	// Simulate GenerateName taking some time and then returning a name
+	store.On("GenerateName", mock.Anything, mock.Anything, "hello").
+		Run(func(args mock.Arguments) {
+			time.Sleep(10 * time.Millisecond)
+		}).
+		Return("Named Session", nil)
+
+	// Simulate Agent.Run reading/writing to session messages at the same time
+	agent.On("Run", mock.Anything, mock.Anything, "hello").
+		Run(func(args mock.Arguments) {
+			s := args.Get(1).(*domain.Session)
+			for i := 0; i < 100; i++ {
+				s.Messages = append(s.Messages, domain.UserMessage{Content: "msg"})
+				time.Sleep(1 * time.Millisecond)
+			}
+		}).
+		Return(nil)
+
+	done := RunPrompt(ctx, "hello", deps)
+	<-done
 }

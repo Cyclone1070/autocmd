@@ -33,14 +33,20 @@ func main() {
 		State:        &state.State{},
 		Store:        &mockStore{},
 		LLM:          &mockLLM{},
-		Runner:       &realRunner{},
 		Agent:        &mockAgent{bus: bus},
-		UI:           m,
 		Bus:          bus,
 		ToolRegistry: &mockRegistry{},
 	}
 
-	if err := workflow.RunPrompt(context.Background(), "", deps); err != nil {
+	done := workflow.RunPrompt(context.Background(), "", deps)
+
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Error running UI: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := <-done; err != nil {
 		fmt.Printf("Error running workflow: %v\n", err)
 		os.Exit(1)
 	}
@@ -68,7 +74,7 @@ type mockStore struct{}
 func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
 func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
 func (s *mockStore) Save(sess *domain.Session) error       { return nil }
-func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
+func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return "Test Session", nil
 }
 
@@ -84,13 +90,6 @@ func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []doma
 	return nil, nil
 }
 
-type realRunner struct{}
-
-func (r *realRunner) Run(m tea.Model) error {
-	p := tea.NewProgram(m)
-	_, err := p.Run()
-	return err
-}
 
 type mockRegistry struct{}
 

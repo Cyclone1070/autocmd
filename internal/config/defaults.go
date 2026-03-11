@@ -6,50 +6,68 @@ import (
 )
 
 // Config holds all application configuration values.
-// Defaults are set in DefaultConfig() and can be overridden via dotfile.
-// NOTE: Values in config files override defaults, including explicit zero values.
-// Missing keys are left at their default values.
 type Config struct {
-	Tools   ToolsConfig   `json:"tools"`
-	Session SessionConfig `json:"session"`
-	UI      UIConfig      `json:"ui"`
+	tools   ToolsConfig
+	session SessionConfig
+	ui      UIConfig
 }
 
+func (c *Config) Tools() ToolsConfig     { return c.tools }
+func (c *Config) Session() SessionConfig { return c.session }
+func (c *Config) UI() UIConfig           { return c.ui }
 
 type SessionConfig struct {
-	StorageDir string `json:"storage_dir"` // Default: ~/.config/iav/sessions
+	storageDir string
 }
 
+func (c SessionConfig) StorageDir() string { return c.storageDir }
+
 type ToolsConfig struct {
-	// File Operations
-	MaxFileSize int64 `json:"max_file_size"` // Default: 20 * 1024 * 1024 (20MB)
+	maxFileSize         int64
+	defaultShellTimeout int
+	maxIterations       int
+}
 
-	// Command Execution
-	DefaultShellTimeout int `json:"default_shell_timeout"` // Default: 600 (10 minutes, in seconds)
+func (c ToolsConfig) MaxFileSize() int64         { return c.maxFileSize }
+func (c ToolsConfig) DefaultShellTimeout() int   { return c.defaultShellTimeout }
+func (c ToolsConfig) MaxIterations() int         { return c.maxIterations }
 
-	// Agent
-	MaxIterations int `json:"max_iterations"` // Default: 20
+// DTOs for JSON persistence
+type sessionDTO struct {
+	StorageDir string `json:"storage_dir"`
+}
+
+type toolsDTO struct {
+	MaxFileSize         int64 `json:"max_file_size"`
+	DefaultShellTimeout int   `json:"default_shell_timeout"`
+	MaxIterations       int   `json:"max_iterations"`
+}
+
+type configDTO struct {
+	Tools   toolsDTO   `json:"tools"`
+	Session sessionDTO `json:"session"`
+	UI      uiDTO      `json:"ui"`
 }
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		Tools: ToolsConfig{
-			MaxFileSize:         20 * 1024 * 1024,
-			DefaultShellTimeout: 600,
-			MaxIterations:       20,
+		tools: ToolsConfig{
+			maxFileSize:         20 * 1024 * 1024,
+			defaultShellTimeout: 600,
+			maxIterations:       20,
 		},
-		Session: SessionConfig{
-			StorageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
+		session: SessionConfig{
+			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
 		},
-		UI: UIConfig{
-			PrimaryColor:      ColorConfig{Light: "#0EA5E9", Dark: "#38BDF8"}, // Sky Blue (Tailwind 500/400)
-			SuccessColor:      ColorConfig{Light: "#43BF6D", Dark: "#73F59F"},
-			ErrorColor:        ColorConfig{Light: "#F05D5E", Dark: "#FF6666"},
-			MutedColor:        ColorConfig{Light: "#D9DCCF", Dark: "#888888"},
-			ChatWindowWidth:   80,
-			ShellOutputHeight: 12,
-			ShortToolbox:      false,
+		ui: UIConfig{
+			primaryColor:      ColorConfig{light: "#0EA5E9", dark: "#38BDF8"},
+			successColor:      ColorConfig{light: "#43BF6D", dark: "#73F59F"},
+			errorColor:        ColorConfig{light: "#F05D5E", dark: "#FF6666"},
+			mutedColor:        ColorConfig{light: "#D9DCCF", dark: "#888888"},
+			chatWindowWidth:   80,
+			shellOutputHeight: 12,
+			shortToolbox:      false,
 		},
 	}
 }

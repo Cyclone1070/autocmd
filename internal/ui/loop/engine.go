@@ -7,7 +7,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -71,7 +70,6 @@ type Model struct {
 
 // Option is a functional option for configuring the Model.
 type Option func(*Model)
-
 // WithFlush sets the flush function for the model.
 func WithFlush(f func(string) tea.Cmd) Option {
 	return func(m *Model) {
@@ -79,13 +77,20 @@ func WithFlush(f func(string) tea.Cmd) Option {
 	}
 }
 
+// WithIsDark sets the dark mode flag for the model.
+func WithIsDark(dark bool) Option {
+	return func(m *Model) {
+		m.stream.renderer = ui.NewGlamourRenderer(m.width, dark)
+	}
+}
+
 // NewModel creates a new UI engine model.
-func NewModel(b bus, cfg config.UIConfig, opts ...Option) *Model {
-	theme := ui.NewTheme(cfg)
+func NewModel(b bus, themeCfg ui.ThemeConfig, chatWindowWidth int, opts ...Option) *Model {
+	theme := ui.NewTheme(themeCfg)
 
 	// Detect terminal size
 	detectedWidth, detectedHeight, err := term.GetSize(int(os.Stdout.Fd()))
-	width := cfg.ChatWindowWidth
+	width := chatWindowWidth
 	height := 40 // Default fallback
 
 	if err == nil {
@@ -95,7 +100,11 @@ func NewModel(b bus, cfg config.UIConfig, opts ...Option) *Model {
 		height = detectedHeight
 	}
 
-	isDark := lipgloss.HasDarkBackground()
+	// Default renderer (auto-detect if possible, but safely)
+	var isDark bool
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		isDark = lipgloss.HasDarkBackground()
+	}
 	renderer := ui.NewGlamourRenderer(width, isDark)
 
 	s := spinner.New()

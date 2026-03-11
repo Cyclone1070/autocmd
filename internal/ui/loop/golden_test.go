@@ -96,9 +96,9 @@ func getLoopElements() []LoopElement {
 
 func TestLoop_GoldenCombinations(t *testing.T) {
 	elements := getLoopElements()
-	cfg := config.DefaultConfig().UI
+	cfg := config.DefaultConfig().UI()
 	width := 80
-	cfg.ChatWindowWidth = width
+	cfg.SetChatWindowWidth(width)
 	isDark := true
 	renderer := ui.NewGlamourRenderer(width, isDark)
 
@@ -151,7 +151,14 @@ func (d dummyBus) SendAction(domain.Action)           {}
 
 func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...LoopElement) {
 	var signals []string
-	m := NewModel(dummyBus{}, cfg, WithFlush(func(content string) tea.Cmd {
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+	m := NewModel(dummyBus{}, themeCfg, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))

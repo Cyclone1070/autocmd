@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -98,12 +97,7 @@ func (m *mockFileSystem) Remove(path string) error {
 
 func newTestStore() (*Store, *mockFileSystem) {
 	fs := newMockFileSystem()
-	cfg := &config.Config{
-		Session: config.SessionConfig{
-			StorageDir: "/test/sessions",
-		},
-	}
-	return NewStore(cfg, fs), fs
+	return NewStore(fs, "/test/sessions"), fs
 }
 
 func TestCreate_Success(t *testing.T) {

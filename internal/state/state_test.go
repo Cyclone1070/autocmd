@@ -40,24 +40,23 @@ func (m *MockFS) MkdirAll(path string, perm os.FileMode) error {
 
 func TestLoad_NoFile_ReturnsDefault(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
-	loader := state.NewLoaderWithFS(fs)
+	mgr := state.NewManager(fs)
 
-	s, err := loader.Load()
+	s, err := mgr.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "", s.Model) // Default model should be empty
-	assert.Equal(t, "", s.CurrentSessionID)
+	assert.Equal(t, "", s.Model()) // Default model should be empty
+	assert.Equal(t, "", s.CurrentSessionID())
 }
 
 func TestSave_PersistsToFile(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
-	loader := state.NewLoaderWithFS(fs)
+	mgr := state.NewManager(fs)
 
-	s := &state.State{
-		Model:            "custom-model",
-		CurrentSessionID: "session-123",
-	}
+	s, _ := mgr.Load()
+	s.SetModel("custom-model")
+	s.SetCurrentSessionID("session-123")
 
-	err := loader.Save(s)
+	err := mgr.Save(s)
 	require.NoError(t, err)
 
 	// Verify file was written
@@ -72,9 +71,9 @@ func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	statePath := filepath.Join("/home/user", ".config", "iav", "state.json")
 	fs.Files[statePath] = []byte(`{"model": "saved-model", "current_session_id": "999"}`)
 	
-	loader := state.NewLoaderWithFS(fs)
-	s, err := loader.Load()
+	mgr := state.NewManager(fs)
+	s, err := mgr.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "saved-model", s.Model)
-	assert.Equal(t, "999", s.CurrentSessionID)
+	assert.Equal(t, "saved-model", s.Model())
+	assert.Equal(t, "999", s.CurrentSessionID())
 }

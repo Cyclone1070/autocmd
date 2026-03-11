@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -28,7 +27,6 @@ type directoryEntry struct {
 // ListDirTool allows agents to list directory contents with proper validation and tree formatting.
 type ListDirTool struct {
 	fs           dirLister
-	config       *config.Config
 	pathResolver pathResolver
 	// ignoreMatcher is optional (can be nil)
 	ignoreMatcher ignoreMatcher
@@ -39,22 +37,17 @@ type ListDirTool struct {
 // NewListDirectoryTool creates a new ListDirTool.
 func NewListDirectoryTool(
 	fs dirLister,
-	cfg *config.Config,
 	pathResolver pathResolver,
 	ignoreMatcher ignoreMatcher, // optional, can be nil
 ) *ListDirTool {
 	if fs == nil {
 		panic("fs is required")
 	}
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
 	return &ListDirTool{
 		fs:            fs,
-		config:        cfg,
 		pathResolver:  pathResolver,
 		ignoreMatcher: ignoreMatcher,
 		maxResults:    defaultMaxResults,
@@ -100,7 +93,6 @@ type listDirInvocation struct {
 	fs             dirLister
 	pathResolver   pathResolver
 	ignoreMatcher  ignoreMatcher
-	config         *config.Config
 	resolvedPath   string
 	ignorePatterns []string
 	display        domain.ToolDisplay
@@ -143,7 +135,6 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (doma
 		fs:             t.fs,
 		pathResolver:   t.pathResolver,
 		ignoreMatcher:  t.ignoreMatcher,
-		config:         t.config,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
 		display:        domain.NewStringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
@@ -47,16 +46,16 @@ type mockFileSystemForWrite struct {
 	dirs            map[string]bool
 	symlinks        map[string]symlinkEntry
 	operationErrors map[string]error
-	config          *config.Config
+	maxFileSize     int64
 }
 
-func newMockFileSystemForWrite(cfg *config.Config) *mockFileSystemForWrite {
+func newMockFileSystemForWrite(maxFileSize int64) *mockFileSystemForWrite {
 	return &mockFileSystemForWrite{
 		files:           make(map[string]fileEntry),
 		dirs:            make(map[string]bool),
 		symlinks:        make(map[string]symlinkEntry),
 		operationErrors: make(map[string]error),
-		config:          cfg,
+		maxFileSize:     maxFileSize,
 	}
 }
 
@@ -90,8 +89,8 @@ func (m *mockFileSystemForWrite) ReadFile(path string) ([]byte, error) {
 		return nil, os.ErrNotExist
 	}
 
-	if m.config != nil && m.config.Tools.MaxFileSize > 0 && int64(len(entry.content)) > m.config.Tools.MaxFileSize {
-		return nil, fmt.Errorf("file too large: %d bytes exceeds limit %d", len(entry.content), m.config.Tools.MaxFileSize)
+	if m.maxFileSize > 0 && int64(len(entry.content)) > m.maxFileSize {
+		return nil, fmt.Errorf("file too large: %d bytes exceeds limit %d", len(entry.content), m.maxFileSize)
 	}
 
 	return entry.content, nil
@@ -176,12 +175,10 @@ func TestWriteFile(t *testing.T) {
 	maxFileSize := int64(1024 * 1024) // 1MB
 
 	t.Run("create new file succeeds and updates cache", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 		content := "test content"
 
 		req := &WriteFileRequest{Path: "new.txt", Content: content}
@@ -210,12 +207,11 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("existing file rejection", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/existing.txt", []byte("existing"), 0o644)
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), config.DefaultConfig())
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &WriteFileRequest{Path: "existing.txt", Content: "new content"}
 		_, err := executeWrite(t, writeTool, req)
@@ -225,9 +221,7 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("large content rejection", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
 		// Create content larger than limit
@@ -236,7 +230,7 @@ func TestWriteFile(t *testing.T) {
 			largeContent[i] = 'A'
 		}
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &WriteFileRequest{Path: "large.txt", Content: string(largeContent)}
 		_, err := executeWrite(t, writeTool, req)
@@ -246,11 +240,10 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("binary content rejection", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), config.DefaultConfig())
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 		// Content with NUL byte
 		binaryContent := []byte{0x48, 0x65, 0x6C, 0x00, 0x6C, 0x6F}
 
@@ -262,10 +255,9 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("verify default permissions 0o644", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		expectedPerm := os.FileMode(0o644)
 
@@ -286,10 +278,9 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("nested directory creation", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
 		_, err := executeWrite(t, writeTool, req)
@@ -308,12 +299,11 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("ensure dirs failure", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.setOperationError("EnsureDirs", errors.New("failed to mkdir"))
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
 		result, err := executeWrite(t, writeTool, req)
@@ -326,11 +316,10 @@ func TestWriteFile(t *testing.T) {
 	})
 
 	t.Run("empty content allowed", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &WriteFileRequest{Path: "empty.txt", Content: ""}
 		_, err := executeWrite(t, writeTool, req)

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/assert"
@@ -76,12 +75,12 @@ func newTestStreamingCmd(output string, result *executor.Result, waitErr error) 
 // --- Tests ---
 
 func TestShellTool_Name(t *testing.T) {
-	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, time.Second, &mockPathResolver{})
 	assert.Equal(t, "shell", tl.Name())
 }
 
 func TestShellTool_Declaration(t *testing.T) {
-	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, time.Second, &mockPathResolver{})
 	decl := tl.Declaration()
 	assert.Equal(t, "shell", decl.Name)
 	assert.Contains(t, decl.Description, "shell command")
@@ -93,7 +92,7 @@ func TestShellTool_Declaration(t *testing.T) {
 }
 
 func TestShellTool_Prepare_Validation(t *testing.T) {
-	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, config.DefaultConfig(), &mockPathResolver{})
+	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, time.Second, &mockPathResolver{})
 	ctx := context.Background()
 
 	tests := []struct {
@@ -131,9 +130,8 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -161,9 +159,8 @@ func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", "/custom/path").Return("/custom/path", nil)
@@ -187,9 +184,8 @@ func TestShellTool_Prepare_EnvFiles(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -228,9 +224,8 @@ func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -254,9 +249,8 @@ func TestShellTool_Prepare_CustomTimeout(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -279,10 +273,8 @@ func TestShellTool_Prepare_DefaultTimeout(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
-	cfg.Tools.DefaultShellTimeout = 60 // 60 seconds default
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 60*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -305,9 +297,8 @@ func TestShellTool_Prepare_ExecutorError(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -328,9 +319,8 @@ func TestShellTool_Prepare_PathResolverError(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	mockPR.On("Abs", ".").Return("", errors.New("path error"))
 
@@ -346,9 +336,8 @@ func TestShellTool_Prepare_EnvFileError(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -369,9 +358,8 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -402,9 +390,8 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -432,9 +419,8 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -462,9 +448,8 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -493,9 +478,8 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -523,9 +507,8 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 	mockEnv := new(mockEnvFileOps)
-	cfg := config.DefaultConfig()
 
-	tl := NewShellTool(mockEnv, mockCE, cfg, mockPR)
+	tl := NewShellTool(mockEnv, mockCE, 10*time.Second, mockPR)
 
 	// Setup mocks
 	mockPR.On("Abs", ".").Return("/workspace", nil)
@@ -558,7 +541,6 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 }
 
 func TestShellTool_CapturedOutput(t *testing.T) {
-	cfg := config.DefaultConfig()
 	mockExec := &mockCommandExecutor{}
 	res := &executor.Result{Stdout: "captured\n", ExitCode: 0}
 	mockExec.On("RunStreaming", mock.Anything, []string{"echo", "captured"}, mock.Anything, mock.Anything, mock.Anything).
@@ -567,7 +549,7 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	mockPath := &mockPathResolver{}
 	mockPath.On("Abs", mock.Anything).Return(".", nil)
 
-	tl := NewShellTool(&mockEnvFileOps{}, mockExec, cfg, mockPath)
+	tl := NewShellTool(&mockEnvFileOps{}, mockExec, 10*time.Second, mockPath)
 	ctx := context.Background()
 	params := `{"command": ["echo", "captured"], "comment": "test capture"}`
 

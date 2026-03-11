@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -28,7 +27,6 @@ type SearchContentRequest struct {
 type SearchContentTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
-	config          *config.Config
 	pathResolver    pathResolver
 
 	maxLineLength int // For testing
@@ -38,7 +36,6 @@ type SearchContentTool struct {
 func NewSearchContentTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
-	cfg *config.Config,
 	pathResolver pathResolver,
 ) *SearchContentTool {
 	if fs == nil {
@@ -47,16 +44,12 @@ func NewSearchContentTool(
 	if commandExecutor == nil {
 		panic("commandExecutor is required")
 	}
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
 	return &SearchContentTool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
-		config:          cfg,
 		pathResolver:    pathResolver,
 		maxLineLength:   defaultMaxLineLength,
 	}
@@ -126,7 +119,6 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 	return &searchContentInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
-		config:          t.config,
 		pathResolver:    t.pathResolver,
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
@@ -139,7 +131,6 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage)
 type searchContentInvocation struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
-	config          *config.Config
 	pathResolver    pathResolver
 	absPath         string
 	pattern         string

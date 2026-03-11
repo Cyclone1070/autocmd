@@ -14,9 +14,16 @@ import (
 
 
 func newTestTheme() *ui.Theme {
-	cfg := config.DefaultConfig()
-	cfg.UI.ShortToolbox = false
-	return ui.NewTheme(cfg.UI)
+	cfg := config.DefaultConfig().UI()
+	cfg.SetShortToolbox(false)
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+	return ui.NewTheme(themeCfg)
 }
 
 func TestShellHistory_UseCapturedOutput(t *testing.T) {
@@ -149,8 +156,15 @@ func TestDivider_Color(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(termenv.Ascii) // Reset after test
 
-	cfg := config.DefaultConfig().UI
-	theme := ui.NewTheme(cfg)
+	cfg := config.DefaultConfig().UI()
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+	theme := ui.NewTheme(themeCfg)
 
 	// Create expected USER divider (primary color)
 	primaryStyle := lipgloss.NewStyle().Foreground(theme.PrimaryColor())

@@ -8,11 +8,16 @@ import (
 	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/llm"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+type stateManager interface {
+	Model() string
+	SetModel(string)
+	Save() error
+}
 
 type uiState int
 
@@ -22,7 +27,7 @@ const (
 	stateFieldCollection
 )
 
-func Run(registry *llm.Registry, authMgr *auth.Manager, appState *state.State) error {
+func Run(registry *llm.Registry, authMgr *auth.Manager, appState stateManager) error {
 	m := NewModel(registry, authMgr, appState)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
@@ -38,7 +43,7 @@ func Run(registry *llm.Registry, authMgr *auth.Manager, appState *state.State) e
 type Model struct {
 	registry *llm.Registry
 	authMgr  *auth.Manager
-	appState *state.State
+	appState stateManager
 
 	state    uiState
 	provider domain.Provider
@@ -53,7 +58,7 @@ type Model struct {
 	err      error
 }
 
-func NewModel(registry *llm.Registry, authMgr *auth.Manager, appState *state.State) *Model {
+func NewModel(registry *llm.Registry, authMgr *auth.Manager, appState stateManager) *Model {
 	m := &Model{
 		registry: registry,
 		authMgr:  authMgr,
@@ -226,9 +231,9 @@ func (m *Model) save() error {
 func (m *Model) deleteAuth(providerID string) {
 	_ = m.authMgr.Remove(providerID)
 	// Clear current model if it belongs to this provider
-	if strings.HasPrefix(m.appState.Model, providerID+"/") {
-		m.appState.Model = ""
-		_ = state.Save(m.appState)
+	if strings.HasPrefix(m.appState.Model(), providerID+"/") {
+		m.appState.SetModel("")
+		_ = m.appState.Save()
 	}
 }
 

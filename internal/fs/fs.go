@@ -6,22 +6,31 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
+// FileSystem defines the filesystem operations needed by the application.
+type FileSystem interface {
+	ReadFile(path string) ([]byte, error)
+	WriteFile(path string, data []byte, perm os.FileMode) error
+	WriteFileAtomic(path string, data []byte, perm os.FileMode) error
+	MkdirAll(path string, perm os.FileMode) error
+	EnsureDirs(path string) error
+	UserHomeDir() (string, error)
+	ListDir(path string) ([]os.DirEntry, error)
+	Remove(path string) error
+	Stat(path string) (os.FileInfo, error)
+}
+
 // OSFileSystem implements filesystem operations using the local OS filesystem primitives.
 type OSFileSystem struct {
-	config *config.Config
+	maxFileSize int64
 }
 
 // NewOSFileSystem creates a new OSFileSystem.
-func NewOSFileSystem(cfg *config.Config) *OSFileSystem {
-	if cfg == nil {
-		panic("cfg is required")
-	}
-	return &OSFileSystem{config: cfg}
+func NewOSFileSystem(maxFileSize int64) *OSFileSystem {
+	return &OSFileSystem{maxFileSize: maxFileSize}
 }
 
 // ReadFile reads the entire content of a file with safety limits.
@@ -38,8 +47,8 @@ func (fs *OSFileSystem) ReadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 
-	if info.Size() > fs.config.Tools.MaxFileSize {
-		return nil, fmt.Errorf("file %s exceeds max size (%d bytes)", path, fs.config.Tools.MaxFileSize)
+	if fs.maxFileSize != -1 && info.Size() > fs.maxFileSize {
+		return nil, fmt.Errorf("file %s exceeds max size (%d bytes)", path, fs.maxFileSize)
 	}
 
 	data, err := io.ReadAll(file)

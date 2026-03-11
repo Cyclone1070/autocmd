@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -99,7 +98,6 @@ func TestSearchContent_BasicSearch(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	// Mock path resolution
 	pathResolver.On("Abs", ".").Return("/root", nil)
@@ -117,7 +115,7 @@ func TestSearchContent_BasicSearch(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stdout: rgOutput, ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{
 		Pattern: "pattern",
@@ -138,7 +136,6 @@ func TestSearchContent_Includes(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	fs.On("Stat", "/root").Return(MockFileInfo{IsDirVal: true}, nil)
@@ -151,7 +148,7 @@ func TestSearchContent_Includes(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stdout: "", ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{
 		Pattern: "pattern",
@@ -166,13 +163,12 @@ func TestSearchContent_PathValidation(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	// 1. Path does not exist
 	pathResolver.On("Abs", "nonexistent").Return("/root/nonexistent", nil)
 	fs.On("Stat", "/root/nonexistent").Return(nil, os.ErrNotExist)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "foo", Path: "nonexistent"}
 	_, err := executeSearch(t, tool, req)
@@ -200,7 +196,6 @@ func TestSearchContent_Truncation(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	fs.On("Stat", "/root").Return(MockFileInfo{IsDirVal: true}, nil)
@@ -218,7 +213,7 @@ func TestSearchContent_Truncation(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stdout: rgOutputBuilder.String(), ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
@@ -232,7 +227,6 @@ func TestSearchContent_NoMatches(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	fs.On("Stat", "/root").Return(MockFileInfo{IsDirVal: true}, nil)
@@ -244,7 +238,7 @@ func TestSearchContent_NoMatches(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stdout: "", ExitCode: 1}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
@@ -256,7 +250,6 @@ func TestSearchContent_CommandFailure(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	fs.On("Stat", "/root").Return(MockFileInfo{IsDirVal: true}, nil)
@@ -268,7 +261,7 @@ func TestSearchContent_CommandFailure(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stderr: "Fatal error", ExitCode: 2}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
@@ -280,7 +273,6 @@ func TestSearchContent_InvalidJSON(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
 	fs.On("Stat", "/root").Return(MockFileInfo{IsDirVal: true}, nil)
@@ -292,7 +284,7 @@ func TestSearchContent_InvalidJSON(t *testing.T) {
 		([]string)(nil),
 	).Return(executor.Result{Stdout: "invalid json\n", ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 
 	req := &SearchContentRequest{Pattern: "pattern"}
 	result, err := executeSearch(t, tool, req)
@@ -304,8 +296,7 @@ func TestSearchContent_LineLengthLimit(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
-	tool := NewSearchContentTool(fs, exec, cfg, pathResolver)
+	tool := NewSearchContentTool(fs, exec, pathResolver)
 	tool.maxLineLength = 10
 
 	pathResolver.On("Abs", ".").Return("/root", nil)
@@ -331,18 +322,14 @@ func TestNewSearchContentTool_Panics(t *testing.T) {
 	fs := new(MockFileSystem)
 	exec := new(MockCommandExecutor)
 	pathResolver := new(MockPathResolver)
-	cfg := config.DefaultConfig()
 
 	assert.PanicsWithValue(t, "fs is required", func() {
-		NewSearchContentTool(nil, exec, cfg, pathResolver)
+		NewSearchContentTool(nil, exec, pathResolver)
 	})
 	assert.PanicsWithValue(t, "commandExecutor is required", func() {
-		NewSearchContentTool(fs, nil, cfg, pathResolver)
-	})
-	assert.PanicsWithValue(t, "cfg is required", func() {
-		NewSearchContentTool(fs, exec, nil, pathResolver)
+		NewSearchContentTool(fs, nil, pathResolver)
 	})
 	assert.PanicsWithValue(t, "pathResolver is required", func() {
-		NewSearchContentTool(fs, exec, cfg, nil)
+		NewSearchContentTool(fs, exec, nil)
 	})
 }

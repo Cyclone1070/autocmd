@@ -30,11 +30,21 @@ func (m *infoMockFS) WriteFile(name string, d []byte, p os.FileMode) error {
 	return nil
 }
 func (m *infoMockFS) MkdirAll(p string, perm os.FileMode) error { return nil }
+func (m *infoMockFS) UserHomeDir() (string, error)         { return "/home/user", nil }
+func (m *infoMockFS) ListDir(path string) ([]os.DirEntry, error) { return nil, nil }
+func (m *infoMockFS) Remove(path string) error               { return nil }
+func (m *infoMockFS) Stat(path string) (os.FileInfo, error) { return nil, nil }
+func (m *infoMockFS) WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	return m.WriteFile(path, data, perm)
+}
+func (m *infoMockFS) EnsureDirs(path string) error { return nil }
 
 func TestInfoGracefulness(t *testing.T) {
 	cfg := config.DefaultConfig()
-	s := &state.State{Model: "google/gemini-2.0-flash"}
-	authMgr := auth.NewManager(&infoMockFS{}, "/tmp/auth.json")
+	s := &state.State{}
+	s.SetModel("google/gemini-2.0-flash")
+	mockFS := &infoMockFS{}
+	authMgr := auth.NewManager(mockFS, "/tmp/auth.json")
 
 	// Clear keys
 	os.Unsetenv("GEMINI_API_KEY")
@@ -43,7 +53,7 @@ func TestInfoGracefulness(t *testing.T) {
 	b := &bytes.Buffer{}
 	infoCmd.SetOut(b)
 
-	err := runInfo(infoCmd, cfg, s, authMgr)
+	err := runInfo(infoCmd, mockFS, cfg, s, authMgr)
 
 	// Success condition: No error even if LLM fails
 	assert.NoError(t, err)
@@ -61,11 +71,12 @@ func TestInfoAuthAwareness(t *testing.T) {
 		authMgr := auth.NewManager(mockFS, "/tmp/auth.json")
 		os.Unsetenv("GEMINI_API_KEY")
 
-		s := &state.State{Model: "google/gemini-2.0-flash"}
+		s := &state.State{}
+		s.SetModel("google/gemini-2.0-flash")
 		b := &bytes.Buffer{}
 		infoCmd.SetOut(b)
 
-		err := runInfo(infoCmd, cfg, s, authMgr)
+		err := runInfo(infoCmd, mockFS, cfg, s, authMgr)
 		require.NoError(t, err)
 
 		output := b.String()
@@ -79,11 +90,12 @@ func TestInfoAuthAwareness(t *testing.T) {
 		os.Setenv("GEMINI_API_KEY", "test-key")
 		defer os.Unsetenv("GEMINI_API_KEY")
 
-		s := &state.State{Model: "google/gemini-2.0-flash"}
+		s := &state.State{}
+		s.SetModel("google/gemini-2.0-flash")
 		b := &bytes.Buffer{}
 		infoCmd.SetOut(b)
 
-		err := runInfo(infoCmd, cfg, s, authMgr)
+		err := runInfo(infoCmd, mockFS, cfg, s, authMgr)
 		require.NoError(t, err)
 
 		output := b.String()
@@ -100,11 +112,12 @@ func TestInfoAuthAwareness(t *testing.T) {
 		// Auth for 'google' via mockFS
 		mockFS.files["/tmp/auth.json"] = []byte(`{"google": {"type": "api_key", "api_key": "google-key"}}`)
 
-		s := &state.State{Model: "other/model"}
+		s := &state.State{}
+		s.SetModel("other/model")
 		b := &bytes.Buffer{}
 		infoCmd.SetOut(b)
 
-		err := runInfo(infoCmd, cfg, s, authMgr)
+		err := runInfo(infoCmd, mockFS, cfg, s, authMgr)
 		require.NoError(t, err)
 
 		output := b.String()

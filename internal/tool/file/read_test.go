@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
 
@@ -19,14 +18,12 @@ import (
 type mockFileSystemForRead struct {
 	files  map[string][]byte
 	dirs   map[string]bool
-	config *config.Config
 }
 
-func newMockFileSystemForRead(cfg *config.Config) *mockFileSystemForRead {
+func newMockFileSystemForRead() *mockFileSystemForRead {
 	return &mockFileSystemForRead{
 		files:  make(map[string][]byte),
 		dirs:   make(map[string]bool),
-		config: cfg,
 	}
 }
 
@@ -115,18 +112,15 @@ func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (strin
 
 func TestReadFile(t *testing.T) {
 	workspaceRoot := "/workspace"
-	maxFileSize := int64(1024 * 1024) // 1MB
 
 	t.Run("full read caches checksum", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		contentStr := "test content"
 		content := []byte(contentStr)
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 0, Limit: 100}
 		output, err := executeRead(t, readTool, readReq)
@@ -149,14 +143,12 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("partial read using offset and limit", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		content := []byte("line1\nline2\nline3\nline4")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		// Read lines 2 and 3 (Offset=1, Limit=2)
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 1, Limit: 2}
@@ -172,13 +164,12 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("offset beyond EOF", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		content := []byte("line1")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 		offset := 100
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: offset, Limit: 10}
@@ -192,12 +183,11 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("directory rejection", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createDir("/workspace/subdir")
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "subdir"}
 		params, _ := json.Marshal(readReq)
@@ -211,11 +201,10 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
 		params, _ := json.Marshal(readReq)
@@ -229,11 +218,10 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("empty path returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: ""}
 		_, err := executeRead(t, readTool, readReq)
@@ -244,11 +232,10 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("path outside workspace returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "../outside.txt"}
 		_, err := executeRead(t, readTool, readReq)
@@ -259,13 +246,11 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("negative offset clamps to zero", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: -5, Limit: 10}
 		output, err := executeRead(t, readTool, readReq)
@@ -279,13 +264,11 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("zero limit defaults to constant", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2\nline3"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "test.txt", Limit: 0}
 		output, err := executeRead(t, readTool, readReq)
@@ -302,13 +285,11 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("high limit is accepted", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 
 		readReq := &ReadFileRequest{Path: "test.txt", Limit: 100000}
 		output, err := executeRead(t, readTool, readReq)
@@ -324,14 +305,13 @@ func TestReadFile(t *testing.T) {
 	})
 
 	t.Run("windows line endings normalization", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForRead(cfg)
+		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		// Use Windows line endings
 		content := []byte("line1\r\nline2")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
 		output, err := executeRead(t, readTool, &ReadFileRequest{Path: "test.txt"})
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)

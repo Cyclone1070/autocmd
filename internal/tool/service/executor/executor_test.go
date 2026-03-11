@@ -7,13 +7,10 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/Cyclone1070/iav/internal/config"
 )
 
 func TestRun(t *testing.T) {
-	cfg := config.DefaultConfig()
-	exec := NewOSCommandExecutor(cfg)
+	exec := NewOSCommandExecutor()
 
 	t.Run("SimpleCommand", func(t *testing.T) {
 		res, err := exec.Run(context.Background(), []string{"echo", "hello"}, "", nil)
@@ -65,8 +62,7 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("LargeOutput", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		exec := NewOSCommandExecutor(cfg)
+		exec := NewOSCommandExecutor()
 		exec.maxOutputSize = 10
 
 		res, err := exec.Run(context.Background(), []string{"echo", "123456789012345"}, "", nil)
@@ -83,8 +79,7 @@ func TestRun(t *testing.T) {
 }
 
 func TestRunWithTimeout(t *testing.T) {
-	cfg := config.DefaultConfig()
-	exec := NewOSCommandExecutor(cfg)
+	exec := NewOSCommandExecutor()
 	exec.dockerGracefulShutdownMs = 100
 
 	t.Run("CompletesBeforeTimeout", func(t *testing.T) {
@@ -125,8 +120,7 @@ func TestRunWithTimeout(t *testing.T) {
 }
 
 func TestRunStreaming(t *testing.T) {
-	cfg := config.DefaultConfig()
-	exec := NewOSCommandExecutor(cfg)
+	exec := NewOSCommandExecutor()
 	exec.dockerGracefulShutdownMs = 100
 
 	t.Run("SimpleCommand", func(t *testing.T) {

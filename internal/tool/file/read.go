@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
@@ -35,7 +34,6 @@ type ReadFileTool struct {
 	fileOps         fileReader
 	checksumManager checksumComputer
 	pathResolver    pathResolver
-	config          *config.Config
 }
 
 // NewReadFileTool creates a new ReadFileTool with injected dependencies.
@@ -43,7 +41,6 @@ func NewReadFileTool(
 	fileOps fileReader,
 	checksumManager checksumComputer,
 	pathResolver pathResolver,
-	cfg *config.Config,
 ) *ReadFileTool {
 	if fileOps == nil {
 		panic("fileOps is required")
@@ -54,14 +51,10 @@ func NewReadFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	if cfg == nil {
-		panic("config is required")
-	}
 	return &ReadFileTool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
 		pathResolver:    pathResolver,
-		config:          cfg,
 	}
 }
 

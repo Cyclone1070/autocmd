@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
@@ -82,11 +81,8 @@ func newMockEventSender(size int) *mockEventSender {
 }
 
 func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
-	cfg := &config.Config{
-		Tools: config.ToolsConfig{MaxIterations: 5},
-	}
 	registry := newMockToolRegistry(tools)
-	return NewLoop(m, registry, cfg, events)
+	return NewLoop(m, registry, 5, events)
 }
 
 // --- Tests ---
@@ -200,8 +196,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{Tools: config.ToolsConfig{MaxIterations: 3}}
-	l := NewLoop(m, newMockToolRegistry([]domain.Tool{mt}), cfg, nil)
+	l := NewLoop(m, newMockToolRegistry([]domain.Tool{mt}), 3, nil)
 
 	session := &domain.Session{}
 	err := l.Run(context.Background(), session, "go")

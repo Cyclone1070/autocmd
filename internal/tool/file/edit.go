@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	udiff "github.com/aymanbagabas/go-udiff"
 )
@@ -45,7 +44,7 @@ type EditFileRequest struct {
 type EditFileTool struct {
 	fileOps         fileEditor
 	checksumManager checksumManager
-	config          *config.Config
+	maxFileSize     int64
 	pathResolver    pathResolver
 }
 
@@ -54,7 +53,7 @@ func NewEditFileTool(
 	fileOps fileEditor,
 	checksumManager checksumManager,
 	pathResolver pathResolver,
-	cfg *config.Config,
+	maxFileSize int64,
 ) *EditFileTool {
 	if fileOps == nil {
 		panic("fileOps is required")
@@ -65,13 +64,10 @@ func NewEditFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	if cfg == nil {
-		panic("config is required")
-	}
 	return &EditFileTool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
-		config:          cfg,
+		maxFileSize:     maxFileSize,
 		pathResolver:    pathResolver,
 	}
 }
@@ -206,8 +202,8 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 	newContentBytes := []byte(finalContent)
 
 	// Check size limit
-	if int64(len(newContentBytes)) > t.config.Tools.MaxFileSize {
-		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", req.Path, len(newContentBytes), t.config.Tools.MaxFileSize)
+	if int64(len(newContentBytes)) > t.maxFileSize {
+		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", req.Path, len(newContentBytes), t.maxFileSize)
 	}
 
 	diff, added, removed := computeUnifiedDiff(oldContent, content)

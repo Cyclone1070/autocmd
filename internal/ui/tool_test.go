@@ -14,9 +14,16 @@ import (
 
 func newTestTheme(t *testing.T) *Theme {
 	t.Helper()
-	cfg := config.DefaultConfig()
-	cfg.UI.ShortToolbox = false // Default tests to full mode
-	return NewTheme(cfg.UI)
+	cfg := config.DefaultConfig().UI()
+	cfg.SetShortToolbox(false) // Default tests to full mode
+	themeCfg := ThemeConfig{
+		PrimaryColor: ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+	return NewTheme(themeCfg)
 }
 
 func assertGolden(t *testing.T, name string, actual string) {

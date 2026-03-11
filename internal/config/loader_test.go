@@ -47,13 +47,6 @@ func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-// SetOperationError sets an error for a specific operation
-func (m *mockFileSystem) SetOperationError(operation string, err error) {
-	if operation == "ReadFile" {
-		m.ReadFileErr = err
-	}
-}
-
 // createMockFS helper to reduce boilerplate
 func createMockFS(files map[string][]byte) *mockFileSystem {
 	return &mockFileSystem{
@@ -66,12 +59,13 @@ func createMockFS(files map[string][]byte) *mockFileSystem {
 func TestLoad_NoConfigFile_ReturnsDefaults(t *testing.T) {
 	// Config file doesn't exist - should return all defaults
 	fs := createMockFS(nil)
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(20*1024*1024), cfg.Tools.MaxFileSize)
+	// Using unexported field getters (will be implemented in GREEN phase)
+	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize())
 }
 
 func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {
@@ -82,13 +76,13 @@ func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(10485760), cfg.Tools.MaxFileSize)
-	assert.Equal(t, 1800, cfg.Tools.DefaultShellTimeout)
+	assert.Equal(t, int64(10485760), cfg.Tools().MaxFileSize())
+	assert.Equal(t, 1800, cfg.Tools().DefaultShellTimeout())
 }
 
 func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
@@ -97,13 +91,13 @@ func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, 1200, cfg.Tools.DefaultShellTimeout)        // Overridden
-	assert.Equal(t, int64(20*1024*1024), cfg.Tools.MaxFileSize) // Default
+	assert.Equal(t, 1200, cfg.Tools().DefaultShellTimeout())        // Overridden
+	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize()) // Default
 }
 
 func TestLoad_EmptyConfigFile_ReturnsDefaults(t *testing.T) {
@@ -111,12 +105,12 @@ func TestLoad_EmptyConfigFile_ReturnsDefaults(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(`{}`),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(20*1024*1024), cfg.Tools.MaxFileSize)
+	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize())
 }
 
 // --- UNHAPPY PATH TESTS ---
@@ -125,22 +119,22 @@ func TestLoad_MalformedJSON_ReturnsError(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(`{invalid json`),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
-	assert.Contains(t, err.Error(), "invalid")
+	assert.Contains(t, err.Error(), "parse")
 }
 
 func TestLoad_PermissionDenied_ReturnsError(t *testing.T) {
 	fs := createMockFS(nil)
-	fs.SetOperationError("ReadFile", os.ErrPermission)
+	fs.ReadFileErr = os.ErrPermission
 
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -152,12 +146,12 @@ func TestLoad_HomeDirError_ReturnsDefaults(t *testing.T) {
 	fs := createMockFS(nil)
 	fs.HomeDirErr = errors.New("homeless")
 
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(20*1024*1024), cfg.Tools.MaxFileSize) // Default
+	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize()) // Default
 }
 
 func TestLoad_WrongJSONType_ReturnsError(t *testing.T) {
@@ -165,9 +159,9 @@ func TestLoad_WrongJSONType_ReturnsError(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(`["not", "an", "object"]`),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -181,9 +175,9 @@ func TestLoad_NegativeValues_Rejected(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	assert.Error(t, err)
 	assert.Nil(t, cfg)
@@ -196,10 +190,10 @@ func TestLoad_UnknownFields_Ignored(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})
-	loader := config.NewLoaderWithFS(fs)
+	mgr := config.NewManager(fs)
 
-	cfg, err := loader.Load()
+	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1024), cfg.Tools.MaxFileSize)
+	assert.Equal(t, int64(1024), cfg.Tools().MaxFileSize())
 }

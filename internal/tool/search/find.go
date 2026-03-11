@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -26,7 +25,6 @@ type FindFileRequest struct {
 type FindFileTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
-	config          *config.Config
 	pathResolver    pathResolver
 }
 
@@ -34,7 +32,6 @@ type FindFileTool struct {
 func NewFindFileTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
-	cfg *config.Config,
 	pathResolver pathResolver,
 ) *FindFileTool {
 	if fs == nil {
@@ -43,16 +40,12 @@ func NewFindFileTool(
 	if commandExecutor == nil {
 		panic("commandExecutor is required")
 	}
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
 	return &FindFileTool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
-		config:          cfg,
 		pathResolver:    pathResolver,
 	}
 }

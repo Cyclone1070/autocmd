@@ -11,7 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/llm"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
 	"github.com/Cyclone1070/iav/internal/state"
-	tea "github.com/charmbracelet/bubbletea"
+	 tea "github.com/charmbracelet/bubbletea"
 )
 
 type mockFileSystem struct {
@@ -38,7 +38,8 @@ func newTestAuthManager(fs auth.FileSystem) *auth.Manager {
 }
 
 func newTestState() *state.State {
-	return &state.State{}
+	s := &state.State{}
+	return s
 }
 
 type mockProvider struct {
@@ -251,7 +252,8 @@ func TestInteraction_BugFixes(t *testing.T) {
 		fs := &mockFileSystem{files: make(map[string][]byte)}
 		authMgr := newTestAuthManager(fs)
 		registry := llm.NewRegistry(authMgr, p)
-		appState := &state.State{Model: "google/gemini"}
+		appState := &state.State{}
+		appState.SetModel("google/gemini")
 		
 		// 1. Initially NOT authorized
 		model := authui.NewModel(registry, authMgr, appState)
@@ -281,8 +283,8 @@ func TestInteraction_BugFixes(t *testing.T) {
 		}
 
 		// Verify state synced (model cleared)
-		if appState.Model != "" {
-			t.Errorf("expected appState.Model to be cleared after deleting auth")
+		if appState.Model() != "" {
+			t.Errorf("expected appState.Model() to be cleared after deleting auth")
 		}
 
 		// Verify label gone

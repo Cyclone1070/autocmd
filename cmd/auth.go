@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
 	"github.com/spf13/cobra"
@@ -18,19 +19,27 @@ var authCmd = &cobra.Command{
 	Short:        "Manage authentication for LLM providers",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		bootstrapFS := fs.NewOSFileSystem(-1)
+
+		configMgr := config.NewManager(bootstrapFS)
+		cfg, err := configMgr.Load()
 		if err != nil {
 			return err
 		}
+
 		authMgr, err := buildAuthManager(cfg)
 		if err != nil {
 			return fmt.Errorf("build auth manager: %w", err)
 		}
+
 		registry := buildLLMRegistry(authMgr)
-		s, err := state.Load()
+
+		stateMgr := state.NewManager(bootstrapFS)
+		s, err := stateMgr.Load()
 		if err != nil {
 			return err
 		}
+
 		return authui.Run(registry, authMgr, s)
 	},
 }

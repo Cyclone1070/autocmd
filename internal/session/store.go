@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/google/uuid"
 )
@@ -45,8 +45,13 @@ type Store struct {
 }
 
 // NewStore creates a new session store.
-func NewStore(cfg *config.Config, fs fileSystem) *Store {
-	return &Store{storageDir: cfg.Session.StorageDir, fs: fs}
+func NewStore(fs fileSystem, storageDir string) *Store {
+	return &Store{storageDir: storageDir, fs: fs}
+}
+
+// GenerateName is a facade for the session.GenerateName function.
+func (st *Store) GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
+	return GenerateName(ctx, llm, sess, input)
 }
 
 // Create creates a new session with a unique ID and saves it.

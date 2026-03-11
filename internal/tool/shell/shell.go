@@ -9,24 +9,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 )
 
 // ShellTool executes commands on the local machine.
 type ShellTool struct {
-	envFileOps      envFileOps
-	commandExecutor commandExecutor
-	config          *config.Config
-	pathResolver    pathResolver
+	envFileOps          envFileOps
+	commandExecutor     commandExecutor
+	defaultShellTimeout time.Duration
+	pathResolver        pathResolver
 }
 
 // NewShellTool creates a new ShellTool with injected dependencies.
 func NewShellTool(
 	envFileOps envFileOps,
 	commandExecutor commandExecutor,
-	cfg *config.Config,
+	defaultShellTimeout time.Duration,
 	pathResolver pathResolver,
 ) *ShellTool {
 	if envFileOps == nil {
@@ -35,17 +34,14 @@ func NewShellTool(
 	if commandExecutor == nil {
 		panic("commandExecutor is required")
 	}
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
 	return &ShellTool{
-		envFileOps:      envFileOps,
-		commandExecutor: commandExecutor,
-		config:          cfg,
-		pathResolver:    pathResolver,
+		envFileOps:          envFileOps,
+		commandExecutor:     commandExecutor,
+		defaultShellTimeout: defaultShellTimeout,
+		pathResolver:        pathResolver,
 	}
 }
 
@@ -150,7 +146,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 	// 5. Calculate Timeout
 	timeout := time.Duration(req.TimeoutSeconds) * time.Second
 	if req.TimeoutSeconds <= 0 {
-		timeout = time.Duration(t.config.Tools.DefaultShellTimeout) * time.Second
+		timeout = t.defaultShellTimeout
 	}
 
 	// 6. Start Streaming Command via Executor

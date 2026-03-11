@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
@@ -30,7 +29,7 @@ type checksumUpdater interface {
 type WriteFileTool struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
-	config          *config.Config
+	maxFileSize     int64
 	pathResolver    pathResolver
 }
 
@@ -39,7 +38,7 @@ func NewWriteFileTool(
 	fileOps fileWriter,
 	checksumManager checksumUpdater,
 	pathResolver pathResolver,
-	cfg *config.Config,
+	maxFileSize int64,
 ) *WriteFileTool {
 	if fileOps == nil {
 		panic("fileOps is required")
@@ -50,14 +49,11 @@ func NewWriteFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	if cfg == nil {
-		panic("config is required")
-	}
 	return &WriteFileTool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
 		pathResolver:    pathResolver,
-		config:          cfg,
+		maxFileSize:     maxFileSize,
 	}
 }
 
@@ -96,9 +92,9 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (do
 		return nil, fmt.Errorf("path is required")
 	}
 	/* Empty content allowed */
-	if int64(len(req.Content)) > t.config.Tools.MaxFileSize {
+	if int64(len(req.Content)) > t.maxFileSize {
 		return nil, fmt.Errorf("content too large: %d bytes exceeds limit %d",
-			len(req.Content), t.config.Tools.MaxFileSize)
+			len(req.Content), t.maxFileSize)
 	}
 
 	abs, err := t.pathResolver.Abs(req.Path)

@@ -122,10 +122,19 @@ func (m *mockBus) SendAction(act domain.Action) {
 
 // NewTestModel creates a model with a mock renderer for literal string matching.
 func NewTestModel(events chan domain.UIUpdate, actions chan domain.Action, tracker *outputTracker) *Model {
-	cfg := config.DefaultConfig().UI
-	cfg.ChatWindowWidth = 80
+	cfg := config.DefaultConfig().UI()
+	cfg.SetChatWindowWidth(80)
+
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+
 	bus := &mockBus{updates: events, actions: actions}
-	m := NewModel(bus, cfg, WithFlush(func(content string) tea.Cmd {
+	m := NewModel(bus, themeCfg, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		if tracker != nil {
 			tracker.signals = append(tracker.signals, content)
 			tracker.history = append(tracker.history, content)
@@ -135,6 +144,17 @@ func NewTestModel(events chan domain.UIUpdate, actions chan domain.Action, track
 	}))
 	m.stream.renderer = &engineMockRenderer{}
 	return m
+}
+
+func testNewModel(b bus, cfg config.UIConfig, opts ...Option) *Model {
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolbox: cfg.ShortToolbox(),
+	}
+	return NewModel(b, themeCfg, cfg.ChatWindowWidth(), opts...)
 }
 
 // msgQueue is a simple queue for processing messages sequentially in tests.
@@ -181,7 +201,7 @@ func TestModel_Update_SmoothStreaming(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
@@ -228,7 +248,7 @@ func TestModel_Update_TextEvent(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 	renderer := &engineMockRenderer{}
 	m.stream = NewStream(renderer)
 
@@ -257,7 +277,7 @@ func TestModel_View_Truncation(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 	m.height = 5
 
 	longText := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
@@ -281,7 +301,7 @@ func TestModel_Update_ThinkingEvent(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 
 	// 1. Send ThinkingEvent
 	tm, cmd := m.Update(eventMsg{update: domain.ThinkingEvent{}})
@@ -342,7 +362,7 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 
 	// 1. ThinkingEvent must batch waitForEvent
 	_, cmd := m.Update(eventMsg{update: domain.ThinkingEvent{}})
@@ -368,7 +388,7 @@ func TestModel_Update_EventLoopContinuity(t *testing.T) {
 	assert.True(t, foundWait, "Should contain waitForEvent (eventMsg)")
 
 	// 2. TextEvent (start of streaming) must NOT batch waitForEvent (it waits for streamDone)
-	m = NewModel(&mockBus{updates: events}, config.DefaultConfig().UI)
+	m = testNewModel(&mockBus{updates: events}, config.DefaultConfig().UI())
 	_, cmd = m.Update(eventMsg{update: domain.TextEvent{Text: "Hello"}})
 	assert.NotNil(t, cmd)
 
@@ -442,7 +462,7 @@ func TestModel_Update_ToolLifecycle(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 
 	// 1. Tool Start
 	startEv := domain.ToolStartEvent{
@@ -1011,7 +1031,7 @@ func TestIssue_PureView_DeterministicDuration(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate, 10)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 
 	m.isThinking = true
 	m.thinkStart = time.Now().Add(-5 * time.Second)
@@ -1033,7 +1053,7 @@ func TestModel_Spinner_Clockwise(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 
 	expectedFrames := []string{"⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"}
 	assert.Equal(t, expectedFrames, m.spinner.Spinner.Frames)
@@ -1185,10 +1205,10 @@ func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 func TestModel_Update_WindowSize_NoResize(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate)
-	cfg := config.DefaultConfig().UI
-	cfg.ChatWindowWidth = 80
+	cfg := config.DefaultConfig().UI()
+	cfg.SetChatWindowWidth(80)
 
-	m := NewModel(&mockBus{updates: events}, cfg)
+	m := testNewModel(&mockBus{updates: events}, cfg)
 	initialWidth := m.width
 	initialHeight := m.height
 
@@ -1202,10 +1222,10 @@ func TestModel_Update_WindowSize_NoResize(t *testing.T) {
 func TestModel_RenderTool_WidthConstraint(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate)
-	cfg := config.DefaultConfig().UI
-	cfg.ChatWindowWidth = 80
+	cfg := config.DefaultConfig().UI()
+	cfg.SetChatWindowWidth(80)
 
-	m := NewModel(&mockBus{updates: events}, cfg)
+	m := testNewModel(&mockBus{updates: events}, cfg)
 
 	ts := &toolState{
 		id:      "test",
@@ -1288,7 +1308,7 @@ func TestModel_ToolSpacingConsistency(t *testing.T) {
 	t.Parallel()
 	events := make(chan domain.UIUpdate)
 	bus := &mockBus{updates: events}
-	m := NewModel(bus, config.DefaultConfig().UI)
+	m := testNewModel(bus, config.DefaultConfig().UI())
 	// Force a consistent width for testing
 	m.width = 80
 

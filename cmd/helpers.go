@@ -11,7 +11,7 @@ import (
 )
 
 func buildFS(cfg *config.Config) *fs.OSFileSystem {
-	return fs.NewOSFileSystem(cfg)
+	return fs.NewOSFileSystem(cfg.Tools().MaxFileSize())
 }
 
 func buildPathResolver() (*path.Resolver, error) {
@@ -22,9 +22,8 @@ func buildPathResolver() (*path.Resolver, error) {
 	return path.NewResolver(canonicalRoot), nil
 }
 
-func buildSessionStore(cfg *config.Config) (*session.Store, error) {
-	fileSystem := buildFS(cfg)
-	return session.NewStore(cfg, fileSystem), nil
+func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) (*session.Store, error) {
+	return session.NewStore(filesystem, cfg.Session().StorageDir()), nil
 }
 
 // buildLLMRegistry creates the LLM registry with supported providers.
@@ -33,7 +32,7 @@ func buildLLMRegistry(authMgr *auth.Manager) *llm.Registry {
 }
 
 func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {
-	osFS := fs.NewOSFileSystem(cfg)
+	osFS := buildFS(cfg)
 	storePath, err := auth.DefaultStorePath()
 	if err != nil {
 		return nil, err

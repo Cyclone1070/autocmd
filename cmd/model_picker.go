@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,7 +20,10 @@ var modelCmd = &cobra.Command{
 	Use:   "model",
 	Short: "Choose the default LLM model",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		bootstrapFS := fs.NewOSFileSystem(-1)
+
+		configMgr := config.NewManager(bootstrapFS)
+		cfg, err := configMgr.Load()
 		if err != nil {
 			return err
 		}
@@ -29,7 +33,8 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
-		appState, err := state.Load()
+		stateMgr := state.NewManager(bootstrapFS)
+		appState, err := stateMgr.Load()
 		if err != nil {
 			return err
 		}
@@ -48,7 +53,7 @@ var modelCmd = &cobra.Command{
 				ID:     mi.ID,
 				Label:  mi.DisplayName,
 				Detail: mi.ID,
-				Active: mi.ID == appState.Model,
+				Active: mi.ID == appState.Model(),
 			})
 		}
 
@@ -65,8 +70,8 @@ var modelCmd = &cobra.Command{
 		}
 
 		if selected, ok := m.Selected(); ok {
-			appState.Model = selected.ID
-			if err := state.Save(appState); err != nil {
+			appState.SetModel(selected.ID)
+			if err := appState.Save(); err != nil {
 				return fmt.Errorf("failed to save state: %w", err)
 			}
 			fmt.Printf("\nSelected model: %s\n", selected.ID)

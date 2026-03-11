@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -40,55 +41,96 @@ func (ConfigFileReader) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// Loader handles configuration loading with injected dependencies
-type Loader struct {
+// Manager handles configuration loading with injected dependencies
+type Manager struct {
 	fs FileSystem
 }
 
-// NewLoader creates a production Loader using the real filesystem
-func NewLoader() *Loader {
-	return &Loader{fs: ConfigFileReader{}}
+// NewManager creates a Manager with the provided filesystem
+func NewManager(fs FileSystem) *Manager {
+	if fs == nil {
+		panic("fs is required")
+	}
+	return &Manager{fs: fs}
 }
 
-// NewLoaderWithFS creates a Loader with a custom filesystem (for testing)
-func NewLoaderWithFS(fs FileSystem) *Loader {
-	return &Loader{fs: fs}
-}
-
-// Load reads configuration and merges it with defaults.
-// Returns error only for parse errors, permission issues, or validation failures.
-func (l *Loader) Load() (*Config, error) {
-	cfg := DefaultConfig()
-
-	// Load User Config
-	homeDir, err := l.fs.UserHomeDir()
-	if err != nil {
-		return cfg, nil // Use defaults if can't get home dir
+// newConfig creates a Config from a DTO and validates it.
+func newConfig(dto configDTO) (*Config, error) {
+	cfg := &Config{
+		tools: ToolsConfig{
+			maxFileSize:         dto.Tools.MaxFileSize,
+			defaultShellTimeout: dto.Tools.DefaultShellTimeout,
+			maxIterations:       dto.Tools.MaxIterations,
+		},
+		session: SessionConfig{
+			storageDir: dto.Session.StorageDir,
+		},
+		ui: UIConfig{
+			primaryColor: ColorConfig{
+				light: dto.UI.PrimaryColor.Light,
+				dark:  dto.UI.PrimaryColor.Dark,
+			},
+			successColor: ColorConfig{
+				light: dto.UI.SuccessColor.Light,
+				dark:  dto.UI.SuccessColor.Dark,
+			},
+			errorColor: ColorConfig{
+				light: dto.UI.ErrorColor.Light,
+				dark:  dto.UI.ErrorColor.Dark,
+			},
+			mutedColor: ColorConfig{
+				light: dto.UI.MutedColor.Light,
+				dark:  dto.UI.MutedColor.Dark,
+			},
+			chatWindowWidth:   dto.UI.ChatWindowWidth,
+			shellOutputHeight: dto.UI.ShellOutputHeight,
+			shortToolbox:      dto.UI.ShortToolbox,
+		},
 	}
 
-	configPath := filepath.Join(homeDir, ".config", ConfigDir, ConfigFile)
-	data, err := l.fs.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, cfg.Validate()
-		}
-		return nil, err // Return error for permission issues
-	}
-
-	// Parse JSON directly into the config struct.
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
-	}
-
-	// Validate the final merged configuration
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
 	return cfg, nil
 }
 
-// Load is a convenience function using the default loader
-func Load() (*Config, error) {
-	return NewLoader().Load()
+// Load reads configuration and merges it with defaults.
+func (m *Manager) Load() (*Config, error) {
+	// Start with default DTO values
+	defaults := DefaultConfig()
+	dto := configDTO{
+		Tools: toolsDTO{
+			MaxFileSize:         defaults.tools.maxFileSize,
+			DefaultShellTimeout: defaults.tools.defaultShellTimeout,
+			MaxIterations:       defaults.tools.maxIterations,
+		},
+		Session: sessionDTO{
+			StorageDir: defaults.session.storageDir,
+		},
+		UI: uiDTO{
+			PrimaryColor:      colorDTO{Light: defaults.ui.primaryColor.light, Dark: defaults.ui.primaryColor.dark},
+			SuccessColor:      colorDTO{Light: defaults.ui.successColor.light, Dark: defaults.ui.successColor.dark},
+			ErrorColor:        colorDTO{Light: defaults.ui.errorColor.light, Dark: defaults.ui.errorColor.dark},
+			MutedColor:        colorDTO{Light: defaults.ui.mutedColor.light, Dark: defaults.ui.mutedColor.dark},
+			ChatWindowWidth:   defaults.ui.chatWindowWidth,
+			ShellOutputHeight: defaults.ui.shellOutputHeight,
+			ShortToolbox:      defaults.ui.shortToolbox,
+		},
+	}
+
+	homeDir, err := m.fs.UserHomeDir()
+	if err == nil {
+		configPath := filepath.Join(homeDir, ".config", ConfigDir, ConfigFile)
+		data, err := m.fs.ReadFile(configPath)
+		if err == nil {
+			if err := json.Unmarshal(data, &dto); err != nil {
+				return nil, fmt.Errorf("failed to parse config file: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+
+	return newConfig(dto)
 }

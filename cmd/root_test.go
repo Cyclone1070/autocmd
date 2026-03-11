@@ -12,10 +12,10 @@ import (
 
 func TestRunAgent_FailFast_NoModel(t *testing.T) {
 	cfg := config.DefaultConfig()
-	s := &state.State{Model: ""}
+	s := &state.State{} // Model defaults to empty string
 	ctx := context.Background()
 
-	err := runAgent(ctx, cfg, s, "hello")
+	err := runAgent(ctx, nil, cfg, nil, s, "hello")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "No model selected")

@@ -8,10 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/session"
-	"github.com/Cyclone1070/iav/internal/state"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -20,6 +17,14 @@ type sessionStore interface {
 	Create() (*domain.Session, error)
 	Get(id string) (*domain.Session, error)
 	Save(s *domain.Session) error
+	GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error)
+}
+
+// stateStore defines the persistence operations for application state.
+type stateStore interface {
+	CurrentSessionID() string
+	SetCurrentSessionID(string)
+	Save() error
 }
 
 type toolRegistry interface {
@@ -43,8 +48,7 @@ type bus interface {
 
 // PromptDeps contains the dependencies required to run the agent prompt workflow.
 type PromptDeps struct {
-	Config       *config.Config
-	State        *state.State
+	State        stateStore
 	Store        sessionStore
 	LLM          domain.LLM
 	ToolRegistry toolRegistry
@@ -59,7 +63,7 @@ type PromptDeps struct {
 func RunPrompt(ctx context.Context, input string, deps *PromptDeps) error {
 	var sessionID string
 	// For the main agent command, we always use the current session from state.
-	sessionID = deps.State.CurrentSessionID
+	sessionID = deps.State.CurrentSessionID()
 
 	var sess *domain.Session
 	var err error
@@ -68,8 +72,8 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) error {
 		if err != nil {
 			return err
 		}
-		deps.State.CurrentSessionID = sess.ID
-		if err := state.Save(deps.State); err != nil {
+		deps.State.SetCurrentSessionID(sess.ID)
+		if err := deps.State.Save(); err != nil {
 			slog.Warn("failed to save state", "error", err)
 		}
 	} else {
@@ -77,9 +81,9 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) error {
 		if err != nil {
 			return err
 		}
-		if deps.State.CurrentSessionID != sess.ID {
-			deps.State.CurrentSessionID = sess.ID
-			if err := state.Save(deps.State); err != nil {
+		if deps.State.CurrentSessionID() != sess.ID {
+			deps.State.SetCurrentSessionID(sess.ID)
+			if err := deps.State.Save(); err != nil {
 				slog.Warn("failed to save state", "error", err)
 			}
 		}
@@ -95,7 +99,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) error {
 		namingWg.Add(1)
 		go func() {
 			defer namingWg.Done()
-			name, err := session.GenerateName(workflowCtx, deps.LLM, sess, input)
+			name, err := deps.Store.GenerateName(workflowCtx, deps.LLM, sess, input)
 			if err == nil {
 				sess.Name = name
 			}

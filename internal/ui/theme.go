@@ -6,7 +6,6 @@ package ui
 import (
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -18,6 +17,26 @@ const (
 	StatusSuccess
 	StatusError
 )
+
+// ColorInfo matches the methods provided by config.ColorConfig.
+type ColorInfo interface {
+	Light() string
+	Dark() string
+}
+
+// ToAdaptiveColor converts a ColorInfo (e.g. from config) to lipgloss.AdaptiveColor.
+func ToAdaptiveColor(c ColorInfo) lipgloss.AdaptiveColor {
+	return lipgloss.AdaptiveColor{Light: c.Light(), Dark: c.Dark()}
+}
+
+// ThemeConfig holds the colors and styling needed for the theme.
+type ThemeConfig struct {
+	PrimaryColor lipgloss.AdaptiveColor
+	SuccessColor lipgloss.AdaptiveColor
+	ErrorColor   lipgloss.AdaptiveColor
+	MutedColor   lipgloss.AdaptiveColor
+	ShortToolbox bool
+}
 
 // Theme provides styling for the UI.
 type Theme struct {
@@ -31,16 +50,16 @@ type Theme struct {
 }
 
 // NewTheme creates a theme from config.
-func NewTheme(cfg config.UIConfig) *Theme {
+func NewTheme(cfg ThemeConfig) *Theme {
 	return &Theme{
-		muted:        lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark},
-		primary:      lipgloss.AdaptiveColor{Light: cfg.PrimaryColor.Light, Dark: cfg.PrimaryColor.Dark},
-		success:      lipgloss.AdaptiveColor{Light: cfg.SuccessColor.Light, Dark: cfg.SuccessColor.Dark},
-		err:          lipgloss.AdaptiveColor{Light: cfg.ErrorColor.Light, Dark: cfg.ErrorColor.Dark},
+		muted:        cfg.MutedColor,
+		primary:      cfg.PrimaryColor,
+		success:      cfg.SuccessColor,
+		err:          cfg.ErrorColor,
 		ShortToolbox: cfg.ShortToolbox,
 		box: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.AdaptiveColor{Light: cfg.MutedColor.Light, Dark: cfg.MutedColor.Dark}).
+			BorderForeground(cfg.MutedColor).
 			Padding(0, 0).
 			MarginTop(0).
 			MarginBottom(0),

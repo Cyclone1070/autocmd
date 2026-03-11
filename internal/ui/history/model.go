@@ -1,26 +1,27 @@
 package history
 
 import (
+	"os"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 // Model is the bubbletea model for the history viewer.
 type Model struct {
-	messages domain.Messages
-	cfg      config.UIConfig
-	theme    *ui.Theme
-	width    int
-	height   int
-	renderer ui.Renderer
-	viewport viewport.Model
-	displays domain.ToolDisplays
+	messages        domain.Messages
+	chatWindowWidth int
+	theme           *ui.Theme
+	width           int
+	height          int
+	renderer        ui.Renderer
+	viewport        viewport.Model
+	displays        domain.ToolDisplays
 
 	// Cache for lazy rendering
 	renderedMessages map[int]string
@@ -49,11 +50,11 @@ func WithIsDark(isDark bool) Option {
 }
 
 // NewModel creates a new history model.
-func NewModel(messages domain.Messages, displays domain.ToolDisplays, cfg config.UIConfig, width, height int, opts ...Option) *Model {
+func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg ui.ThemeConfig, chatWindowWidth int, width, height int, opts ...Option) *Model {
 	m := &Model{
 		messages:         messages,
-		cfg:              cfg,
-		theme:            ui.NewTheme(cfg),
+		chatWindowWidth:  chatWindowWidth,
+		theme:            ui.NewTheme(themeCfg),
 		height:           height,
 		renderedMessages: make(map[int]string),
 		topIdx:           0,
@@ -70,7 +71,9 @@ func NewModel(messages domain.Messages, displays domain.ToolDisplays, cfg config
 
 	// If isDark wasn't provided, we poll it. But ideally it's passed from cmd/
 	if !m.isDark && m.renderer == nil {
-		m.isDark = lipgloss.HasDarkBackground()
+		if term.IsTerminal(int(os.Stdout.Fd())) {
+			m.isDark = lipgloss.HasDarkBackground()
+		}
 	}
 
 	if m.renderer == nil {
@@ -158,7 +161,7 @@ func (m *Model) refreshViewport() {
 }
 
 func (m *Model) calculateWidth(termWidth int) int {
-	w := m.cfg.ChatWindowWidth
+	w := m.chatWindowWidth
 	if termWidth > 0 && termWidth < w {
 		w = termWidth
 	}

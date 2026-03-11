@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
@@ -80,7 +79,6 @@ func TestFindFile_BasicGlob(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
 	mockRunner := &mockCommandExecutorForFind{}
 	mockRunner.runFunc = func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
@@ -88,7 +86,7 @@ func TestFindFile_BasicGlob(t *testing.T) {
 		return &executor.Result{Stdout: output, ExitCode: 0}, nil
 	}
 
-	findTool := NewFindFileTool(fs, mockRunner, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, mockRunner, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "*.go", Path: ""}
 	resp, err := executeFind(context.Background(), findTool, req)
@@ -114,9 +112,8 @@ func TestFindFile_InvalidGlob(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
-	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "[", Path: ""}
 	_, err := executeFind(context.Background(), findTool, req)
@@ -132,9 +129,8 @@ func TestFindFile_NonExistentPath(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
-	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "*.go", Path: "nonexistent/dir"}
 	_, err := executeFind(context.Background(), findTool, req)
@@ -150,14 +146,13 @@ func TestFindFile_CommandFailure(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
 	mockRunner := &mockCommandExecutorForFind{}
 	mockRunner.runFunc = func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
 		return &executor.Result{Stdout: "", Stderr: "fd error", ExitCode: 2}, nil
 	}
 
-	findTool := NewFindFileTool(fs, mockRunner, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, mockRunner, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "*.go", Path: ""}
 	resp, err := executeFind(context.Background(), findTool, req)
@@ -174,14 +169,13 @@ func TestFindFile_NoMatches(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
 	mockRunner := &mockCommandExecutorForFind{}
 	mockRunner.runFunc = func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
 		return &executor.Result{Stdout: "", ExitCode: 0}, nil
 	}
 
-	findTool := NewFindFileTool(fs, mockRunner, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, mockRunner, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "*.nonexistent", Path: ""}
 	resp, err := executeFind(context.Background(), findTool, req)
@@ -198,7 +192,6 @@ func TestFindFile_HitMaxResults(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
 
 	mockRunner := &mockCommandExecutorForFind{}
 	mockRunner.runFunc = func(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
@@ -209,7 +202,7 @@ func TestFindFile_HitMaxResults(t *testing.T) {
 		return &executor.Result{Stdout: output.String(), ExitCode: 0}, nil
 	}
 
-	findTool := NewFindFileTool(fs, mockRunner, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, mockRunner, path.NewResolver(workspaceRoot))
 
 	req := &FindFileRequest{Pattern: "*.go", Path: ""}
 	resp, err := executeFind(context.Background(), findTool, req)
@@ -242,8 +235,7 @@ func TestFindFile_PrepareValidation(t *testing.T) {
 	fs := newMockFileSystemForFind()
 	fs.createDir("/workspace")
 	workspaceRoot := "/workspace"
-	cfg := config.DefaultConfig()
-	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, cfg, path.NewResolver(workspaceRoot))
+	findTool := NewFindFileTool(fs, &mockCommandExecutorForFind{}, path.NewResolver(workspaceRoot))
 
 	tests := []struct {
 		name    string

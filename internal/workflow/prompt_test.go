@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +28,11 @@ func (m *mockSessionStore) Get(id string) (*domain.Session, error) {
 func (m *mockSessionStore) Save(s *domain.Session) error {
 	args := m.Called(s)
 	return args.Error(0)
+}
+
+func (m *mockSessionStore) GenerateName(ctx context.Context, llm domain.LLM, sess *domain.Session, input string) (string, error) {
+	args := m.Called(ctx, llm, sess, input)
+	return args.String(0), args.Error(1)
 }
 
 type mockLLM struct {
@@ -102,12 +106,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	runner := new(mockRunner)
 
 	appState := &state.State{}
-	cfg := &config.Config{
-		UI: config.UIConfig{},
-		Tools: config.ToolsConfig{
-			MaxIterations: 1,
-		},
-	}
+	// cfg is not needed by PromptDeps
 
 	agent := new(mockAgent)
 	bus := NewEventBus()
@@ -116,7 +115,6 @@ func TestRunPrompt_GREEN(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        appState,
-		Config:       cfg,
 		ToolRegistry: registry,
 		Runner:       runner,
 		Agent:        agent,
@@ -128,10 +126,8 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	store.On("Create").Return(&domain.Session{ID: "new-id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 
-	// 2. Auto-naming expectations (GenerateName calls Stream)
-	llm.On("Stream", mock.Anything, mock.MatchedBy(func(msgs domain.Messages) bool {
-		return len(msgs) > 0 // The naming prompt
-	}), mock.Anything).Return(newMockStream(), nil)
+	// 2. Auto-naming expectations
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything, "hello").Return("New Session", nil)
 
 	// 3. Agent Loop expectations
 	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
@@ -142,7 +138,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	err := RunPrompt(ctx, "hello", deps)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "new-id", appState.CurrentSessionID)
+	assert.Equal(t, "new-id", appState.CurrentSessionID())
 	store.AssertExpectations(t)
 	llm.AssertExpectations(t)
 	runner.AssertExpectations(t)
@@ -200,7 +196,6 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        &state.State{},
-		Config:       &config.Config{},
 		ToolRegistry: registry,
 		Runner:       runner,
 		Agent:        agent,
@@ -209,7 +204,7 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 
 	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
-	llm.On("Stream", mock.Anything, mock.Anything, mock.Anything).Return(newMockStream(), nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
 	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	runner.On("Run", mock.Anything).Return(nil)
 

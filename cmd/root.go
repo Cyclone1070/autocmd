@@ -7,13 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
- 
+	"time"
+
+	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/internal/agent"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -23,6 +23,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
+	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -38,11 +40,16 @@ var rootCmd = &cobra.Command{
 		setupLogging()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		bootstrapFS := fs.NewOSFileSystem(-1)
+
+		configMgr := config.NewManager(bootstrapFS)
+		cfg, err := configMgr.Load()
 		if err != nil {
 			return err
 		}
-		appState, err := state.Load()
+
+		stateMgr := state.NewManager(bootstrapFS)
+		appState, err := stateMgr.Load()
 		if err != nil {
 			return err
 		}
@@ -52,7 +59,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		input := strings.Join(args, " ")
-		return runAgent(cmd.Context(), cfg, appState, input)
+		return runAgent(cmd.Context(), bootstrapFS, cfg, stateMgr, appState, input)
 	},
 }
 
@@ -66,8 +73,8 @@ func Execute() {
 	}
 }
 
-func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, input string) error {
-	if appState.Model == "" {
+func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config, stateMgr *state.Manager, appState *state.State, input string) error {
+	if appState.Model() == "" {
 		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started.")
 	}
 
@@ -76,8 +83,8 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 		return err
 	}
 
-	fileSystem := fs.NewOSFileSystem(cfg)
-	cmdExecutor := executor.NewOSCommandExecutor(cfg)
+	fileSystem := fs.NewOSFileSystem(cfg.Tools().MaxFileSize())
+	cmdExecutor := executor.NewOSCommandExecutor()
 	checksumMgr := hash.NewChecksumManager()
 	todoStore := todo.NewInMemoryTodoStore()
 
@@ -87,13 +94,13 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 	}
 
 	tools := []domain.Tool{
-		directory.NewListDirectoryTool(fileSystem, cfg, pathResolver, ignoreMatcher),
-		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver, cfg),
-		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg),
-		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg),
-		search.NewFindFileTool(fileSystem, cmdExecutor, cfg, pathResolver),
-		search.NewSearchContentTool(fileSystem, cmdExecutor, cfg, pathResolver),
-		shell.NewShellTool(fileSystem, cmdExecutor, cfg, pathResolver),
+		directory.NewListDirectoryTool(fileSystem, pathResolver, ignoreMatcher),
+		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
+		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
+		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
+		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
+		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
+		shell.NewShellTool(fileSystem, cmdExecutor, time.Duration(cfg.Tools().DefaultShellTimeout())*time.Second, pathResolver),
 		todo.NewReadTodosTool(todoStore),
 		todo.NewWriteTodosTool(todoStore),
 	}
@@ -107,12 +114,12 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 	// Resolve credential based on provider ID (e.g., "google")
 	llmRegistry := buildLLMRegistry(authMgr)
 
-	llmInstance, err := llmRegistry.Get(ctx, appState.Model)
+	llmInstance, err := llmRegistry.Get(ctx, appState.Model())
 	if err != nil {
 		return fmt.Errorf("get llm: %w", err)
 	}
 
-	store, err := buildSessionStore(cfg)
+	store, err := buildSessionStore(cfg, bootstrapFS)
 	if err != nil {
 		return err
 	}
@@ -120,11 +127,18 @@ func runAgent(ctx context.Context, cfg *config.Config, appState *state.State, in
 	// Wiring
 	bus := workflow.NewEventBus()
 	defer bus.Close()
-	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg, bus)
-	uiModel := loop.NewModel(bus, cfg.UI)
+	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg.Tools().MaxIterations(), bus)
+
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(cfg.UI().PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(cfg.UI().SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(cfg.UI().ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(cfg.UI().MutedColor()),
+		ShortToolbox: cfg.UI().ShortToolbox(),
+	}
+	uiModel := loop.NewModel(bus, themeCfg, cfg.UI().ChatWindowWidth())
 
 	deps := &workflow.PromptDeps{
-		Config:       cfg,
 		State:        appState,
 		Store:        store,
 		LLM:          llmInstance,

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
@@ -34,15 +33,13 @@ func TestEditFile(t *testing.T) {
 	maxFileSize := int64(1024 * 1024) // 1MB
 
 	t.Run("conflict detection when cache checksum differs", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		originalContent := []byte("original content")
 		fs.createFile("/workspace/test.txt", originalContent, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		// Read file to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
@@ -72,13 +69,12 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("no cached checksum skips revalidation", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		content := []byte("some content")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -97,15 +93,13 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("multiple operations", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		content := []byte("line1\nline2\nline3")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
@@ -142,15 +136,13 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("mismatch in expected replacements", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		cfg.Tools.MaxFileSize = maxFileSize
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		content := []byte("line1\nline1\nline3")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
@@ -175,14 +167,13 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("replacement when snippet appears multiple times but ExpectedReplacements matches", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		content := []byte("foo\nfoo\nbar")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
@@ -213,12 +204,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("snippet not found", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("content"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -236,12 +226,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("append to non-empty file", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("existing"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -265,12 +254,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("multiple appends in one request", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -298,12 +286,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("append with count greater than 1 errors", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -322,13 +309,12 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("CRLF file with LF snippet matches", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		// File with CRLF line endings
 		fs.createFile("/workspace/test.txt", []byte("line1\r\nline2\r\nline3"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -355,10 +341,9 @@ func TestEditFile(t *testing.T) {
 
 	// Validation tests moved from types_test.go
 	t.Run("empty path returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{Path: "", Comment: "test", Operations: []EditOperation{{Before: "old", After: "new"}}}
 		_, err := executeEdit(t, editTool, req)
@@ -369,10 +354,9 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("empty operations returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: []EditOperation{}}
 		_, err := executeEdit(t, editTool, req)
@@ -383,11 +367,10 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("negative expected replacements defaults to 1", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("foo\nfoo\nbar"), 0o644)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{
 			Path:       "test.txt",
@@ -403,10 +386,9 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("path outside workspace returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{Path: "../outside.txt", Comment: "test", Operations: []EditOperation{{Before: "a", After: "b"}}}
 		_, err := executeEdit(t, editTool, req)
@@ -417,12 +399,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("file changed between Prepare and Execute fails", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("original"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		// Prepare the edit
 		req := &EditFileRequest{
@@ -448,12 +429,11 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("Display returns DiffDisplay with diff content", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("old content"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{
 			Path:       "test.txt",
@@ -484,10 +464,9 @@ func TestEditFile(t *testing.T) {
 	})
 
 	t.Run("missing comment returns error", func(t *testing.T) {
-		cfg := config.DefaultConfig()
-		fs := newMockFileSystemForWrite(cfg)
+		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), cfg)
+		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
 
 		req := &EditFileRequest{Path: "test.txt", Comment: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
 		_, err := executeEdit(t, editTool, req)

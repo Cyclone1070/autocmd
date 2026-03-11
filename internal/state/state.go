@@ -20,62 +20,79 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 }
 
-// OSFileSystem implements FileSystem using the real OS
-type OSFileSystem struct{}
-
-func (OSFileSystem) UserHomeDir() (string, error) { return os.UserHomeDir() }
-func (OSFileSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
-func (OSFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(path, data, perm)
-}
-func (OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
-}
-
-// State holds application persistent state that is managed by the app.
-type State struct {
-	CurrentSessionID string `json:"current_session_id"`
-	Model            string `json:"model"`
-}
-
-// Loader handles state loading with injected dependencies
-type Loader struct {
+// Manager handles state loading and saving with injected dependencies
+type Manager struct {
 	fs FileSystem
 }
 
-func NewLoader() *Loader {
-	return &Loader{fs: OSFileSystem{}}
+// NewManager creates a new Manager with the provided filesystem
+func NewManager(fs FileSystem) *Manager {
+	if fs == nil {
+		panic("fs is required")
+	}
+	return &Manager{fs: fs}
 }
 
-func NewLoaderWithFS(fs FileSystem) *Loader {
-	return &Loader{fs: fs}
+// State holds application persistent state.
+type State struct {
+	currentSessionID string
+	model            string
+	saveFn           func() error
+}
+
+// Model returns the current model.
+func (s *State) Model() string {
+	return s.model
+}
+
+// SetModel sets the current model.
+func (s *State) SetModel(m string) {
+	s.model = m
+}
+
+// CurrentSessionID returns the current session ID.
+func (s *State) CurrentSessionID() string {
+	return s.currentSessionID
+}
+
+// SetCurrentSessionID sets the current session ID.
+func (s *State) SetCurrentSessionID(id string) {
+	s.currentSessionID = id
+}
+
+// Save persists the state using the manager it was loaded from.
+func (s *State) Save() error {
+	if s.saveFn == nil {
+		return fmt.Errorf("state not loaded via manager")
+	}
+	return s.saveFn()
+}
+
+// stateDTO is used for JSON persistence.
+type stateDTO struct {
+	CurrentSessionID string `json:"current_session_id"`
+	Model            string `json:"model"`
 }
 
 // Default returns the default application state
 func Default() *State {
 	return &State{
-		Model: "",
+		model: "",
 	}
 }
 
-// Validate checks state values for correctness.
-func (s *State) Validate() error {
-	// Root command will handle uninitialized state gracefully with a friendly message.
-	return nil
-}
-
-// Load reads application state from ~/.config/iav/state.json
-func (l *Loader) Load() (*State, error) {
+// Load reads application state using the injected filesystem.
+func (m *Manager) Load() (*State, error) {
 	s := Default()
 
-	homeDir, err := l.fs.UserHomeDir()
+	homeDir, err := m.fs.UserHomeDir()
 	if err != nil {
 		return s, nil
 	}
 
 	statePath := filepath.Join(homeDir, ".config", ConfigDir, StateFile)
 
-	data, err := l.fs.ReadFile(statePath)
+	data, err := m.fs.ReadFile(statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return s, nil
@@ -83,24 +100,25 @@ func (l *Loader) Load() (*State, error) {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(data, s); err != nil {
+	var dto stateDTO
+	if err := json.Unmarshal(data, &dto); err != nil {
 		return nil, err
 	}
 
-	if err := s.Validate(); err != nil {
-		return nil, err
-	}
+	s.currentSessionID = dto.CurrentSessionID
+	s.model = dto.Model
+	s.saveFn = func() error { return m.Save(s) }
 
 	return s, nil
 }
 
-// Save writes application state to ~/.config/iav/state.json
-func (l *Loader) Save(s *State) error {
+// Save writes application state using the injected filesystem.
+func (m *Manager) Save(s *State) error {
 	if s == nil {
 		return fmt.Errorf("state is nil")
 	}
 
-	homeDir, err := l.fs.UserHomeDir()
+	homeDir, err := m.fs.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
 	}
@@ -108,22 +126,23 @@ func (l *Loader) Save(s *State) error {
 	configDir := filepath.Join(homeDir, ".config", ConfigDir)
 	statePath := filepath.Join(configDir, StateFile)
 
-	if err := l.fs.MkdirAll(configDir, 0o755); err != nil {
+	if err := m.fs.MkdirAll(configDir, 0o755); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	data, err := json.MarshalIndent(s, "", "  ")
+	dto := stateDTO{
+		CurrentSessionID: s.currentSessionID,
+		Model:            s.model,
+	}
+
+	data, err := json.MarshalIndent(dto, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}
 
-	if err := l.fs.WriteFile(statePath, data, 0644); err != nil {
+	if err := m.fs.WriteFile(statePath, data, 0644); err != nil {
 		return fmt.Errorf("write state file: %w", err)
 	}
 
 	return nil
 }
-
-// Convenience functions using the default loader
-func Load() (*State, error) { return NewLoader().Load() }
-func Save(s *State) error   { return NewLoader().Save(s) }

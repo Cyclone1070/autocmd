@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -21,17 +20,14 @@ type Loop struct {
 func NewLoop(
 	llm domain.LLM,
 	toolRegistry toolRegistry,
-	cfg *config.Config,
+	maxIterations int,
 	events eventSender,
 ) *Loop {
-	if cfg == nil {
-		panic("cfg is required")
-	}
 	return &Loop{
 		llm:           llm,
 		toolExecutor:  newToolExecutor(toolRegistry),
 		events:        events,
-		maxIterations: cfg.Tools.MaxIterations,
+		maxIterations: maxIterations,
 	}
 }
 

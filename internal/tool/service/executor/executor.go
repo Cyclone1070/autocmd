@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"sync"
 	"time"
-
-	"github.com/Cyclone1070/iav/internal/config"
 )
 
 const (
@@ -65,19 +63,13 @@ func NewStreamingCmd(output io.Reader, wait func() (*Result, error)) *StreamingC
 
 // OSCommandExecutor implements command execution using os/exec for real system commands.
 type OSCommandExecutor struct {
-	config *config.Config
-
 	maxOutputSize            int64
 	dockerGracefulShutdownMs int
 }
 
-// NewOSCommandExecutor creates a new OSCommandExecutor with injected config.
-func NewOSCommandExecutor(cfg *config.Config) *OSCommandExecutor {
-	if cfg == nil {
-		panic("cfg is required")
-	}
+// NewOSCommandExecutor creates a new OSCommandExecutor.
+func NewOSCommandExecutor() *OSCommandExecutor {
 	return &OSCommandExecutor{
-		config:                   cfg,
 		maxOutputSize:            defaultMaxOutputSize,
 		dockerGracefulShutdownMs: defaultDockerGracefulShutdownMs,
 	}
@@ -167,17 +159,21 @@ func (f *OSCommandExecutor) RunWithTimeout(ctx context.Context, command []string
 	case err := <-done:
 		execErr = err
 	case <-ctx.Done():
-		_ = cmd.Process.Kill()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
 		execErr = ctx.Err()
 	case <-time.After(timeout):
-		// Try graceful shutdown
-		_ = cmd.Process.Signal(os.Interrupt)
-		select {
-		case <-done:
-			execErr = ErrTimeout
-		case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
-			_ = cmd.Process.Kill()
-			execErr = ErrTimeout
+		if cmd.Process != nil {
+			// Try graceful shutdown
+			_ = cmd.Process.Signal(os.Interrupt)
+			select {
+			case <-done:
+				execErr = ErrTimeout
+			case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
+				_ = cmd.Process.Kill()
+				execErr = ErrTimeout
+			}
 		}
 	}
 

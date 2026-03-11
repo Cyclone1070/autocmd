@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/picker"
@@ -94,7 +95,7 @@ func (w *sessionPickerWrapper) mapSessionsToItems(sessions []domain.SessionSumma
 			ID:     s.ID,
 			Label:  name,
 			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
-			Active: s.ID == w.state.CurrentSessionID,
+			Active: s.ID == w.state.CurrentSessionID(),
 			Group:  getDateGroup(s.Updated),
 		})
 	}
@@ -120,17 +121,21 @@ func getDateGroup(t time.Time) string {
 }
 
 func runSessionPicker() error {
-	cfg, err := config.Load()
+	bootstrapFS := fs.NewOSFileSystem(-1)
+
+	configMgr := config.NewManager(bootstrapFS)
+	cfg, err := configMgr.Load()
 	if err != nil {
 		return err
 	}
 
-	appState, err := state.Load()
+	stateMgr := state.NewManager(bootstrapFS)
+	appState, err := stateMgr.Load()
 	if err != nil {
 		return err
 	}
 
-	store, err := buildSessionStore(cfg)
+	store, err := buildSessionStore(cfg, bootstrapFS)
 	if err != nil {
 		return err
 	}
@@ -163,8 +168,8 @@ func runSessionPicker() error {
 					if err != nil {
 						return nil
 					}
-					appState.CurrentSessionID = sess.ID
-					_ = state.Save(appState)
+					appState.SetCurrentSessionID(sess.ID)
+					_ = appState.Save()
 					wrapper.newSessionCreated = true
 					return nil
 				},
@@ -185,9 +190,9 @@ func runSessionPicker() error {
 				Label: "delete",
 				Fn: func(item picker.Item) tea.Cmd {
 					_ = store.Delete(item.ID)
-					if item.ID == appState.CurrentSessionID {
-						appState.CurrentSessionID = ""
-						_ = state.Save(appState)
+					if item.ID == appState.CurrentSessionID() {
+						appState.SetCurrentSessionID("")
+						_ = appState.Save()
 					}
 					summaries, _ := store.List()
 					wrapper.picker.RefreshItems(wrapper.mapSessionsToItems(summaries))
@@ -207,8 +212,8 @@ func runSessionPicker() error {
 	if wrapper.newSessionCreated {
 		fmt.Printf("Started new session\n")
 	} else if selected, ok := wrapper.picker.Selected(); ok {
-		appState.CurrentSessionID = selected.ID
-		_ = state.Save(appState)
+		appState.SetCurrentSessionID(selected.ID)
+		_ = appState.Save()
 		fmt.Printf("Selected session\n")
 	}
 

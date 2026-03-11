@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
@@ -196,8 +195,7 @@ func TestListDirTool_Validation(t *testing.T) {
 	fs.createDir("/workspace/src")
 	fs.createFile("/workspace/file.txt", []byte("content"), 0o644)
 
-	cfg := config.DefaultConfig()
-	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
 
 	tests := []struct {
 		name    string
@@ -260,8 +258,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	fs.createFile("/workspace/src/utils.go", []byte{}, 0644)
 	fs.createFile("/workspace/README.md", []byte{}, 0644)
 
-	cfg := config.DefaultConfig()
-	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
 
 	// Prepare
 	req := ListDirRequest{Path: "src"}
@@ -320,8 +317,7 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 		fs.createFile(fmt.Sprintf("/workspace/big/file_%d.txt", i), []byte{}, 0644)
 	}
 
-	cfg := config.DefaultConfig()
-	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
 	toolInstance.maxResults = 100 // Override for testing truncation
 
 	req := ListDirRequest{Path: "big"}
@@ -351,8 +347,7 @@ func TestListDirTool_Execute_Ignore(t *testing.T) {
 	fs.createFile("/workspace/file.txt", []byte{}, 0644)
 	fs.createFile("/workspace/test.log", []byte{}, 0644)
 
-	cfg := config.DefaultConfig()
-	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
 
 	req := ListDirRequest{
 		Path:   ".",
@@ -383,8 +378,7 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 	fs.createDir("/workspace")
 	fs.createDir("/workspace/temp")
 
-	cfg := config.DefaultConfig()
-	toolInstance := NewListDirectoryTool(fs, cfg, path.NewResolver(workspaceRoot), nil)
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
 
 	// 1. Prepare (Success)
 	req := ListDirRequest{Path: "temp"}

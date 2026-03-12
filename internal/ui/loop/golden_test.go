@@ -146,7 +146,11 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 
 type dummyBus struct{}
 
-func (d dummyBus) UIUpdates() <-chan domain.UIUpdate { return nil }
+func (d dummyBus) UIUpdates() <-chan domain.UIUpdate {
+	c := make(chan domain.UIUpdate)
+	close(c)
+	return c
+}
 func (d dummyBus) SendAction(domain.Action)           {}
 
 func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...LoopElement) {

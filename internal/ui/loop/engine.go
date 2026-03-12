@@ -26,6 +26,9 @@ type eventMsg struct {
 	update domain.UIUpdate
 }
 
+// pollRequestedMsg is a marker for tests indicating a poll started.
+type pollRequestedMsg struct{}
+
 type toolState struct {
 	id      string
 	display domain.ToolDisplay
@@ -66,14 +69,22 @@ type Model struct {
 	flush      func(string) tea.Cmd
 	isWaiting  bool
 	isDone     bool
+	poll       func() tea.Cmd
+	tickDelay  time.Duration
 }
 
 // Option is a functional option for configuring the Model.
 type Option func(*Model)
-// WithFlush sets the flush function for the model.
 func WithFlush(f func(string) tea.Cmd) Option {
 	return func(m *Model) {
 		m.flush = f
+	}
+}
+
+// WithPoll sets the polling function for the model.
+func WithPoll(f func() tea.Cmd) Option {
+	return func(m *Model) {
+		m.poll = f
 	}
 }
 
@@ -81,6 +92,20 @@ func WithFlush(f func(string) tea.Cmd) Option {
 func WithIsDark(dark bool) Option {
 	return func(m *Model) {
 		m.stream.renderer = ui.NewGlamourRenderer(m.width, dark)
+	}
+}
+
+// WithTickDelay sets the delay for streaming ticks.
+func WithTickDelay(d time.Duration) Option {
+	return func(m *Model) {
+		m.tickDelay = d
+	}
+}
+
+// WithSpinner sets the spinner model for the model.
+func WithSpinner(s spinner.Model) Option {
+	return func(m *Model) {
+		m.spinner = s
 	}
 }
 
@@ -128,7 +153,9 @@ func NewModel(b bus, themeCfg ui.ThemeConfig, chatWindowWidth int, opts ...Optio
 				func() tea.Msg { return flushDoneMsg{} },
 			)
 		},
+		tickDelay: 16 * time.Millisecond,
 	}
+	m.poll = m.waitForEvent // Default: use the real bus listener
 
 	for _, opt := range opts {
 		opt(m)
@@ -139,7 +166,7 @@ func NewModel(b bus, themeCfg ui.ThemeConfig, chatWindowWidth int, opts ...Optio
 
 // Init initializes the model.
 func (m *Model) Init() tea.Cmd {
-	return m.waitForEvent()
+	return m.poll()
 }
 
 // Update handles messages and returns mutated model and commands.
@@ -249,10 +276,10 @@ func (m *Model) handleInterrupt() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) ensureEventListener() tea.Cmd {
-	if m.isWaiting {
+	if m.isWaiting || m.isStreaming {
 		return nil
 	}
-	return m.waitForEvent()
+	return m.poll()
 }
 
 func (m *Model) flushPrintQueue() tea.Cmd {
@@ -335,7 +362,15 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		// Continue loop to process next event immediately
+		
+		// If there are more events, yield to allow the UI to reflect state changes
+		// (like starting the thinking spinner or updating tool status) before
+		// processing subsequent text or tools.
+		if len(m.queue) > 0 {
+			// Reuse streamTick to yield
+			cmds = append(cmds, m.streamTick())
+			return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
+		}
 	}
 
 	if m.isDone && !m.isStreaming && len(m.queue) == 0 {
@@ -545,7 +580,7 @@ func (m *Model) renderTool(ts *toolState) string {
 }
 
 func (m *Model) streamTick() tea.Cmd {
-	return tea.Tick(time.Millisecond*16, func(t time.Time) tea.Msg {
+	return tea.Tick(m.tickDelay, func(t time.Time) tea.Msg {
 		return streamTickMsg{}
 	})
 }

@@ -129,6 +129,47 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	llm.AssertExpectations(t)
 }
 
+func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	registry := new(mockToolRegistry)
+	agent := new(mockAgent)
+	bus := NewEventBus()
+
+	appState := &state.State{}
+	appState.SetCurrentSessionID("existing-id")
+
+	sess := &domain.Session{ID: "existing-id", Name: "Existing Session"}
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        appState,
+		ToolRegistry: registry,
+		Agent:        agent,
+		Bus:          bus,
+	}
+
+	store.On("Get", "existing-id").Return(sess, nil)
+	store.On("Save", mock.Anything).Return(nil)
+
+	agent.On("Run", mock.Anything, sess, "hello").Return(nil)
+
+	done := RunPrompt(ctx, "hello", deps)
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("RunPrompt did not complete for existing named session (possible deadlock on nameChan)")
+	}
+
+	store.AssertNotCalled(t, "GenerateName", mock.Anything, mock.Anything, mock.Anything)
+}
+
 type mockStream struct {
 	mock.Mock
 }

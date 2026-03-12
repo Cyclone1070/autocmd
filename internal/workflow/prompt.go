@@ -106,6 +106,9 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 				nameChan <- name
 			}
 		}()
+	} else {
+		// Session already has a name; ensure receivers don't block waiting for naming.
+		close(nameChan)
 	}
 
 	// Monitor for workflow actions (e.g. StopAction)

@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
@@ -65,8 +64,9 @@ type Model struct {
 	queue       []domain.UIUpdate
 	isStreaming bool
 
-	printQueue []string
-	flush      func(string) tea.Cmd
+	animator *textAnimator
+	flusher  *flushCoordinator
+	flush    func(string) tea.Cmd
 	isWaiting  bool
 	isDone     bool
 	poll       func() tea.Cmd
@@ -147,6 +147,8 @@ func NewModel(b bus, themeCfg ui.ThemeConfig, chatWindowWidth int, opts ...Optio
 		height:      height,
 		spinner:     s,
 		activeTools: make(map[string]*toolState),
+		animator:    newTextAnimator(4),
+		flusher:     newFlushCoordinator(),
 		flush: func(content string) tea.Cmd {
 			return tea.Sequence(
 				tea.Printf("%s", content),
@@ -267,6 +269,7 @@ func (m *Model) handleInterrupt() (tea.Model, tea.Cmd) {
 	// 3. Clear transient state
 	m.isStreaming = false
 	m.queue = nil
+	_ = m.animator.FlushAll()
 
 	flushCmd := m.flushPrintQueue()
 	if flushCmd == nil {
@@ -283,91 +286,53 @@ func (m *Model) ensureEventListener() tea.Cmd {
 }
 
 func (m *Model) flushPrintQueue() tea.Cmd {
-	if len(m.printQueue) > 0 {
-		content := strings.Join(m.printQueue, "")
-		m.printQueue = nil
-		return m.flush(strings.TrimRight(content, "\n"))
+	content, ok := m.flusher.Flush()
+	if !ok {
+		return nil
 	}
-	return nil
+	return m.flush(strings.TrimRight(content, "\n"))
 }
 
 func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	for len(m.queue) > 0 {
-		ev := m.queue[0]
-
-		if te, ok := ev.(domain.TextEvent); ok {
-			// If empty text event, just pop and continue
-			if len(te.Text) == 0 {
-				m.queue = m.queue[1:]
+	for m.animator.HasPending() || len(m.queue) > 0 {
+		if m.animator.HasPending() {
+			chunk, ok := m.animator.NextChunk()
+			if !ok {
 				continue
 			}
-
-			// Pre-split the text into chunks of up to 4 runes
-			var chunks []domain.TextEvent
-			text := te.Text
-			for len(text) > 0 {
-				count := 0
-				byteOffset := 0
-				for count < 4 && byteOffset < len(text) {
-					_, size := utf8.DecodeRuneInString(text[byteOffset:])
-					byteOffset += size
-					count++
-				}
-				chunks = append(chunks, domain.TextEvent{Text: text[:byteOffset]})
-				text = text[byteOffset:]
-			}
-
-			// Sub the big event out for the smaller ones in that exact slot
-			if len(chunks) > 1 {
-				newQueue := make([]domain.UIUpdate, 0, len(chunks)+len(m.queue)-1)
-				for _, c := range chunks {
-					newQueue = append(newQueue, c) 
-				}
-				newQueue = append(newQueue, m.queue[1:]...)
-				m.queue = newQueue
-
-				// Update te to the first chunk
-				te = m.queue[0].(domain.TextEvent)
-			} else {
-				// Ensure te refers to the exact single chunk
-				te = chunks[0]
-			}
-
-			tm, cmd := m.handleEvent(te)
+			tm, cmd := m.handleEvent(domain.TextEvent{Text: chunk})
 			m = tm.(*Model)
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-
-			// Text chunk finished, pop
-			m.queue = m.queue[1:]
-
-			// If there are more events following (including DoneEvent), wait for a tick
-			// to allow the terminal to render the current chunk before quitting or starting tools.
-			if len(m.queue) > 0 {
+			if m.animator.HasPending() || len(m.queue) > 0 {
 				m.isStreaming = true
 				cmds = append(cmds, m.streamTick())
 				return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 			}
-
 			continue
 		}
 
-		// Non-text event: pop and process
+		ev := m.queue[0]
+		if te, ok := ev.(domain.TextEvent); ok {
+			if len(te.Text) == 0 {
+				m.queue = m.queue[1:]
+				continue
+			}
+			m.animator.Enqueue(te.Text)
+			m.queue = m.queue[1:]
+			continue
+		}
+
 		m.queue = m.queue[1:]
 		tm, cmd := m.handleEvent(ev)
 		m = tm.(*Model)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		
-		// If there are more events, yield to allow the UI to reflect state changes
-		// (like starting the thinking spinner or updating tool status) before
-		// processing subsequent text or tools.
 		if len(m.queue) > 0 {
-			// Reuse streamTick to yield
 			cmds = append(cmds, m.streamTick())
 			return m, tea.Batch(tea.Batch(cmds...), tea.Sequence(m.flushPrintQueue(), m.ensureEventListener()))
 		}
@@ -390,14 +355,14 @@ func (m *Model) processQueue() (tea.Model, tea.Cmd) {
 func (m *Model) flushAll() {
 	flushed := m.stream.Flush()
 	if len(flushed) > 0 {
-		m.printQueue = append(m.printQueue, flushed...)
+		m.flusher.Enqueue(flushed...)
 	}
 
 	// Force graduate everything remaining (e.g. on DoneEvent)
 	for len(m.toolOrder) > 0 {
 		id := m.toolOrder[0]
 		ts := m.activeTools[id]
-		m.printQueue = append(m.printQueue, m.renderTool(ts))
+		m.flusher.Enqueue(m.renderTool(ts))
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -415,10 +380,10 @@ func (m *Model) flushFinishedTools() {
 		// Flush any pending text before tool box to preserve sequence
 		flushed := m.stream.Flush()
 		if len(flushed) > 0 {
-			m.printQueue = append(m.printQueue, flushed...)
+			m.flusher.Enqueue(flushed...)
 		}
 
-		m.printQueue = append(m.printQueue, m.renderTool(ts))
+		m.flusher.Enqueue(m.renderTool(ts))
 		delete(m.activeTools, id)
 		m.toolOrder = m.toolOrder[1:]
 	}
@@ -440,7 +405,7 @@ func (m *Model) handleEvent(event domain.UIUpdate) (tea.Model, tea.Cmd) {
 	case domain.ThinkingEvent:
 		// Flush any pending text before switching to thinking state
 		flushed := m.stream.Flush()
-		m.printQueue = append(m.printQueue, flushed...)
+		m.flusher.Enqueue(flushed...)
 
 		m.isThinking = true
 		m.thinkStart = time.Now()
@@ -449,13 +414,13 @@ func (m *Model) handleEvent(event domain.UIUpdate) (tea.Model, tea.Cmd) {
 	case domain.TextEvent:
 		flushed := m.stream.Append(ev.Text)
 		if len(flushed) > 0 {
-			m.printQueue = append(m.printQueue, flushed...)
+			m.flusher.Enqueue(flushed...)
 		}
 
 	case domain.ToolStartEvent:
 		// Flush any pending text before starting a tool
 		flushed := m.stream.Flush()
-		m.printQueue = append(m.printQueue, flushed...)
+		m.flusher.Enqueue(flushed...)
 
 		ts := &toolState{
 			id:      ev.CallID,
@@ -543,7 +508,7 @@ func (m *Model) flushThinking(status ui.ToolStatus) {
 	}
 
 	style := lipgloss.NewStyle().Foreground(textColor)
-	m.printQueue = append(m.printQueue, fmt.Sprintf("\n %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
+	m.flusher.Enqueue(fmt.Sprintf("\n %s %s\n", prefix, style.Render(fmt.Sprintf("Thought for %v", finalDuration))))
 }
 
 func (m *Model) waitForEvent() tea.Cmd {

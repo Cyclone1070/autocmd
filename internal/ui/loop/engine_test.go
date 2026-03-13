@@ -233,8 +233,8 @@ func TestModel_Update_SmoothStreaming(t *testing.T) {
 	// 1. Send text event
 	tm, cmd := m.Update(msg)
 	m = tm.(*Model)
-	assert.Len(t, m.queue, 1)
-	assert.Equal(t, "5678", m.queue[0].(domain.TextEvent).Text)
+	assert.Equal(t, "5678", m.animator.Pending())
+	assert.Empty(t, m.queue)
 	assert.NotNil(t, cmd)
 
 	// Extract tick from batch
@@ -242,9 +242,10 @@ func TestModel_Update_SmoothStreaming(t *testing.T) {
 	tickMsg := extractTickFromMsgs(msgs)
 	assert.NotNil(t, tickMsg)
 
-	// 2. Process Tick 1 -> should process remaining "5678" and leave queue empty
+	// 2. Process Tick 1 -> should process remaining "5678" and leave animator empty
 	tm, cmd = m.Update(tickMsg)
 	m = tm.(*Model)
+	assert.False(t, m.animator.HasPending())
 	assert.Empty(t, m.queue)
 	assert.Equal(t, "12345678", m.stream.buffer)
 
@@ -449,7 +450,7 @@ func TestModel_Update_KeyMsg_Quit_InstantWipe(t *testing.T) {
 	assert.False(t, m.isStreaming, "Streaming state should be wiped instantly on Ctrl+C")
 	assert.Empty(t, m.activeTools, "Active tools should be cleared after flushing")
 
-	assert.Empty(t, m.printQueue, "printQueue should be empty because it was flushed to tea.Cmd")
+	assert.True(t, m.flusher.IsEmpty(), "flusher should be empty because it was flushed to tea.Cmd")
 
 	// 4. ASSERT: Action sent to workflow
 	select {
@@ -675,7 +676,7 @@ func TestModel_Update_Interleaved_ThinkingLeapfrog_Done(t *testing.T) {
 
 	// 2. Step once to start ticking. "Text" is taken, " 1" remains.
 	q.step()
-	assert.NotEmpty(t, q.m.queue, "Text should still be in queue")
+	assert.True(t, q.m.animator.HasPending() || len(q.m.queue) > 0, "Text should still be in animator or queue")
 
 	// 3. Send Thinking (Turn 2) - should be buffered
 	q.push(func() tea.Msg { return eventMsg{update: domain.ThinkingEvent{}} })
@@ -998,8 +999,8 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	m = tm.(*Model)
 
 	assert.Equal(t, "KEEPDISC", m.stream.buffer)
-	assert.Len(t, m.queue, 1)
-	assert.Equal(t, "ARD", m.queue[0].(domain.TextEvent).Text)
+	assert.Equal(t, "ARD", m.animator.Pending())
+	assert.Empty(t, m.queue)
 	assert.Empty(t, tracker.signals)
 
 	// 2. Ctrl+C (Emergency Exit)
@@ -1012,6 +1013,7 @@ func TestFlush_OnInterrupt(t *testing.T) {
 	assert.Contains(t, allSignals, "KEEP", "Buffer tail should be signaled on interrupt")
 	assert.NotContains(t, allSignals, "DISCARD", "queue should be discarded on interrupt")
 	assert.Empty(t, m.queue, "Interrupt should leave queue empty")
+	assert.False(t, m.animator.HasPending(), "Interrupt should clear animator")
 }
 
 func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
@@ -1024,7 +1026,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 
 	// 1. Manually seed printQueue as if a handler forgot to flush
 	// (or as if we want to ensure any branch flushes)
-	m.printQueue = []string{"TRAPPED"}
+	m.flusher.Enqueue("TRAPPED")
 
 	// 2. Send spinner.TickMsg
 	tm, cmd := m.Update(spinner.TickMsg{})
@@ -1034,7 +1036,7 @@ func TestIssue_FinalizerBypass_SpinnerTick(t *testing.T) {
 	// Assertion: In the current bugged state, tracker.signals will be empty
 	// because return m, cmd bypasses continueEventLoop().
 	assert.Contains(t, strings.Join(tracker.signals, ""), "TRAPPED", "Spinner tick should still trigger finalization if output is pending")
-	assert.Empty(t, m.printQueue, "printQueue should be cleared even on spinner tick")
+	assert.True(t, m.flusher.IsEmpty(), "flusher should be cleared even on spinner tick")
 }
 
 func TestIssue_RenderingFallback(t *testing.T) {
@@ -1224,20 +1226,12 @@ func TestModel_Update_UnrollTextEvent_QueueSplitting(t *testing.T) {
 	// Send a BigTextEvent
 	msg := eventMsg{update: domain.TextEvent{Text: "1234567890"}} // 10 chars
 
-	// Process it. It should process "1234", and leave "5678" and "90" as separate TextEvents in the queue.
+	// Process it. It should process "1234", and leave "567890" in the animator.
 	m2, cmd := m.Update(msg)
 	m = m2.(*Model)
 
 	assert.NotNil(t, cmd, "Should return a command (stream tick)")
-	assert.Len(t, m.queue, 2, "Queue should contain exactly 2 remaining items")
-
-	te1, ok := m.queue[0].(domain.TextEvent)
-	assert.True(t, ok, "First remaining item should be a TextEvent")
-	assert.Equal(t, "5678", te1.Text, "First remaining item should be next 4 runes")
-
-	te2, ok := m.queue[1].(domain.TextEvent)
-	assert.True(t, ok, "Second remaining item should be a TextEvent")
-	assert.Equal(t, "90", te2.Text, "Second remaining item should be the last 2 runes")
+	assert.Equal(t, "567890", m.animator.Pending(), "Remaining text should be in animator")
 }
 
 func TestModel_Update_WindowSize_NoResize(t *testing.T) {
@@ -1421,7 +1415,7 @@ func TestModel_DeterministicHandshake(t *testing.T) {
 	m := NewTestModel(events, nil, tracker)
 
 	// 1. Manually put something in the print queue to guarantee a flush command
-	m.printQueue = append(m.printQueue, "Force flush content")
+	m.flusher.Enqueue("Force flush content")
 
 	// 2. Trigger flush (DoneEvent calls flushPrintQueue)
 	tm, cmd := m.Update( eventMsg{update: domain.DoneEvent{}})
@@ -1452,7 +1446,7 @@ func TestModel_Race_LostLastFrame(t *testing.T) {
 	m := NewTestModel(events, nil, tracker)
 
 	// 1. Manually put something in printQueue that hasn't been flushed yet
-	m.printQueue = []string{"Last Frame Content"}
+	m.flusher.Enqueue("Last Frame Content")
 
 	// 2. UI is ready to quit. Trigger with DoneEvent.
 	tm, cmd := m.Update( eventMsg{update: domain.DoneEvent{}})
@@ -1481,7 +1475,7 @@ func TestModel_DeterministicExit_Handshake_After_Nil(t *testing.T) {
 	m := NewTestModel(events, nil, tracker)
 
 	// 1. Set up pending handshake
-	m.printQueue = []string{"Handshake Content"}
+	m.flusher.Enqueue("Handshake Content")
 	m.isStreaming = false 
 	tm, cmd := m.Update( eventMsg{update: domain.DoneEvent{}})
 	m = tm.(*Model)

@@ -28,7 +28,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var debug bool
@@ -137,7 +139,33 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		MutedColor:   ui.ToAdaptiveColor(cfg.UI().MutedColor()),
 		ShortToolbox: cfg.UI().ShortToolbox(),
 	}
-	uiModel := loop.NewModel(bus, themeCfg, cfg.UI().ChatWindowWidth())
+	// Calculate width capping at terminal size
+	chatWidth := cfg.UI().ChatWindowWidth()
+	if termWidth, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termWidth > 0 {
+		if chatWidth <= 0 || termWidth < chatWidth {
+			chatWidth = termWidth
+		}
+	}
+
+	// Loop UI Wiring
+	glamour := ui.NewGlamourRenderer(chatWidth, true)
+	stream := loop.NewStream(glamour)
+	animator := loop.NewTextAnimator(4) // 4 runes per tick
+	
+	theme := ui.NewTheme(themeCfg)
+	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
+	thinking := loop.NewThinkingRenderer(theme)
+	tooling := ui.NewToolRenderer(theme, chatWidth)
+	
+	uiModel := loop.NewModel(
+		bus,
+		thinking,
+		tooling,
+		spinner,
+		stream,
+		animator,
+		chatWidth,
+	)
 
 	deps := &workflow.PromptDeps{
 		State:        appState,

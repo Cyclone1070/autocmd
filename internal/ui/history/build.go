@@ -116,32 +116,28 @@ func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, mes
 			}
 		}
 
-		var rendered string
-		prefix := lipgloss.NewStyle().Foreground(theme.SuccessColor()).Render("✔")
-		if status == ui.StatusError {
-			prefix = lipgloss.NewStyle().Foreground(theme.ErrorColor()).Render("✘")
-		}
-
 		// Use width-2 for the content to account for the box borders,
 		// matching the logic in engine.go
 		boxWidth := width - 2
-
+		tooling := ui.NewToolRenderer(theme, width)
+		prefix := tooling.StatusPrefix(status, "")
+		var rendered string
 		switch d := display.(type) {
 		case domain.StringDisplay:
-			rendered = ui.RenderString(theme, d, status, toolErr, prefix)
+			rendered = tooling.RenderString(d, status, toolErr, prefix)
 		case domain.DiffDisplay:
-			rendered = ui.RenderDiff(boxWidth, 10, theme, d, status, toolErr, prefix)
+			rendered = tooling.RenderDiff(d, status, toolErr, prefix)
 		case domain.ShellDisplay:
 			// Prefer baked captured output over the decorated toolOutput (which includes exit codes for LLM)
 			output := toolOutput
 			if d.CapturedOutput != nil {
 				output = *d.CapturedOutput
 			}
-			rendered = ui.RenderShell(boxWidth, 10, theme, d, output, status, toolErr, prefix)
+			rendered = tooling.RenderShell(d, output, status, toolErr, prefix)
 		}
 
 		if rendered != "" {
-			fmt.Fprint(sb, theme.Box(rendered, boxWidth, status))
+			fmt.Fprint(sb, tooling.Box(rendered, boxWidth, status))
 		}
 	}
 }

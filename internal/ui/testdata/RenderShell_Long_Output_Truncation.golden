@@ -1,17 +1,15 @@
- ✓ # Log 
-   
-   $ cat log.txt
-   
-     ▲ [3 lines truncated]
-   line
-   line
-   line
-   line
-   line
-   line
-   line
-   line
-   line
-   line
-   line
-   line
+✓# Log
+ 
+ $ cat log.txt
+ 
+   ▲ [5 lines truncated]
+ line
+ line
+ line
+ line
+ line
+ line
+ line
+ line
+ line
+ line

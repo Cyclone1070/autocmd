@@ -8,7 +8,7 @@ import (
 
 func TestTextAnimator_EmptyEnqueue_NoOp(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("")
 	assert.False(t, a.HasPending())
 	_, ok := a.NextChunk()
@@ -17,7 +17,7 @@ func TestTextAnimator_EmptyEnqueue_NoOp(t *testing.T) {
 
 func TestTextAnimator_SingleChunk_ReturnsWholeThenEmpty(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("Hi")
 	assert.True(t, a.HasPending())
 
@@ -32,7 +32,7 @@ func TestTextAnimator_SingleChunk_ReturnsWholeThenEmpty(t *testing.T) {
 
 func TestTextAnimator_MultiChunk_ExactRuneCount(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("12345678")
 
 	chunk, ok := a.NextChunk()
@@ -50,7 +50,7 @@ func TestTextAnimator_MultiChunk_ExactRuneCount(t *testing.T) {
 
 func TestTextAnimator_MultiByteRunes_NoSplit(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	// 4 CJK characters (each 3 bytes in UTF-8)
 	a.Enqueue("日本語韓")
 
@@ -64,7 +64,7 @@ func TestTextAnimator_MultiByteRunes_NoSplit(t *testing.T) {
 
 func TestTextAnimator_FlushAll_ReturnsAndClears(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("ABC")
 	a.NextChunk() // consume "ABC", nothing left for 4 runes
 	a.Enqueue("XYZ")
@@ -79,14 +79,14 @@ func TestTextAnimator_FlushAll_ReturnsAndClears(t *testing.T) {
 
 func TestTextAnimator_FlushAll_EmptyReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	got := a.FlushAll()
 	assert.Equal(t, "", got)
 }
 
 func TestTextAnimator_HasPending_Accuracy(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("12")
 	assert.True(t, a.HasPending())
 	a.NextChunk()
@@ -99,7 +99,7 @@ func TestTextAnimator_HasPending_Accuracy(t *testing.T) {
 
 func TestTextAnimator_SequentialEnqueue_Accumulates(t *testing.T) {
 	t.Parallel()
-	a := newTextAnimator(4)
+	a := NewTextAnimator(4)
 	a.Enqueue("AB")
 	a.Enqueue("CD")
 

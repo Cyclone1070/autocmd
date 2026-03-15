@@ -2,18 +2,19 @@ package loop
 
 import "unicode/utf8"
 
-// textAnimator splits text into fixed-size rune chunks for streaming animation.
-type textAnimator struct {
+// TextAnimator splits text into fixed-size rune chunks for streaming animation.
+type TextAnimator struct {
 	pending      string
 	runesPerTick int
 }
 
-func newTextAnimator(runesPerTick int) *textAnimator {
-	return &textAnimator{runesPerTick: runesPerTick}
+// NewTextAnimator creates a new TextAnimator.
+func NewTextAnimator(runesPerTick int) *TextAnimator {
+	return &TextAnimator{runesPerTick: runesPerTick}
 }
 
 // Enqueue appends text to the internal pending buffer. Calling with "" is a no-op.
-func (a *textAnimator) Enqueue(text string) {
+func (a *TextAnimator) Enqueue(text string) {
 	if text == "" {
 		return
 	}
@@ -22,7 +23,7 @@ func (a *textAnimator) Enqueue(text string) {
 
 // NextChunk returns the next chunk of up to runesPerTick runes from pending and advances.
 // Returns ("", false) when pending is empty. Rune-boundary safe.
-func (a *textAnimator) NextChunk() (string, bool) {
+func (a *TextAnimator) NextChunk() (string, bool) {
 	if a.pending == "" {
 		return "", false
 	}
@@ -39,18 +40,18 @@ func (a *textAnimator) NextChunk() (string, bool) {
 }
 
 // HasPending returns true if there is content remaining in the pending buffer.
-func (a *textAnimator) HasPending() bool {
+func (a *TextAnimator) HasPending() bool {
 	return len(a.pending) > 0
 }
 
-// FlushAll returns the entirety of pending and clears it. Returns "" if nothing pending.
-func (a *textAnimator) FlushAll() string {
+// FlushAll returns all pending content and clears the buffer.
+func (a *TextAnimator) FlushAll() string {
 	out := a.pending
 	a.pending = ""
 	return out
 }
 
 // Pending returns read-only access to the pending buffer (for test assertions).
-func (a *textAnimator) Pending() string {
+func (a *TextAnimator) Pending() string {
 	return a.pending
 }

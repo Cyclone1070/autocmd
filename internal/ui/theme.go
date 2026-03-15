@@ -60,9 +60,23 @@ func NewTheme(cfg ThemeConfig) *Theme {
 		box: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(cfg.MutedColor).
-			Padding(0, 0).
+			Padding(0, 1). // Add horizontal padding for breathing room
 			MarginTop(0).
 			MarginBottom(0),
+	}
+}
+
+// StatusPrefix returns a styled icon with a trailing space.
+func (t *Theme) StatusPrefix(status ToolStatus, frame string) string {
+	switch status {
+	case StatusRunning:
+		return t.Primary(frame) + " "
+	case StatusSuccess:
+		return t.Success("✔") + " "
+	case StatusError:
+		return t.Error("✘") + " "
+	default:
+		return t.Muted("○") + " "
 	}
 }
 

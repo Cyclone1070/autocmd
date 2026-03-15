@@ -11,40 +11,67 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Pad adds the status prefix to the first line and standard indentation to others.
-func Pad(s string, prefix string) string {
-	lines := strings.Split(s, "\n")
-	w := lipgloss.Width(prefix)
-	if w == 0 {
-		w = 1
-	}
-	indent := strings.Repeat(" ", 1+w+1)
+// ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, ShellDisplay).
+type ToolRenderer struct {
+	Theme    *Theme
+	Width    int
+	MaxLines int
+}
 
-	for i, line := range lines {
-		if i == 0 && prefix != "" {
-			lines[i] = fmt.Sprintf(" %s %s ", prefix, line)
+// NewToolRenderer creates a new ToolRenderer.
+func NewToolRenderer(theme *Theme, width int) *ToolRenderer {
+	return &ToolRenderer{
+		Theme:    theme,
+		Width:    width,
+		MaxLines: 10, // Default
+	}
+}
+
+func (r *ToolRenderer) SetMaxLines(n int) {
+	r.MaxLines = n
+}
+
+func (r *ToolRenderer) SetShortToolbox(b bool) {
+	r.Theme.ShortToolbox = b
+}
+
+// StatusPrefix returns a styled and padded status indicator.
+func (r *ToolRenderer) StatusPrefix(status ToolStatus, frame string) string {
+	return r.Theme.StatusPrefix(status, frame)
+}
+
+// Pad adds the status prefix to the first line and standard indentation to others.
+func (r *ToolRenderer) Pad(text, prefix string) string {
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
+	for i := range lines {
+		if i == 0 {
+			lines[i] = prefix + lines[i]
 		} else {
-			lines[i] = indent + line
+			lines[i] = indent + lines[i]
 		}
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatError(header string, err string, th *Theme) string {
-	return fmt.Sprintf("%s — %s", header, th.Error(err))
+func (r *ToolRenderer) formatError(header string, err string) string {
+	return fmt.Sprintf("%s — %s", header, r.Theme.Error(err))
 }
 
 // RenderString renders StringDisplay.
-func RenderString(th *Theme, d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
+func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
 	s := d.Content
 	if status == StatusError {
-		s = formatError(s, err, th)
+		s = r.formatError(s, err)
 	}
-	return Pad(s, prefix)
+	return r.Pad(s, prefix)
 }
 
 // RenderDiff renders DiffDisplay.
-func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
+func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
 	header := d.Comment
 	target := d.Target
 	if target == "" {
@@ -52,27 +79,27 @@ func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, statu
 	}
 
 	if status == StatusError {
-		header = formatError(header, err, th)
-		header = th.Muted("# " + header)
+		header = r.formatError(header, err)
+		header = r.Theme.Muted("# " + header)
 		parts := []string{header, target}
-		return Pad(strings.Join(parts, "\n\n"), prefix)
+		return r.Pad(strings.Join(parts, "\n\n"), prefix)
 	}
 
 	// Add stats to target if success
 	if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
 		target = fmt.Sprintf("%s (%s, %s)",
 			target,
-			th.Success(fmt.Sprintf("+%d", d.Added)),
-			th.Error(fmt.Sprintf("-%d", d.Removed)))
+			r.Theme.Success(fmt.Sprintf("+%d", d.Added)),
+			r.Theme.Error(fmt.Sprintf("-%d", d.Removed)))
 	}
 
-	header = th.Muted("# " + header)
-	diffContent := colorizeDiff(d.Diff, th)
+	header = r.Theme.Muted("# " + header)
+	diffContent := r.colorizeDiff(d.Diff)
 
 	// Apply truncation if needed
 	lines := strings.Split(diffContent, "\n")
-	if len(lines) > maxDiffHeight && maxDiffHeight > 0 {
-		overflow := len(lines) - maxDiffHeight
+	if len(lines) > r.MaxLines && r.MaxLines > 0 {
+		overflow := len(lines) - r.MaxLines
 		visible := lines[overflow:]
 		indicator := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
 		diffContent = indicator + "\n" + strings.Join(visible, "\n")
@@ -83,45 +110,45 @@ func RenderDiff(width, maxDiffHeight int, th *Theme, d domain.DiffDisplay, statu
 		header,
 		target,
 	}
-	if !th.ShortToolbox {
+	if !r.Theme.ShortToolbox {
 		parts = append(parts, diffContent)
 	}
 
 	content := strings.Join(parts, "\n\n")
-	return Pad(content, prefix)
+	return r.Pad(content, prefix)
 }
 
-func colorizeDiff(diff string, th *Theme) string {
+func (r *ToolRenderer) colorizeDiff(diff string) string {
 	lines := strings.Split(diff, "\n")
 	for i, line := range lines {
 		if strings.HasPrefix(line, "+") {
-			lines[i] = th.Success(line)
+			lines[i] = r.Theme.Success(line)
 		} else if strings.HasPrefix(line, "-") {
-			lines[i] = th.Error(line)
+			lines[i] = r.Theme.Error(line)
 		}
 	}
 	return strings.Join(lines, "\n")
 }
 
 // RenderShell renders ShellDisplay.
-func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
+func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
 	header := d.Comment
 	if status == StatusError {
-		header = formatError(header, err, th)
-		header = th.Muted("# " + header)
+		header = r.formatError(header, err)
+		header = r.Theme.Muted("# " + header)
 		cmdLine := fmt.Sprintf("$ %s", d.Command)
 		content := strings.Join([]string{header, cmdLine}, "\n\n")
-		return Pad(content, prefix)
+		return r.Pad(content, prefix)
 	}
 
-	header = th.Muted("# " + header)
+	header = r.Theme.Muted("# " + header)
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
 	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	var visibleLines []string
 	var indicator string
-	if len(lines) > shellOutputHeight && shellOutputHeight > 0 {
-		overflow := len(lines) - shellOutputHeight
+	if len(lines) > r.MaxLines && r.MaxLines > 0 {
+		overflow := len(lines) - r.MaxLines
 		visibleLines = lines[overflow:]
 		indicator = fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
 	} else {
@@ -137,10 +164,15 @@ func RenderShell(width, shellOutputHeight int, th *Theme, d domain.ShellDisplay,
 		header,
 		cmdLine,
 	}
-	if shellOutput != "" && !th.ShortToolbox {
+	if shellOutput != "" && !r.Theme.ShortToolbox {
 		parts = append(parts, shellOutput)
 	}
 
 	content := strings.Join(parts, "\n\n")
-	return Pad(content, prefix)
+	return r.Pad(content, prefix)
+}
+
+// Box wraps content in a themed box.
+func (r *ToolRenderer) Box(content string, width int, status ToolStatus) string {
+	return r.Theme.Box(content, width, status)
 }

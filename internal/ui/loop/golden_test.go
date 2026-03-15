@@ -13,6 +13,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -162,11 +163,17 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolbox: cfg.ShortToolbox(),
 	}
-	m := NewModel(dummyBus{}, themeCfg, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
+	theme := ui.NewTheme(themeCfg)
+	s := NewStream(renderer)
+	anim := NewTextAnimator(4)
+	thinking := NewThinkingRenderer(theme)
+	tooling := ui.NewToolRenderer(theme, cfg.ChatWindowWidth())
+	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
+
+	m := NewModel(dummyBus{}, thinking, tooling, spinner, s, anim, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))
-	m.stream.renderer = renderer // Force our deterministic renderer
 
 	for _, e := range elems {
 		for _, ev := range e.Events {
@@ -174,6 +181,8 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 			m = res.(*Model)
 		}
 	}
+
+	m = m.DrainAnimationForTest()
 
 	var trace strings.Builder
 	for _, s := range signals {

@@ -369,3 +369,55 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	assert.True(t, res.ToolError)
 	assert.Equal(t, "execution cancelled", res.Content)
 }
+
+func TestToolExecutor_Throughput_Batching(t *testing.T) {
+	// Root cause: The tool executor used to read in 4KB chunks, which fragmented
+	// large bursts of output into many small UI events.
+	// This test verifies that we can now batch larger bursts (e.g. 8KB) into a single event.
+
+	// Prepare 8KB of data
+	data := strings.Repeat("A", 8192)
+
+	mt := &mockTool{
+		name: "throughput-test",
+		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+			return &mockInvocation{
+				content: "done",
+				display: domain.NewShellDisplay("test", "test", strings.NewReader(data), nil),
+			}, nil
+		},
+	}
+
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+
+	sender := newMockEventSender(100)
+
+	_, _, err := executor.execute(context.Background(), domain.ToolCall{
+		ID:   "tc-1",
+		Name: "throughput-test",
+	}, sender)
+
+	assert.NoError(t, err)
+
+	eventCount := 0
+	totalReceived := 0
+loop:
+	for {
+		select {
+		case ev := <-sender.events:
+			if se, ok := ev.(domain.ToolStreamEvent); ok {
+				eventCount++
+				totalReceived += len(se.Chunk)
+			}
+			if _, ok := ev.(domain.ToolEndEvent); ok {
+				break loop
+			}
+		case <-time.After(1 * time.Second):
+			t.Fatal("timed out waiting for events")
+		}
+	}
+
+	assert.Equal(t, 8192, totalReceived, "Should receive all 8KB of data")
+	assert.Equal(t, 1, eventCount, "Should receive all 8KB in a single event when buffer is 1MB")
+}

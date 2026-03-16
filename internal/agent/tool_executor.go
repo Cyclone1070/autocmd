@@ -82,7 +82,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		streamWG.Add(1)
 		go func() {
 			defer streamWG.Done()
-			buf := make([]byte, 4096)
+			buf := make([]byte, 1024*1024)
 			for {
 				n, err := sh.Output.Read(buf)
 				if n > 0 {

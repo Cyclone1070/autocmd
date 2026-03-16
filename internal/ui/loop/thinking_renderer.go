@@ -26,11 +26,11 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 
 	switch status {
 	case ui.StatusRunning:
-		label = r.Theme.Muted(fmt.Sprintf("Thinking for %s...", dur))
+		label = r.Theme.Primary(fmt.Sprintf("Thinking for %s", dur))
 	case ui.StatusSuccess:
-		label = r.Theme.Muted(fmt.Sprintf("Thought for %s", dur))
+		label = r.Theme.Success(fmt.Sprintf("Thought for %s", dur))
 	case ui.StatusError:
-		label = r.Theme.Muted("Thinking")
+		label = r.Theme.Error("Thinking")
 	}
 
 	return fmt.Sprintf("\n %s%s", prefix, label)

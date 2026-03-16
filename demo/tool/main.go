@@ -87,26 +87,53 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-2", Display: display2})
 		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-3", Display: display3})
 
-		// Finishes: 2 (0.5s), 3 (1.5s), 1 (3s)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
-		}
+		// For STRING suite, keep original order:
+		//   2 (0.5s), 3 (1.5s, error), 1 (3s).
+		// For DIFF suite, make 1 finish first, 3 error second, 2 last.
+		if name == "DIFF" {
+			// 1 (0.5s), 3 (1.5s, error), 2 (3s)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+			}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1000 * time.Millisecond):
-			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
-		}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1000 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
+			}
 
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1500 * time.Millisecond):
-			a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1500 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
+			}
+		} else {
+			// Default: 2 (0.5s), 3 (1.5s, error), 1 (3s)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1000 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1500 * time.Millisecond):
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+			}
 		}
 		return nil
 	}

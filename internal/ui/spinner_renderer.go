@@ -2,7 +2,7 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+var spinnerFrames = []string{"⠹", "⢸", "⣰", "⣤", "⣆", "⡇", "⠏", "⠛"}
 
 // SpinnerRenderer handles braille spinner animations.
 type SpinnerRenderer struct {

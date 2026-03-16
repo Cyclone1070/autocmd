@@ -49,7 +49,7 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 
 	t.Run("StatusError", func(t *testing.T) {
 		got := r.RenderThinking(ui.StatusError, time.Now(), 0, sp)
-		expectedLabel := theme.Error("Thinking")
-		assert.Contains(t, got, expectedLabel, "Error label should be Error color")
+		expectedLabel := theme.Error("Thought for 0s")
+		assert.Contains(t, got, expectedLabel, "Error label should be Error color and duration-based")
 	})
 }

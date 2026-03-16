@@ -30,7 +30,7 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 	case ui.StatusSuccess:
 		label = r.Theme.Success(fmt.Sprintf("Thought for %s", dur))
 	case ui.StatusError:
-		label = r.Theme.Error("Thinking")
+		label = r.Theme.Error(fmt.Sprintf("Thought for %s", dur))
 	}
 
 	return fmt.Sprintf("\n %s%s", prefix, label)

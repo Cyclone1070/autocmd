@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -66,7 +67,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := <-done; err != nil {
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Printf("Error running workflow: %v\n", err)
 		os.Exit(1)
 	}

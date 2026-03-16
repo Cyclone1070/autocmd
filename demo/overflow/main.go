@@ -25,12 +25,14 @@ func main() {
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(80)
 
-	// Calculate width capping at terminal size
+	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
-	if termWidth, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termWidth > 0 {
-		if chatWidth <= 0 || termWidth < chatWidth {
-			chatWidth = termWidth
+	termHeight := 25 // Fallback
+	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
+		if chatWidth <= 0 || width < chatWidth {
+			chatWidth = width
 		}
+		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -44,10 +46,10 @@ func main() {
 	s := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
 	anim := loop.NewTextAnimator(4)
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth)
+	tooling := ui.NewToolRenderer(theme, chatWidth, 12)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, chatWidth)
+	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, chatWidth, loop.WithTermHeight(termHeight))
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

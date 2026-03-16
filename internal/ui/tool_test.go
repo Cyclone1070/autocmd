@@ -24,7 +24,14 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 		ShortToolbox: cfg.ShortToolbox(),
 	}
 	theme := NewTheme(themeCfg)
-	return NewToolRenderer(theme, 80)
+	return NewToolRenderer(theme, 80, 12)
+}
+
+func TestToolRenderer_RespectsMaxLines(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	tr := NewToolRenderer(theme, 80, 12)
+	// Specification: Should respect config value (12) instead of hardcoded 10
+	assert.Equal(t, 12, tr.MaxLines, "ToolRenderer should allow setting MaxLines or use a config-driven default")
 }
 
 func assertGolden(t *testing.T, name string, actual string) {

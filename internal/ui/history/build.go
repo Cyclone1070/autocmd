@@ -119,7 +119,7 @@ func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, mes
 		// Use width-2 for the content to account for the box borders,
 		// matching the logic in engine.go
 		boxWidth := width - 2
-		tooling := ui.NewToolRenderer(theme, width)
+		tooling := ui.NewToolRenderer(theme, width, 12)
 		prefix := tooling.StatusPrefix(status, "")
 		var rendered string
 		switch d := display.(type) {

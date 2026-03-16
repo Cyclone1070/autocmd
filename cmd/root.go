@@ -139,14 +139,16 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		MutedColor:   ui.ToAdaptiveColor(cfg.UI().MutedColor()),
 		ShortToolbox: cfg.UI().ShortToolbox(),
 	}
-	// Calculate width capping at terminal size
+	// Calculate width and height capping at terminal size
 	chatWidth := cfg.UI().ChatWindowWidth()
-	if termWidth, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termWidth > 0 {
-		if chatWidth <= 0 || termWidth < chatWidth {
-			chatWidth = termWidth
+	termHeight := 25 // Fallback
+	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
+		if chatWidth <= 0 || width < chatWidth {
+			chatWidth = width
 		}
+		termHeight = height
 	}
-
+	
 	// Loop UI Wiring
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := loop.NewStream(glamour)
@@ -155,7 +157,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth)
+	tooling := ui.NewToolRenderer(theme, chatWidth, cfg.UI().ShellOutputHeight())
 	
 	uiModel := loop.NewModel(
 		bus,
@@ -165,6 +167,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		stream,
 		animator,
 		chatWidth,
+		loop.WithTermHeight(termHeight),
 	)
 
 	deps := &workflow.PromptDeps{

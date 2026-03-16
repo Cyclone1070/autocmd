@@ -145,14 +145,14 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 	}
 }
 
-type dummyBus struct{}
+type dummyBus struct {
+	updates chan domain.UIUpdate
+}
 
 func (d dummyBus) UIUpdates() <-chan domain.UIUpdate {
-	c := make(chan domain.UIUpdate)
-	close(c)
-	return c
+	return d.updates
 }
-func (d dummyBus) SendAction(domain.Action)           {}
+func (d dummyBus) SendAction(domain.Action) {}
 
 func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...LoopElement) {
 	var signals []string
@@ -167,18 +167,36 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 	s := NewStream(renderer)
 	anim := NewTextAnimator(4)
 	thinking := NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, cfg.ChatWindowWidth())
+	tooling := ui.NewToolRenderer(theme, 80, 12)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := NewModel(dummyBus{}, thinking, tooling, spinner, s, anim, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
+	bus := dummyBus{updates: make(chan domain.UIUpdate, 100)}
+	m := NewModel(bus, thinking, tooling, spinner, s, anim, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))
 
 	for _, e := range elems {
 		for _, ev := range e.Events {
-			res, _ := m.Update(eventMsg{update: ev})
-			m = res.(*Model)
+			bus.updates <- ev
+			// Process the event by ticking until we aren't in stateFlushing 
+			// (because handleEvent might trigger a flush)
+			for i := 0; i < 100; i++ {
+				res, _ := m.Update(tickMsg{})
+				m = res.(*Model)
+				
+				// If we are flushing, we must process the flushDoneMsg to move on
+				if m.state == stateFlushing {
+					res, _ = m.Update(flushDoneMsg{})
+					m = res.(*Model)
+				}
+				
+				// Stop ticking if we've reached a stable state and processed the event
+				// (Simplified: we'll call DrainAnimationForTest later for streaming)
+				if m.state != stateStreaming {
+					break 
+				}
+			}
 		}
 	}
 

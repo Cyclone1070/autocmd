@@ -13,9 +13,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
@@ -24,12 +24,14 @@ func main() {
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(80)
 
-	// Calculate width capping at terminal size
+	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
-	if termWidth, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termWidth > 0 {
-		if chatWidth <= 0 || termWidth < chatWidth {
-			chatWidth = termWidth
+	termHeight := 25 // Fallback
+	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
+		if chatWidth <= 0 || width < chatWidth {
+			chatWidth = width
 		}
+		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -43,10 +45,10 @@ func main() {
 	s := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
 	anim := loop.NewTextAnimator(4)
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth)
+	tooling := ui.NewToolRenderer(theme, chatWidth, 12)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, chatWidth)
+	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, chatWidth, loop.WithTermHeight(termHeight))
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},
@@ -108,7 +110,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return nil
 	}
 
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer"})
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n\n"})
 
 	// 1. String Suite
 	if err := runSuite("STRING",
@@ -173,7 +175,7 @@ type mockStore struct{}
 
 func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
 func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
-func (s *mockStore) Save(sess *domain.Session) error       { return nil }
+func (s *mockStore) Save(sess *domain.Session) error        { return nil }
 func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return "Test Session", nil
 }
@@ -186,12 +188,12 @@ func (l *mockLLM) ContextWindow() int  { return 1000 }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
 	return 0, nil
 }
+
 func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
 	return nil, nil
 }
 
-
 type mockRegistry struct{}
 
-func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Declarations() []domain.Declaration  { return nil }
 func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

@@ -19,11 +19,11 @@ type ToolRenderer struct {
 }
 
 // NewToolRenderer creates a new ToolRenderer.
-func NewToolRenderer(theme *Theme, width int) *ToolRenderer {
+func NewToolRenderer(theme *Theme, width int, maxLines int) *ToolRenderer {
 	return &ToolRenderer{
 		Theme:    theme,
 		Width:    width,
-		MaxLines: 10, // Default
+		MaxLines: maxLines,
 	}
 }
 

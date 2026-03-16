@@ -2,7 +2,9 @@
  
  $ cat log.txt
  
-   ▲ [5 lines truncated]
+   ▲ [3 lines truncated]
+ line
+ line
  line
  line
  line

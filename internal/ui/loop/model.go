@@ -1,18 +1,12 @@
 package loop
 
 import (
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
-)
-
-const (
-	runesPerTick = 4
-	boxWidthPad  = 2
 )
 
 type spinnerProvider interface {
@@ -40,6 +34,7 @@ type stream interface {
 type animator interface {
 	Enqueue(text string)
 	NextChunk() (string, bool)
+	HasPending() bool
 	FlushAll() string
 }
 
@@ -55,6 +50,7 @@ const (
 	stateThinking
 	stateStreaming
 	stateTooling
+	stateFlushing
 	stateDone
 )
 
@@ -67,7 +63,6 @@ type toolSlot struct {
 	streamOutput string
 }
 
-// Model is the Bubble Tea model for the prompt path streaming UI.
 type Model struct {
 	state   uiState
 	bus     bus
@@ -75,28 +70,32 @@ type Model struct {
 	animator animator
 	tools   []toolSlot
 	
-	// DI Services
 	thinkingRenderer thinkingRenderer
 	toolRenderer     toolRenderer
 	spinnerProvider  spinnerProvider
 
 	width         int
+	termHeight    int
 	flushFn       func(content string) tea.Cmd
 	thinkingStart time.Time
 	spinnerFrame  int
+	nextState     uiState
 }
 
-// Option configures the Model.
 type Option func(*Model)
 
-// WithFlush sets the function called when content is flushed to history.
 func WithFlush(fn func(content string) tea.Cmd) Option {
 	return func(m *Model) {
 		m.flushFn = fn
 	}
 }
 
-// NewModel creates a new loop Model with strict DI.
+func WithTermHeight(h int) Option {
+	return func(m *Model) {
+		m.termHeight = h
+	}
+}
+
 func NewModel(
 	b bus,
 	tr thinkingRenderer,
@@ -116,6 +115,7 @@ func NewModel(
 		stream:           s,
 		animator:         a,
 		width:            chatWindowWidth,
+		termHeight:       25, // Fallback
 		flushFn:          func(content string) tea.Cmd { return tea.Printf("%s", content) },
 	}
 	for _, opt := range opts {
@@ -124,285 +124,235 @@ func NewModel(
 	return m
 }
 
-// Init returns the initial command (waitForEvent).
 func (m *Model) Init() tea.Cmd {
-	return waitForEvent(m.bus.UIUpdates())
+	return animationTick(tickHighDelay)
 }
 
-// Update processes messages and drives the state machine.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlC {
 		return m.handleCancel()
 	}
 
-	if _, ok := msg.(channelClosedMsg); ok {
-		slog.Error("bus channel closed before DoneEvent")
-		return m, tea.Quit
+	switch msg.(type) {
+	case tickMsg:
+		return m.handleTick()
+	case flushDoneMsg:
+		return m.handleFlushDone()
 	}
 
-	switch m.state {
-	case stateIdle:
-		return m.updateIdle(msg)
-	case stateThinking:
-		return m.updateThinking(msg)
-	case stateStreaming:
-		return m.updateStreaming(msg)
-	case stateTooling:
-		return m.updateTooling(msg)
-	case stateDone:
-		return m, tea.Quit
-	}
 	return m, nil
 }
 
-// View renders the current state.
-func (m *Model) View() string {
-	switch m.state {
-	case stateIdle:
-		return m.stream.Pending()
-	case stateThinking:
-		return m.thinkingRenderer.RenderThinking(ui.StatusRunning, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
-	case stateStreaming:
-		return m.stream.Pending()
-	case stateTooling:
-		return m.renderToolsView()
+func (m *Model) handleTick() (tea.Model, tea.Cmd) {
+	// 1. Advance visual state (Spinners)
+	if m.state != stateIdle && m.state != stateDone && m.state != stateFlushing {
+		m.spinnerFrame++
 	}
-	return ""
+
+	// 2. Animate chunks or poll for events
+	if m.state == stateStreaming && m.animator.HasPending() {
+		chunk, ok := m.animator.NextChunk()
+		if !ok {
+			m.state = stateIdle
+			return m, m.nextTick()
+		}
+		blocks := m.stream.Append(chunk)
+		if len(blocks) > 0 {
+			return m.doFlush(blocks, stateStreaming)
+		}
+		return m, m.nextTick()
+	}
+
+	if m.isReadyForEvent() {
+		if ev, ok := m.pollOneEvent(); ok {
+			return m.handleEvent(ev)
+		}
+	}
+
+	return m, m.nextTick()
 }
 
-func (m *Model) thinkingResult() string {
-	return "Thought for " + time.Since(m.thinkingStart).Round(time.Second).String()
+func (m *Model) isReadyForEvent() bool {
+	switch m.state {
+	case stateIdle, stateThinking, stateTooling:
+		return true
+	case stateStreaming:
+		return !m.animator.HasPending()
+	}
+	return false
+}
+
+func (m *Model) pollOneEvent() (domain.UIUpdate, bool) {
+	select {
+	case ev, ok := <-m.bus.UIUpdates():
+		return ev, ok
+	default:
+		return nil, false
+	}
+}
+
+func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
+	var flushBlocks []string
+	if m.state == stateThinking {
+		// Whenever leaving Thinking state, flush the final result line
+		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider))
+	}
+
+	switch u := u.(type) {
+	case domain.ThinkingEvent:
+		m.state = stateThinking
+		m.thinkingStart = time.Now()
+		m.spinnerFrame = 0
+		flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		return m.doFlush(flushBlocks, stateThinking)
+	case domain.TextEvent:
+		m.animator.Enqueue(u.Text)
+		m.state = stateStreaming
+		if len(flushBlocks) > 0 {
+			return m.doFlush(flushBlocks, stateStreaming)
+		}
+		return m, m.nextTick()
+	case domain.ToolStartEvent:
+		m.tools = append(m.tools, toolSlot{
+			callID:   u.CallID,
+			toolName: u.ToolName,
+			display:  u.Display,
+			status:   ui.StatusRunning,
+		})
+		m.state = stateTooling
+		flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		return m.doFlush(flushBlocks, stateTooling)
+	case domain.DoneEvent:
+		m.state = stateDone
+		flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		return m.doFlush(flushBlocks, stateDone)
+	case domain.ToolStreamEvent:
+		if m.state == stateTooling {
+			for i := range m.tools {
+				if m.tools[i].callID == u.CallID {
+					m.tools[i].streamOutput += u.Chunk
+					break
+				}
+			}
+		}
+		return m, m.nextTick()
+	case domain.ToolEndEvent:
+		if m.state == stateTooling {
+			for i := range m.tools {
+				if m.tools[i].callID == u.CallID {
+					if u.Error != "" {
+						m.tools[i].status = ui.StatusError
+						m.tools[i].errorMsg = u.Error
+					} else {
+						m.tools[i].status = ui.StatusSuccess
+					}
+					break
+				}
+			}
+			flushed := m.flushCompletedToolPrefix()
+			if len(flushed) > 0 {
+				next := stateTooling
+				if len(m.tools) == 0 {
+					next = stateIdle
+				}
+				// Prepend any existing flush blocks (like thinking result)
+				flushed = append(flushBlocks, flushed...)
+				return m.doFlush(flushed, next)
+			}
+			if len(m.tools) == 0 {
+				m.state = stateIdle
+			}
+		}
+		if len(flushBlocks) > 0 {
+			return m.doFlush(flushBlocks, m.state)
+		}
+		return m, m.nextTick()
+	}
+	if len(flushBlocks) > 0 {
+		return m.doFlush(flushBlocks, m.state)
+	}
+	return m, m.nextTick()
+}
+
+func (m *Model) handleFlushDone() (tea.Model, tea.Cmd) {
+	m.state = m.nextState
+	if m.state == stateDone {
+		return m, tea.Quit
+	}
+	return m, m.nextTick()
+}
+
+func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
+	if len(blocks) == 0 {
+		m.state = next
+		if m.state == stateDone {
+			return m, tea.Quit
+		}
+		return m, m.nextTick()
+	}
+	
+	m.state = stateFlushing
+	m.nextState = next
+	
+	var cmds []tea.Cmd
+	for _, b := range blocks {
+		if b != "" && m.flushFn != nil {
+			cmds = append(cmds, m.flushFn(b))
+		}
+	}
+	
+	if len(cmds) == 0 {
+		m.state = next
+		if m.state == stateDone {
+			return m, tea.Quit
+		}
+		return m, m.nextTick()
+	}
+
+	cmds = append(cmds, func() tea.Msg { return flushDoneMsg{} })
+	return m, tea.Sequence(cmds...)
+}
+
+func (m *Model) nextTick() tea.Cmd {
+	delay := tickHighDelay
+	if m.state == stateStreaming {
+		delay = tickLowDelay
+	}
+	return animationTick(delay)
+}
+
+func (m *Model) View() string {
+	var content string
+	switch m.state {
+	case stateIdle, stateFlushing:
+		content = m.stream.Pending()
+	case stateThinking:
+		content = m.thinkingRenderer.RenderThinking(ui.StatusRunning, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
+	case stateStreaming:
+		content = m.stream.Pending()
+	case stateTooling:
+		content = m.renderToolsView()
+	}
+	return ui.TruncateWithIndicator(content, m.termHeight)
 }
 
 func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
-	var flushCmd tea.Cmd
+	m.bus.SendAction(domain.StopAction{})
 	switch m.state {
-	case stateIdle:
-		flushCmd = m.doFlush(m.stream.Flush())
 	case stateThinking:
-		flushCmd = m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)})
+		return m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)}, stateDone)
 	case stateStreaming:
 		m.animator.FlushAll()
-		flushCmd = m.doFlush(m.stream.Flush())
+		return m.doFlush(m.stream.Flush(), stateDone)
 	case stateTooling:
 		for i := range m.tools {
 			if m.tools[i].status == ui.StatusRunning {
 				m.tools[i].status = ui.StatusError
 			}
 		}
-		flushCmd = m.doFlush(m.renderAllTools())
-		m.tools = nil
-	}
-	m.bus.SendAction(domain.StopAction{})
-	if flushCmd != nil {
-		return m, tea.Sequence(flushCmd, tea.Quit)
-	}
-	return m, tea.Quit
-}
-
-func (m *Model) updateIdle(msg tea.Msg) (tea.Model, tea.Cmd) {
-	ev, ok := msg.(eventMsg)
-	if !ok {
-		return m, waitForEvent(m.bus.UIUpdates())
-	}
-
-	switch u := ev.update.(type) {
-	case domain.ThinkingEvent:
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.state = stateThinking
-		m.thinkingStart = time.Now()
-		m.spinnerFrame = 0
-		return m, tea.Batch(flushCmd, waitForEvent(m.bus.UIUpdates()), animationTick())
-	case domain.TextEvent:
-		m.animator.Enqueue(u.Text)
-		m.state = stateStreaming
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	case domain.ToolStartEvent:
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.tools = append(m.tools, toolSlot{
-			callID:   u.CallID,
-			toolName: u.ToolName,
-			display:  u.Display,
-			status:   ui.StatusRunning,
-		})
-		m.state = stateTooling
-		return m, tea.Batch(flushCmd, waitForEvent(m.bus.UIUpdates()), animationTick())
-	case domain.DoneEvent:
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.state = stateDone
-		return m, tea.Sequence(flushCmd, tea.Quit)
-	}
-	return m, waitForEvent(m.bus.UIUpdates())
-}
-func (m *Model) updateThinking(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(tickMsg); ok {
-		m.spinnerFrame++
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	}
-
-	ev, ok := msg.(eventMsg)
-	if !ok {
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	}
-
-	switch u := ev.update.(type) {
-	case domain.TextEvent:
-		flushCmd := m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)})
-		m.animator.Enqueue(u.Text)
-		m.state = stateStreaming
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	case domain.ToolStartEvent:
-		flushCmd := m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)})
-		m.tools = append(m.tools, toolSlot{
-			callID:   u.CallID,
-			toolName: u.ToolName,
-			display:  u.Display,
-			status:   ui.StatusRunning,
-		})
-		m.state = stateTooling
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	case domain.DoneEvent:
-		flushCmd := m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)})
-		m.state = stateDone
-		return m, tea.Sequence(flushCmd, tea.Quit)
-	}
-	return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-}
-
-func (m *Model) updateStreaming(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
-	case tickMsg:
-		chunk, ok := m.animator.NextChunk()
-		if !ok {
-			m.state = stateIdle
-			return m, waitForEvent(m.bus.UIUpdates())
-		}
-		blocks := m.stream.Append(chunk)
-		flushCmd := m.doFlush(blocks)
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	}
-
-	ev, ok := msg.(eventMsg)
-	if !ok {
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	}
-
-	switch u := ev.update.(type) {
-	case domain.TextEvent:
-		m.animator.Enqueue(u.Text)
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	case domain.ThinkingEvent:
-		raw := m.animator.FlushAll()
-		if raw != "" {
-			m.stream.Append(raw)
-		}
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.state = stateThinking
-		m.thinkingStart = time.Now()
-		m.spinnerFrame = 0
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	case domain.ToolStartEvent:
-		raw := m.animator.FlushAll()
-		if raw != "" {
-			m.stream.Append(raw)
-		}
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.tools = append(m.tools, toolSlot{
-			callID:   u.CallID,
-			toolName: u.ToolName,
-			display:  u.Display,
-			status:   ui.StatusRunning,
-		})
-		m.state = stateTooling
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	case domain.DoneEvent:
-		raw := m.animator.FlushAll()
-		if raw != "" {
-			m.stream.Append(raw)
-		}
-		flushCmd := m.doFlush(m.stream.Flush())
-		m.state = stateDone
-		return m, tea.Sequence(flushCmd, tea.Quit)
-	}
-	return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-}
-
-func (m *Model) updateTooling(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if _, ok := msg.(tickMsg); ok {
-		m.spinnerFrame++
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	}
-
-	ev, ok := msg.(eventMsg)
-	if !ok {
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick())
-	}
-
-	switch u := ev.update.(type) {
-	case domain.ToolStartEvent:
-		m.tools = append(m.tools, toolSlot{
-			callID:   u.CallID,
-			toolName: u.ToolName,
-			display:  u.Display,
-			status:   ui.StatusRunning,
-		})
-		return m, waitForEvent(m.bus.UIUpdates())
-	case domain.ToolStreamEvent:
-		for i := range m.tools {
-			if m.tools[i].callID == u.CallID {
-				m.tools[i].streamOutput += u.Chunk
-				break
-			}
-		}
-		return m, waitForEvent(m.bus.UIUpdates())
-	case domain.ToolEndEvent:
-		for i := range m.tools {
-			if m.tools[i].callID == u.CallID {
-				if u.Error != "" {
-					m.tools[i].status = ui.StatusError
-					m.tools[i].errorMsg = u.Error
-				} else {
-					m.tools[i].status = ui.StatusSuccess
-				}
-				break
-			}
-		}
-		flushed := m.flushCompletedToolPrefix()
-		flushCmd := m.doFlush(flushed)
-		if len(m.tools) == 0 {
-			m.state = stateIdle
-			return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), flushCmd)
-		}
-		return m, tea.Batch(waitForEvent(m.bus.UIUpdates()), animationTick(), flushCmd)
-	case domain.DoneEvent:
-		flushCmd := m.doFlush(m.renderAllTools())
-		m.tools = nil
-		m.state = stateDone
-		return m, tea.Sequence(flushCmd, tea.Quit)
-	}
-	return m, waitForEvent(m.bus.UIUpdates())
-}
-
-// doFlush writes blocks to history and returns a batched Cmd for any flush operations.
-func (m *Model) doFlush(blocks []string) tea.Cmd {
-	var cmds []tea.Cmd
-	for _, b := range blocks {
-		if b != "" && m.flushFn != nil {
-			if c := m.flushFn(b); c != nil {
-				cmds = append(cmds, c)
-			}
-		}
-	}
-	if len(cmds) == 0 {
-		return nil
-	}
-	return tea.Batch(cmds...)
-}
-
-func (m *Model) drainAnimator() {
-	raw := m.animator.FlushAll()
-	if raw != "" {
-		m.stream.Append(raw)
+		return m.doFlush(m.renderAllTools(), stateDone)
+	default:
+		return m.doFlush(m.stream.Flush(), stateDone)
 	}
 }
 
@@ -416,7 +366,7 @@ func (m *Model) flushCompletedToolPrefix() []string {
 }
 
 func (m *Model) renderToolBox(slot toolSlot) string {
-	boxWidth := m.width - boxWidthPad
+	boxWidth := m.width - 2
 	if boxWidth < 1 {
 		boxWidth = 1
 	}
@@ -459,12 +409,9 @@ func (m *Model) renderAllTools() []string {
 	return out
 }
 
-
-// DrainAnimationForTest runs tick updates until the animator is drained.
-// Used by golden tests to complete text streaming before capturing output.
 func (m *Model) DrainAnimationForTest() *Model {
 	for i := 0; i < 1000; i++ {
-		if m.state != stateStreaming {
+		if !m.animator.HasPending() && m.state != stateStreaming {
 			break
 		}
 		res, _ := m.Update(tickMsg{})

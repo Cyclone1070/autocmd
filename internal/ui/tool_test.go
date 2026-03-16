@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockGater struct {
+	gateFunc func(string) string
+}
+func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
+
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
 	cfg := config.DefaultConfig().UI()
@@ -24,14 +29,18 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 		ShortToolbox: cfg.ShortToolbox(),
 	}
 	theme := NewTheme(themeCfg)
-	return NewToolRenderer(theme, 80, 12)
+	// For testing, we inject a gater that uses the standard 12 lines
+	return NewToolRenderer(theme, 80, NewToolOutputGater(12))
 }
 
-func TestToolRenderer_RespectsMaxLines(t *testing.T) {
+func TestToolRenderer_RespectsGater(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
-	tr := NewToolRenderer(theme, 80, 12)
-	// Specification: Should respect config value (12) instead of hardcoded 10
-	assert.Equal(t, 12, tr.MaxLines, "ToolRenderer should allow setting MaxLines or use a config-driven default")
+	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	tr := NewToolRenderer(theme, 80, g)
+	
+	// Specification: Should use the injected gater
+	got := tr.RenderString(domain.NewStringDisplay("raw"), StatusSuccess, "", "✓")
+	assert.Contains(t, got, "raw_gated", "ToolRenderer should use the injected gater for output")
 }
 
 func assertGolden(t *testing.T, name string, actual string) {
@@ -148,8 +157,8 @@ func TestRenderShell_Error(t *testing.T) {
 }
 
 func TestRenderDiff_LongDiffTruncation(t *testing.T) {
-	tr := newTestToolRenderer(t)
-	tr.SetMaxLines(2) // Limit to 2 lines, should show truncation indicator
+	theme := NewTheme(ThemeConfig{})
+	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
 		Comment: "Massive Change",
 		Target:  "Edit big.go",

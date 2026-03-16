@@ -46,7 +46,7 @@ func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.T
 
 func TestModel_SyncPolling(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, nil, nil, nil, &mockStream{}, &TextAnimator{runesPerTick: 4}, 80)
+	m := NewModel(bus, nil, nil, nil, &mockStream{}, &TextAnimator{runesPerTick: 4}, ui.NewNoOpGater(), 80)
 
 	// Specification: Init should start the heartbeat (100ms)
 	m.Init()
@@ -70,7 +70,7 @@ func TestModel_SyncPolling(t *testing.T) {
 
 func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, nil, nil, nil, &mockStream{}, &mockAnimator{pending: true}, 80)
+	m := NewModel(bus, nil, nil, nil, &mockStream{}, &mockAnimator{pending: true}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.spinnerFrame = 10
 
@@ -82,7 +82,7 @@ func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, &mockStream{}, &mockAnimator{}, 80, WithFlush(func(c string) tea.Cmd {
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
 		return nil
 	}))
@@ -95,13 +95,13 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 }
 
 func TestModel_ViewportTruncation(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, 80, WithTermHeight(3))
+	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(3), 80)
 	v := m.View()
-	assert.Contains(t, v, "truncated", "View should be truncated with indicator when using WithTermHeight")
+	assert.Contains(t, v, "truncated", "View should be truncated with indicator")
 }
 
 func TestModel_NoTruncationIfHeightZero(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, 80, WithTermHeight(0))
+	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(0), 80)
 	v := m.View()
 	assert.NotContains(t, v, "truncated", "View should not be truncated when height is 0")
 	assert.Contains(t, v, "L5", "Full content should be visible")
@@ -116,10 +116,10 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	// Verified in code: return m, tea.Sequence(cmds...)
 	assert.NotNil(t, cmd)
 }
-func TestModel_DefaultTermHeight(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, nil, nil, 80)
-	_, ok := m.gater.(*noOpGater)
-	assert.True(t, ok, "Model should default to noOpGater")
+func TestModel_ExplicitGater(t *testing.T) {
+	m := NewModel(nil, nil, nil, nil, nil, nil, ui.NewNoOpGater(), 80)
+	// Success if constructor accepts it
+	assert.NotNil(t, m.gater)
 }
 
 type mockGater struct {
@@ -130,7 +130,7 @@ func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
 func TestModel_ViewUsesGater(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
-	m := NewModel(bus, nil, nil, nil, &mockStream{p: "raw"}, nil, 80, WithViewportGater(g))
+	m := NewModel(bus, nil, nil, nil, &mockStream{p: "raw"}, nil, g, 80)
 	
 	assert.Equal(t, "raw_gated", m.View())
 }

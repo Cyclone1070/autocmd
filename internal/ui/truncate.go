@@ -8,10 +8,60 @@ import (
 	"strings"
 )
 
+// TruncatingGater implements viewport-style truncation.
+type TruncatingGater struct {
+	maxLines int
+}
+
+func (g *TruncatingGater) Gate(content string) string {
+	if g.maxLines <= 0 || content == "" {
+		return content
+	}
+	return TruncateWithIndicator(content, g.maxLines)
+}
+
+// NewTruncatingGater creates a gater that truncates content after maxLines.
+func NewTruncatingGater(maxLines int) *TruncatingGater {
+	return &TruncatingGater{maxLines: maxLines}
+}
+
+type NoOpGater struct{}
+
+func (g *NoOpGater) Gate(content string) string { return content }
+
+// NewNoOpGater returns a gater that performs no truncation.
+func NewNoOpGater() *NoOpGater {
+	return &NoOpGater{}
+}
+
+// ToolOutputGater implements tool-specific truncation logic.
+type ToolOutputGater struct {
+	maxLines int
+}
+
+func (g *ToolOutputGater) Gate(content string) string {
+	if g.maxLines <= 0 || content == "" {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) <= g.maxLines {
+		return content
+	}
+	overflow := len(lines) - g.maxLines
+	visible := lines[overflow:]
+	indicator := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
+	return indicator + "\n" + strings.Join(visible, "\n")
+}
+
+// NewToolOutputGater creates a gater optimized for tool output (shell/diff).
+func NewToolOutputGater(maxLines int) *ToolOutputGater {
+	return &ToolOutputGater{maxLines: maxLines}
+}
+
 // TruncateWithIndicator shows only the bottom portion if content is too tall.
 func TruncateWithIndicator(content string, termHeight int) string {
 	if termHeight <= 0 {
-		return ""
+		return content
 	}
 
 	lines := strings.Split(content, "\n")

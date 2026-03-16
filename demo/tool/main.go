@@ -45,10 +45,10 @@ func main() {
 	s := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
 	anim := loop.NewTextAnimator(4)
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth, 12)
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, chatWidth, loop.WithTermHeight(termHeight))
+	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, ui.NewTruncatingGater(termHeight), chatWidth)
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

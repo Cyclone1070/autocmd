@@ -167,11 +167,11 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 	s := NewStream(renderer)
 	anim := NewTextAnimator(4)
 	thinking := NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, 80, 12)
+	tooling := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	bus := dummyBus{updates: make(chan domain.UIUpdate, 100)}
-	m := NewModel(bus, thinking, tooling, spinner, s, anim, cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
+	m := NewModel(bus, thinking, tooling, spinner, s, anim, ui.NewNoOpGater(), cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))

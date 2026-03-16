@@ -157,7 +157,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth, cfg.UI().ShellOutputHeight())
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(cfg.UI().ShellOutputHeight()))
 	
 	uiModel := loop.NewModel(
 		bus,
@@ -166,8 +166,8 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		spinner,
 		stream,
 		animator,
+		ui.NewTruncatingGater(termHeight),
 		chatWidth,
-		loop.WithTermHeight(termHeight),
 	)
 
 	deps := &workflow.PromptDeps{

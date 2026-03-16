@@ -43,7 +43,7 @@ type bus interface {
 	SendAction(domain.Action)
 }
 	
-type ViewportGater interface {
+type viewportGater interface {
 	Gate(content string) string
 }
 
@@ -79,7 +79,7 @@ type Model struct {
 	spinnerProvider  spinnerProvider
 
 	width         int
-	gater         ViewportGater
+	gater         viewportGater
 	flushFn       func(content string) tea.Cmd
 	thinkingStart time.Time
 	spinnerFrame  int
@@ -94,18 +94,6 @@ func WithFlush(fn func(content string) tea.Cmd) Option {
 	}
 }
 
-func WithViewportGater(g ViewportGater) Option {
-	return func(m *Model) {
-		m.gater = g
-	}
-}
-
-func WithTermHeight(h int) Option {
-	return func(m *Model) {
-		m.gater = NewTruncatingGater(h)
-	}
-}
-
 func NewModel(
 	b bus,
 	tr thinkingRenderer,
@@ -113,6 +101,7 @@ func NewModel(
 	sp spinnerProvider,
 	s stream,
 	a animator,
+	g viewportGater,
 	chatWindowWidth int,
 	opts ...Option,
 ) *Model {
@@ -125,7 +114,7 @@ func NewModel(
 		stream:           s,
 		animator:         a,
 		width:            chatWindowWidth,
-		gater:            NewNoOpGater(),
+		gater:            g,
 		flushFn:          func(content string) tea.Cmd { return tea.Printf("%s", content) },
 	}
 	for _, opt := range opts {
@@ -417,27 +406,6 @@ func (m *Model) renderAllTools() []string {
 		}
 	}
 	return out
-}
-
-type noOpGater struct{}
-
-func (g *noOpGater) Gate(content string) string { return content }
-
-func NewNoOpGater() ViewportGater { return &noOpGater{} }
-
-type truncatingGater struct {
-	height int
-}
-
-func (g *truncatingGater) Gate(content string) string {
-	if g.height <= 0 {
-		return content
-	}
-	return ui.TruncateWithIndicator(content, g.height)
-}
-
-func NewTruncatingGater(height int) ViewportGater {
-	return &truncatingGater{height: height}
 }
 
 func (m *Model) DrainAnimationForTest() *Model {

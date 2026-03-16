@@ -11,24 +11,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type gater interface {
+	Gate(content string) string
+}
+
 // ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, ShellDisplay).
 type ToolRenderer struct {
-	Theme    *Theme
-	Width    int
-	MaxLines int
+	Theme *Theme
+	Width int
+	gater gater
 }
 
 // NewToolRenderer creates a new ToolRenderer.
-func NewToolRenderer(theme *Theme, width int, maxLines int) *ToolRenderer {
+func NewToolRenderer(theme *Theme, width int, g gater) *ToolRenderer {
 	return &ToolRenderer{
-		Theme:    theme,
-		Width:    width,
-		MaxLines: maxLines,
+		Theme: theme,
+		Width: width,
+		gater: g,
 	}
-}
-
-func (r *ToolRenderer) SetMaxLines(n int) {
-	r.MaxLines = n
 }
 
 func (r *ToolRenderer) SetShortToolbox(b bool) {
@@ -67,7 +67,7 @@ func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, e
 	if status == StatusError {
 		s = r.formatError(s, err)
 	}
-	return r.Pad(s, prefix)
+	return r.gater.Gate(r.Pad(s, prefix))
 }
 
 // RenderDiff renders DiffDisplay.
@@ -95,15 +95,7 @@ func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err s
 
 	header = r.Theme.Muted("# " + header)
 	diffContent := r.colorizeDiff(d.Diff)
-
-	// Apply truncation if needed
-	lines := strings.Split(diffContent, "\n")
-	if len(lines) > r.MaxLines && r.MaxLines > 0 {
-		overflow := len(lines) - r.MaxLines
-		visible := lines[overflow:]
-		indicator := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
-		diffContent = indicator + "\n" + strings.Join(visible, "\n")
-	}
+	diffContent = r.gater.Gate(diffContent)
 
 	// Build parts with blank line separation
 	parts := []string{
@@ -144,20 +136,7 @@ func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status 
 	header = r.Theme.Muted("# " + header)
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
-	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-	var visibleLines []string
-	var indicator string
-	if len(lines) > r.MaxLines && r.MaxLines > 0 {
-		overflow := len(lines) - r.MaxLines
-		visibleLines = lines[overflow:]
-		indicator = fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
-	} else {
-		visibleLines = lines
-	}
-	shellOutput := strings.Join(visibleLines, "\n")
-	if indicator != "" {
-		shellOutput = indicator + "\n" + shellOutput
-	}
+	shellOutput := r.gater.Gate(strings.TrimRight(output, "\n"))
 
 	// Build parts with blank line separation
 	parts := []string{

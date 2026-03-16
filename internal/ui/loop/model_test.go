@@ -97,7 +97,14 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 func TestModel_ViewportTruncation(t *testing.T) {
 	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, 80, WithTermHeight(3))
 	v := m.View()
-	assert.Contains(t, v, "truncated", "View should be truncated with indicator")
+	assert.Contains(t, v, "truncated", "View should be truncated with indicator when using WithTermHeight")
+}
+
+func TestModel_NoTruncationIfHeightZero(t *testing.T) {
+	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, 80, WithTermHeight(0))
+	v := m.View()
+	assert.NotContains(t, v, "truncated", "View should not be truncated when height is 0")
+	assert.Contains(t, v, "L5", "Full content should be visible")
 }
 
 func TestModel_FlushDoneMsgSequencing(t *testing.T) {
@@ -111,5 +118,19 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 }
 func TestModel_DefaultTermHeight(t *testing.T) {
 	m := NewModel(nil, nil, nil, nil, nil, nil, 80)
-	assert.Equal(t, 25, m.termHeight, "Model should default to 25-line height fallback")
+	_, ok := m.gater.(*noOpGater)
+	assert.True(t, ok, "Model should default to noOpGater")
+}
+
+type mockGater struct {
+	gateFunc func(string) string
+}
+func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
+
+func TestModel_ViewUsesGater(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	m := NewModel(bus, nil, nil, nil, &mockStream{p: "raw"}, nil, 80, WithViewportGater(g))
+	
+	assert.Equal(t, "raw_gated", m.View())
 }

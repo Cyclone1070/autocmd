@@ -141,7 +141,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 	}
 	// Calculate width and height capping at terminal size
 	chatWidth := cfg.UI().ChatWindowWidth()
-	termHeight := 25 // Fallback
+	termHeight := 0 // Fallback (0 disables global truncation)
 	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
 		if chatWidth <= 0 || width < chatWidth {
 			chatWidth = width

@@ -26,7 +26,7 @@ func main() {
 
 	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 25 // Fallback
+	termHeight := 0 // Fallback
 	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
 		if chatWidth <= 0 || width < chatWidth {
 			chatWidth = width

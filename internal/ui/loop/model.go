@@ -42,6 +42,10 @@ type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 	SendAction(domain.Action)
 }
+	
+type ViewportGater interface {
+	Gate(content string) string
+}
 
 type uiState int
 
@@ -75,7 +79,7 @@ type Model struct {
 	spinnerProvider  spinnerProvider
 
 	width         int
-	termHeight    int
+	gater         ViewportGater
 	flushFn       func(content string) tea.Cmd
 	thinkingStart time.Time
 	spinnerFrame  int
@@ -90,9 +94,15 @@ func WithFlush(fn func(content string) tea.Cmd) Option {
 	}
 }
 
+func WithViewportGater(g ViewportGater) Option {
+	return func(m *Model) {
+		m.gater = g
+	}
+}
+
 func WithTermHeight(h int) Option {
 	return func(m *Model) {
-		m.termHeight = h
+		m.gater = NewTruncatingGater(h)
 	}
 }
 
@@ -115,7 +125,7 @@ func NewModel(
 		stream:           s,
 		animator:         a,
 		width:            chatWindowWidth,
-		termHeight:       25, // Fallback
+		gater:            NewNoOpGater(),
 		flushFn:          func(content string) tea.Cmd { return tea.Printf("%s", content) },
 	}
 	for _, opt := range opts {
@@ -333,7 +343,7 @@ func (m *Model) View() string {
 	case stateTooling:
 		content = m.renderToolsView()
 	}
-	return ui.TruncateWithIndicator(content, m.termHeight)
+	return m.gater.Gate(content)
 }
 
 func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
@@ -407,6 +417,27 @@ func (m *Model) renderAllTools() []string {
 		}
 	}
 	return out
+}
+
+type noOpGater struct{}
+
+func (g *noOpGater) Gate(content string) string { return content }
+
+func NewNoOpGater() ViewportGater { return &noOpGater{} }
+
+type truncatingGater struct {
+	height int
+}
+
+func (g *truncatingGater) Gate(content string) string {
+	if g.height <= 0 {
+		return content
+	}
+	return ui.TruncateWithIndicator(content, g.height)
+}
+
+func NewTruncatingGater(height int) ViewportGater {
+	return &truncatingGater{height: height}
 }
 
 func (m *Model) DrainAnimationForTest() *Model {

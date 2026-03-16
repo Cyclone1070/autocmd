@@ -100,10 +100,6 @@ func (b *EventBus) runUIUpdates() {
 		select {
 		case upd, ok := <-in:
 			if !ok {
-				// Flush remaining messages before exiting
-				for _, qe := range queue {
-					b.uiOut <- qe
-				}
 				close(b.uiOut)
 				return
 			}
@@ -132,10 +128,6 @@ func (b *EventBus) runWorkflowActions() {
 		select {
 		case act, ok := <-in:
 			if !ok {
-				// Flush remaining messages before exiting
-				for _, qe := range queue {
-					b.workflowOut <- qe
-				}
 				close(b.workflowOut)
 				return
 			}

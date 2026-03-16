@@ -44,37 +44,39 @@ func TestEventBus_BiDirectional_Centralized(t *testing.T) {
 	}
 }
 
-func TestEventBus_Drainage_Comprehensive(t *testing.T) {
+func TestEventBus_Shutdown_NoHang(t *testing.T) {
 	bus := NewEventBus()
 	uiOut := bus.UIUpdates()
 
-	count := 100
-	for i := 0; i < count; i++ {
-		bus.SendUIUpdate(domain.TextEvent{Text: "msg"})
+	// Fill more than the channel buffer
+	count := 200
+	go func() {
+		for i := 0; i < count; i++ {
+			bus.SendUIUpdate(domain.TextEvent{Text: "msg"})
+		}
+	}()
+
+	// Close should return quickly and not hang, even if consumer is slow
+	done := make(chan struct{})
+	go func() {
+		bus.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success: Close() did not deadlock
+	case <-time.After(1 * time.Second):
+		t.Fatal("Close() hung during shutdown")
 	}
 
-	// Close immediately
-	bus.Close()
-
+	// Consume what's available
 	received := 0
 	for range uiOut {
 		received++
 	}
-	assert.Equal(t, count, received, "All UI updates must be received after Close()")
-
-	// Workflow actions should also drain
-	bus2 := NewEventBus()
-	wfOut := bus2.WorkflowActions()
-	for i := 0; i < count; i++ {
-		bus2.SendAction(domain.StopAction{})
-	}
-	bus2.Close()
-
-	receivedWf := 0
-	for range wfOut {
-		receivedWf++
-	}
-	assert.Equal(t, count, receivedWf, "All Actions must be received after Close()")
+	// We don't assert 'count == received' because we explicitly want to allow discarding
+	// to prevent deadlocks.
 }
 
 func TestEventBus_Concurrent_Safe(t *testing.T) {
@@ -89,4 +91,37 @@ func TestEventBus_Concurrent_Safe(t *testing.T) {
 		}()
 	}
 	// No panic = success for this basic concurrency test
+}
+
+func TestEventBus_CloseDeadlock_Reproduction(t *testing.T) {
+	// Root cause: Close() waits for goroutines that block on Send if no one is reading.
+	bus := NewEventBus()
+
+	// The internal channels have a buffer of 100.
+	// We send 101 messages.
+	// 100 go into the output channel buffer.
+	// 1 stays in the internal 'queue' slice.
+	for i := 0; i < 101; i++ {
+		bus.SendUIUpdate(domain.TextEvent{Text: "deadlock-me"})
+	}
+
+	// We do NOT read from the UIUpdates() channel.
+
+	done := make(chan struct{})
+	go func() {
+		// This will call wg.Wait()
+		// runUIUpdates will try to push the 101st message to uiOut
+		// uiOut is full (100 msgs) and no one is reading.
+		// runUIUpdates blocks on 'b.uiOut <- qe'
+		// wg.Wait() blocks forever.
+		bus.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// If we reach here, the deadlock is fixed (or didn't happen)
+	case <-time.After(2 * time.Second):
+		t.Fatal("FATAL: Deadlock detected in Close(). The call hung for 2 seconds.")
+	}
 }

@@ -347,6 +347,7 @@ func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 		for i := range m.tools {
 			if m.tools[i].status == ui.StatusRunning {
 				m.tools[i].status = ui.StatusError
+				m.tools[i].errorMsg = "cancelled"
 			}
 		}
 		return m.doFlush(m.renderAllTools(), stateDone)

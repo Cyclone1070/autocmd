@@ -155,3 +155,25 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	// The blank line is EXACTLY there.
 	assert.Contains(t, v, "╯\n\n╭", "There should be a blank line between the boxes")
 }
+
+func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+
+	m := NewModel(bus, nil, tr, sp, nil, nil, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{callID: "1", toolName: "t1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
+	}
+
+	// Act: simulate Ctrl+C cancel
+	res, _ := m.handleCancel()
+	newModel := res.(*Model)
+
+	if assert.Len(t, newModel.tools, 1) {
+		assert.Equal(t, ui.StatusError, newModel.tools[0].status, "Running tool should be marked as error on cancel")
+		assert.Equal(t, "cancelled", newModel.tools[0].errorMsg, "Cancelled tools should carry a generic error message")
+	}
+}

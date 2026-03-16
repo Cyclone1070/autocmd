@@ -57,8 +57,8 @@ func TestRenderer_RedBarSymmetry(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, 1, topBlanks, "Should have exactly one blank barred line at top")
-	assert.Equal(t, 1, bottomBlanks, "Should have exactly one blank barred line at bottom")
+	assert.Equal(t, 0, topBlanks, "Should have no blank barred line at top")
+	assert.Equal(t, 0, bottomBlanks, "Should have no blank barred line at bottom")
 }
 
 func TestRenderer_BlockquoteAlignment(t *testing.T) {

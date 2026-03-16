@@ -13,9 +13,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/loop"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
@@ -84,7 +84,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"This is a paragraph with **bold** and *italic* and `inline code`.\n\n",
 		"Here is a list:\n- Item 1\n- Item 2\n- Item 3\n\n",
 		"1. Ordered item 1\n2. Ordered item 2\n\n",
-		"> This is a blockquote.\n> It can have multiple lines.\n\n",
+		"> This is a blockquote.\n> It can have multiple lines. It can also be very long. Sometimes it can be 2 or 3 lines even.\n\n",
 		"```go\nfunc hello() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n\n",
 		"---\n\n", // HR
 		"| Table | Header |\n|-------|--------|\n| Row 1 | Cell 1 |\n| Row 2 | Cell 2 |\n\n",
@@ -105,9 +105,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 type mockStore struct{}
 
-func (s *mockStore) Create() (*domain.Session, error)         { return &domain.Session{ID: "test"}, nil }
-func (s *mockStore) Get(id string) (*domain.Session, error)   { return &domain.Session{ID: id}, nil }
-func (s *mockStore) Save(sess *domain.Session) error         { return nil }
+func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
+func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
+func (s *mockStore) Save(sess *domain.Session) error        { return nil }
 func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return "Test Session", nil
 }
@@ -120,12 +120,12 @@ func (l *mockLLM) ContextWindow() int  { return 1000 }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
 	return 0, nil
 }
+
 func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
 	return nil, nil
 }
 
-
 type mockRegistry struct{}
 
-func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Declarations() []domain.Declaration  { return nil }
 func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

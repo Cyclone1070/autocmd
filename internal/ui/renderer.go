@@ -2,7 +2,6 @@ package ui
 
 import (
 	"log/slog"
-
 	"regexp"
 	"strings"
 
@@ -26,6 +25,8 @@ type GlamourRenderer struct {
 	tr     *glamour.TermRenderer
 	isDark bool
 }
+
+var reANSI = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
 
 // Render implements Renderer. On error, it returns the original markdown and logs.
 func (g *GlamourRenderer) Render(markdown string) string {
@@ -60,7 +61,6 @@ func (g *GlamourRenderer) Render(markdown string) string {
 
 		// Helper to check if a line is blank (ignoring ANSI codes)
 		isBlank := func(s string) bool {
-			reANSI := regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
 			stripped := reANSI.ReplaceAllString(s, "")
 			return strings.TrimSpace(stripped) == ""
 		}
@@ -78,15 +78,20 @@ func (g *GlamourRenderer) Render(markdown string) string {
 
 		// Build the barred block
 		var result []string
-		// Add one blank barred line at top for symmetry
-		result = append(result, prefix+bar)
-		for _, line := range coreLines {
+		for i, line := range coreLines {
 			// Remove glamour's right-side padding before adding our bar
 			trimmedLine := strings.TrimRight(line, " ")
+
+			// Normalize indentation: Glamour/Goldmark often adds 2 spaces of ghost 
+			// indentation to lines 2+ of code blocks but not the first line.
+			// These spaces can be preceded by ANSI escape codes.
+			if i > 0 {
+				reGhost := regexp.MustCompile(`^(\x1b\[[0-9;]*[mGKH])*  `)
+				trimmedLine = reGhost.ReplaceAllString(trimmedLine, "$1")
+			}
+
 			result = append(result, prefix+bar+" "+trimmedLine)
 		}
-		// Add one blank barred line at bottom
-		result = append(result, prefix+bar)
 
 		return strings.Join(result, "\n") + "\n"
 	})

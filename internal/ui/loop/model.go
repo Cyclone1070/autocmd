@@ -394,7 +394,7 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 }
 
 func (m *Model) renderToolsView() string {
-	return strings.Join(m.renderAllTools(), "")
+	return strings.Join(m.renderAllTools(), "\n")
 }
 
 func (m *Model) renderAllTools() []string {

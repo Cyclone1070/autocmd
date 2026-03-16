@@ -134,3 +134,24 @@ func TestModel_ViewUsesGater(t *testing.T) {
 	
 	assert.Equal(t, "raw_gated", m.View())
 }
+
+func TestModel_ToolsViewSpacing(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(nil, nil, tr, sp, nil, nil, ui.NewNoOpGater(), 80)
+	
+	m.tools = []toolSlot{
+		{callID: "1", toolName: "t1", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c1"}},
+		{callID: "2", toolName: "t2", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c2"}},
+	}
+	m.state = stateTooling
+	
+	v := m.View()
+	// Each box starts with \n. Join adds another \n.
+	// So we expect: ...bottom_border\n\n\nbox2_top_border...
+	// Wait, if Box1 is "\nBox1" and Box2 is "\nBox2", and we join with "\n", 
+	// we get "\nBox1" + "\n" + "\nBox2" = "\nBox1\n\nBox2".
+	// The blank line is EXACTLY there.
+	assert.Contains(t, v, "╯\n\n╭", "There should be a blank line between the boxes")
+}

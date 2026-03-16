@@ -76,7 +76,7 @@ type mockAgent struct {
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
 	// 1. Text Stream
-	markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response.\n\n"
+	markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response."
 	a.bus.SendUIUpdate(domain.TextEvent{Text: markdown})
 	select {
 	case <-ctx.Done():
@@ -195,7 +195,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-1"})
 
 	// 6. Final text
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "\n\nRefactoring complete! The UI is looking great. ✨\n"})
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Refactoring complete! The UI is looking great. ✨"})
 
 	return nil
 }

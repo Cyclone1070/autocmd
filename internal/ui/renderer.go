@@ -46,7 +46,7 @@ func (g *GlamourRenderer) Render(markdown string) string {
 	}
 	bar := red + "┃" + "\x1b[0m"
 
-	return re.ReplaceAllStringFunc(rendered, func(match string) string {
+	out := re.ReplaceAllStringFunc(rendered, func(match string) string {
 		sub := re.FindStringSubmatch(match)
 		if len(sub) < 4 {
 			return match
@@ -90,6 +90,8 @@ func (g *GlamourRenderer) Render(markdown string) string {
 
 		return strings.Join(result, "\n") + "\n"
 	})
+
+	return strings.TrimRight(out, "\n")
 }
 
 // PassthroughRenderer is a no-op renderer that returns markdown as-is.

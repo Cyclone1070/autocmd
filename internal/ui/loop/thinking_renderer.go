@@ -33,5 +33,5 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 		label = r.Theme.Muted("Thinking")
 	}
 
-	return fmt.Sprintf("\n %s%s\n", prefix, label)
+	return fmt.Sprintf("\n %s%s", prefix, label)
 }

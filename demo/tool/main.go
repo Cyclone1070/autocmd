@@ -77,7 +77,7 @@ type mockAgent struct {
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
 	runSuite := func(name string, display1, display2, display3 domain.ToolDisplay) error {
-		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("\n### SUITE: %s\n", name)})
+		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("### SUITE: %s\n\n", name)})
 
 		// Start all three
 		a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: name + "-1", Display: display1})
@@ -108,7 +108,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return nil
 	}
 
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n"})
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer"})
 
 	// 1. String Suite
 	if err := runSuite("STRING",
@@ -127,7 +127,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// 3. Shell Suite (with more streaming)
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "\n### SUITE: SHELL (Heavy Streaming)\n"})
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "### SUITE: SHELL (Heavy Streaming)\n\n"})
 	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", nil, nil)})
 	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", nil, nil)})
 	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", nil, nil)})

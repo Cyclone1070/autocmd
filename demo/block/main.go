@@ -76,17 +76,17 @@ type mockAgent struct {
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
 	blocks := []string{
-		"# H1 Header - Should be uppercase\n",
-		"## H2 Header\n",
-		"### H3 Header\n",
-		"This is a paragraph with **bold** and *italic* and `inline code`.\n",
-		"Here is a list:\n- Item 1\n- Item 2\n- Item 3\n",
-		"1. Ordered item 1\n2. Ordered item 2\n",
-		"> This is a blockquote.\n> It can have multiple lines.\n",
-		"```go\nfunc hello() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n",
-		"---\n", // HR
+		"# H1 Header - Should be uppercase\n\n",
+		"## H2 Header\n\n",
+		"### H3 Header\n\n",
+		"This is a paragraph with **bold** and *italic* and `inline code`.\n\n",
+		"Here is a list:\n- Item 1\n- Item 2\n- Item 3\n\n",
+		"1. Ordered item 1\n2. Ordered item 2\n\n",
+		"> This is a blockquote.\n> It can have multiple lines.\n\n",
+		"```go\nfunc hello() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n\n",
+		"---\n\n", // HR
 		"| Table | Header |\n|-------|--------|\n| Row 1 | Cell 1 |\n| Row 2 | Cell 2 |\n\n",
-		"Task list:\n- [x] Done\n- [ ] Todo\n",
+		"Task list:\n- [x] Done\n- [ ] Todo",
 	}
 
 	for _, b := range blocks {

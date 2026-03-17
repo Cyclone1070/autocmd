@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
@@ -25,23 +27,19 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		store, err := buildSessionStore(cfg, bootstrapFS)
-		if err != nil {
-			return err
-		}
-
-		sess, err := store.Create()
-		if err != nil {
-			return err
-		}
-
 		stateMgr := state.NewManager(bootstrapFS)
 		appState, err := stateMgr.Load()
 		if err != nil {
 			return err
 		}
-		appState.SetCurrentSessionID(sess.ID)
-		if err := appState.Save(); err != nil {
+
+		store, err := buildSessionStore(cfg, bootstrapFS)
+		if err != nil {
+			return err
+		}
+
+		wf := workflow.NewSessionPickerWorkflow(store, appState)
+		if _, err := wf.CreateSession(context.Background()); err != nil {
 			return err
 		}
 

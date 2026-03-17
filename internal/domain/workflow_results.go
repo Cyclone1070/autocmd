@@ -14,3 +14,9 @@ type ModelPickerResult struct {
 	Models        []LLMInfo
 	ActiveModelID string
 }
+
+// SessionPickerResult contains the data needed for session selection UI.
+type SessionPickerResult struct {
+	Sessions         []SessionSummary
+	CurrentSessionID string
+}

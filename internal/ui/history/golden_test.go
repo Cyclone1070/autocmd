@@ -188,7 +188,7 @@ func renderHistoryToGolden(w *bytes.Buffer, name string, msgs domain.Messages, d
 		// This golden test only renders assistant messages for now
 		return
 	}
-	renderAssistantMessage(&sb, am, msgs, 0, displays, renderer, theme, width, isDark)
+	renderAssistantMessage(&sb, am, msgs, 0, displays, renderer, theme, width)
 
 	w.WriteString(fmt.Sprintf("=== START [%s] ===\n", name))
 	w.WriteString(sb.String())

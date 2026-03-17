@@ -22,6 +22,7 @@ type Model struct {
 	renderer        ui.Renderer
 	viewport        viewport.Model
 	displays        domain.ToolDisplays
+	items           []renderItem
 
 	// Cache for lazy rendering
 	renderedMessages map[int]string
@@ -64,6 +65,7 @@ func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg u
 		isDark:           false, // Default, will be overridden by options or polled on-demand
 	}
 	m.width = m.calculateWidth(width)
+	m.items = buildRenderItems(messages)
 
 	for _, opt := range opts {
 		opt(m)
@@ -77,7 +79,11 @@ func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg u
 	}
 
 	if m.renderer == nil {
-		m.renderer = ui.NewGlamourRenderer(m.width, m.isDark)
+		renderWidth := m.width - gutterWidth
+		if renderWidth < 10 {
+			renderWidth = 10
+		}
+		m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 	}
 
 	m.viewport = viewport.New(m.width, height)
@@ -87,13 +93,13 @@ func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg u
 }
 
 func (m *Model) initializeContent() {
-	if len(m.messages) == 0 {
+	if len(m.items) == 0 {
 		m.reachedTop = true
 		return
 	}
 
 	m.reachedTop = false
-	m.bottomIdx = len(m.messages) - 1
+	m.bottomIdx = len(m.items) - 1
 	m.topIdx = m.bottomIdx
 
 	var renderedParts []string
@@ -128,7 +134,13 @@ func (m *Model) renderMessage(idx int) string {
 	if r, ok := m.renderedMessages[idx]; ok {
 		return r
 	}
-	rendered := RenderMessage(m.messages, idx, m.displays, m.renderer, m.theme, m.width, idx > 0)
+	it := m.items[idx]
+	if len(it.assistantIndices) > 1 {
+		rendered := renderCoalescedAssistant(m.messages, it.assistantIndices, m.displays, m.renderer, m.theme, m.width, idx > 0)
+		m.renderedMessages[idx] = rendered
+		return rendered
+	}
+	rendered := RenderMessage(m.messages, it.idx, m.displays, m.renderer, m.theme, m.width, idx > 0)
 	m.renderedMessages[idx] = rendered
 	return rendered
 }
@@ -194,7 +206,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if newWidth != m.width {
 			m.width = newWidth
-			m.renderer = ui.NewGlamourRenderer(m.width, m.isDark)
+			renderWidth := m.width - gutterWidth
+			if renderWidth < 10 {
+				renderWidth = 10
+			}
+			m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 			// Reset rendered cache only on width change as it affects wrapping.
 			m.renderedMessages = make(map[int]string)
 		}

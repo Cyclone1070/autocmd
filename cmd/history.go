@@ -9,6 +9,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/history"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -36,30 +37,24 @@ var historyCmd = &cobra.Command{
 			return err
 		}
 
-		var sessionID string
-		if len(args) > 0 {
-			sessionID = args[0]
-		} else {
-			sessionID = appState.CurrentSessionID()
-		}
-
 		store, err := buildSessionStore(cfg, bootstrapFS)
 		if err != nil {
 			return err
 		}
 
-		if sessionID == "" {
-			summaries, err := store.List()
-			if err != nil || len(summaries) == 0 {
-				return fmt.Errorf("no current session found and no history available")
-			}
-			sessionID = summaries[0].ID
+		var argSessionID string
+		if len(args) > 0 {
+			argSessionID = args[0]
 		}
 
-		sess, err := store.Get(sessionID)
+		res, err := workflow.RunHistory(&workflow.HistoryDeps{
+			Store: store,
+			State: appState,
+		}, argSessionID)
 		if err != nil {
-			return fmt.Errorf("failed to load session %s: %w", sessionID, err)
+			return err
 		}
+		sess := res.Session
 
 		themeCfg := ui.ThemeConfig{
 			PrimaryColor: ui.ToAdaptiveColor(cfg.UI().PrimaryColor()),
@@ -71,7 +66,8 @@ var historyCmd = &cobra.Command{
 
 		width, height, _ := term.GetSize(int(os.Stdout.Fd()))
 		m := history.NewModel(sess.Messages, sess.ToolDisplays, themeCfg, cfg.UI().ChatWindowWidth(), width, height)
-		p := tea.NewProgram(m, tea.WithAltScreen())
+		// Enable mouse input so the viewport can scroll with the wheel/trackpad.
+		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run history viewer: %w", err)

@@ -1,4 +1,4 @@
-package picker
+package ui
 
 import (
 	"testing"

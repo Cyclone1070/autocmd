@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInfoRenderer_Render(t *testing.T) {
 	t.Run("Full Success Scenario", func(t *testing.T) {
-		data := &workflow.InfoResult{
+		data := &domain.InfoResult{
 			Model:          "google/gemini-pro",
 			SessionDisplay: "Test Session",
 			SessionTokens:  100,
@@ -39,7 +39,7 @@ func TestInfoRenderer_Render(t *testing.T) {
 	})
 
 	t.Run("Minimal Scenario", func(t *testing.T) {
-		data := &workflow.InfoResult{
+		data := &domain.InfoResult{
 			SessionDisplay: "none",
 		}
 

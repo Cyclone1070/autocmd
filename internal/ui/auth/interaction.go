@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui/picker"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -58,7 +58,7 @@ type Model struct {
 	method   domain.AuthMethod
 	values   map[string]string
 
-	picker     *picker.Picker
+	picker     *ui.Picker
 	textInput  textinput.Model
 	fieldIndex int
 
@@ -80,7 +80,7 @@ func NewModel(registry Registry, authMgr AuthManager, appState stateManager) *Mo
 
 func (m *Model) initProviderPicker() {
 	infos, _ := m.registry.ListProviders(context.Background())
-	var items []picker.Item
+	var items []ui.Item
 	for _, info := range infos {
 		label := info.ID
 		active := false
@@ -91,32 +91,32 @@ func (m *Model) initProviderPicker() {
 			detail = "(Authorized)"
 		}
 
-		items = append(items, picker.Item{
+		items = append(items, ui.Item{
 			ID:     info.ID,
 			Label:  label,
 			Active: active,
 			Detail: detail,
 		})
 	}
-	m.picker = picker.NewPicker(picker.Config{
+	m.picker = ui.NewPicker(ui.Config{
 		Title: "SELECT PROVIDER",
 		Items: items,
-		Actions: []picker.Action{
-			{Key: "d", Label: "delete auth", Fn: func(item picker.Item) tea.Cmd { return nil }},
+		Actions: []ui.Action{
+			{Key: "d", Label: "delete auth", Fn: func(item ui.Item) tea.Cmd { return nil }},
 		},
 	})
 }
 
 func (m *Model) initMethodPicker() {
 	methods := m.provider.SupportedAuthMethods()
-	var items []picker.Item
+	var items []ui.Item
 	for _, meth := range methods {
-		items = append(items, picker.Item{
+		items = append(items, ui.Item{
 			ID:    meth.ID,
 			Label: meth.Label,
 		})
 	}
-	m.picker = picker.NewPicker(picker.Config{
+	m.picker = ui.NewPicker(ui.Config{
 		Title: fmt.Sprintf("SELECT AUTH MODE (%s)", m.provider.ID()),
 		Items: items,
 	})
@@ -163,7 +163,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		newPicker, pCmd := m.picker.Update(msg)
-		m.picker = newPicker.(*picker.Picker)
+		m.picker = newPicker.(*ui.Picker)
 		
 		if sel, ok := m.picker.Selected(); ok {
 			m.provider, _ = m.registry.GetProvider(sel.ID)
@@ -175,7 +175,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stateMethodSelection:
 		newPicker, pCmd := m.picker.Update(msg)
-		m.picker = newPicker.(*picker.Picker)
+		m.picker = newPicker.(*ui.Picker)
 		
 		if sel, ok := m.picker.Selected(); ok {
 			for _, meth := range m.provider.SupportedAuthMethods() {

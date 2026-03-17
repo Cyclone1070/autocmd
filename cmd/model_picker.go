@@ -7,7 +7,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/internal/ui/picker"
+	"github.com/Cyclone1070/iav/internal/ui/model_picker"
+	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
@@ -42,39 +43,24 @@ var modelCmd = &cobra.Command{
 		ctx := context.Background()
 		registry := buildLLMRegistry(authMgr)
 
-		models, err := registry.List(ctx)
+		wf := workflow.NewModelPickerWorkflow(registry, appState)
+		res, err := wf.Run(ctx)
 		if err != nil {
-			return fmt.Errorf("list models: %w", err)
+			return err
 		}
 
-		var items []picker.Item
-		for _, mi := range models {
-			items = append(items, picker.Item{
-				ID:     mi.ID,
-				Label:  mi.DisplayName,
-				Detail: mi.ID,
-				Active: mi.ID == appState.Model(),
-			})
-		}
-
-		pickerCfg := picker.Config{
-			Title: "MODELS",
-			Items: items,
-		}
-
-		m := picker.NewPicker(pickerCfg)
+		m := model_picker.NewModel(res)
 		p := tea.NewProgram(m)
 
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("picker failed: %w", err)
 		}
 
-		if selected, ok := m.Selected(); ok {
-			appState.SetModel(selected.ID)
-			if err := appState.Save(); err != nil {
-				return fmt.Errorf("failed to save state: %w", err)
+		if selectedID, ok := m.SelectedID(); ok {
+			if err := wf.Select(ctx, selectedID); err != nil {
+				return err
 			}
-			fmt.Printf("\nSelected model: %s\n", selected.ID)
+			m.RenderSuccess(cmd, selectedID)
 		}
 
 		return nil

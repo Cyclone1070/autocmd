@@ -1,0 +1,53 @@
+?   	github.com/Cyclone1070/iav	[no test files]
+ok  	github.com/Cyclone1070/iav/cmd	(cached)
+?   	github.com/Cyclone1070/iav/demo/block	[no test files]
+?   	github.com/Cyclone1070/iav/demo/debug_delay	[no test files]
+?   	github.com/Cyclone1070/iav/demo/debug_instant	[no test files]
+?   	github.com/Cyclone1070/iav/demo/overflow	[no test files]
+?   	github.com/Cyclone1070/iav/demo/tool	[no test files]
+?   	github.com/Cyclone1070/iav/demo/truncate	[no test files]
+?   	github.com/Cyclone1070/iav/demo/ui_demo	[no test files]
+Debug: Working Dir: /Users/mac/Desktop/repos/iav/internal
+
+--- ARCHITECTURE VIOLATIONS DETECTED ---
+Violation: Package "ui/model_picker" imports "github.com/Cyclone1070/iav/internal/workflow", but this is not allowed by rule: ^internal/ui(/.*)?$ cannot import ^github\.com/Cyclone1070/iav/internal/workflow(/.*)?$
+Violation: Package "ui/info" imports "github.com/Cyclone1070/iav/internal/workflow", but this is not allowed by rule: ^internal/ui(/.*)?$ cannot import ^github\.com/Cyclone1070/iav/internal/workflow(/.*)?$
+----------------------------------------
+
+--- FAIL: TestArchitecture (0.20s)
+    architecture_test.go:138: 
+        	Error Trace:	/Users/mac/Desktop/repos/iav/internal/architecture_test.go:138
+        	Error:      	Should be true
+        	Test:       	TestArchitecture
+        	Messages:   	Architecture violations detected (see output above)
+FAIL
+FAIL	github.com/Cyclone1070/iav/internal	0.769s
+ok  	github.com/Cyclone1070/iav/internal/agent	(cached)
+ok  	github.com/Cyclone1070/iav/internal/auth	(cached)
+ok  	github.com/Cyclone1070/iav/internal/config	(cached)
+ok  	github.com/Cyclone1070/iav/internal/domain	(cached)
+?   	github.com/Cyclone1070/iav/internal/fs	[no test files]
+ok  	github.com/Cyclone1070/iav/internal/llm	(cached)
+ok  	github.com/Cyclone1070/iav/internal/llm/google	(cached)
+ok  	github.com/Cyclone1070/iav/internal/session	(cached)
+ok  	github.com/Cyclone1070/iav/internal/state	(cached)
+?   	github.com/Cyclone1070/iav/internal/tool	[no test files]
+ok  	github.com/Cyclone1070/iav/internal/tool/directory	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/file	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/helper/content	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/helper/pagination	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/search	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/service/executor	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/service/git	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/service/hash	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/service/path	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/shell	(cached)
+ok  	github.com/Cyclone1070/iav/internal/tool/todo	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui/auth	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui/history	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui/info	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui/loop	(cached)
+ok  	github.com/Cyclone1070/iav/internal/ui/model_picker	(cached)
+ok  	github.com/Cyclone1070/iav/internal/workflow	(cached)
+FAIL

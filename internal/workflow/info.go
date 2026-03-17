@@ -21,15 +21,6 @@ type infoSessionStore interface {
 	Get(id string) (*domain.Session, error)
 }
 
-// InfoResult contains gathered data for UI display.
-type InfoResult struct {
-	Model          string
-	SessionDisplay string
-	SessionTokens  int
-	ContextWindow  int
-	Authorized     []string
-}
-
 // InfoWorkflow gathers information about the current configuration and state.
 type InfoWorkflow struct {
 	registry infoLLMRegistry
@@ -47,8 +38,8 @@ func NewInfoWorkflow(registry infoLLMRegistry, state infoState, store infoSessio
 }
 
 // Run executes the info workflow.
-func (w *InfoWorkflow) Run(ctx context.Context) (*InfoResult, error) {
-	res := &InfoResult{}
+func (w *InfoWorkflow) Run(ctx context.Context) (*domain.InfoResult, error) {
+	res := &domain.InfoResult{}
 
 	// 1. Authorized Providers
 	providers, err := w.registry.ListProviders(ctx)

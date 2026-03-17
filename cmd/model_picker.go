@@ -49,18 +49,15 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
-		m := model_picker.NewModel(res)
+		m := model_picker.NewModel(res, wf)
 		p := tea.NewProgram(m)
 
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("picker failed: %w", err)
 		}
 
-		if selectedID, ok := m.SelectedID(); ok {
-			if err := wf.ApplySelection(ctx, selectedID); err != nil {
-				return err
-			}
-			m.RenderSuccess(cmd, selectedID)
+		if err := m.Err(); err != nil {
+			return err
 		}
 
 		return nil

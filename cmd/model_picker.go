@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -40,16 +39,10 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
-		ctx := context.Background()
 		registry := buildLLMRegistry(authMgr)
-
 		wf := workflow.NewModelPickerWorkflow(registry, appState)
-		res, err := wf.PrepareSelection(ctx)
-		if err != nil {
-			return err
-		}
 
-		m := model_picker.NewModel(res, wf)
+		m := model_picker.NewModel(wf)
 		p := tea.NewProgram(m)
 
 		if _, err := p.Run(); err != nil {

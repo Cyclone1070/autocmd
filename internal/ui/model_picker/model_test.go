@@ -16,6 +16,9 @@ type mockWorkflow struct {
 
 func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerResult, error) {
 	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*domain.ModelPickerResult), args.Error(1)
 }
 
@@ -35,28 +38,40 @@ func TestModelSelection(t *testing.T) {
 
 	t.Run("Selection triggers ApplySelection and returns SelectedID", func(t *testing.T) {
 		wf := new(mockWorkflow)
+		wf.On("PrepareSelection", mock.Anything).Return(data, nil)
 		wf.On("ApplySelection", mock.Anything, "m2").Return(nil)
 		
-		m := NewModel(data, wf)
+		m := NewModel(wf)
+		
+		// Initial state: Fetching
+		assert.Contains(t, m.View(), "Fetching models")
+
+		// Simulate Init and Update with data
+		cmd := m.Init()
+		msg := cmd()
+		m.Update(msg)
+
+		// Now showing picker
+		assert.Contains(t, m.View(), "MODELS")
 		
 		// Move cursor down to m2
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		
 		// Press Enter - this should return a Cmd
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		assert.NotNil(t, cmd)
+		_, cmdEnter := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		assert.NotNil(t, cmdEnter)
 		
 		// Execute the cmd
-		msg := cmd()
+		msgEnter := cmdEnter()
 		
 		// Send the result back to the model
-		m.Update(msg)
+		m.Update(msgEnter)
 
 		selectedID, ok := m.SelectedID()
 		assert.True(t, ok)
 		assert.Equal(t, "m2", selectedID)
 		
-		// CRITICAL: The view must be empty after selection to allow clean terminal output
+		// View should be empty after selection
 		assert.Empty(t, m.View(), "View should be empty after selection to clear the picker")
 		
 		wf.AssertExpectations(t)
@@ -64,7 +79,13 @@ func TestModelSelection(t *testing.T) {
 
 	t.Run("Escape clears selection without calling ApplySelection", func(t *testing.T) {
 		wf := new(mockWorkflow)
-		m := NewModel(data, wf)
+		wf.On("PrepareSelection", mock.Anything).Return(data, nil)
+
+		m := NewModel(wf)
+		
+		cmd := m.Init()
+		m.Update(cmd())
+
 		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 		_, ok := m.SelectedID()

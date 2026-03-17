@@ -47,7 +47,7 @@ func TestRunHistory_WithArgSessionID(t *testing.T) {
 	}
 	state := &fakeHistoryState{currentID: "state-id"}
 
-	res, err := RunHistory(&HistoryDeps{
+	res, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
 	}, "arg-id")
@@ -67,7 +67,7 @@ func TestRunHistory_WithCurrentSessionID(t *testing.T) {
 	}
 	state := &fakeHistoryState{currentID: "state-id"}
 
-	res, err := RunHistory(&HistoryDeps{
+	res, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
 	}, "")
@@ -90,7 +90,7 @@ func TestRunHistory_FallbackToList(t *testing.T) {
 	}
 	state := &fakeHistoryState{currentID: ""}
 
-	res, err := RunHistory(&HistoryDeps{
+	res, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
 	}, "")
@@ -109,7 +109,7 @@ func TestRunHistory_NoSessionsAvailable(t *testing.T) {
 	}
 	state := &fakeHistoryState{currentID: ""}
 
-	_, err := RunHistory(&HistoryDeps{
+	_, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
 	}, "")

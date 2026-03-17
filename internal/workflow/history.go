@@ -30,14 +30,8 @@ type HistoryResult struct {
 	Session *domain.Session
 }
 
-// RunHistory resolves which session's history should be displayed and loads it.
-// Selection order:
-//   1. Explicit argSessionID, if provided.
-//   2. CurrentSessionID from state, if non-empty.
-//   3. First session returned by Store.List(), if any.
-// If no session can be resolved, an error is returned that matches the current
-// CLI behaviour.
-func RunHistory(deps *HistoryDeps, argSessionID string) (*HistoryResult, error) {
+// ResolveSession resolves which session's history should be displayed and loads it.
+func ResolveSession(deps *HistoryDeps, argSessionID string) (*HistoryResult, error) {
 	if deps == nil || deps.Store == nil || deps.State == nil {
 		return nil, fmt.Errorf("invalid history dependencies")
 	}

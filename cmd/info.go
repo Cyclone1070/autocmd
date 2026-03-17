@@ -53,7 +53,7 @@ func runInfo(cmd *cobra.Command, bootstrapFS fs.FileSystem, cfg *config.Config, 
 	}
 
 	wf := workflow.NewInfoWorkflow(llmRegistry, appState, store)
-	res, err := wf.Run(ctx)
+	res, err := wf.Gather(ctx)
 	if err != nil {
 		return err
 	}

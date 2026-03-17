@@ -47,7 +47,7 @@ var historyCmd = &cobra.Command{
 			argSessionID = args[0]
 		}
 
-		res, err := workflow.RunHistory(&workflow.HistoryDeps{
+		res, err := workflow.ResolveSession(&workflow.HistoryDeps{
 			Store: store,
 			State: appState,
 		}, argSessionID)

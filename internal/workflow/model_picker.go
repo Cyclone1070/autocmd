@@ -32,8 +32,8 @@ func NewModelPickerWorkflow(registry modelLLMRegistry, state modelState) *ModelP
 	}
 }
 
-// Run gathers the current model state and available models.
-func (w *ModelPickerWorkflow) Run(ctx context.Context) (*domain.ModelPickerResult, error) {
+// PrepareSelection gathers the current model state and available models.
+func (w *ModelPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerResult, error) {
 	models, err := w.registry.List(ctx)
 	if err != nil {
 		return nil, err
@@ -45,8 +45,8 @@ func (w *ModelPickerWorkflow) Run(ctx context.Context) (*domain.ModelPickerResul
 	}, nil
 }
 
-// Select updates the current model in the application state.
-func (w *ModelPickerWorkflow) Select(ctx context.Context, id string) error {
+// ApplySelection updates the current model in the application state.
+func (w *ModelPickerWorkflow) ApplySelection(ctx context.Context, id string) error {
 	w.state.SetModel(id)
 	return w.state.Save()
 }

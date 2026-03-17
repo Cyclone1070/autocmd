@@ -50,7 +50,7 @@ func TestModelPickerWorkflow_Run(t *testing.T) {
 	state.On("Model").Return("google/gemini-pro")
 
 	wf := NewModelPickerWorkflow(registry, state)
-	res, err := wf.Run(ctx)
+	res, err := wf.PrepareSelection(ctx)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "google/gemini-pro", res.ActiveModelID)
@@ -66,7 +66,7 @@ func TestModelPickerWorkflow_Select(t *testing.T) {
 	state.On("Save").Return(nil)
 
 	wf := NewModelPickerWorkflow(registry, state)
-	err := wf.Select(ctx, "openai/gpt-4")
+	err := wf.ApplySelection(ctx, "openai/gpt-4")
 
 	assert.NoError(t, err)
 	state.AssertExpectations(t)

@@ -44,7 +44,7 @@ var modelCmd = &cobra.Command{
 		registry := buildLLMRegistry(authMgr)
 
 		wf := workflow.NewModelPickerWorkflow(registry, appState)
-		res, err := wf.Run(ctx)
+		res, err := wf.PrepareSelection(ctx)
 		if err != nil {
 			return err
 		}
@@ -57,7 +57,7 @@ var modelCmd = &cobra.Command{
 		}
 
 		if selectedID, ok := m.SelectedID(); ok {
-			if err := wf.Select(ctx, selectedID); err != nil {
+			if err := wf.ApplySelection(ctx, selectedID); err != nil {
 				return err
 			}
 			m.RenderSuccess(cmd, selectedID)

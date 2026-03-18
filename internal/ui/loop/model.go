@@ -205,6 +205,9 @@ func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
 		return m.doFlush(flushBlocks, stateThinking)
 	case domain.TextEvent:
+		if u.IsThought {
+			return m, m.nextTick()
+		}
 		m.animator.Enqueue(u.Text)
 		m.state = stateStreaming
 		if len(flushBlocks) > 0 {

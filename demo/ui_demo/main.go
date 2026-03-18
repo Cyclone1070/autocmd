@@ -87,22 +87,25 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(400 * time.Millisecond):
 	}
 
-	// 2. Thinking
+	// 2. Thinking + Hidden Thoughts (Simulating a Leak)
 	a.bus.SendUIUpdate(domain.ThinkingEvent{})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(1 * time.Second):
+	
+	thoughts := []string{
+		"Hmm, let me look at the file system structure first... ",
+		"I should check if main.go exists in the root... ",
+		"Okay, I'll use the read_file tool to investigate. ",
+	}
+	
+	for _, t := range thoughts {
+		a.bus.SendUIUpdate(domain.TextEvent{Text: t, IsThought: true})
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(600 * time.Millisecond):
+		}
 	}
 
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's a readfile tool call."})
-
-	a.bus.SendUIUpdate(domain.ThinkingEvent{})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(1 * time.Second):
-	}
+	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's the result of my investigation:"})
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",

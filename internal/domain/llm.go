@@ -69,8 +69,10 @@ func (m UserMessage) MarshalJSON() ([]byte, error) {
 }
 
 type AssistantMessage struct {
-	Content   string     `json:"content,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Content          string     `json:"content,omitempty"`
+	Thought          string     `json:"thought,omitempty"`
+	ThoughtSignature string     `json:"thought_signature,omitempty"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 }
 
 func (AssistantMessage) Role() Role { return RoleAssistant }
@@ -195,7 +197,9 @@ type StreamChunk interface {
 
 // TextChunk is a fragment of text response.
 type TextChunk struct {
-	Text string
+	Text             string
+	IsThought        bool
+	ThoughtSignature string
 }
 
 func (TextChunk) isStreamChunk() {}
@@ -203,9 +207,11 @@ func (TextChunk) isStreamChunk() {}
 // ToolCall is the LLM's request to execute a tool.
 // Implements StreamChunk.
 type ToolCall struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Arguments        json.RawMessage `json:"arguments"`
+	Thought          string          `json:"thought,omitempty"`
+	ThoughtSignature string          `json:"thought_signature,omitempty"`
 }
 
 func (ToolCall) isStreamChunk() {}

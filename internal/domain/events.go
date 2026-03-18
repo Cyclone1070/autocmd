@@ -19,7 +19,8 @@ func (StopAction) isAction() {}
 
 // TextEvent is emitted when the LLM produces text output.
 type TextEvent struct {
-	Text string
+	Text      string
+	IsThought bool
 }
 
 func (TextEvent) isUIUpdate() {}

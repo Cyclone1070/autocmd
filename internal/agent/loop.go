@@ -73,12 +73,25 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		for stream.Next() {
 			switch c := stream.Chunk().(type) {
 			case domain.TextChunk:
-				msg.Content += c.Text
+				if c.IsThought {
+					msg.Thought += c.Text
+					if c.ThoughtSignature != "" {
+						msg.ThoughtSignature = c.ThoughtSignature
+					}
+				} else {
+					msg.Content += c.Text
+				}
 				if l.events != nil {
-					l.events.SendUIUpdate(domain.TextEvent(c))
+					l.events.SendUIUpdate(domain.TextEvent{
+						Text:      c.Text,
+						IsThought: c.IsThought,
+					})
 				}
 			case domain.ToolCall:
 				msg.ToolCalls = append(msg.ToolCalls, c)
+				if c.ThoughtSignature != "" {
+					msg.ThoughtSignature = c.ThoughtSignature
+				}
 			}
 		}
 

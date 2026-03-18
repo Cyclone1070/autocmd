@@ -143,3 +143,24 @@ func TestToHistory_ToolCall(t *testing.T) {
 	}
 	assert.Equal(t, "Sunny", parts[0].FunctionResponse.Response["result"])
 }
+
+func TestToHistory_ThoughtSignature(t *testing.T) {
+	msgs := domain.Messages{
+		domain.AssistantMessage{
+			Thought:          "I am thinking",
+			ThoughtSignature: "sig-123",
+		},
+	}
+
+	hist, err := toHistory(msgs)
+	if err != nil {
+		t.Fatalf("toHistory failed: %v", err)
+	}
+
+	assert.Len(t, hist.Contents, 1)
+	assert.Len(t, hist.Contents[0].Parts, 1)
+	p := hist.Contents[0].Parts[0]
+	assert.Equal(t, true, p.Thought)
+	assert.Equal(t, "I am thinking", p.Text)
+	assert.Equal(t, []byte("sig-123"), p.ThoughtSignature)
+}

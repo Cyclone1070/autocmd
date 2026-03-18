@@ -117,6 +117,13 @@ func toParts(m domain.Message) ([]*genai.Part, error) {
 			parts = append(parts, &genai.Part{Text: msg.Content})
 		}
 	case domain.AssistantMessage:
+		if msg.Thought != "" {
+			parts = append(parts, &genai.Part{
+				Thought:          true,
+				ThoughtSignature: []byte(msg.ThoughtSignature),
+				Text:             msg.Thought,
+			})
+		}
 		if msg.Content != "" {
 			parts = append(parts, &genai.Part{Text: msg.Content})
 		}
@@ -128,6 +135,7 @@ func toParts(m domain.Message) ([]*genai.Part, error) {
 				}
 			}
 			parts = append(parts, &genai.Part{
+				ThoughtSignature: []byte(tc.ThoughtSignature),
 				FunctionCall: &genai.FunctionCall{
 					Name: tc.Name,
 					Args: args,

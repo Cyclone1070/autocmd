@@ -77,8 +77,14 @@ func toChunks(resp *genai.GenerateContentResponse) []domain.StreamChunk {
 	}
 
 	for _, part := range cand.Content.Parts {
+		thoughtSig := string(part.ThoughtSignature)
+
 		if part.Text != "" {
-			chunks = append(chunks, domain.TextChunk{Text: part.Text})
+			chunks = append(chunks, domain.TextChunk{
+				Text:             part.Text,
+				IsThought:        part.Thought,
+				ThoughtSignature: thoughtSig,
+			})
 		}
 		if part.FunctionCall != nil {
 			args, err := json.Marshal(part.FunctionCall.Args)
@@ -89,9 +95,10 @@ func toChunks(resp *genai.GenerateContentResponse) []domain.StreamChunk {
 				args = json.RawMessage("{}")
 			}
 			chunks = append(chunks, domain.ToolCall{
-				ID:        uuid.NewString(),
-				Name:      part.FunctionCall.Name,
-				Arguments: args,
+				ID:               uuid.NewString(),
+				Name:             part.FunctionCall.Name,
+				Arguments:        args,
+				ThoughtSignature: thoughtSig,
 			})
 		}
 	}

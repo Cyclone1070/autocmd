@@ -20,3 +20,14 @@ type SessionPickerResult struct {
 	Sessions         []SessionSummary
 	CurrentSessionID string
 }
+
+// AuthWorkflowResult contains the data needed for the auth management UI.
+type AuthWorkflowResult struct {
+	Providers []ProviderSummary
+}
+
+// ProviderSummary provides a snapshot of a provider's auth status.
+type ProviderSummary struct {
+	ID         string
+	Authorized bool
+}

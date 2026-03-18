@@ -7,6 +7,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
+	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +42,14 @@ var authCmd = &cobra.Command{
 			return err
 		}
 
-		return authui.Run(registry, authMgr, s)
+		wf := workflow.NewAuthWorkflow(registry, authMgr, s)
+		m := authui.NewModel(wf)
+		p := tea.NewProgram(m)
+
+		if _, err := p.Run(); err != nil {
+			return err
+		}
+
+		return m.Err()
 	},
 }

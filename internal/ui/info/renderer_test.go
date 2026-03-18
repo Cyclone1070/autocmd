@@ -11,7 +11,7 @@ import (
 
 func TestInfoRenderer_Render(t *testing.T) {
 	t.Run("Full Success Scenario", func(t *testing.T) {
-		data := &domain.InfoResult{
+		data := &domain.SystemSnapshot{
 			Model:          "google/gemini-pro",
 			SessionDisplay: "Test Session",
 			SessionTokens:  100,
@@ -39,7 +39,7 @@ func TestInfoRenderer_Render(t *testing.T) {
 	})
 
 	t.Run("Minimal Scenario", func(t *testing.T) {
-		data := &domain.InfoResult{
+		data := &domain.SystemSnapshot{
 			SessionDisplay: "none",
 		}
 

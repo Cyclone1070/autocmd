@@ -11,7 +11,7 @@ import (
 type InfoRenderer struct{}
 
 // Render prints the info data to the provided cobra command's output.
-func (r *InfoRenderer) Render(cmd *cobra.Command, data *domain.InfoResult) {
+func (r *InfoRenderer) Render(cmd *cobra.Command, data *domain.SystemSnapshot) {
 	// Model Section
 	if data.Model != "" {
 		cmd.Printf("\033[1m%-22s\033[0m %s\n", "Model:", data.Model)

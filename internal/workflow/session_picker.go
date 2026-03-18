@@ -34,13 +34,13 @@ func NewSessionPickerWorkflow(store sessionPickerStore, state sessionPickerState
 }
 
 // PrepareSelection gathers the sessions and the current active session.
-func (w *SessionPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.SessionPickerResult, error) {
+func (w *SessionPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.SessionPickerSnapshot, error) {
 	summaries, err := w.store.List()
 	if err != nil {
 		return nil, err
 	}
 
-	return &domain.SessionPickerResult{
+	return &domain.SessionPickerSnapshot{
 		Sessions:         summaries,
 		CurrentSessionID: w.state.CurrentSessionID(),
 	}, nil

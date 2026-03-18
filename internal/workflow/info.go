@@ -38,8 +38,8 @@ func NewInfoWorkflow(registry infoLLMRegistry, state infoState, store infoSessio
 }
 
 // Gather executes the info workflow results.
-func (w *InfoWorkflow) Gather(ctx context.Context) (*domain.InfoResult, error) {
-	res := &domain.InfoResult{}
+func (w *InfoWorkflow) Gather(ctx context.Context) (*domain.SystemSnapshot, error) {
+	res := &domain.SystemSnapshot{}
 
 	// 1. Authorized Providers
 	providers, err := w.registry.ListProviders(ctx)

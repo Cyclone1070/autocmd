@@ -13,14 +13,14 @@ import (
 
 // Workflow defines the operations needed for authentication.
 type Workflow interface {
-	Gather(ctx context.Context) (*domain.AuthWorkflowResult, error)
+	Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error)
 	SetAuth(ctx context.Context, providerID string, cred domain.Credential) error
 	RemoveAuth(ctx context.Context, providerID string) error
 	GetProvider(id string) (domain.Provider, bool)
 }
 
 type prepareResultMsg struct {
-	data *domain.AuthWorkflowResult
+	data *domain.AuthProviderSnapshot
 	err  error
 }
 
@@ -184,7 +184,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializeProviderPicker(data *domain.AuthWorkflowResult) {
+func (m *Model) initializeProviderPicker(data *domain.AuthProviderSnapshot) {
 	var items []ui.Item
 	for _, p := range data.Providers {
 		detail := ""

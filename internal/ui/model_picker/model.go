@@ -10,7 +10,7 @@ import (
 
 // Workflow defines the operations needed for model selection.
 type Workflow interface {
-	PrepareSelection(ctx context.Context) (*domain.ModelPickerResult, error)
+	PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error)
 	ApplySelection(ctx context.Context, id string) error
 }
 
@@ -20,7 +20,7 @@ type applyResultMsg struct {
 }
 
 type prepareResultMsg struct {
-	data *domain.ModelPickerResult
+	data *domain.ModelPickerSnapshot
 	err  error
 }
 
@@ -105,7 +105,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializePicker(data *domain.ModelPickerResult) {
+func (m *Model) initializePicker(data *domain.ModelPickerSnapshot) {
 	var items []ui.Item
 	for _, m := range data.Models {
 		items = append(items, ui.Item{

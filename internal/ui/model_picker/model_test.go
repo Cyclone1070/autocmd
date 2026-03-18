@@ -14,12 +14,12 @@ type mockWorkflow struct {
 	mock.Mock
 }
 
-func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerResult, error) {
+func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*domain.ModelPickerResult), args.Error(1)
+	return args.Get(0).(*domain.ModelPickerSnapshot), args.Error(1)
 }
 
 func (m *mockWorkflow) ApplySelection(ctx context.Context, id string) error {
@@ -28,7 +28,7 @@ func (m *mockWorkflow) ApplySelection(ctx context.Context, id string) error {
 }
 
 func TestModelSelection(t *testing.T) {
-	data := &domain.ModelPickerResult{
+	data := &domain.ModelPickerSnapshot{
 		Models: []domain.LLMInfo{
 			{ID: "m1", DisplayName: "Model 1"},
 			{ID: "m2", DisplayName: "Model 2"},

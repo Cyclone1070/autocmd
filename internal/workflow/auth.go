@@ -40,7 +40,7 @@ func NewAuthWorkflow(registry authRegistry, authMgr authManager, state authState
 }
 
 // Gather returns the providers and their authentication status.
-func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthWorkflowResult, error) {
+func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error) {
 	infos, err := w.registry.ListProviders(ctx)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthWorkflowResult, 
 		})
 	}
 
-	return &domain.AuthWorkflowResult{
+	return &domain.AuthProviderSnapshot{
 		Providers: results,
 	}, nil
 }

@@ -14,12 +14,12 @@ type mockAuthWorkflow struct {
 	mock.Mock
 }
 
-func (m *mockAuthWorkflow) Gather(ctx context.Context) (*domain.AuthWorkflowResult, error) {
+func (m *mockAuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*domain.AuthWorkflowResult), args.Error(1)
+	return args.Get(0).(*domain.AuthProviderSnapshot), args.Error(1)
 }
 
 func (m *mockAuthWorkflow) SetAuth(ctx context.Context, providerID string, cred domain.Credential) error {
@@ -60,7 +60,7 @@ func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, mode
 }
 
 func TestAuthUI(t *testing.T) {
-	result := &domain.AuthWorkflowResult{
+	result := &domain.AuthProviderSnapshot{
 		Providers: []domain.ProviderSummary{
 			{ID: "openai", Authorized: true},
 			{ID: "anthropic", Authorized: false},

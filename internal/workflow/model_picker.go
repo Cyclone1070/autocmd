@@ -33,13 +33,13 @@ func NewModelPickerWorkflow(registry modelLLMRegistry, state modelState) *ModelP
 }
 
 // PrepareSelection gathers the current model state and available models.
-func (w *ModelPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerResult, error) {
+func (w *ModelPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error) {
 	models, err := w.registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return &domain.ModelPickerResult{
+	return &domain.ModelPickerSnapshot{
 		Models:        models,
 		ActiveModelID: w.state.Model(),
 	}, nil

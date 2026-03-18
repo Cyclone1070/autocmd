@@ -1,7 +1,7 @@
 package domain
 
-// InfoResult contains gathered data for UI display of configuration and state.
-type InfoResult struct {
+// SystemSnapshot contains gathered data for UI display of configuration and state.
+type SystemSnapshot struct {
 	Model          string
 	SessionDisplay string
 	SessionTokens  int
@@ -9,20 +9,20 @@ type InfoResult struct {
 	Authorized     []string
 }
 
-// ModelPickerResult contains the data needed for model selection UI.
-type ModelPickerResult struct {
+// ModelPickerSnapshot contains the data needed for model selection UI.
+type ModelPickerSnapshot struct {
 	Models        []LLMInfo
 	ActiveModelID string
 }
 
-// SessionPickerResult contains the data needed for session selection UI.
-type SessionPickerResult struct {
+// SessionPickerSnapshot contains the data needed for session selection UI.
+type SessionPickerSnapshot struct {
 	Sessions         []SessionSummary
 	CurrentSessionID string
 }
 
-// AuthWorkflowResult contains the data needed for the auth management UI.
-type AuthWorkflowResult struct {
+// AuthProviderSnapshot contains the data needed for the auth management UI.
+type AuthProviderSnapshot struct {
 	Providers []ProviderSummary
 }
 

@@ -14,7 +14,7 @@ import (
 
 // Workflow defines the operations needed for session management.
 type Workflow interface {
-	PrepareSelection(ctx context.Context) (*domain.SessionPickerResult, error)
+	PrepareSelection(ctx context.Context) (*domain.SessionPickerSnapshot, error)
 	ApplySelection(ctx context.Context, id string) error
 	CreateSession(ctx context.Context) (string, error)
 	RenameSession(ctx context.Context, id, name string) error
@@ -22,7 +22,7 @@ type Workflow interface {
 }
 
 type prepareResultMsg struct {
-	data *domain.SessionPickerResult
+	data *domain.SessionPickerSnapshot
 	err  error
 }
 
@@ -181,7 +181,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializePicker(data *domain.SessionPickerResult) {
+func (m *Model) initializePicker(data *domain.SessionPickerSnapshot) {
 	var items []ui.Item
 	for _, s := range data.Sessions {
 		name := s.Name

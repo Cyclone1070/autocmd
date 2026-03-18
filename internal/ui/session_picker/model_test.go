@@ -14,12 +14,12 @@ type mockWorkflow struct {
 	mock.Mock
 }
 
-func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.SessionPickerResult, error) {
+func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.SessionPickerSnapshot, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*domain.SessionPickerResult), args.Error(1)
+	return args.Get(0).(*domain.SessionPickerSnapshot), args.Error(1)
 }
 
 func (m *mockWorkflow) ApplySelection(ctx context.Context, id string) error {
@@ -46,7 +46,7 @@ func TestSessionPickerUI(t *testing.T) {
 	summaries := []domain.SessionSummary{
 		{ID: "s1", Name: "Session 1"},
 	}
-	result := &domain.SessionPickerResult{
+	result := &domain.SessionPickerSnapshot{
 		Sessions:         summaries,
 		CurrentSessionID: "s1",
 	}

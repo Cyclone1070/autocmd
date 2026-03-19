@@ -411,14 +411,3 @@ func (m *Model) renderAllTools() []string {
 	}
 	return out
 }
-
-func (m *Model) DrainAnimationForTest() *Model {
-	for i := 0; i < 1000; i++ {
-		if !m.animator.HasPending() && m.state != stateStreaming {
-			break
-		}
-		res, _ := m.Update(tickMsg{})
-		m = res.(*Model)
-	}
-	return m
-}

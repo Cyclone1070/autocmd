@@ -212,3 +212,14 @@ func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, rende
 	w.WriteString(trace.String())
 	w.WriteString(fmt.Sprintf("\n=== END [%s] ===\n", name))
 }
+
+func (m *Model) DrainAnimationForTest() *Model {
+	for i := 0; i < 1000; i++ {
+		if !m.animator.HasPending() && m.state != stateStreaming {
+			break
+		}
+		res, _ := m.Update(tickMsg{})
+		m = res.(*Model)
+	}
+	return m
+}

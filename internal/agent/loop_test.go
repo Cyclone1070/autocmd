@@ -228,7 +228,8 @@ func TestRun_ContextCancelled(t *testing.T) {
 }
 
 func TestRun_ParallelToolCalls(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	sender := newMockEventSender(20)
 
 	m := &mockLLM{
@@ -242,12 +243,18 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		},
 	}
 
+	// Channels to coordinate deterministic parallel execution
+	t1Started := make(chan struct{})
+	t2Started := make(chan struct{})
+	canFinish := make(chan struct{})
+
 	mt1 := &mockTool{
 		name: "t1",
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
-					time.Sleep(100 * time.Millisecond)
+					close(t1Started)
+					<-canFinish // Wait until test says we can finish
 					return "R1", nil
 				},
 			}, nil
@@ -258,7 +265,8 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
-					time.Sleep(50 * time.Millisecond)
+					close(t2Started)
+					<-canFinish // Wait until test says we can finish
 					return "R2", nil
 				},
 			}, nil
@@ -268,15 +276,33 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	l := newTestLoop([]domain.Tool{mt1, mt2}, m, sender)
 	session := &domain.Session{}
 
-	start := time.Now()
-	err := l.Run(ctx, session, "run")
-	duration := time.Since(start)
+	// Run in a separate goroutine so we can coordinate
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- l.Run(ctx, session, "run")
+	}()
 
+	// Wait for BOTH to have started. If they were serial, we would deadlock here
+	// because mt1 would be waiting on canFinish before it ever reached the code to start mt2.
+	select {
+	case <-t1Started:
+		select {
+		case <-t2Started:
+			// Success: both started
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("t2 did not start in parallel with t1")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("t1 did not start")
+	}
+
+	// Now let them finish
+	close(canFinish)
+
+	err := <-runDone
 	assert.NoError(t, err)
-	// Parallel should take ~100ms, sequential ~150ms.
-	assert.Less(t, duration, 140*time.Millisecond)
 
-	// Verify order in session messages
+	// Verify order in session messages (TC order is preserved, but execution was parallel)
 	m2 := session.Messages[2].(domain.ToolMessage)
 	m3 := session.Messages[3].(domain.ToolMessage)
 	assert.Equal(t, "tc-1", m2.ToolCallID)

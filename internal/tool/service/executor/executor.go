@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+// Clock defines a way to handle time-based operations in a testable way.
+type Clock interface {
+	After(d time.Duration) <-chan time.Time
+}
+
+// RealClock implements Clock using the standard time package.
+type RealClock struct{}
+
+func (RealClock) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
 const (
 	defaultMaxOutputSize            = 10 * 1024 * 1024 // 10MB
 	defaultDockerGracefulShutdownMs = 2000
@@ -65,6 +77,7 @@ func NewStreamingCmd(output io.Reader, wait func() (*Result, error)) *StreamingC
 type OSCommandExecutor struct {
 	maxOutputSize            int64
 	dockerGracefulShutdownMs int
+	clock                    Clock
 }
 
 // NewOSCommandExecutor creates a new OSCommandExecutor.
@@ -72,6 +85,7 @@ func NewOSCommandExecutor() *OSCommandExecutor {
 	return &OSCommandExecutor{
 		maxOutputSize:            defaultMaxOutputSize,
 		dockerGracefulShutdownMs: defaultDockerGracefulShutdownMs,
+		clock:                    RealClock{},
 	}
 }
 
@@ -163,14 +177,14 @@ func (f *OSCommandExecutor) RunWithTimeout(ctx context.Context, command []string
 			_ = cmd.Process.Kill()
 		}
 		execErr = ctx.Err()
-	case <-time.After(timeout):
+	case <-f.clock.After(timeout):
 		if cmd.Process != nil {
 			// Try graceful shutdown
 			_ = cmd.Process.Signal(os.Interrupt)
 			select {
 			case <-done:
 				execErr = ErrTimeout
-			case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
+			case <-f.clock.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
 				_ = cmd.Process.Kill()
 				execErr = ErrTimeout
 			}
@@ -234,7 +248,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 	}
 
 	// Start timeout timer immediately after command starts
-	timeoutCh := time.After(timeout)
+	timeoutCh := f.clock.After(timeout)
 
 	// Combined output pipe for streaming to UI
 	pr, pw := io.Pipe()
@@ -297,7 +311,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 				_ = cmd.Process.Signal(os.Interrupt)
 				select {
 				case <-done:
-				case <-time.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
+				case <-f.clock.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
 					_ = cmd.Process.Kill()
 					<-done
 				}

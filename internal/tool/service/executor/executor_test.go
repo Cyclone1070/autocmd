@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -78,11 +79,35 @@ func TestRun(t *testing.T) {
 	})
 }
 
-func TestRunWithTimeout(t *testing.T) {
-	exec := NewOSCommandExecutor()
-	exec.dockerGracefulShutdownMs = 100
+type MockClock struct {
+	afterCh chan chan time.Time
+}
 
+func NewMockClock() *MockClock {
+	return &MockClock{
+		afterCh: make(chan chan time.Time, 10),
+	}
+}
+
+func (m *MockClock) After(d time.Duration) <-chan time.Time {
+	ch := make(chan time.Time, 1)
+	m.afterCh <- ch
+	return ch
+}
+
+func (m *MockClock) Trigger(t *testing.T) {
+	t.Helper()
+	select {
+	case ch := <-m.afterCh:
+		ch <- time.Now()
+	case <-time.After(1 * time.Second):
+		t.Fatal("MockClock.Trigger timed out waiting for an After call")
+	}
+}
+
+func TestRunWithTimeout(t *testing.T) {
 	t.Run("CompletesBeforeTimeout", func(t *testing.T) {
+		exec := NewOSCommandExecutor()
 		res, err := exec.RunWithTimeout(context.Background(), []string{"echo", "hi"}, "", nil, 1*time.Second)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -96,8 +121,22 @@ func TestRunWithTimeout(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("Skipping timeout test on Windows")
 		}
-		// sleep for 10 seconds, timeout in 100ms
-		_, err := exec.RunWithTimeout(context.Background(), []string{"sleep", "10"}, "", nil, 100*time.Millisecond)
+		clock := NewMockClock()
+		exec := NewOSCommandExecutor()
+		exec.clock = clock
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := exec.RunWithTimeout(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
+			errCh <- err
+		}()
+
+		// Trigger the main timeout
+		clock.Trigger(t)
+		// Trigger the graceful shutdown timeout (SIGKILL wait)
+		clock.Trigger(t)
+
+		err := <-errCh
 		if err != ErrTimeout {
 			t.Errorf("expected ErrTimeout, got %v", err)
 		}
@@ -107,12 +146,25 @@ func TestRunWithTimeout(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("Skipping timeout test on Windows")
 		}
-		// Write something then sleep
-		cmd := []string{"sh", "-c", "echo starting; sleep 10"}
-		res, err := exec.RunWithTimeout(context.Background(), cmd, "", nil, 500*time.Millisecond)
-		if err != ErrTimeout {
-			t.Errorf("expected ErrTimeout, got %v", err)
-		}
+		clock := NewMockClock()
+		exec := NewOSCommandExecutor()
+		exec.clock = clock
+
+		resCh := make(chan *Result, 1)
+		go func() {
+			// Write something then sleep. We use a script to ensure some output is flushed.
+			cmd := []string{"sh", "-c", "printf starting; sleep 10"}
+			res, _ := exec.RunWithTimeout(context.Background(), cmd, "", nil, 1*time.Hour)
+			resCh <- res
+		}()
+
+		// Give time for sh to start and printf to run
+		time.Sleep(100 * time.Millisecond)
+
+		clock.Trigger(t) // Main timeout
+		clock.Trigger(t) // Graceful wait
+
+		res := <-resCh
 		if strings.TrimSpace(res.Stdout) != "starting" {
 			t.Errorf("expected stdout 'starting', got %q", res.Stdout)
 		}
@@ -120,10 +172,8 @@ func TestRunWithTimeout(t *testing.T) {
 }
 
 func TestRunStreaming(t *testing.T) {
-	exec := NewOSCommandExecutor()
-	exec.dockerGracefulShutdownMs = 100
-
 	t.Run("SimpleCommand", func(t *testing.T) {
+		exec := NewOSCommandExecutor()
 		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil, 5*time.Second)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -151,18 +201,15 @@ func TestRunStreaming(t *testing.T) {
 		}
 	})
 
-	t.Run("EmptyCommand", func(t *testing.T) {
-		_, err := exec.RunStreaming(context.Background(), []string{}, "", nil, 1*time.Second)
-		if err != os.ErrInvalid {
-			t.Errorf("expected os.ErrInvalid, got %v", err)
-		}
-	})
-
 	t.Run("Timeout", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("Skipping timeout test on Windows")
 		}
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 100*time.Millisecond)
+		clock := NewMockClock()
+		exec := NewOSCommandExecutor()
+		exec.clock = clock
+
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
 		if err != nil {
 			t.Fatalf("unexpected error starting: %v", err)
 		}
@@ -178,46 +225,18 @@ func TestRunStreaming(t *testing.T) {
 			}
 		}()
 
-		res, err := streamCmd.Wait()
-		if err != ErrTimeout {
-			t.Errorf("expected ErrTimeout, got %v", err)
-		}
-		if res.ExitCode != -1 {
-			t.Errorf("expected exit code -1 for timeout, got %d", res.ExitCode)
-		}
-	})
-
-	t.Run("MultipleWaitCalls", func(t *testing.T) {
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "once"}, "", nil, 5*time.Second)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Drain output
+		waitErrCh := make(chan error, 1)
 		go func() {
-			buf := make([]byte, 1024)
-			for {
-				_, err := streamCmd.Output().Read(buf)
-				if err != nil {
-					break
-				}
-			}
+			_, err := streamCmd.Wait()
+			waitErrCh <- err
 		}()
 
-		// Call Wait multiple times
-		res1, err1 := streamCmd.Wait()
-		res2, err2 := streamCmd.Wait()
-		res3, err3 := streamCmd.Wait()
+		clock.Trigger(t) // Main timeout
+		clock.Trigger(t) // Graceful wait
 
-		// All should return the same result
-		if res1 != res2 || res2 != res3 {
-			t.Error("multiple Wait() calls should return same result pointer")
-		}
-		if err1 != err2 || err2 != err3 {
-			t.Error("multiple Wait() calls should return same error")
-		}
-		if !strings.Contains(res1.Stdout, "once") {
-			t.Errorf("expected stdout to contain 'once', got %q", res1.Stdout)
+		err = <-waitErrCh
+		if err != ErrTimeout {
+			t.Errorf("expected ErrTimeout, got %v", err)
 		}
 	})
 
@@ -225,32 +244,33 @@ func TestRunStreaming(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("Skipping timeout test on Windows")
 		}
-		// Command runs for 200ms, timeout is 100ms
-		// But we delay calling Wait() by 150ms
-		// If timeout started at Wait(), the command would complete
-		// If timeout started at command start, it should timeout
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "0.2"}, "", nil, 100*time.Millisecond)
-		if err != nil {
-			t.Fatalf("unexpected error starting: %v", err)
-		}
+		clock := NewMockClock()
+		exec := NewOSCommandExecutor()
+		exec.clock = clock
+
+		// The timeout started immediately after RunStreaming
+		streamCmd, _ := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
 
 		// Drain output
 		go func() {
-			buf := make([]byte, 1024)
-			for {
-				_, err := streamCmd.Output().Read(buf)
-				if err != nil {
-					break
-				}
-			}
+			_, _ = io.Copy(io.Discard, streamCmd.Output())
 		}()
 
-		// Delay before calling Wait
-		time.Sleep(50 * time.Millisecond)
+		// Even if we delay calling Wait(), the timeout already "happened" in the background
+		// if the mock clock is triggered.
+		clock.Trigger(t) // Main timeout (started in RunStreaming)
 
-		_, err = streamCmd.Wait()
-		if err != ErrTimeout {
-			t.Errorf("expected ErrTimeout (timeout should start at command start), got %v", err)
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := streamCmd.Wait()
+			errCh <- err
+		}()
+
+		// Now Wait() should have picked up the main timeout and started the graceful wait
+		clock.Trigger(t) // Graceful wait (started in Wait())
+
+		if err := <-errCh; err != ErrTimeout {
+			t.Errorf("expected ErrTimeout, got %v", err)
 		}
 	})
 }

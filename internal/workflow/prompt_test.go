@@ -240,7 +240,7 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 }
 
 func TestRunPrompt_NamingRace(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	store := new(mockSessionStore)
@@ -262,24 +262,36 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	store.On("Create").Return(sess, nil)
 	store.On("Save", mock.Anything).Return(nil)
 
-	// Simulate GenerateName taking some time and then returning a name
+	// Sync channels to force interleaving
+	agentStartedAppending := make(chan struct{})
+
+	// Simulate GenerateName waiting for agent to start appending
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").
 		Run(func(args mock.Arguments) {
-			time.Sleep(10 * time.Millisecond)
+			<-agentStartedAppending // Wait until agent says it started appending
 		}).
 		Return("Named Session", nil)
 
-	// Simulate Agent.Run reading/writing to session messages at the same time
+	// Simulate Agent.Run appending messages and then signaling
 	agent.On("Run", mock.Anything, mock.Anything, "hello").
 		Run(func(args mock.Arguments) {
 			s := args.Get(1).(*domain.Session)
-			for i := 0; i < 100; i++ {
+			// Append some messages to simulate work and race
+			for i := 0; i < 10; i++ {
 				s.Messages = append(s.Messages, domain.UserMessage{Content: "msg"})
-				time.Sleep(1 * time.Millisecond)
+				if i == 5 {
+					close(agentStartedAppending) // Signal that we've started appending
+				}
 			}
 		}).
 		Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
-	<-done
+	
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("Test timed out - possible deadlock in deterministic synchronization")
+	}
 }

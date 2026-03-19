@@ -99,9 +99,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
+		case "q":
+			if m.state != stateFieldCollection {
+				m.quitting = true
+				return m, tea.Quit
+			}
 		}
 
 		switch m.state {
@@ -243,6 +248,9 @@ func (m *Model) View() string {
 			return m.picker.View()
 		}
 	case stateFieldCollection:
+		if m.fieldIndex >= len(m.method.Fields) {
+			return "\n  Saving...\n\n"
+		}
 		field := m.method.Fields[m.fieldIndex]
 		return fmt.Sprintf("\n  %s\n\n  %s\n\n", field.Label, m.textInput.View())
 	}

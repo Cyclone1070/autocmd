@@ -39,10 +39,10 @@ func (f *fakeHistoryState) CurrentSessionID() string {
 	return f.currentID
 }
 
-func TestRunHistory_WithArgSessionID(t *testing.T) {
+func TestRunHistory_NoArgProvided(t *testing.T) {
 	store := &fakeHistoryStore{
 		sessions: map[string]*domain.Session{
-			"arg-id": {ID: "arg-id"},
+			"state-id": {ID: "state-id"},
 		},
 	}
 	state := &fakeHistoryState{currentID: "state-id"}
@@ -50,12 +50,12 @@ func TestRunHistory_WithArgSessionID(t *testing.T) {
 	res, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
-	}, "arg-id")
+	})
 	if err != nil {
 		t.Fatalf("RunHistory returned error: %v", err)
 	}
-	if res.Session == nil || res.Session.ID != "arg-id" {
-		t.Fatalf("expected session ID %q, got %#v", "arg-id", res.Session)
+	if res.Session == nil || res.Session.ID != "state-id" {
+		t.Fatalf("expected session ID %q, got %#v", "state-id", res.Session)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestRunHistory_WithCurrentSessionID(t *testing.T) {
 	res, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
-	}, "")
+	})
 	if err != nil {
 		t.Fatalf("RunHistory returned error: %v", err)
 	}
@@ -79,42 +79,38 @@ func TestRunHistory_WithCurrentSessionID(t *testing.T) {
 	}
 }
 
-func TestRunHistory_FallbackToList(t *testing.T) {
+func TestRunHistory_NoCurrentSessionInState(t *testing.T) {
 	store := &fakeHistoryStore{
 		sessions: map[string]*domain.Session{
-			"listed-id": {ID: "listed-id"},
+			"some-id": {ID: "some-id"},
 		},
 		summaries: []domain.SessionSummary{
-			{ID: "listed-id"},
+			{ID: "some-id"},
 		},
-	}
-	state := &fakeHistoryState{currentID: ""}
-
-	res, err := ResolveSession(&HistoryDeps{
-		Store: store,
-		State: state,
-	}, "")
-	if err != nil {
-		t.Fatalf("RunHistory returned error: %v", err)
-	}
-	if res.Session == nil || res.Session.ID != "listed-id" {
-		t.Fatalf("expected session ID %q, got %#v", "listed-id", res.Session)
-	}
-}
-
-func TestRunHistory_NoSessionsAvailable(t *testing.T) {
-	store := &fakeHistoryStore{
-		sessions:  map[string]*domain.Session{},
-		summaries: nil,
 	}
 	state := &fakeHistoryState{currentID: ""}
 
 	_, err := ResolveSession(&HistoryDeps{
 		Store: store,
 		State: state,
-	}, "")
+	})
 	if err == nil {
-		t.Fatalf("expected error when no sessions are available")
+		t.Fatalf("expected error when no current session ID is in state")
+	}
+}
+
+func TestRunHistory_SessionInStateButNotFoundInStore(t *testing.T) {
+	store := &fakeHistoryStore{
+		sessions: map[string]*domain.Session{},
+	}
+	state := &fakeHistoryState{currentID: "missing-id"}
+
+	_, err := ResolveSession(&HistoryDeps{
+		Store: store,
+		State: state,
+	})
+	if err == nil {
+		t.Fatalf("expected error when state session ID is not found in store")
 	}
 }
 

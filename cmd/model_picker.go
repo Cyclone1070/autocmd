@@ -3,9 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/model_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,27 +17,12 @@ var modelCmd = &cobra.Command{
 	Use:   "model",
 	Short: "Choose the default LLM model",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bootstrapFS := fs.NewOSFileSystem(-1)
-
-		configMgr := config.NewManager(bootstrapFS)
-		cfg, err := configMgr.Load()
+		deps, err := Wire()
 		if err != nil {
 			return err
 		}
 
-		authMgr, err := buildAuthManager(cfg)
-		if err != nil {
-			return err
-		}
-
-		stateMgr := state.NewManager(bootstrapFS)
-		appState, err := stateMgr.Load()
-		if err != nil {
-			return err
-		}
-
-		registry := buildLLMRegistry(authMgr)
-		wf := workflow.NewModelPickerWorkflow(registry, appState)
+		wf := workflow.NewModelPickerWorkflow(deps.LLMRegistry, deps.State)
 
 		m := model_picker.NewModel(wf)
 		p := tea.NewProgram(m)

@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/agent"
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -43,16 +41,7 @@ var rootCmd = &cobra.Command{
 		setupLogging()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bootstrapFS := fs.NewOSFileSystem(-1)
-
-		configMgr := config.NewManager(bootstrapFS)
-		cfg, err := configMgr.Load()
-		if err != nil {
-			return err
-		}
-
-		stateMgr := state.NewManager(bootstrapFS)
-		appState, err := stateMgr.Load()
+		deps, err := Wire()
 		if err != nil {
 			return err
 		}
@@ -62,7 +51,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		input := strings.Join(args, " ")
-		return runAgent(cmd.Context(), bootstrapFS, cfg, stateMgr, appState, input)
+		return runAgent(cmd.Context(), deps, input)
 	},
 }
 
@@ -76,8 +65,8 @@ func Execute() {
 	}
 }
 
-func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config, stateMgr *state.Manager, appState *state.State, input string) error {
-	if appState.Model() == "" {
+func runAgent(ctx context.Context, deps *Deps, input string) error {
+	if deps.State.Model() == "" {
 		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started.")
 	}
 
@@ -86,7 +75,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		return err
 	}
 
-	fileSystem := fs.NewOSFileSystem(cfg.Tools().MaxFileSize())
+	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
 	cmdExecutor := executor.NewOSCommandExecutor()
 	checksumMgr := hash.NewChecksumManager()
 	todoStore := todo.NewInMemoryTodoStore()
@@ -99,48 +88,35 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 	tools := []domain.Tool{
 		directory.NewListDirectoryTool(fileSystem, pathResolver, ignoreMatcher),
 		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
-		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
-		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
+		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
+		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
-		shell.NewShellTool(fileSystem, cmdExecutor, time.Duration(cfg.Tools().DefaultShellTimeout())*time.Second, pathResolver),
+		shell.NewShellTool(fileSystem, cmdExecutor, time.Duration(deps.Config.Tools().DefaultShellTimeout())*time.Second, pathResolver),
 		todo.NewReadTodosTool(todoStore),
 		todo.NewWriteTodosTool(todoStore),
 	}
 	toolRegistry := tool.NewRegistry(tools)
 
-	authMgr, err := buildAuthManager(cfg)
-	if err != nil {
-		return err
-	}
-
-	// Resolve credential based on provider ID (e.g., "google")
-	llmRegistry := buildLLMRegistry(authMgr)
-
-	llmInstance, err := llmRegistry.Get(ctx, appState.Model())
+	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())
 	if err != nil {
 		return fmt.Errorf("get llm: %w", err)
-	}
-
-	store, err := buildSessionStore(cfg, bootstrapFS)
-	if err != nil {
-		return err
 	}
 
 	// Wiring
 	bus := workflow.NewEventBus()
 	defer bus.Close()
-	agentLoop := agent.NewLoop(llmInstance, toolRegistry, cfg.Tools().MaxIterations(), bus)
+	agentLoop := agent.NewLoop(llmInstance, toolRegistry, deps.Config.Tools().MaxIterations(), bus)
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.UI().PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.UI().SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.UI().ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.UI().MutedColor()),
-		ShortToolbox: cfg.UI().ShortToolbox(),
+		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
+		ShortToolbox: deps.Config.UI().ShortToolbox(),
 	}
 	// Calculate width and height capping at terminal size
-	chatWidth := cfg.UI().ChatWindowWidth()
+	chatWidth := deps.Config.UI().ChatWindowWidth()
 	termHeight := 0 // Fallback (0 disables global truncation)
 	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
 		if chatWidth <= 0 || width < chatWidth {
@@ -157,7 +133,7 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := loop.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(cfg.UI().ShellOutputHeight()))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().ShellOutputHeight()))
 	
 	uiModel := loop.NewModel(
 		bus,
@@ -170,16 +146,16 @@ func runAgent(ctx context.Context, bootstrapFS fs.FileSystem, cfg *config.Config
 		chatWidth,
 	)
 
-	deps := &workflow.PromptDeps{
-		State:        appState,
-		Store:        store,
+	depsWP := &workflow.PromptDeps{
+		State:        deps.State,
+		Store:        deps.SessionStore,
 		LLM:          llmInstance,
 		ToolRegistry: toolRegistry,
 		Agent:        agentLoop,
 		Bus:          bus,
 	}
 
-	done := workflow.RunPrompt(ctx, input, deps)
+	done := workflow.RunPrompt(ctx, input, depsWP)
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {

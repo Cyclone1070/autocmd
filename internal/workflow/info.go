@@ -21,11 +21,40 @@ type infoSessionStore interface {
 	Get(id string) (*domain.Session, error)
 }
 
+type infoBus interface {
+	SendUIUpdate(domain.UIUpdate)
+}
+
 // InfoWorkflow gathers information about the current configuration and state.
 type InfoWorkflow struct {
 	registry infoLLMRegistry
 	state    infoState
 	store    infoSessionStore
+}
+
+type InfoDeps struct {
+	Bus      infoBus
+	Registry infoLLMRegistry
+	State    infoState
+	Store    infoSessionStore
+}
+
+// RunInfo executes the info gathering process asynchronously.
+func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		wf := NewInfoWorkflow(deps.Registry, deps.State, deps.Store)
+		res, err := wf.gather(ctx)
+		if err != nil {
+			done <- err
+			return
+		}
+		deps.Bus.SendUIUpdate(res)
+		deps.Bus.SendUIUpdate(domain.DoneEvent{})
+		done <- nil
+	}()
+	return done
 }
 
 // NewInfoWorkflow creates a new InfoWorkflow.
@@ -37,9 +66,9 @@ func NewInfoWorkflow(registry infoLLMRegistry, state infoState, store infoSessio
 	}
 }
 
-// Gather executes the info workflow results.
-func (w *InfoWorkflow) Gather(ctx context.Context) (*domain.SystemSnapshot, error) {
-	res := &domain.SystemSnapshot{}
+// gather executes the info workflow results.
+func (w *InfoWorkflow) gather(ctx context.Context) (*domain.InfoEvent, error) {
+	res := &domain.InfoEvent{}
 
 	// 1. Authorized Providers
 	providers, err := w.registry.ListProviders(ctx)

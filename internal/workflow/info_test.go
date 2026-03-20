@@ -99,7 +99,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		llm.On("ComputeTokens", ctx, session.Messages).Return(100, nil)
 
 		wf := NewInfoWorkflow(registry, state, store)
-		res, err := wf.Gather(ctx)
+		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "google/gemini-pro", res.Model)
@@ -119,7 +119,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		state.On("CurrentSessionID").Return("")
 
 		wf := NewInfoWorkflow(registry, state, store)
-		res, err := wf.Gather(ctx)
+		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "", res.Model)
@@ -138,7 +138,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		store.On("Get", "missing-sess").Return(nil, fmt.Errorf("not found"))
 
 		wf := NewInfoWorkflow(registry, state, store)
-		res, err := wf.Gather(ctx)
+		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "missing-sess (not found)", res.SessionDisplay)
@@ -152,7 +152,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		registry.On("ListProviders", ctx).Return([]domain.ProviderInfo{}, fmt.Errorf("registry fail"))
 
 		wf := NewInfoWorkflow(registry, state, store)
-		_, err := wf.Gather(ctx)
+		_, err := wf.gather(ctx)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "list providers")

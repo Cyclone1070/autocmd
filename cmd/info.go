@@ -3,12 +3,10 @@ package cmd
 import (
 	"context"
 
-	"github.com/Cyclone1070/iav/internal/auth"
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui/info"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -20,46 +18,36 @@ var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Show information about the current configuration and state",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bootstrapFS := fs.NewOSFileSystem(-1)
-
-		configMgr := config.NewManager(bootstrapFS)
-		cfg, err := configMgr.Load()
+		deps, err := Wire()
 		if err != nil {
 			return err
 		}
 
-		stateMgr := state.NewManager(bootstrapFS)
-		appState, err := stateMgr.Load()
-		if err != nil {
-			return err
-		}
-
-		authMgr, err := buildAuthManager(cfg)
-		if err != nil {
-			return err
-		}
-
-		return runInfo(cmd, bootstrapFS, cfg, appState, authMgr)
+		return runInfo(cmd.Context(), deps)
 	},
 }
 
-func runInfo(cmd *cobra.Command, bootstrapFS fs.FileSystem, cfg *config.Config, appState *state.State, authMgr *auth.Manager) error {
-	ctx := context.Background()
-	llmRegistry := buildLLMRegistry(authMgr)
+func runInfo(ctx context.Context, deps *Deps) error {
+	bus := workflow.NewEventBus()
+	defer bus.Close()
 
-	store, err := buildSessionStore(cfg, bootstrapFS)
+	fileSystem := fs.NewOSFileSystem(-1)
+	store, err := buildSessionStore(deps.Config, fileSystem)
 	if err != nil {
 		return err
 	}
 
-	wf := workflow.NewInfoWorkflow(llmRegistry, appState, store)
-	res, err := wf.Gather(ctx)
-	if err != nil {
+	done := workflow.RunInfo(ctx, &workflow.InfoDeps{
+		Bus:      bus,
+		Registry: deps.LLMRegistry,
+		State:    deps.State,
+		Store:    store,
+	})
+
+	p := tea.NewProgram(info.NewModel(bus))
+	if _, err := p.Run(); err != nil {
 		return err
 	}
 
-	renderer := &info.InfoRenderer{}
-	renderer.Render(cmd, res)
-
-	return nil
+	return <-done
 }

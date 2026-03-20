@@ -1,13 +1,15 @@
 package domain
 
-// SystemSnapshot contains gathered data for UI display of configuration and state.
-type SystemSnapshot struct {
+// InfoEvent contains gathered data for UI display of configuration and state.
+type InfoEvent struct {
 	Model          string
 	SessionDisplay string
 	SessionTokens  int
 	ContextWindow  int
 	Authorized     []string
 }
+
+func (InfoEvent) isUIUpdate() {}
 
 // ModelPickerSnapshot contains the data needed for model selection UI.
 type ModelPickerSnapshot struct {

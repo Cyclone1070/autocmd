@@ -8,7 +8,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// Loop is the central orchestrator for the execution loop.
+// Loop is the central orchestrator for the execution prompt.
 type Loop struct {
 	llm           domain.LLM
 	toolExecutor  *toolExecutor
@@ -31,7 +31,7 @@ func NewLoop(
 	}
 }
 
-// Run executes the main LLM-tool interaction loop.
+// Run executes the main LLM-tool interaction prompt.
 func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) error {
 	if session == nil {
 		return fmt.Errorf("session is required")

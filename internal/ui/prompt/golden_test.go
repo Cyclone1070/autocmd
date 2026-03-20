@@ -1,4 +1,4 @@
-package loop
+package prompt
 
 import (
 	"bytes"
@@ -19,16 +19,16 @@ import (
 
 var update = flag.Bool("update", false, "update golden files")
 
-type LoopElement struct {
+type PromptElement struct {
 	ID     string
 	Events []domain.UIUpdate
 	Desc   string
 }
 
-func getLoopElements() []LoopElement {
+func getPromptElements() []PromptElement {
 	tcID := "tc-ok"
 	tcErrID := "tc-err"
-	return []LoopElement{
+	return []PromptElement{
 		{
 			ID: "TXT",
 			Events: []domain.UIUpdate{
@@ -89,14 +89,14 @@ func getLoopElements() []LoopElement {
 			ID: "THINK",
 			Events: []domain.UIUpdate{
 				domain.ThinkingEvent{},
-				domain.TextEvent{Text: "thought 1s"}, // This finishes thinking in the loop logic
+				domain.TextEvent{Text: "thought 1s"}, // This finishes thinking in the prompt logic
 			},
 		},
 	}
 }
 
-func TestLoop_GoldenCombinations(t *testing.T) {
-	elements := getLoopElements()
+func TestPrompt_GoldenCombinations(t *testing.T) {
+	elements := getPromptElements()
 	cfg := config.DefaultConfig().UI()
 	width := 80
 	cfg.SetChatWindowWidth(width)
@@ -108,14 +108,14 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 	// 1. Singles
 	for _, e := range elements {
 		name := fmt.Sprintf("SINGLE_%s", e.ID)
-		renderLoopToGolden(&goldenOutput, name, cfg, renderer, width, e)
+		renderPromptToGolden(&goldenOutput, name, cfg, renderer, width, e)
 	}
 
 	// 2. Pairs
 	for _, e1 := range elements {
 		for _, e2 := range elements {
 			name := fmt.Sprintf("PAIR_%s_%s", e1.ID, e2.ID)
-			renderLoopToGolden(&goldenOutput, name, cfg, renderer, width, e1, e2)
+			renderPromptToGolden(&goldenOutput, name, cfg, renderer, width, e1, e2)
 		}
 	}
 
@@ -124,12 +124,12 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 		for _, e2 := range elements {
 			for _, e3 := range elements {
 				name := fmt.Sprintf("TRIPLE_%s_%s_%s", e1.ID, e2.ID, e3.ID)
-				renderLoopToGolden(&goldenOutput, name, cfg, renderer, width, e1, e2, e3)
+				renderPromptToGolden(&goldenOutput, name, cfg, renderer, width, e1, e2, e3)
 			}
 		}
 	}
 
-	goldenPath := filepath.Join("testdata", "loop_combos.golden")
+	goldenPath := filepath.Join("testdata", "prompt_combos.golden")
 	if *update {
 		err := os.MkdirAll("testdata", 0755)
 		assert.NoError(t, err)
@@ -141,7 +141,7 @@ func TestLoop_GoldenCombinations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to read golden file: %v. Run with -update to create it.", err)
 		}
-		assert.Equal(t, string(expected), goldenOutput.String(), "Loop UI regression detected! Rendered combinations do not match golden file.")
+		assert.Equal(t, string(expected), goldenOutput.String(), "Prompt UI regression detected! Rendered combinations do not match golden file.")
 	}
 }
 
@@ -154,7 +154,7 @@ func (d dummyBus) UIUpdates() <-chan domain.UIUpdate {
 }
 func (d dummyBus) SendAction(domain.Action) {}
 
-func renderLoopToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...LoopElement) {
+func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...PromptElement) {
 	var signals []string
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),

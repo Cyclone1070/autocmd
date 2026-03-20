@@ -11,7 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -41,13 +41,13 @@ func main() {
 		ShortToolbox: cfg.ShortToolbox(),
 	}
 	theme := ui.NewTheme(themeCfg)
-	stream := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	animator := loop.NewTextAnimator(4)
-	thinking := loop.NewThinkingRenderer(theme)
+	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
+	animator := prompt.NewTextAnimator(4)
+	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(
+	m := prompt.NewModel(
 		bus,
 		thinking,
 		tooling,

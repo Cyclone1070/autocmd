@@ -23,7 +23,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
 	"github.com/Cyclone1070/iav/internal/ui"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -127,15 +127,15 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	
 	// Loop UI Wiring
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
-	stream := loop.NewStream(glamour)
-	animator := loop.NewTextAnimator(4) // 4 runes per tick
+	stream := prompt.NewStream(glamour)
+	animator := prompt.NewTextAnimator(4) // 4 runes per tick
 	
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := loop.NewThinkingRenderer(theme)
+	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().ShellOutputHeight()))
 	
-	uiModel := loop.NewModel(
+	uiModel := prompt.NewModel(
 		bus,
 		thinking,
 		tooling,

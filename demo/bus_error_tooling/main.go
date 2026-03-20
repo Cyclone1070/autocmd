@@ -7,7 +7,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
-	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -24,13 +24,13 @@ func main() {
 
 	chatWidth := 80
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
-	stream := loop.NewStream(glamour)
-	animator := loop.NewTextAnimator(4)
+	stream := prompt.NewStream(glamour)
+	animator := prompt.NewTextAnimator(4)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := loop.NewThinkingRenderer(theme)
+	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewNoOpGater())
 
-	uiModel := loop.NewModel(
+	uiModel := prompt.NewModel(
 		bus,
 		thinking,
 		tooling,

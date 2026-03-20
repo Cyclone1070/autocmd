@@ -355,7 +355,7 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 
 	// User message + Assistant (with 2 calls) + 2 Tool responses + User cancellation message
-	// Wait, loop.go appends a cancellation message in a defer.
+	// Wait, prompt.go appends a cancellation message in a defer.
 	// We expect 5 messages:
 	// 0: User input
 	// 1: Assistant with tool calls

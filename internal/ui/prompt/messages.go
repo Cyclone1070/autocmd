@@ -1,4 +1,4 @@
-package loop
+package prompt
 
 // tickMsg signals an animation tick for text streaming.
 type tickMsg struct{}

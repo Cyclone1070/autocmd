@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -24,7 +25,7 @@ var authCmd = &cobra.Command{
 			return err
 		}
 
-		bus := workflow.NewEventBus()
+		bus := eventbus.New()
 		defer bus.Close()
 
 		done := workflow.RunAuth(cmd.Context(), &workflow.AuthDeps{

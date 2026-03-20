@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/model_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -23,7 +24,7 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
-		bus := workflow.NewEventBus()
+		bus := eventbus.New()
 		defer bus.Close()
 
 		done := workflow.RunModelPicker(cmd.Context(), &workflow.ModelPickerDeps{

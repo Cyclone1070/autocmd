@@ -22,6 +22,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/tool/todo"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -104,7 +105,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	}
 
 	// Wiring
-	bus := workflow.NewEventBus()
+	bus := eventbus.New()
 	defer bus.Close()
 	agentLoop := agent.NewLoop(llmInstance, toolRegistry, deps.Config.Tools().MaxIterations(), bus)
 

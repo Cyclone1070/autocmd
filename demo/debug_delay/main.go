@@ -13,6 +13,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
-	bus := workflow.NewEventBus()
+	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 
 	// Calculate width and height capping at terminal size
@@ -84,7 +85,7 @@ func main() {
 }
 
 type mockAgent struct {
-	bus *workflow.EventBus
+	bus *eventbus.EventBus
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {

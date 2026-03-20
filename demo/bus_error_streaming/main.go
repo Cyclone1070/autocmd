@@ -8,13 +8,13 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func main() {
-	bus := workflow.NewEventBus()
+	bus := eventbus.New()
 	theme := ui.NewTheme(ui.ThemeConfig{
 		PrimaryColor: lipgloss.AdaptiveColor{Light: "#0EA5E9", Dark: "#38BDF8"},
 		SuccessColor: lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"},

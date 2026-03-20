@@ -1,4 +1,4 @@
-package workflow
+package eventbus
 
 import (
 	"sync"
@@ -21,8 +21,8 @@ type EventBus struct {
 	wg       sync.WaitGroup
 }
 
-// NewEventBus creates and starts a new EventBus.
-func NewEventBus() *EventBus {
+// New creates and starts a new EventBus.
+func New() *EventBus {
 	b := &EventBus{
 		uiIn:        make(chan domain.UIUpdate, 100),
 		uiOut:       make(chan domain.UIUpdate, 100),

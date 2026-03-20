@@ -13,6 +13,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
-	bus := workflow.NewEventBus()
+	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(80)
 
@@ -85,7 +86,7 @@ func main() {
 }
 
 type mockAgent struct {
-	bus *workflow.EventBus
+	bus *eventbus.EventBus
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {

@@ -53,9 +53,9 @@ This document describes the high-level architecture of the application — its l
 The entry point. Its only job is to:
 
 1. Parse CLI flags and build configuration.
-2. Create concrete instances of services, workflow, and UI.
-3. Wire them together via dependency injection.
-4. Manage lifecycle (`defer bus.Close()`, etc.).
+2. Pair a specific **workflow orchestrator** (e.g., `RunAuth`) with its corresponding **UI model** (e.g., `authui.Model`).
+3. Wire them together via a dedicated, independent `EventBus`.
+4. Manage lifecycle (`defer bus.Close()`, wait for workflow completion).
 
 If you find yourself writing an `if` that isn't about flag parsing or wiring, it belongs in `workflow/` or an internal service.
 
@@ -98,8 +98,9 @@ Small, independent packages that each do one thing:
 |------------|------------------------------------------|
 | `agent/`   | Runs the LLM agent loop (stream + tools) |
 | `auth/`    | API key management                       |
-| `config/`  | Configuration loading and defaults       |
-| `fs/`      | Filesystem abstraction                   |
+| `config/`   | Configuration loading and defaults       |
+| `eventbus/` | Async, buffered UI/Workflow communication |
+| `fs/`       | Filesystem abstraction                   |
 | `llm/`     | LLM provider adapters                    |
 | `session/` | Session persistence (chat history)       |
 | `state/`   | Runtime state (current session, etc.)    |
@@ -143,9 +144,13 @@ The workflow and UI communicate through a bidirectional event bus:
      │                           │                        │
 ```
 
-**Key contract:**
+**Termination Contract:**
 
-- **`DoneEvent`** is the last meaningful event. It tells the UI: "I'm done, flush everything and quit."
-- **Channel closure** (`nil` message) happens later, after the UI has already quit. If `nil` arrives before `DoneEvent`, something is broken and the UI panics.
-- The UI never assumes the workflow is done on its own. It waits for `DoneEvent`.
+- **Natural Completion (Success Path)**: The workflow sends a `DoneEvent` as its final acknowledgement. The UI **waits** for this signal before printing success messages (e.g., "Authorized [Provider]") and quitting, ensuring all background state persistence (saves) has finished.
+- **User Cancellation (Quit Path)**: When the user initiates a quit (`ctrl+c`, `esc`, `q`), the UI sends a `StopAction` and returns `tea.Quit` **immediately** to ensure the interface feels snappy. The workflow terminates independently upon receiving the action or when the `cmd` layer closes the bus.
+
+**Polling Contract:**
+
+- **Heartbeat polling**: Components with autonomous visual state (e.g. `prompt`) use non-blocking `select` on a regular scale to maintain animations (spinners, typewriter text).
+- **Reactive polling**: Stationary components (e.g. `auth`, `pickers`) use blocking `pollBus()` commands that wait exclusively for the next event to save resources.
 

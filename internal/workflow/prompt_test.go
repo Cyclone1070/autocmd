@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -99,7 +100,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	// cfg is not needed by PromptDeps
 
 	agent := new(mockAgent)
-	bus := NewEventBus()
+	bus := eventbus.New()
 
 	deps := &PromptDeps{
 		Store:        store,
@@ -137,7 +138,7 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	llm := new(mockLLM)
 	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
-	bus := NewEventBus()
+	bus := eventbus.New()
 
 	appState := &state.State{}
 	appState.SetCurrentSessionID("existing-id")
@@ -196,7 +197,7 @@ func (m *mockStream) Err() error {
 }
 
 type trackableBus struct {
-	*EventBus
+	*eventbus.EventBus
 	closed bool
 }
 
@@ -214,7 +215,7 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 	
-	eb := NewEventBus()
+	eb := eventbus.New()
 	bus := &trackableBus{EventBus: eb}
 
 	deps := &PromptDeps{
@@ -247,7 +248,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	llm := new(mockLLM)
 	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
-	bus := NewEventBus()
+	bus := eventbus.New()
 
 	deps := &PromptDeps{
 		Store:        store,

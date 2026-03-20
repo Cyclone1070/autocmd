@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/history"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -26,7 +27,7 @@ var historyCmd = &cobra.Command{
 			return err
 		}
 
-		bus := workflow.NewEventBus()
+		bus := eventbus.New()
 		defer bus.Close()
 
 		done := workflow.RunHistory(cmd.Context(), &workflow.HistoryDeps{

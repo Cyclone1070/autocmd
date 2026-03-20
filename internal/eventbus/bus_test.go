@@ -1,4 +1,4 @@
-package workflow
+package eventbus
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 
 func TestEventBus_Ownership(t *testing.T) {
 	// RED: NewEventBus takes no arguments
-	bus := NewEventBus()
+	bus := New()
 	defer bus.Close()
 
 	// RED: Provides unidirectional accessors
@@ -19,7 +19,7 @@ func TestEventBus_Ownership(t *testing.T) {
 }
 
 func TestEventBus_BiDirectional_Centralized(t *testing.T) {
-	bus := NewEventBus()
+	bus := New()
 	defer bus.Close()
 
 	uiOut := bus.UIUpdates()
@@ -45,7 +45,7 @@ func TestEventBus_BiDirectional_Centralized(t *testing.T) {
 }
 
 func TestEventBus_Shutdown_NoHang(t *testing.T) {
-	bus := NewEventBus()
+	bus := New()
 	uiOut := bus.UIUpdates()
 
 	// Fill more than the channel buffer
@@ -80,7 +80,7 @@ func TestEventBus_Shutdown_NoHang(t *testing.T) {
 }
 
 func TestEventBus_Concurrent_Safe(t *testing.T) {
-	bus := NewEventBus()
+	bus := New()
 	defer bus.Close()
 
 	// Multiple goroutines sending updates and actions
@@ -95,7 +95,7 @@ func TestEventBus_Concurrent_Safe(t *testing.T) {
 
 func TestEventBus_CloseDeadlock_Reproduction(t *testing.T) {
 	// Root cause: Close() waits for goroutines that block on Send if no one is reading.
-	bus := NewEventBus()
+	bus := New()
 
 	// The internal channels have a buffer of 100.
 	// We send 101 messages.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/session_picker"
@@ -29,7 +30,7 @@ var sessionCmd = &cobra.Command{
 }
 
 func runSessionPicker(ctx context.Context, deps *Deps) error {
-	bus := workflow.NewEventBus()
+	bus := eventbus.New()
 	defer bus.Close()
 
 	fileSystem := fs.NewOSFileSystem(-1)

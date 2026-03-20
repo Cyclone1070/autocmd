@@ -33,10 +33,10 @@ func TestSessionPickerUI(t *testing.T) {
 	}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 
-	t.Run("Initial loading view", func(t *testing.T) {
+	t.Run("Initial view is empty", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme)
-		assert.Contains(t, m.View(), "Fetching sessions")
+		assert.Empty(t, m.View())
 	})
 
 	t.Run("Snapshot received -> List view", func(t *testing.T) {

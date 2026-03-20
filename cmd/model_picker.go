@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/model_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,16 +23,32 @@ var modelCmd = &cobra.Command{
 			return err
 		}
 
-		wf := workflow.NewModelPickerWorkflow(deps.LLMRegistry, deps.State)
+		bus := workflow.NewEventBus()
+		defer bus.Close()
 
-		m := model_picker.NewModel(wf)
+		done := workflow.RunModelPicker(cmd.Context(), &workflow.ModelPickerDeps{
+			Bus:      bus,
+			Registry: deps.LLMRegistry,
+			State:    deps.State,
+		})
+
+		themeCfg := ui.ThemeConfig{
+			PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
+			SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
+			ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
+			MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
+			ShortToolbox: deps.Config.UI().ShortToolbox(),
+		}
+		theme := ui.NewTheme(themeCfg)
+
+		m := model_picker.NewModel(bus, theme)
 		p := tea.NewProgram(m)
 
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("picker failed: %w", err)
 		}
 
-		if err := m.Err(); err != nil {
+		if err := <-done; err != nil {
 			return err
 		}
 

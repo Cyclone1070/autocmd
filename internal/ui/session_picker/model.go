@@ -22,7 +22,6 @@ type model struct {
 	textInput    textinput.Model
 	bus          bus
 	theme        *ui.Theme
-	fetching     bool
 	renaming     bool
 	renameItemID string
 	quitting     bool
@@ -40,7 +39,6 @@ func NewModel(b bus, theme *ui.Theme) *model {
 		bus:       b,
 		theme:     theme,
 		textInput: ti,
-		fetching:  true,
 	}
 }
 
@@ -66,7 +64,6 @@ func (m *model) pollBus() tea.Cmd {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case domain.SessionListEvent:
-		m.fetching = false
 		m.initializePicker(&msg)
 		return m, m.pollBus()
 
@@ -103,10 +100,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		if m.fetching {
+		if m.picker == nil {
 			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
 				m.bus.SendAction(domain.StopAction{})
-				return m, m.pollBus()
+				return m, nil
 			}
 			return m, nil
 		}
@@ -212,9 +209,6 @@ func (m *model) View() string {
 	}
 	if m.renaming {
 		return fmt.Sprintf("\n  Rename session:\n\n  %s\n\n  (Enter to save, Esc to cancel)\n", m.textInput.View())
-	}
-	if m.fetching && m.picker == nil {
-		return "\n  Fetching sessions...\n"
 	}
 	if m.picker != nil {
 		return m.picker.View()

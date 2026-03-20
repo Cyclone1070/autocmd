@@ -18,35 +18,90 @@ type modelState interface {
 	Save() error
 }
 
-// ModelPickerWorkflow orchestrates the model selection use case.
-type ModelPickerWorkflow struct {
+type modelPickerBus interface {
+	SendUIUpdate(domain.UIUpdate)
+	WorkflowActions() <-chan domain.Action
+}
+
+type ModelPickerDeps struct {
+	Bus      modelPickerBus
+	Registry modelLLMRegistry
+	State    modelState
+}
+
+// RunModelPicker starts the model selection workflow asynchronously.
+func RunModelPicker(ctx context.Context, deps *ModelPickerDeps) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		wf := newModelPickerWorkflow(deps.Registry, deps.State)
+
+		// 1. Send initial snapshot
+		snapshot, err := wf.prepareSelection(ctx)
+		if err != nil {
+			done <- err
+			return
+		}
+		deps.Bus.SendUIUpdate(snapshot)
+
+		// 2. Action loop
+		for {
+			select {
+			case <-ctx.Done():
+				done <- ctx.Err()
+				return
+			case act, ok := <-deps.Bus.WorkflowActions():
+				if !ok {
+					done <- nil
+					return
+				}
+
+				switch a := act.(type) {
+				case domain.SelectModelAction:
+					if err := wf.applySelection(ctx, a.ID); err != nil {
+						done <- err
+						return
+					}
+					deps.Bus.SendUIUpdate(domain.DoneEvent{})
+					done <- nil
+					return
+
+				case domain.StopAction:
+					deps.Bus.SendUIUpdate(domain.DoneEvent{})
+					done <- nil
+					return
+				}
+			}
+		}
+	}()
+	return done
+}
+
+type modelPickerWorkflow struct {
 	registry modelLLMRegistry
 	state    modelState
 }
 
-// NewModelPickerWorkflow creates a new instance of the model picker workflow.
-func NewModelPickerWorkflow(registry modelLLMRegistry, state modelState) *ModelPickerWorkflow {
-	return &ModelPickerWorkflow{
+func newModelPickerWorkflow(registry modelLLMRegistry, state modelState) *modelPickerWorkflow {
+	return &modelPickerWorkflow{
 		registry: registry,
 		state:    state,
 	}
 }
 
-// PrepareSelection gathers the current model state and available models.
-func (w *ModelPickerWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error) {
+func (w *modelPickerWorkflow) prepareSelection(ctx context.Context) (domain.ModelListEvent, error) {
 	models, err := w.registry.List(ctx)
 	if err != nil {
-		return nil, err
+		return domain.ModelListEvent{}, err
 	}
 
-	return &domain.ModelPickerSnapshot{
+	return domain.ModelListEvent{
 		Models:        models,
 		ActiveModelID: w.state.Model(),
 	}, nil
 }
 
-// ApplySelection updates the current model in the application state.
-func (w *ModelPickerWorkflow) ApplySelection(ctx context.Context, id string) error {
+func (w *modelPickerWorkflow) applySelection(ctx context.Context, id string) error {
 	w.state.SetModel(id)
 	return w.state.Save()
 }

@@ -11,11 +11,13 @@ type InfoEvent struct {
 
 func (InfoEvent) isUIUpdate() {}
 
-// ModelPickerSnapshot contains the data needed for model selection UI.
-type ModelPickerSnapshot struct {
+// ModelListEvent contains the data needed for model selection UI.
+type ModelListEvent struct {
 	Models        []LLMInfo
 	ActiveModelID string
 }
+
+func (ModelListEvent) isUIUpdate() {}
 
 // SessionListEvent contains the data needed for session selection UI.
 type SessionListEvent struct {

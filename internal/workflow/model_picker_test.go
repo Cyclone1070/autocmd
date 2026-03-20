@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
@@ -36,38 +37,61 @@ func (m *mockModelState) Save() error {
 	return args.Error(0)
 }
 
-func TestModelPickerWorkflow_Run(t *testing.T) {
-	ctx := context.Background()
-	registry := new(mockModelLLMRegistry)
-	state := new(mockModelState)
-
-	models := []domain.LLMInfo{
-		{ID: "google/gemini-pro", DisplayName: "Gemini Pro"},
-		{ID: "openai/gpt-4", DisplayName: "GPT-4"},
-	}
-
-	registry.On("List", ctx).Return(models, nil)
-	state.On("Model").Return("google/gemini-pro")
-
-	wf := NewModelPickerWorkflow(registry, state)
-	res, err := wf.PrepareSelection(ctx)
-
-	assert.NoError(t, err)
-	assert.Equal(t, "google/gemini-pro", res.ActiveModelID)
-	assert.Len(t, res.Models, 2)
+type mockModelPickerBus struct {
+	mock.Mock
 }
 
-func TestModelPickerWorkflow_Select(t *testing.T) {
-	ctx := context.Background()
+func (m *mockModelPickerBus) SendUIUpdate(update domain.UIUpdate) {
+	m.Called(update)
+}
+
+func (m *mockModelPickerBus) WorkflowActions() <-chan domain.Action {
+	args := m.Called()
+	return args.Get(0).(<-chan domain.Action)
+}
+
+func TestRunModelPicker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	registry := new(mockModelLLMRegistry)
 	state := new(mockModelState)
+	bus := new(mockModelPickerBus)
 
-	state.On("SetModel", "openai/gpt-4").Return()
-	state.On("Save").Return(nil)
+	models := []domain.LLMInfo{{ID: "m1", DisplayName: "Model 1"}}
+	registry.On("List", mock.Anything).Return(models, nil)
+	state.On("Model").Return("m1")
 
-	wf := NewModelPickerWorkflow(registry, state)
-	err := wf.ApplySelection(ctx, "openai/gpt-4")
+	// Expect initial snapshot
+	bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
+		snapshot, ok := ev.(domain.ModelListEvent)
+		return ok && snapshot.ActiveModelID == "m1"
+	})).Return()
 
-	assert.NoError(t, err)
-	state.AssertExpectations(t)
+	actions := make(chan domain.Action, 1)
+	bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
+
+	t.Run("Selection success", func(t *testing.T) {
+		state.On("SetModel", "m2").Return()
+		state.On("Save").Return(nil)
+		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+		done := RunModelPicker(ctx, &ModelPickerDeps{
+			Bus:      bus,
+			Registry: registry,
+			State:    state,
+		})
+
+		actions <- domain.SelectModelAction{ID: "m2"}
+		
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(200 * time.Millisecond):
+			t.Fatal("workflow timed out")
+		}
+		
+		state.AssertExpectations(t)
+		bus.AssertExpectations(t)
+	})
 }

@@ -1,98 +1,88 @@
 package model_picker
 
 import (
-	"context"
-
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Workflow defines the operations needed for model selection.
-type Workflow interface {
-	PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error)
-	ApplySelection(ctx context.Context, id string) error
+type bus interface {
+	UIUpdates() <-chan domain.UIUpdate
+	SendAction(domain.Action)
 }
 
-type applyResultMsg struct {
-	id  string
-	err error
-}
-
-type prepareResultMsg struct {
-	data *domain.ModelPickerSnapshot
-	err  error
-}
-
-// Model is a domain-specific UI model for selecting LLM models.
-type Model struct {
+// model is a domain-specific UI model for selecting LLM models.
+type model struct {
 	picker     *ui.Picker
-	wf         Workflow
-	selectedID string
-	err        error
+	bus        bus
+	theme      *ui.Theme
+	selectedName string
+	err          error
 	quitting   bool
-	fetching   bool
 }
 
-// NewModel creates a new model picker UI model with an injected workflow.
-func NewModel(wf Workflow) *Model {
-	return &Model{
-		wf:       wf,
-		fetching: true,
+// NewModel creates a new model picker UI model with a bus and theme.
+func NewModel(b bus, theme *ui.Theme) *model {
+	return &model{
+		bus:   b,
+		theme: theme,
 	}
 }
 
-// Init initializes the model by fetching the available models.
-func (m *Model) Init() tea.Cmd {
+// Init initializes the model by starting the bus polling.
+func (m *model) Init() tea.Cmd {
+	return m.pollBus()
+}
+
+func (m *model) pollBus() tea.Cmd {
 	return func() tea.Msg {
-		res, err := m.wf.PrepareSelection(context.Background())
-		return prepareResultMsg{data: res, err: err}
+		ev, ok := <-m.bus.UIUpdates()
+		if !ok {
+			return tea.Sequence(
+				tea.Printf("\n %s\n", m.theme.Error("Error: bus closed unexpectedly")),
+				tea.Quit,
+			)()
+		}
+		return ev
 	}
 }
 
 // Update handles UI messages.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case prepareResultMsg:
-		m.fetching = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
-		}
-		m.initializePicker(msg.data)
-		return m, m.picker.Init()
+	case domain.ModelListEvent:
+		m.initializePicker(&msg)
+		return m, m.pollBus()
 
-	case applyResultMsg:
+	case domain.DoneEvent:
 		m.quitting = true
-		if msg.err != nil {
-			m.err = msg.err
+		if m.selectedName == "" {
 			return m, tea.Quit
 		}
-		m.selectedID = msg.id
-		// Return tea.Printf followed by tea.Quit to show the persistent message
 		return m, tea.Sequence(
-			tea.Printf("\nSelected model: %s\n", msg.id),
+			tea.Printf("\nSelected model: %s\n", m.theme.Success(m.selectedName)),
 			tea.Quit,
 		)
 
 	case tea.KeyMsg:
-		if m.fetching {
+		if m.picker == nil {
 			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
-				m.quitting = true
-				return m, tea.Quit
+				m.bus.SendAction(domain.StopAction{})
+				return m, nil
 			}
 			return m, nil
 		}
 		switch msg.String() {
 		case "enter":
 			if item, ok := m.picker.CursorItem(); ok {
-				return m, func() tea.Msg {
-					err := m.wf.ApplySelection(context.Background(), item.ID)
-					return applyResultMsg{id: item.ID, err: err}
-				}
+				m.selectedName = item.Label
+				m.bus.SendAction(domain.SelectModelAction{ID: item.ID})
+				return m, nil
 			}
 		case "q", "esc", "ctrl+c":
-			m.quitting = true
+			m.selectedName = "" // Signal cancellation
+			m.bus.SendAction(domain.StopAction{})
+			return m, nil
 		}
 	}
 
@@ -105,7 +95,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializePicker(data *domain.ModelPickerSnapshot) {
+func (m *model) initializePicker(data *domain.ModelListEvent) {
 	var items []ui.Item
 	for _, m := range data.Models {
 		items = append(items, ui.Item{
@@ -124,25 +114,17 @@ func (m *Model) initializePicker(data *domain.ModelPickerSnapshot) {
 }
 
 // View returns the string representation of the UI.
-func (m *Model) View() string {
+func (m *model) View() string {
 	if m.quitting || m.err != nil {
 		return ""
 	}
-	if m.fetching {
-		return "\n  Fetching models...\n"
+	if m.picker != nil {
+		return m.picker.View()
 	}
-	return m.picker.View()
-}
-
-// SelectedID returns the ID of the selected model and true, or empty string and false if cancelled.
-func (m *Model) SelectedID() (string, bool) {
-	if m.selectedID != "" {
-		return m.selectedID, true
-	}
-	return "", false
+	return ""
 }
 
 // Err returns any error encountered during the selection process.
-func (m *Model) Err() error {
+func (m *model) Err() error {
 	return m.err
 }

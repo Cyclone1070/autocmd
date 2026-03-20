@@ -1,96 +1,80 @@
 package model_picker
 
 import (
-	"context"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-type mockWorkflow struct {
+type mockBus struct {
 	mock.Mock
 }
 
-func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.ModelPickerSnapshot, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.ModelPickerSnapshot), args.Error(1)
+func (m *mockBus) UIUpdates() <-chan domain.UIUpdate {
+	args := m.Called()
+	return args.Get(0).(<-chan domain.UIUpdate)
 }
 
-func (m *mockWorkflow) ApplySelection(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
+func (m *mockBus) SendAction(act domain.Action) {
+	m.Called(act)
 }
 
 func TestModelSelection(t *testing.T) {
-	data := &domain.ModelPickerSnapshot{
+	result := domain.ModelListEvent{
 		Models: []domain.LLMInfo{
 			{ID: "m1", DisplayName: "Model 1"},
 			{ID: "m2", DisplayName: "Model 2"},
 		},
 		ActiveModelID: "m1",
 	}
+	theme := ui.NewTheme(ui.ThemeConfig{})
 
-	t.Run("Selection triggers ApplySelection and returns SelectedID", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("PrepareSelection", mock.Anything).Return(data, nil)
-		wf.On("ApplySelection", mock.Anything, "m2").Return(nil)
+	t.Run("Selection triggers SelectModelAction", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectModelAction{ID: "m2"}).Return()
 		
-		m := NewModel(wf)
+		m := NewModel(bus, theme)
 		
-		// Initial state: Fetching
-		assert.Contains(t, m.View(), "Fetching models")
+		// Initial state
+		assert.Empty(t, m.View())
 
-		// Simulate Init and Update with data
-		cmd := m.Init()
-		msg := cmd()
-		m.Update(msg)
-
-		// Now showing picker
+		// Receive data
+		m.Update(result)
 		assert.Contains(t, m.View(), "MODELS")
 		
-		// Move cursor down to m2
+		// Press Enter on item
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		
-		// Press Enter - this should return a Cmd
-		_, cmdEnter := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		assert.NotNil(t, cmdEnter)
-		
-		// Execute the cmd
-		msgEnter := cmdEnter()
-		
-		// Send the result back to the model
-		m.Update(msgEnter)
-
-		selectedID, ok := m.SelectedID()
-		assert.True(t, ok)
-		assert.Equal(t, "m2", selectedID)
-		
-		// View should be empty after selection
-		assert.Empty(t, m.View(), "View should be empty after selection to clear the picker")
-		
-		wf.AssertExpectations(t)
+		assert.Nil(t, cmd, "Keypress should not trigger new poller")
+		assert.Equal(t, "Model 2", m.selectedName)
+		bus.AssertExpectations(t)
 	})
 
-	t.Run("Escape clears selection without calling ApplySelection", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("PrepareSelection", mock.Anything).Return(data, nil)
-
-		m := NewModel(wf)
+	t.Run("Escape sends StopAction", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.StopAction{}).Return()
 		
-		cmd := m.Init()
-		m.Update(cmd())
+		m := NewModel(bus, theme)
+		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		assert.Equal(t, "", m.selectedName)
+		bus.AssertExpectations(t)
+	})
 
-		_, ok := m.SelectedID()
-		assert.False(t, ok)
-		assert.Empty(t, m.View(), "View should be empty after escape")
-		wf.AssertNotCalled(t, "ApplySelection", mock.Anything, mock.Anything)
+	t.Run("DoneEvent triggers Quit", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+		m.Update(result)
+		m.selectedName = "Model 1"
+
+		_, cmd := m.Update(domain.DoneEvent{})
+		assert.NotNil(t, cmd)
+		assert.True(t, m.quitting)
 	})
 }

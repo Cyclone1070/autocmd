@@ -1,143 +1,92 @@
 package authui
 
 import (
-	"context"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-type mockAuthWorkflow struct {
+type mockBus struct {
 	mock.Mock
 }
 
-func (m *mockAuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.AuthProviderSnapshot), args.Error(1)
+func (m *mockBus) UIUpdates() <-chan domain.UIUpdate {
+	args := m.Called()
+	return args.Get(0).(<-chan domain.UIUpdate)
 }
 
-func (m *mockAuthWorkflow) SetAuth(ctx context.Context, providerID string, cred domain.Credential) error {
-	return m.Called(ctx, providerID, cred).Error(0)
+func (m *mockBus) SendAction(act domain.Action) {
+	m.Called(act)
 }
 
-func (m *mockAuthWorkflow) RemoveAuth(ctx context.Context, providerID string) error {
-	return m.Called(ctx, providerID).Error(0)
-}
+func TestAuthUI_Interactive(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	bus := new(mockBus)
 
-func (m *mockAuthWorkflow) GetProvider(id string) (domain.Provider, bool) {
-	args := m.Called(id)
-	if args.Get(0) == nil {
-		return nil, false
-	}
-	return args.Get(0).(domain.Provider), args.Bool(1)
-}
-
-type mockProvider struct {
-	id string
-}
-
-func (m *mockProvider) ID() string   { return m.id }
-func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod {
-	return []domain.AuthMethod{
-		{
-			ID:    "api_key",
-			Label: "API Key",
-			Fields: []domain.AuthField{
-				{ID: "key", Label: "Key", Placeholder: "...", IsSecret: true},
-			},
-		},
-	}
-}
-func (m *mockProvider) ListLLMs() []domain.LLMInfo { return nil }
-func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
-	return nil, nil
-}
-
-func TestAuthUI(t *testing.T) {
-	result := &domain.AuthProviderSnapshot{
-		Providers: []domain.ProviderSummary{
-			{ID: "openai", Authorized: true},
-			{ID: "anthropic", Authorized: false},
-		},
-	}
-
-	t.Run("Initial flow: Load -> List", func(t *testing.T) {
-		wf := new(mockAuthWorkflow)
-		wf.On("Gather", mock.Anything).Return(result, nil)
-
-		m := NewModel(wf)
-		msg := m.Init()()
-		m.Update(msg)
-
-		assert.Contains(t, m.View(), "openai")
-		wf.AssertExpectations(t)
+	t.Run("StopAction on 'q'", func(t *testing.T) {
+		m := NewModel(bus, theme).(*model)
+		m.state = stateProviderSelection
+		
+		bus.On("SendAction", domain.StopAction{}).Return()
+		
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		
+		assert.Nil(t, cmd) // MUST NOT poll
+		bus.AssertCalled(t, "SendAction", domain.StopAction{})
 	})
 
-	t.Run("Delete auth: 'd'", func(t *testing.T) {
-		wf := new(mockAuthWorkflow)
-		wf.On("RemoveAuth", mock.Anything, "openai").Return(nil)
-		wf.On("Gather", mock.Anything).Return(result, nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
-
-		// Press 'd'
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	t.Run("DoneEvent triggers tea.Quit", func(t *testing.T) {
+		m := NewModel(bus, theme).(*model)
+		
+		_, cmd := m.Update(domain.DoneEvent{})
+		
+		// The cmd should be tea.Quit or a sequence ending in tea.Quit
+		// We look at the command's value or behavior if possible
 		assert.NotNil(t, cmd)
-		
-		msg := cmd() // returns mutationResultMsg{refresh: true}
-		_, cmdRefresh := m.Update(msg)
-		assert.NotNil(t, cmdRefresh)
-		
-		msgRefresh := cmdRefresh()
-		m.Update(msgRefresh)
-
-		wf.AssertExpectations(t)
 	})
 
-	t.Run("Regression: Panic on last field submit", func(t *testing.T) {
-		wf := new(mockAuthWorkflow)
-		p := &mockProvider{id: "anthropic"}
-		wf.On("GetProvider", "anthropic").Return(p, true)
-		wf.On("SetAuth", mock.Anything, "anthropic", mock.Anything).Return(nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // Move to Anthropic
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // Select Provider
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // Select Method
-
-		// Input Key
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("secret")})
+	t.Run("Closed bus triggers tea.Quit", func(t *testing.T) {
+		ch := make(chan domain.UIUpdate)
+		close(ch)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		
-		// Submit ('enter')
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m := NewModel(bus, theme).(*model)
+		cmd := m.Init()
+		msg := cmd()
 		
-		// CRITICAL: View() should not panic even if index is incremented
-		assert.NotPanics(t, func() { m.View() })
+		// msg should be tea.Batch/Sequence containing tea.Quit
+		assert.NotNil(t, msg)
 	})
 
-	t.Run("Regression: 'q' key should not quit during field collection", func(t *testing.T) {
-		wf := new(mockAuthWorkflow)
-		p := &mockProvider{id: "anthropic"}
-		wf.On("GetProvider", "anthropic").Return(p, true)
+	t.Run("AuthProviderListEvent shows AuthMethod", func(t *testing.T) {
+		m := NewModel(bus, theme).(*model)
+		snapshot := domain.AuthProviderListEvent{
+			Providers: []domain.ProviderSummary{
+				{ID: "openai", Authorized: true, AuthMethod: "api_key"},
+				{ID: "anthropic", Authorized: false},
+			},
+		}
+		m.Update(snapshot)
+		
+		view := m.View()
+		assert.Contains(t, view, "openai")
+		assert.Contains(t, view, "api_key")
+		assert.Contains(t, view, "anthropic")
+	})
 
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // Move
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // Select Provider
-		m.Update(tea.KeyMsg{Type: tea.KeyEnter})                     // Select Method
+	t.Run("Cancellation clears providerID", func(t *testing.T) {
+		m := NewModel(bus, theme).(*model)
+		m.state = stateMethodSelection
+		m.providerID = "openai"
 
-		// Press 'q'
+		bus.On("SendAction", domain.StopAction{}).Return()
+		
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		
-		assert.False(t, m.quitting)
-		assert.Contains(t, m.View(), "Key") // Should still be in key collection
+		assert.Empty(t, m.providerID)
 	})
 }

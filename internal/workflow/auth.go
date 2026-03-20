@@ -23,6 +23,102 @@ type authState interface {
 	Save() error
 }
 
+type authBus interface {
+	SendUIUpdate(domain.UIUpdate)
+	WorkflowActions() <-chan domain.Action
+}
+
+// AuthDeps contains the dependencies for the auth workflow.
+type AuthDeps struct {
+	Bus      authBus
+	Registry authRegistry
+	AuthMgr  authManager
+	State    authState
+}
+
+// RunAuth starts the authentication workflow asynchronously.
+func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		wf := NewAuthWorkflow(deps.Registry, deps.AuthMgr, deps.State)
+
+		// 1. Initial snapshot
+		snapshot, err := wf.Gather(ctx)
+		if err != nil {
+			done <- err
+			return
+		}
+		deps.Bus.SendUIUpdate(*snapshot)
+
+		var selectedProvider domain.Provider
+		var selectedMethod domain.AuthMethod
+
+		for {
+			select {
+			case <-ctx.Done():
+				done <- ctx.Err()
+				return
+			case act, ok := <-deps.Bus.WorkflowActions():
+				if !ok {
+					done <- nil
+					return
+				}
+
+				switch a := act.(type) {
+				case domain.SelectProviderAction:
+					p, ok := wf.registry.GetProvider(a.ID)
+					if !ok {
+						deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: "Provider not found"})
+						continue
+					}
+					selectedProvider = p
+					deps.Bus.SendUIUpdate(domain.AuthMethodEvent{
+						ProviderID: p.ID(),
+						Methods:    p.SupportedAuthMethods(),
+					})
+
+				case domain.RemoveAuthAction:
+					if err := wf.RemoveAuth(ctx, a.ProviderID); err != nil {
+						deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: err.Error()})
+						continue
+					}
+					// Send refreshed snapshot
+					snapshot, _ := wf.Gather(ctx)
+					deps.Bus.SendUIUpdate(*snapshot)
+
+				case domain.SelectAuthMethodAction:
+					for _, m := range selectedProvider.SupportedAuthMethods() {
+						if m.ID == a.ID {
+							selectedMethod = m
+							break
+						}
+					}
+					deps.Bus.SendUIUpdate(domain.CredentialFieldEvent{
+						Method:     selectedMethod,
+						FieldIndex: 0,
+					})
+
+				case domain.SubmitCredentialAction:
+					if err := wf.authMgr.Set(selectedProvider.ID(), a.Credential); err != nil {
+						deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: err.Error()})
+						continue
+					}
+					deps.Bus.SendUIUpdate(domain.DoneEvent{})
+					done <- nil
+					return
+
+				case domain.StopAction:
+					deps.Bus.SendUIUpdate(domain.DoneEvent{})
+					done <- nil
+					return
+				}
+			}
+		}
+	}()
+	return done
+}
+
 // AuthWorkflow orchestrates authentication operations.
 type AuthWorkflow struct {
 	registry authRegistry
@@ -40,7 +136,7 @@ func NewAuthWorkflow(registry authRegistry, authMgr authManager, state authState
 }
 
 // Gather returns the providers and their authentication status.
-func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error) {
+func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderListEvent, error) {
 	infos, err := w.registry.ListProviders(ctx)
 	if err != nil {
 		return nil, err
@@ -48,20 +144,19 @@ func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderSnapshot
 
 	var results []domain.ProviderSummary
 	for _, info := range infos {
-		results = append(results, domain.ProviderSummary{
+		summary := domain.ProviderSummary{
 			ID:         info.ID,
 			Authorized: info.Credential != nil,
-		})
+		}
+		if info.Credential != nil {
+			summary.AuthMethod = info.Credential.Type
+		}
+		results = append(results, summary)
 	}
 
-	return &domain.AuthProviderSnapshot{
+	return &domain.AuthProviderListEvent{
 		Providers: results,
 	}, nil
-}
-
-// SetAuth sets the authentication credentials for a provider.
-func (w *AuthWorkflow) SetAuth(ctx context.Context, providerID string, cred domain.Credential) error {
-	return w.authMgr.Set(providerID, cred)
 }
 
 // RemoveAuth removes the authentication credentials for a provider and resets active model if needed.

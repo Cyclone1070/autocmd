@@ -27,15 +27,18 @@ type SessionListEvent struct {
 
 func (SessionListEvent) isUIUpdate() {}
 
-// AuthProviderSnapshot contains the data needed for the auth management UI.
-type AuthProviderSnapshot struct {
+// AuthProviderListEvent contains the data needed for the auth management UI.
+type AuthProviderListEvent struct {
 	Providers []ProviderSummary
 }
+
+func (AuthProviderListEvent) isUIUpdate() {}
 
 // ProviderSummary provides a snapshot of a provider's auth status.
 type ProviderSummary struct {
 	ID         string
 	Authorized bool
+	AuthMethod string
 }
 
 // HistoryEvent contains the full conversation history for a session.

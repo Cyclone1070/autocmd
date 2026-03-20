@@ -1,7 +1,6 @@
 package authui
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -11,22 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Workflow defines the operations needed for authentication.
-type Workflow interface {
-	Gather(ctx context.Context) (*domain.AuthProviderSnapshot, error)
-	SetAuth(ctx context.Context, providerID string, cred domain.Credential) error
-	RemoveAuth(ctx context.Context, providerID string) error
-	GetProvider(id string) (domain.Provider, bool)
-}
-
-type prepareResultMsg struct {
-	data *domain.AuthProviderSnapshot
-	err  error
-}
-
-type mutationResultMsg struct {
-	err     error
-	refresh bool
+type bus interface {
+	UIUpdates() <-chan domain.UIUpdate
+	SendAction(domain.Action)
 }
 
 type uiState int
@@ -37,75 +23,99 @@ const (
 	stateFieldCollection
 )
 
-// Model is an autonomous UI component for managing authentication.
-type Model struct {
-	wf         Workflow
+// model is an autonomous UI component for managing authentication.
+type model struct {
+	bus        bus
+	theme      *ui.Theme
 	state      uiState
-	provider   domain.Provider
+	providerID string
 	method     domain.AuthMethod
 	values     map[string]string
 	fieldIndex int
 
-	picker     *ui.Picker
-	textInput  textinput.Model
-	quitting   bool
-	err        error
+	picker    *ui.Picker
+	textInput textinput.Model
+	quitting  bool
+	err       error
 }
 
 // NewModel creates a new auth UI model.
-func NewModel(wf Workflow) *Model {
-	return &Model{
-		wf:     wf,
+func NewModel(b bus, theme *ui.Theme) tea.Model {
+	return &model{
+		bus:    b,
+		theme:  theme,
 		state:  stateProviderSelection,
 		values: make(map[string]string),
 	}
 }
 
-// Init starts the auth gathering process.
-func (m *Model) Init() tea.Cmd {
+// Init starts the auth polling process.
+func (m *model) Init() tea.Cmd {
+	return m.pollBus()
+}
+
+func (m *model) pollBus() tea.Cmd {
 	return func() tea.Msg {
-		res, err := m.wf.Gather(context.Background())
-		return prepareResultMsg{data: res, err: err}
+		ev, ok := <-m.bus.UIUpdates()
+		if !ok {
+			return tea.Sequence(
+				tea.Printf("\n %s\n", m.theme.Error("Error: bus closed unexpectedly")),
+				tea.Quit,
+			)()
+		}
+		return ev
 	}
 }
 
-// Update handles UI interactions and translates them into workflow calls.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case prepareResultMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
-		}
-		m.initializeProviderPicker(msg.data)
-		return m, m.picker.Init()
+// Update handles UI interactions and translates them into workflow actions.
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 
-	case mutationResultMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
+	switch msg := msg.(type) {
+	case domain.AuthProviderListEvent:
+		m.state = stateProviderSelection
+		m.initializeProviderPicker(msg.Providers)
+		return m, tea.Batch(m.pollBus(), m.picker.Init())
+
+	case domain.AuthMethodEvent:
+		m.state = stateMethodSelection
+		m.providerID = msg.ProviderID
+		m.initializeMethodPicker(msg.ProviderID, msg.Methods)
+		return m, m.pollBus()
+
+	case domain.CredentialFieldEvent:
+		m.state = stateFieldCollection
+		m.method = msg.Method
+		m.fieldIndex = msg.FieldIndex
+		m.initializeTextInput()
+		return m, m.pollBus()
+
+	case domain.AuthErrorEvent:
+		m.err = fmt.Errorf("%s", msg.Error)
+		// Don't quit! Show the error and keep polling.
+		return m, m.pollBus()
+
+	case domain.DoneEvent:
+		m.quitting = true
+		if m.providerID != "" {
+			return m, tea.Sequence(
+				tea.Printf("\nAuthorized %s\n", m.providerID),
+				tea.Quit,
+			)
 		}
-		if !msg.refresh {
-			m.quitting = true
-			if m.provider != nil {
-				return m, tea.Sequence(
-					tea.Printf("\nAuthorized %s\n", m.provider.ID()),
-					tea.Quit,
-				)
-			}
-			return m, tea.Quit
-		}
-		return m, m.Init()
+		return m, tea.Quit
 
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
-			m.quitting = true
-			return m, tea.Quit
+			m.providerID = ""
+			m.bus.SendAction(domain.StopAction{})
+			return m, nil
 		case "q":
 			if m.state != stateFieldCollection {
-				m.quitting = true
-				return m, tea.Quit
+				m.providerID = ""
+				m.bus.SendAction(domain.StopAction{})
+				return m, nil
 			}
 		}
 
@@ -113,23 +123,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateProviderSelection:
 			if msg.String() == "d" {
 				if item, ok := m.picker.CursorItem(); ok {
-					return m, func() tea.Msg {
-						err := m.wf.RemoveAuth(context.Background(), item.ID)
-						return mutationResultMsg{err: err, refresh: true}
-					}
+					m.bus.SendAction(domain.RemoveAuthAction{ProviderID: item.ID})
+					return m, nil
 				}
 			}
 			newPicker, cmd := m.picker.Update(msg)
 			m.picker = newPicker.(*ui.Picker)
 			if item, ok := m.picker.Selected(); ok {
-				p, ok := m.wf.GetProvider(item.ID)
-				if !ok {
-					m.err = fmt.Errorf("provider not found: %s", item.ID)
-					return m, tea.Quit
-				}
-				m.provider = p
-				m.state = stateMethodSelection
-				m.initializeMethodPicker()
+				m.bus.SendAction(domain.SelectProviderAction{ID: item.ID})
 				return m, nil
 			}
 			return m, cmd
@@ -138,15 +139,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newPicker, cmd := m.picker.Update(msg)
 			m.picker = newPicker.(*ui.Picker)
 			if item, ok := m.picker.Selected(); ok {
-				for _, meth := range m.provider.SupportedAuthMethods() {
-					if meth.ID == item.ID {
-						m.method = meth
-						break
-					}
-				}
-				m.state = stateFieldCollection
-				m.fieldIndex = 0
-				m.initializeTextInput()
+				m.bus.SendAction(domain.SelectAuthMethodAction{ID: item.ID})
 				return m, nil
 			}
 			return m, cmd
@@ -154,33 +147,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case stateFieldCollection:
 			if msg.Type == tea.KeyEnter {
 				val := strings.TrimSpace(m.textInput.Value())
+				// Local validation
 				if val == "" {
-					m.err = fmt.Errorf("field cannot be empty")
-					m.quitting = true
-					return m, tea.Quit
+					return m, nil // Don't submit empty fields?
 				}
+				
+				// Identify credential. 
+				// The UI doesn't know the full cred until it sends SubmitCredentialAction.
+				// For now, let's assume we collect locally but workflow drives index.
 				field := m.method.Fields[m.fieldIndex]
 				m.values[field.ID] = val
-				m.fieldIndex++
 
-				if m.fieldIndex >= len(m.method.Fields) {
+				if m.fieldIndex+1 >= len(m.method.Fields) {
 					// All fields collected, save auth
 					cred := domain.Credential{Type: m.method.ID}
 					if m.method.ID == domain.AuthMethodAPIKey {
 						cred.APIKey = m.values[domain.AuthFieldAPIKey]
 					}
-					return m, func() tea.Msg {
-						err := m.wf.SetAuth(context.Background(), m.provider.ID(), cred)
-						if err != nil {
-							return mutationResultMsg{err: err}
-						}
-						return mutationResultMsg{refresh: false}
-					}
+					m.bus.SendAction(domain.SubmitCredentialAction{Credential: cred})
+					return m, nil
 				}
-				m.initializeTextInput()
+
+				// Master Rule: Workflow drives next field.
+				m.bus.SendAction(domain.SubmitFieldAction{Value: val})
 				return m, nil
 			}
-			var cmd tea.Cmd
 			m.textInput, cmd = m.textInput.Update(msg)
 			return m, cmd
 		}
@@ -189,12 +180,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializeProviderPicker(data *domain.AuthProviderSnapshot) {
+func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {
 	var items []ui.Item
-	for _, p := range data.Providers {
+	for _, p := range providers {
 		detail := ""
 		if p.Authorized {
-			detail = "(Authorized)"
+			detail = fmt.Sprintf("(%s)", p.AuthMethod)
 		}
 		items = append(items, ui.Item{
 			ID:     p.ID,
@@ -212,21 +203,21 @@ func (m *Model) initializeProviderPicker(data *domain.AuthProviderSnapshot) {
 	})
 }
 
-func (m *Model) initializeMethodPicker() {
+func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthMethod) {
 	var items []ui.Item
-	for _, meth := range m.provider.SupportedAuthMethods() {
+	for _, meth := range methods {
 		items = append(items, ui.Item{
 			ID:    meth.ID,
 			Label: meth.Label,
 		})
 	}
 	m.picker = ui.NewPicker(ui.Config{
-		Title: fmt.Sprintf("SELECT AUTH MODE (%s)", m.provider.ID()),
+		Title: fmt.Sprintf("SELECT AUTH MODE (%s)", providerID),
 		Items: items,
 	})
 }
 
-func (m *Model) initializeTextInput() {
+func (m *model) initializeTextInput() {
 	field := m.method.Fields[m.fieldIndex]
 	m.textInput = textinput.New()
 	m.textInput.Placeholder = field.Placeholder
@@ -238,8 +229,11 @@ func (m *Model) initializeTextInput() {
 }
 
 // View determines what content to display.
-func (m *Model) View() string {
+func (m *model) View() string {
 	if m.quitting || m.err != nil {
+		if m.err != nil {
+			return fmt.Sprintf("\n  %s\n\n", m.theme.Error(m.err.Error()))
+		}
 		return ""
 	}
 	switch m.state {
@@ -255,9 +249,4 @@ func (m *Model) View() string {
 		return fmt.Sprintf("\n  %s\n\n  %s\n\n", field.Label, m.textInput.View())
 	}
 	return ""
-}
-
-// Err returns any error encountered.
-func (m *Model) Err() error {
-	return m.err
 }

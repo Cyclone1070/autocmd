@@ -155,3 +155,8 @@ func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status 
 func (r *ToolRenderer) Box(content string, width int, status ToolStatus) string {
 	return r.Theme.Box(content, width, status)
 }
+
+// RenderErrorLine returns a themed failure message with a status prefix.
+func (r *ToolRenderer) RenderErrorLine(s string) string {
+	return "\n " + r.Theme.StatusPrefix(StatusError, "✘") + r.Theme.Error(s)
+}

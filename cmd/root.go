@@ -140,6 +140,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		thinking,
 		tooling,
 		spinner,
+		theme,
 		stream,
 		animator,
 		ui.NewTruncatingGater(termHeight),

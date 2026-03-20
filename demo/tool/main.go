@@ -49,7 +49,17 @@ func main() {
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, ui.NewTruncatingGater(termHeight), chatWidth)
+	m := loop.NewModel(
+		bus,
+		thinking,
+		tooling,
+		spinner,
+		theme,
+		s,
+		anim,
+		ui.NewTruncatingGater(termHeight),
+		chatWidth,
+	)
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

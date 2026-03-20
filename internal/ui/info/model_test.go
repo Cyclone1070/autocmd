@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -28,9 +29,10 @@ func TestModel(t *testing.T) {
 		eventChan := make(chan domain.UIUpdate, 1)
 		bus.On("UIUpdates").Return(eventChan)
 
-		m := NewModel(bus)
+		theme := ui.NewTheme(ui.ThemeConfig{})
+		m := NewModel(bus, theme)
 		
-		info := &domain.InfoEvent{Model: "gpt-4"}
+		info := domain.InfoEvent{Model: "gpt-4"}
 		eventChan <- info
 
 		// BubbleTea tick manually
@@ -46,7 +48,8 @@ func TestModel(t *testing.T) {
 		eventChan := make(chan domain.UIUpdate, 1)
 		bus.On("UIUpdates").Return(eventChan)
 
-		m := NewModel(bus)
+		theme := ui.NewTheme(ui.ThemeConfig{})
+		m := NewModel(bus, theme)
 		
 		_, cmd := m.Update(domain.DoneEvent{})
 
@@ -60,7 +63,8 @@ func TestModel(t *testing.T) {
 		close(eventChan)
 		bus.On("UIUpdates").Return(eventChan)
 
-		m := NewModel(bus)
+		theme := ui.NewTheme(ui.ThemeConfig{})
+		m := NewModel(bus, theme)
 		
 		cmd := m.pollBus()
 		// Should return a command that eventually calls Printf and Quit

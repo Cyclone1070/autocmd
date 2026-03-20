@@ -1,0 +1,61 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/iav/internal/ui/loop"
+	"github.com/Cyclone1070/iav/internal/workflow"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+func main() {
+	bus := workflow.NewEventBus()
+	theme := ui.NewTheme(ui.ThemeConfig{
+		PrimaryColor: lipgloss.AdaptiveColor{Light: "#0EA5E9", Dark: "#38BDF8"},
+		SuccessColor: lipgloss.AdaptiveColor{Light: "#43BF6D", Dark: "#73F59F"},
+		ErrorColor:   lipgloss.AdaptiveColor{Light: "#F05D5E", Dark: "#FF6666"},
+		MutedColor:   lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#888888"},
+	})
+
+	chatWidth := 80
+	glamour := ui.NewGlamourRenderer(chatWidth, true)
+	stream := loop.NewStream(glamour)
+	animator := loop.NewTextAnimator(4)
+	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
+	thinking := loop.NewThinkingRenderer(theme)
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewNoOpGater())
+
+	uiModel := loop.NewModel(
+		bus,
+		thinking,
+		tooling,
+		spinner,
+		theme,
+		stream,
+		animator,
+		ui.NewNoOpGater(),
+		chatWidth,
+	)
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		bus.SendUIUpdate(domain.ToolStartEvent{
+			CallID:   "1",
+			ToolName: "test_tool",
+			Display:  domain.StringDisplay{Content: "Running some long background task..."},
+		})
+		time.Sleep(2 * time.Second)
+		bus.Close()
+	}()
+
+	p := tea.NewProgram(uiModel)
+	if _, err := p.Run(); err != nil {
+		fmt.Printf("Error running program: %v\n", err)
+		os.Exit(1)
+	}
+}

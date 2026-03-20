@@ -2,10 +2,10 @@ package info
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -14,12 +14,15 @@ type bus interface {
 }
 
 type Model struct {
-	bus bus
+	bus   bus
+	theme *ui.Theme
 }
 
-func NewModel(b bus) *Model {
+// NewModel creates a new reactive InfoModel.
+func NewModel(b bus, th *ui.Theme) *Model {
 	return &Model{
-		bus: b,
+		bus:   b,
+		theme: th,
 	}
 }
 
@@ -29,15 +32,18 @@ func (m *Model) Init() tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case *domain.InfoEvent:
-		// Print immediately when data is received
+	case domain.InfoEvent:
+		// Print the info immediately and keep polling
 		return m, tea.Sequence(
-			tea.Printf("%s", renderInfo(msg)),
+			tea.Printf("%s", renderInfo(&msg)),
 			m.pollBus(),
 		)
+
 	case domain.DoneEvent:
+		// Termination signal
 		return m, tea.Quit
 	}
+
 	return m, nil
 }
 
@@ -49,8 +55,9 @@ func (m *Model) pollBus() tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-m.bus.UIUpdates()
 		if !ok {
-			fmt.Fprintln(os.Stderr, "error: bus closed prematurely")
-			return domain.DoneEvent{}
+			// Styled error message
+			msg := "\n " + m.theme.Error("Error: bus closed unexpectedly") + "\n"
+			return tea.Printf("%s", msg)()
 		}
 		return ev
 	}

@@ -41,13 +41,23 @@ func main() {
 		ShortToolbox: cfg.ShortToolbox(),
 	}
 	theme := ui.NewTheme(themeCfg)
-	s := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	anim := loop.NewTextAnimator(4)
+	stream := loop.NewStream(ui.NewGlamourRenderer(chatWidth, true))
+	animator := loop.NewTextAnimator(4)
 	thinking := loop.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
-	m := loop.NewModel(bus, thinking, tooling, spinner, s, anim, ui.NewTruncatingGater(termHeight), chatWidth)
+	m := loop.NewModel(
+		bus,
+		thinking,
+		tooling,
+		spinner,
+		theme,
+		stream,
+		animator,
+		ui.NewTruncatingGater(termHeight),
+		chatWidth,
+	)
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

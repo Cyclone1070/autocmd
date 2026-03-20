@@ -80,6 +80,7 @@ type Model struct {
 
 	width         int
 	gater         viewportGater
+	theme         *ui.Theme
 	flushFn       func(content string) tea.Cmd
 	thinkingStart time.Time
 	spinnerFrame  int
@@ -87,6 +88,12 @@ type Model struct {
 }
 
 type Option func(*Model)
+
+func WithTheme(th *ui.Theme) Option {
+	return func(m *Model) {
+		m.theme = th
+	}
+}
 
 func WithFlush(fn func(content string) tea.Cmd) Option {
 	return func(m *Model) {
@@ -99,6 +106,7 @@ func NewModel(
 	tr thinkingRenderer,
 	tlr toolRenderer,
 	sp spinnerProvider,
+	th *ui.Theme,
 	s stream,
 	a animator,
 	g viewportGater,
@@ -111,6 +119,7 @@ func NewModel(
 		thinkingRenderer: tr,
 		toolRenderer:     tlr,
 		spinnerProvider:  sp,
+		theme:            th,
 		stream:           s,
 		animator:         a,
 		width:            chatWindowWidth,
@@ -141,7 +150,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
-
 func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 	// 1. Advance visual state (Spinners)
 	if m.state != stateIdle && m.state != stateDone && m.state != stateFlushing {
@@ -163,9 +171,7 @@ func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 	}
 
 	if m.isReadyForEvent() {
-		if ev, ok := m.pollOneEvent(); ok {
-			return m.handleEvent(ev)
-		}
+		return m.pollOneEvent()
 	}
 
 	return m, m.nextTick()
@@ -181,12 +187,45 @@ func (m *Model) isReadyForEvent() bool {
 	return false
 }
 
-func (m *Model) pollOneEvent() (domain.UIUpdate, bool) {
+func (m *Model) pollOneEvent() (tea.Model, tea.Cmd) {
 	select {
 	case ev, ok := <-m.bus.UIUpdates():
-		return ev, ok
+		if !ok {
+			return m.handleUnexpectedClose()
+		}
+		return m.handleEvent(ev)
 	default:
-		return nil, false
+		return m, m.nextTick()
+	}
+}
+
+func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
+	errLine := "Error: bus closed unexpectedly"
+	if m.theme != nil {
+		errLine = m.theme.Error(errLine)
+	}
+	errLine = "\n " + errLine
+
+	switch m.state {
+	case stateThinking:
+		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
+		return m.doFlush([]string{thinkingLine, errLine}, stateDone)
+	case stateStreaming:
+		m.animator.FlushAll()
+		blocks := append(m.stream.Flush(), errLine)
+		return m.doFlush(blocks, stateDone)
+	case stateTooling:
+		for i := range m.tools {
+			if m.tools[i].status == ui.StatusRunning {
+				m.tools[i].status = ui.StatusError
+				m.tools[i].errorMsg = "bus closed unexpectedly"
+			}
+		}
+		// In tooling, the error is displayed per-slot via m.renderAllTools()
+		return m.doFlush(m.renderAllTools(), stateDone)
+	default:
+		blocks := append(m.stream.Flush(), errLine)
+		return m.doFlush(blocks, stateDone)
 	}
 }
 

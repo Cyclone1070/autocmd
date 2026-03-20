@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -46,7 +47,8 @@ func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.T
 
 func TestModel_SyncPolling(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, nil, nil, nil, &mockStream{}, &TextAnimator{runesPerTick: 4}, ui.NewNoOpGater(), 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, &TextAnimator{runesPerTick: 4}, ui.NewNoOpGater(), 80)
 
 	// Specification: Init should start the heartbeat (100ms)
 	m.Init()
@@ -70,7 +72,8 @@ func TestModel_SyncPolling(t *testing.T) {
 
 func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, nil, nil, nil, &mockStream{}, &mockAnimator{pending: true}, ui.NewNoOpGater(), 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, &mockAnimator{pending: true}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.spinnerFrame = 10
 
@@ -82,7 +85,8 @@ func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
 		return nil
 	}))
@@ -95,13 +99,15 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 }
 
 func TestModel_ViewportTruncation(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(3), 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(3), 80)
 	v := m.View()
 	assert.Contains(t, v, "truncated", "View should be truncated with indicator")
 }
 
 func TestModel_NoTruncationIfHeightZero(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(0), 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, nil, ui.NewTruncatingGater(0), 80)
 	v := m.View()
 	assert.NotContains(t, v, "truncated", "View should not be truncated when height is 0")
 	assert.Contains(t, v, "L5", "Full content should be visible")
@@ -117,7 +123,8 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 func TestModel_ExplicitGater(t *testing.T) {
-	m := NewModel(nil, nil, nil, nil, nil, nil, ui.NewNoOpGater(), 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(nil, nil, nil, nil, theme, nil, nil, ui.NewNoOpGater(), 80)
 	// Success if constructor accepts it
 	assert.NotNil(t, m.gater)
 }
@@ -130,7 +137,8 @@ func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
 func TestModel_ViewUsesGater(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
-	m := NewModel(bus, nil, nil, nil, &mockStream{p: "raw"}, nil, g, 80)
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, nil, nil, nil, theme, &mockStream{p: "raw"}, nil, g, 80)
 	
 	assert.Equal(t, "raw_gated", m.View())
 }
@@ -139,7 +147,7 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
-	m := NewModel(nil, nil, tr, sp, nil, nil, ui.NewNoOpGater(), 80)
+	m := NewModel(nil, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	
 	m.tools = []toolSlot{
 		{callID: "1", toolName: "t1", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c1"}},
@@ -162,7 +170,7 @@ func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 
-	m := NewModel(bus, nil, tr, sp, nil, nil, ui.NewNoOpGater(), 80)
+	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
 	m.tools = []toolSlot{
 		{callID: "1", toolName: "t1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
@@ -176,4 +184,37 @@ func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {
 		assert.Equal(t, ui.StatusError, newModel.tools[0].status, "Running tool should be marked as error on cancel")
 		assert.Equal(t, "cancelled", newModel.tools[0].errorMsg, "Cancelled tools should carry a generic error message")
 	}
+}
+
+func TestModel_BusClosedUnexpectedly(t *testing.T) {
+	var flushed []string
+	bus := &mockBus{updates: make(chan domain.UIUpdate)}
+	close(bus.updates) // Close channel immediately
+
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	tickr := &mockThinkingRenderer{}
+	sp := &mockSpinner{}
+	m := NewModel(bus, tickr, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(s string) tea.Cmd {
+		flushed = append(flushed, s)
+		return nil
+	}))
+	m.state = stateThinking
+	m.thinkingStart = time.Now()
+
+	// Act: Trigger a tick
+	m.Update(tickMsg{})
+
+	// Assert: Should detect closed channel, mark tools as error, and transition to flushing/done
+	assert.Contains(t, flushed, "thinking_rendered")
+	
+	found := false
+	for _, f := range flushed {
+		// Use a case-insensitive check or specific styled check
+		if strings.Contains(strings.ToLower(f), "bus closed unexpectedly") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Should flush the explicit error message 'bus closed unexpectedly'")
 }

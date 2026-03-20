@@ -37,3 +37,11 @@ type ProviderSummary struct {
 	ID         string
 	Authorized bool
 }
+
+// HistoryEvent contains the full conversation history for a session.
+type HistoryEvent struct {
+	Messages     Messages
+	ToolDisplays ToolDisplays
+}
+
+func (HistoryEvent) isUIUpdate() {}

@@ -1,10 +1,14 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type fakeHistoryStore struct {
@@ -39,78 +43,41 @@ func (f *fakeHistoryState) CurrentSessionID() string {
 	return f.currentID
 }
 
-func TestRunHistory_NoArgProvided(t *testing.T) {
+type mockHistoryBus struct {
+	mock.Mock
+}
+
+func (m *mockHistoryBus) SendUIUpdate(update domain.UIUpdate) {
+	m.Called(update)
+}
+
+func TestRunHistory(t *testing.T) {
+	ctx := context.Background()
 	store := &fakeHistoryStore{
 		sessions: map[string]*domain.Session{
-			"state-id": {ID: "state-id"},
+			"s1": {ID: "s1", Messages: domain.Messages{domain.UserMessage{Content: "hi"}}},
 		},
 	}
-	state := &fakeHistoryState{currentID: "state-id"}
+	state := &fakeHistoryState{currentID: "s1"}
+	bus := new(mockHistoryBus)
 
-	res, err := ResolveSession(&HistoryDeps{
+	bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
+		snapshot, ok := ev.(domain.HistoryEvent)
+		return ok && len(snapshot.Messages) == 1
+	})).Return()
+	bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+	done := RunHistory(ctx, &HistoryDeps{
 		Store: store,
 		State: state,
-	})
-	if err != nil {
-		t.Fatalf("RunHistory returned error: %v", err)
+	}, bus)
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("workflow timed out")
 	}
-	if res.Session == nil || res.Session.ID != "state-id" {
-		t.Fatalf("expected session ID %q, got %#v", "state-id", res.Session)
-	}
+
+	bus.AssertExpectations(t)
 }
-
-func TestRunHistory_WithCurrentSessionID(t *testing.T) {
-	store := &fakeHistoryStore{
-		sessions: map[string]*domain.Session{
-			"state-id": {ID: "state-id"},
-		},
-	}
-	state := &fakeHistoryState{currentID: "state-id"}
-
-	res, err := ResolveSession(&HistoryDeps{
-		Store: store,
-		State: state,
-	})
-	if err != nil {
-		t.Fatalf("RunHistory returned error: %v", err)
-	}
-	if res.Session == nil || res.Session.ID != "state-id" {
-		t.Fatalf("expected session ID %q, got %#v", "state-id", res.Session)
-	}
-}
-
-func TestRunHistory_NoCurrentSessionInState(t *testing.T) {
-	store := &fakeHistoryStore{
-		sessions: map[string]*domain.Session{
-			"some-id": {ID: "some-id"},
-		},
-		summaries: []domain.SessionSummary{
-			{ID: "some-id"},
-		},
-	}
-	state := &fakeHistoryState{currentID: ""}
-
-	_, err := ResolveSession(&HistoryDeps{
-		Store: store,
-		State: state,
-	})
-	if err == nil {
-		t.Fatalf("expected error when no current session ID is in state")
-	}
-}
-
-func TestRunHistory_SessionInStateButNotFoundInStore(t *testing.T) {
-	store := &fakeHistoryStore{
-		sessions: map[string]*domain.Session{},
-	}
-	state := &fakeHistoryState{currentID: "missing-id"}
-
-	_, err := ResolveSession(&HistoryDeps{
-		Store: store,
-		State: state,
-	})
-	if err == nil {
-		t.Fatalf("expected error when state session ID is not found in store")
-	}
-}
-

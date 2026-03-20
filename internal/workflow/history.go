@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -18,10 +19,35 @@ type historyStateStore interface {
 	CurrentSessionID() string
 }
 
+type historyBus interface {
+	SendUIUpdate(domain.UIUpdate)
+}
+
 // HistoryDeps contains the dependencies required to run the history workflow.
 type HistoryDeps struct {
 	Store historySessionStore
 	State historyStateStore
+}
+
+// RunHistory starts the history gathering workflow asynchronously.
+func RunHistory(ctx context.Context, deps *HistoryDeps, bus historyBus) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		res, err := ResolveSession(deps)
+		if err != nil {
+			done <- err
+			return
+		}
+
+		bus.SendUIUpdate(domain.HistoryEvent{
+			Messages:     res.Session.Messages,
+			ToolDisplays: res.Session.ToolDisplays,
+		})
+		bus.SendUIUpdate(domain.DoneEvent{})
+		done <- nil
+	}()
+	return done
 }
 
 // HistoryResult is the outcome of a successful history workflow run.
@@ -47,4 +73,3 @@ func ResolveSession(deps *HistoryDeps) (*HistoryResult, error) {
 
 	return &HistoryResult{Session: sess}, nil
 }
-

@@ -26,14 +26,13 @@ var historyCmd = &cobra.Command{
 			return err
 		}
 
-		res, err := workflow.ResolveSession(&workflow.HistoryDeps{
+		bus := workflow.NewEventBus()
+		defer bus.Close()
+
+		done := workflow.RunHistory(cmd.Context(), &workflow.HistoryDeps{
 			Store: deps.SessionStore,
 			State: deps.State,
-		})
-		if err != nil {
-			return err
-		}
-		sess := res.Session
+		}, bus)
 
 		themeCfg := ui.ThemeConfig{
 			PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
@@ -42,14 +41,18 @@ var historyCmd = &cobra.Command{
 			MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
 			ShortToolbox: deps.Config.UI().ShortToolbox(),
 		}
+		theme := ui.NewTheme(themeCfg)
 
 		width, height, _ := term.GetSize(int(os.Stdout.Fd()))
-		m := history.NewModel(sess.Messages, sess.ToolDisplays, themeCfg, deps.Config.UI().ChatWindowWidth(), width, height)
-		// Enable mouse input so the viewport can scroll with the wheel/trackpad.
+		m := history.NewModel(bus, theme, deps.Config.UI().ChatWindowWidth(), width, height)
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 		if _, err := p.Run(); err != nil {
 			return fmt.Errorf("failed to run history viewer: %w", err)
+		}
+
+		if err := <-done; err != nil {
+			return err
 		}
 
 		return nil

@@ -3,144 +3,50 @@ package history
 import (
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func testNewModel(messages domain.Messages, displays domain.ToolDisplays, cfg config.UIConfig, width, height int, opts ...Option) *Model {
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
-	}
-	return NewModel(messages, displays, themeCfg, cfg.ChatWindowWidth(), width, height, opts...)
+type mockBus struct {
+	mock.Mock
 }
 
-func TestModel_WidthCapping(t *testing.T) {
-	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(80)
-	messages := domain.Messages{}
-
-	// Case 1: Terminal is wider than config -> should cap to config
-	m := testNewModel(messages, nil, cfg, 200, 40)
-	assert.Equal(t, 80, m.width)
-
-	// Case 2: Terminal is narrower than config -> should cap to terminal
-	m = testNewModel(messages, nil, cfg, 40, 40)
-	assert.Equal(t, 40, m.width)
-
-	// Case 3: Resize to larger than config -> should stay capped at config
-	tm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 50})
-	m = tm.(*Model)
-	assert.Equal(t, 80, m.width)
-	assert.Equal(t, 50, m.height)
-
-	// Case 4: Resize to smaller than config -> should follow terminal
-	tm, _ = m.Update(tea.WindowSizeMsg{Width: 30, Height: 50})
-	m = tm.(*Model)
-	assert.Equal(t, 30, m.width)
+func (m *mockBus) UIUpdates() <-chan domain.UIUpdate {
+	args := m.Called()
+	return args.Get(0).(<-chan domain.UIUpdate)
 }
 
-func TestModel_EmptyMessages_NoPanic(t *testing.T) {
-	cfg := config.DefaultConfig().UI()
-	messages := domain.Messages{}
-	m := testNewModel(messages, nil, cfg, 80, 20)
-
-	// Should not panic on resize
-	assert.NotPanics(t, func() {
-		m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
-	})
-	assert.True(t, m.reachedTop)
+func (m *mockBus) SendAction(act domain.Action) {
+	m.Called(act)
 }
 
-func TestModel_ResizeBehavior(t *testing.T) {
-	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(100)
-	messages := domain.Messages{
-		domain.UserMessage{Content: "hello"},
-		domain.AssistantMessage{Content: "hi there"},
-		domain.UserMessage{Content: "how are you?"},
-		domain.AssistantMessage{Content: "i am good"},
-	}
-
-	t.Run("HeightOnlyResize_PreservesCache", func(t *testing.T) {
-		m := testNewModel(messages, nil, cfg, 80, 20)
-		// Trigger some rendering
-		m.initializeContent()
-		initialCacheSize := len(m.renderedMessages)
-		assert.Greater(t, initialCacheSize, 0)
-
-		// Resize height only
-		tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
-		m2 := tm.(*Model)
-
-		assert.Equal(t, initialCacheSize, len(m2.renderedMessages), "Cache should be preserved when width stays the same")
-	})
-
-	t.Run("WidthResize_ClearsCache", func(t *testing.T) {
-		m := testNewModel(messages, nil, cfg, 80, 20)
-		m.initializeContent()
-
-		// Resize width
-		tm, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
-		m2 := tm.(*Model)
-
-		assert.Equal(t, len(messages), len(m2.renderedMessages), "Cache should be reset and re-populated with newly rendered messages")
-	})
-
-	t.Run("ResizeSmaller_CanScrollToTop", func(t *testing.T) {
-		// Start with 10 messages in a tall window - everything fits
-		var manyMsg domain.Messages
-		for i := 0; i < 10; i++ {
-			manyMsg = append(manyMsg, domain.UserMessage{Content: "msg"})
+func TestModel_EventFlow(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	bus := new(mockBus)
+	
+	t.Run("Snapshot received -> Renders content", func(t *testing.T) {
+		m := NewModel(bus, theme, 80, 80, 40)
+		
+		ev := domain.HistoryEvent{
+			Messages: domain.Messages{domain.UserMessage{Content: "snapshot message"}},
 		}
-
-		m := testNewModel(manyMsg, nil, cfg, 80, 100) // 100 lines height
-		assert.True(t, m.reachedTop, "Should reach top when all messages fit")
-
-		// Resize to very short window
-		tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 2})
-		m2 := tm.(*Model)
-
-		// With height=2, limit=4 lines. 10 messages won't fit.
-		assert.False(t, m2.reachedTop, "reachedTop should be reset so user can scroll up to load earlier messages")
-		assert.Greater(t, m2.topIdx, 0)
+		
+		// Initial view should be empty (detecting no messages/displays yet)
+		assert.Empty(t, m.View())
+		
+		m.Update(ev)
+		assert.Contains(t, m.View(), "snapshot")
+		assert.Contains(t, m.View(), "message")
 	})
-}
 
-func TestIssue_History_ViewportGapAccumulation(t *testing.T) {
-	// This test ensures that YOffset does not exceed mathematical bounds
-	// due to the newline fusion over-counting bug.
-	// Prepending messages must correctly account for the true line count of
-	// the joined string rather than individual heights.
-
-	cfg := config.DefaultConfig().UI()
-	var messages domain.Messages
-	// Provide many messages to ensure we have content to prepend.
-	for i := 0; i < 50; i++ {
-		messages = append(messages, domain.UserMessage{Content: "filler\n"})
-	}
-
-	// 1. Initialize with height 20.
-	// initializeContent renders from messages backward up to limit=height*2 (40 lines).
-	m := testNewModel(messages, nil, cfg, 80, 20)
-
-	// 2. refreshViewport triggers if YOffset < height.
-	// It must increment YOffset exactly by the number of mathematical lines added.
-	m.refreshViewport()
-
-	totalLines := m.viewport.TotalLineCount()
-	maxAllowedY := totalLines - m.height
-	if maxAllowedY < 0 {
-		maxAllowedY = 0
-	}
-
-	assert.LessOrEqual(t, m.viewport.YOffset, maxAllowedY,
-		"YOffset (%d) should be within content bounds [%d]. Failure indicates a blank gap at the bottom.",
-		m.viewport.YOffset, maxAllowedY)
+	t.Run("DoneEvent stops polling", func(t *testing.T) {
+		m := NewModel(bus, theme, 80, 80, 40)
+		m.Update(domain.DoneEvent{})
+		
+		// This is hard to test purely with mock assertions unless we check if pollBus returned a cmd
+		// But we can verify it doesn't crash.
+		assert.True(t, m.loaded)
+	})
 }

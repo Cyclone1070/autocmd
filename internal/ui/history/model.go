@@ -12,8 +12,13 @@ import (
 	"golang.org/x/term"
 )
 
-// Model is the bubbletea model for the history viewer.
-type Model struct {
+type bus interface {
+	UIUpdates() <-chan domain.UIUpdate
+	SendAction(domain.Action)
+}
+
+// model is the bubbletea model for the history viewer.
+type model struct {
 	messages        domain.Messages
 	chatWindowWidth int
 	theme           *ui.Theme
@@ -23,6 +28,8 @@ type Model struct {
 	viewport        viewport.Model
 	displays        domain.ToolDisplays
 	items           []renderItem
+	bus             bus
+	loaded          bool
 
 	// Cache for lazy rendering
 	renderedMessages map[int]string
@@ -33,45 +40,42 @@ type Model struct {
 	isDark           bool
 }
 
-// Option is a functional option for configuring the Model.
-type Option func(*Model)
+// Option is a functional option for configuring the model.
+type Option func(*model)
 
 // WithRenderer sets the renderer for the model.
 func WithRenderer(r ui.Renderer) Option {
-	return func(m *Model) {
+	return func(m *model) {
 		m.renderer = r
 	}
 }
 
 // WithIsDark sets the dark mode flag for the model.
 func WithIsDark(isDark bool) Option {
-	return func(m *Model) {
+	return func(m *model) {
 		m.isDark = isDark
 	}
 }
 
 // NewModel creates a new history model.
-func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg ui.ThemeConfig, chatWindowWidth int, width, height int, opts ...Option) *Model {
-	m := &Model{
-		messages:         messages,
+func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, width, height int, opts ...Option) *model {
+	m := &model{
+		bus:              b,
+		theme:            theme,
 		chatWindowWidth:  chatWindowWidth,
-		theme:            ui.NewTheme(themeCfg),
 		height:           height,
 		renderedMessages: make(map[int]string),
 		topIdx:           0,
 		bottomIdx:        0,
 		reachedTop:       false,
-		displays:         displays,
-		isDark:           false, // Default, will be overridden by options or polled on-demand
+		isDark:           false,
 	}
 	m.width = m.calculateWidth(width)
-	m.items = buildRenderItems(messages)
 
 	for _, opt := range opts {
 		opt(m)
 	}
 
-	// If isDark wasn't provided, we poll it. But ideally it's passed from cmd/
 	if !m.isDark && m.renderer == nil {
 		if term.IsTerminal(int(os.Stdout.Fd())) {
 			m.isDark = lipgloss.HasDarkBackground()
@@ -87,12 +91,11 @@ func NewModel(messages domain.Messages, displays domain.ToolDisplays, themeCfg u
 	}
 
 	m.viewport = viewport.New(m.width, height)
-	m.initializeContent()
-
 	return m
 }
 
-func (m *Model) initializeContent() {
+func (m *model) initializeContent() {
+	m.items = buildRenderItems(m.messages)
 	if len(m.items) == 0 {
 		m.reachedTop = true
 		return
@@ -104,14 +107,12 @@ func (m *Model) initializeContent() {
 
 	var renderedParts []string
 	currentHeight := 0
-	// Render enough to fill the viewport plus one screen height of buffer.
 	limit := m.height * 2
 
 	for m.topIdx >= 0 {
 		rendered := m.renderMessage(m.topIdx)
 		renderedParts = append([]string{rendered}, renderedParts...)
 
-		// Use exact height of joined parts to avoid the newline fusion bug
 		m.renderedBlock = strings.Join(renderedParts, "")
 		currentHeight = lipgloss.Height(m.renderedBlock)
 		m.topIdx--
@@ -130,7 +131,7 @@ func (m *Model) initializeContent() {
 	m.viewport.GotoBottom()
 }
 
-func (m *Model) renderMessage(idx int) string {
+func (m *model) renderMessage(idx int) string {
 	if r, ok := m.renderedMessages[idx]; ok {
 		return r
 	}
@@ -145,24 +146,18 @@ func (m *Model) renderMessage(idx int) string {
 	return rendered
 }
 
-func (m *Model) refreshViewport() {
-	// If we are getting close to the top of the rendered block, prepend more
-	// Use one screen height as the safety margin.
+func (m *model) refreshViewport() {
+	if !m.loaded {
+		return
+	}
 	for !m.reachedTop && m.viewport.YOffset < m.height {
 		rendered := m.renderMessage(m.topIdx)
-
-		// Record the previous line count before we add the new string
 		oldTotal := m.viewport.TotalLineCount()
 
 		m.renderedBlock = rendered + m.renderedBlock
 		m.viewport.SetContent(m.renderedBlock)
 
-		// Calculate exactly how many virtual lines were added.
-		// We do this instead of lipgloss.Height() because joining two strings
-		// that both end in newlines results in 1 fewer line than the sum of their individual heights.
 		linesAdded := m.viewport.TotalLineCount() - oldTotal
-
-		// Shift YOffset down by exactly the number of lines introduced
 		m.viewport.YOffset += linesAdded
 		m.topIdx--
 		if m.topIdx < 0 {
@@ -172,7 +167,7 @@ func (m *Model) refreshViewport() {
 	}
 }
 
-func (m *Model) calculateWidth(termWidth int) int {
+func (m *model) calculateWidth(termWidth int) int {
 	w := m.chatWindowWidth
 	if termWidth > 0 && termWidth < w {
 		w = termWidth
@@ -180,28 +175,47 @@ func (m *Model) calculateWidth(termWidth int) int {
 	return w
 }
 
-func (m *Model) Init() tea.Cmd {
-	return nil
+func (m *model) Init() tea.Cmd {
+	return m.pollBus()
 }
 
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) pollBus() tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-m.bus.UIUpdates()
+		if !ok {
+			return nil
+		}
+		return ev
+	}
+}
+
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
-	// Update sub-models first so they have correct dimensions before our logic runs
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
-
 	switch msg := msg.(type) {
+	case domain.HistoryEvent:
+		m.messages = msg.Messages
+		m.displays = msg.ToolDisplays
+		m.initializeContent()
+		return m, m.pollBus()
+
+	case domain.DoneEvent:
+		m.loaded = true
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
 		}
+
 	case tea.WindowSizeMsg:
 		newWidth := m.calculateWidth(msg.Width)
 		if newWidth == m.width && msg.Height == m.height {
-			return m, nil
+			// Still update viewport for mouse/scrolling consistency
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
 		}
 
 		if newWidth != m.width {
@@ -211,21 +225,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				renderWidth = 10
 			}
 			m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
-			// Reset rendered cache only on width change as it affects wrapping.
 			m.renderedMessages = make(map[int]string)
 		}
 		m.height = msg.Height
 		m.viewport.Width = m.width
 		m.viewport.Height = m.height
-		// Re-initialize content to fill the new viewport and anchor to bottom
-		m.initializeContent()
+		if m.loaded {
+			m.initializeContent()
+		}
 	}
+
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
 
 	m.refreshViewport()
 
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) View() string {
+func (m *model) View() string {
+	if !m.loaded && len(m.messages) == 0 {
+		return ""
+	}
 	return m.viewport.View()
 }

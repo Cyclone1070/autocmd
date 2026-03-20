@@ -95,6 +95,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		store.On("Get", "sess-123").Return(session, nil)
 
 		registry.On("Get", ctx, "google/gemini-pro").Return(llm, nil)
+		llm.On("DisplayName").Return("Gemini 1.5 Pro")
 		llm.On("ContextWindow").Return(128000)
 		llm.On("ComputeTokens", ctx, session.Messages).Return(100, nil)
 
@@ -102,7 +103,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
-		assert.Equal(t, "google/gemini-pro", res.Model)
+		assert.Equal(t, "Gemini 1.5 Pro", res.Model)
 		assert.Equal(t, "Test Session", res.SessionDisplay)
 		assert.Equal(t, 100, res.SessionTokens)
 		assert.Equal(t, 128000, res.ContextWindow)

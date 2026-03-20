@@ -73,6 +73,9 @@ func TestModel(t *testing.T) {
 }
 
 func TestRenderInfo(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(nil, theme)
+
 	t.Run("Full Success Scenario", func(t *testing.T) {
 		data := &domain.InfoEvent{
 			Model:          "google/gemini-pro",
@@ -82,7 +85,7 @@ func TestRenderInfo(t *testing.T) {
 			Authorized:     []string{"google (env)"},
 		}
 
-		output := renderInfo(data)
+		output := m.renderInfo(data)
 		assert.Contains(t, output, "Model:")
 		assert.Contains(t, output, "google/gemini-pro")
 		assert.Contains(t, output, "Current Session:")
@@ -99,7 +102,7 @@ func TestRenderInfo(t *testing.T) {
 			SessionDisplay: "none",
 		}
 
-		output := renderInfo(data)
+		output := m.renderInfo(data)
 		assert.Contains(t, output, "Current Session:")
 		assert.Contains(t, output, "none")
 		assert.NotContains(t, output, "Model:")

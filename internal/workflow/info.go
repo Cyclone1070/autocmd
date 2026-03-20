@@ -67,13 +67,13 @@ func NewInfoWorkflow(registry infoLLMRegistry, state infoState, store infoSessio
 }
 
 // gather executes the info workflow results.
-func (w *InfoWorkflow) gather(ctx context.Context) (*domain.InfoEvent, error) {
-	res := &domain.InfoEvent{}
+func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
+	res := domain.InfoEvent{}
 
 	// 1. Authorized Providers
 	providers, err := w.registry.ListProviders(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list providers: %w", err)
+		return domain.InfoEvent{}, fmt.Errorf("list providers: %w", err)
 	}
 	for _, p := range providers {
 		if p.Credential != nil {
@@ -81,8 +81,8 @@ func (w *InfoWorkflow) gather(ctx context.Context) (*domain.InfoEvent, error) {
 		}
 	}
 
-	// 2. Model from State
-	res.Model = w.state.Model()
+	// 2. Model ID from State
+	modelID := w.state.Model()
 
 	// 3. Session Info
 	sessionID := w.state.CurrentSessionID()
@@ -103,9 +103,10 @@ func (w *InfoWorkflow) gather(ctx context.Context) (*domain.InfoEvent, error) {
 	}
 
 	// 4. LLM Specific Info (Context Window & Tokens)
-	if res.Model != "" {
-		llm, err := w.registry.Get(ctx, res.Model)
+	if modelID != "" {
+		llm, err := w.registry.Get(ctx, modelID)
 		if err == nil {
+			res.Model = llm.DisplayName()
 			res.ContextWindow = llm.ContextWindow()
 			if len(sessionMessages) > 0 {
 				tokens, err := llm.ComputeTokens(ctx, sessionMessages)
@@ -113,6 +114,9 @@ func (w *InfoWorkflow) gather(ctx context.Context) (*domain.InfoEvent, error) {
 					res.SessionTokens = tokens
 				}
 			}
+		} else {
+			// Fallback if not found in registry
+			res.Model = modelID
 		}
 	}
 

@@ -90,7 +90,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.renaming = false
 					m.renameItemID = ""
 					m.bus.SendAction(domain.RenameSessionAction{ID: id, Name: newName})
-					return m, m.pollBus()
+					return m, nil
 				}
 				m.renaming = false
 				return m, nil
@@ -115,7 +115,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "n":
 			m.selectedName = "(new session)"
 			m.bus.SendAction(domain.CreateSessionAction{})
-			return m, m.pollBus()
+			return m, nil
 		case "r":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.renaming = true
@@ -127,20 +127,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.bus.SendAction(domain.DeleteSessionAction{ID: item.ID})
-				return m, m.pollBus()
+				return m, nil
 			}
 		case "enter":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.selectedID = item.ID
 				m.selectedName = item.Label
 				m.bus.SendAction(domain.SelectSessionAction{ID: item.ID})
-				return m, m.pollBus()
+				return m, nil
 			}
 		case "q", "esc", "ctrl+c":
 			m.selectedID = "" // signal cancellation
 			m.selectedName = "Cancelled"
 			m.bus.SendAction(domain.StopAction{})
-			return m, m.pollBus()
+			return m, nil
 		}
 	}
 

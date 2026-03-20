@@ -57,7 +57,7 @@ func TestSessionPickerUI(t *testing.T) {
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
-		assert.NotNil(t, cmd)
+		assert.Nil(t, cmd)
 		assert.Equal(t, "(new session)", m.selectedName)
 		bus.AssertExpectations(t)
 	})

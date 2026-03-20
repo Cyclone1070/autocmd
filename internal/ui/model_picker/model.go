@@ -82,7 +82,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			m.selectedName = "" // Signal cancellation
 			m.bus.SendAction(domain.StopAction{})
-			return m, nil
+			return m, tea.Quit
 		}
 	}
 

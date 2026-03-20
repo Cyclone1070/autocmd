@@ -55,14 +55,15 @@ func TestModelSelection(t *testing.T) {
 		bus.AssertExpectations(t)
 	})
 
-	t.Run("Escape sends StopAction", func(t *testing.T) {
+	t.Run("Escape sends StopAction and Quits", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.StopAction{}).Return()
 		
 		m := NewModel(bus, theme)
 		m.Update(result)
 
-		m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		assert.NotNil(t, cmd) // MUST quit immediately
 		assert.Equal(t, "", m.selectedName)
 		bus.AssertExpectations(t)
 	})

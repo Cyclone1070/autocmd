@@ -116,4 +116,16 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Contains(t, m.selectedName, "Session 1")
 		assert.Empty(t, m.View())
 	})
+
+	t.Run("StopAction on 'q'", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.StopAction{}).Return()
+		m := NewModel(bus, theme)
+		m.Update(result)
+
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		
+		assert.NotNil(t, cmd) // MUST quit immediately
+		bus.AssertCalled(t, "SendAction", domain.StopAction{})
+	})
 }

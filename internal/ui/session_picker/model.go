@@ -137,7 +137,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectedID = "" // signal cancellation
 			m.selectedName = "Cancelled"
 			m.bus.SendAction(domain.StopAction{})
-			return m, nil
+			return m, tea.Quit
 		}
 	}
 

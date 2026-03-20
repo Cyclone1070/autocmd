@@ -110,12 +110,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.providerID = ""
 			m.bus.SendAction(domain.StopAction{})
-			return m, nil
+			return m, tea.Quit
 		case "q":
 			if m.state != stateFieldCollection {
 				m.providerID = ""
 				m.bus.SendAction(domain.StopAction{})
-				return m, nil
+				return m, tea.Quit
 			}
 		}
 

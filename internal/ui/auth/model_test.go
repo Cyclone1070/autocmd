@@ -35,7 +35,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		
-		assert.Nil(t, cmd) // MUST NOT poll
+		assert.NotNil(t, cmd) // MUST quit immediately
 		bus.AssertCalled(t, "SendAction", domain.StopAction{})
 	})
 

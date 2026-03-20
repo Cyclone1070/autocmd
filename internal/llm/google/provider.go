@@ -58,9 +58,9 @@ func (p *Provider) newClient(ctx context.Context, cred *domain.Credential) (*gen
 
 func (p *Provider) ListLLMs() []domain.LLMInfo {
 	return []domain.LLMInfo{
-		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash Lite"},
+		{ID: "gemini-2.5-flash-lite", DisplayName: "Gemini 2.5 Flash-Lite"},
 		{ID: "gemini-2.5-flash", DisplayName: "Gemini 2.5 Flash"},
-		{ID: "gemini-3-flash-preview", DisplayName: "Gemini 3.0 Flash"},
+		{ID: "gemini-3-flash-preview", DisplayName: "Gemini 3.0 Flash Preview"},
 		{ID: "gemini-2.5-pro", DisplayName: "Gemini 2.5 Pro"},
 		{ID: "gemini-3-pro-preview", DisplayName: "Gemini 3.0 Pro Preview"},
 	}

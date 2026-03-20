@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/config"
@@ -38,8 +37,7 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		wf := workflow.NewSessionPickerWorkflow(store, appState)
-		if _, err := wf.CreateSession(context.Background()); err != nil {
+		if _, err := workflow.CreateSession(store, appState); err != nil {
 			return err
 		}
 

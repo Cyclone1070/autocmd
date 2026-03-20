@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/session_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,40 +14,53 @@ import (
 
 func init() {
 	rootCmd.AddCommand(sessionCmd)
-	sessionCmd.AddCommand(listCmd)
 }
 
 var sessionCmd = &cobra.Command{
 	Use:   "session",
 	Short: "Manage conversation sessions",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runSessionPicker(cmd, args)
+		deps, err := Wire()
+		if err != nil {
+			return err
+		}
+		return runSessionPicker(cmd.Context(), deps)
 	},
 }
 
-var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List and manage chat sessions",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runSessionPicker(cmd, args)
-	},
-}
+func runSessionPicker(ctx context.Context, deps *Deps) error {
+	bus := workflow.NewEventBus()
+	defer bus.Close()
 
-func runSessionPicker(cmd *cobra.Command, args []string) error {
-	deps, err := Wire()
+	fileSystem := fs.NewOSFileSystem(-1)
+	store, err := buildSessionStore(deps.Config, fileSystem)
 	if err != nil {
 		return err
 	}
 
-	wf := workflow.NewSessionPickerWorkflow(deps.SessionStore, deps.State)
-	m := session_picker.NewModel(wf)
+	done := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
+		Bus:   bus,
+		Store: store,
+		State: deps.State,
+	})
+
+	themeCfg := ui.ThemeConfig{
+		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
+		SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
+		ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
+		MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
+		ShortToolbox: deps.Config.UI().ShortToolbox(),
+	}
+	theme := ui.NewTheme(themeCfg)
+
+	m := session_picker.NewModel(bus, theme)
 	p := tea.NewProgram(m)
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("picker failed: %w", err)
 	}
 
-	if err := m.Err(); err != nil {
+	if err := <-done; err != nil {
 		return err
 	}
 

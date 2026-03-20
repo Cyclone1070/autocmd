@@ -17,11 +17,13 @@ type ModelPickerSnapshot struct {
 	ActiveModelID string
 }
 
-// SessionPickerSnapshot contains the data needed for session selection UI.
-type SessionPickerSnapshot struct {
+// SessionListEvent contains the data needed for session selection UI.
+type SessionListEvent struct {
 	Sessions         []SessionSummary
 	CurrentSessionID string
 }
+
+func (SessionListEvent) isUIUpdate() {}
 
 // AuthProviderSnapshot contains the data needed for the auth management UI.
 type AuthProviderSnapshot struct {

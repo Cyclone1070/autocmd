@@ -58,15 +58,15 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		{ID: "s2", Name: "Session 2"},
 	}
 
-	t.Run("PrepareSelection returns summaries and current ID", func(t *testing.T) {
+	t.Run("prepareSelection returns summaries and current ID", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
 		store.On("List").Return(summaries, nil)
 		state.On("CurrentSessionID").Return("s1")
 
-		wf := NewSessionPickerWorkflow(store, state)
-		res, err := wf.PrepareSelection(ctx)
+		wf := newSessionPickerWorkflow(store, state)
+		res, err := wf.prepareSelection(ctx)
 
 		assert.NoError(t, err)
 		assert.Equal(t, summaries, res.Sessions)
@@ -75,21 +75,21 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.AssertExpectations(t)
 	})
 
-	t.Run("ApplySelection updates state", func(t *testing.T) {
+	t.Run("applySelection updates state", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
 		state.On("SetCurrentSessionID", "s2").Return()
 		state.On("Save").Return(nil)
 
-		wf := NewSessionPickerWorkflow(store, state)
-		err := wf.ApplySelection(ctx, "s2")
+		wf := newSessionPickerWorkflow(store, state)
+		err := wf.applySelection(ctx, "s2")
 
 		assert.NoError(t, err)
 		state.AssertExpectations(t)
 	})
 
-	t.Run("CreateSession creates and updates state", func(t *testing.T) {
+	t.Run("createSession creates and updates state", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
@@ -98,8 +98,8 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.On("SetCurrentSessionID", "new-id").Return()
 		state.On("Save").Return(nil)
 
-		wf := NewSessionPickerWorkflow(store, state)
-		id, err := wf.CreateSession(ctx)
+		wf := newSessionPickerWorkflow(store, state)
+		id, err := wf.createSession(ctx)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "new-id", id)
@@ -107,20 +107,20 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.AssertExpectations(t)
 	})
 
-	t.Run("RenameSession calls store", func(t *testing.T) {
+	t.Run("renameSession calls store", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
 		store.On("Rename", "s1", "Better Name").Return(nil)
 
-		wf := NewSessionPickerWorkflow(store, state)
-		err := wf.RenameSession(ctx, "s1", "Better Name")
+		wf := newSessionPickerWorkflow(store, state)
+		err := wf.renameSession(ctx, "s1", "Better Name")
 
 		assert.NoError(t, err)
 		store.AssertExpectations(t)
 	})
 
-	t.Run("DeleteSession calls store and clears state if current", func(t *testing.T) {
+	t.Run("deleteSession calls store and clears state if current", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
@@ -129,8 +129,8 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.On("SetCurrentSessionID", "").Return()
 		state.On("Save").Return(nil)
 
-		wf := NewSessionPickerWorkflow(store, state)
-		err := wf.DeleteSession(ctx, "s1")
+		wf := newSessionPickerWorkflow(store, state)
+		err := wf.deleteSession(ctx, "s1")
 
 		assert.NoError(t, err)
 		store.AssertExpectations(t)

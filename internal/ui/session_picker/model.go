@@ -1,7 +1,6 @@
 package session_picker
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -12,94 +11,72 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Workflow defines the operations needed for session management.
-type Workflow interface {
-	PrepareSelection(ctx context.Context) (*domain.SessionPickerSnapshot, error)
-	ApplySelection(ctx context.Context, id string) error
-	CreateSession(ctx context.Context) (string, error)
-	RenameSession(ctx context.Context, id, name string) error
-	DeleteSession(ctx context.Context, id string) error
+type bus interface {
+	UIUpdates() <-chan domain.UIUpdate
+	SendAction(domain.Action)
 }
 
-type prepareResultMsg struct {
-	data *domain.SessionPickerSnapshot
-	err  error
-}
-
-type mutationResultMsg struct {
-	err     error
-	refresh bool
-}
-
-type applyResultMsg struct {
-	id  string
-	err error
-}
-
-// Model is an autonomous UI component for managing chat sessions.
-type Model struct {
+// model is an autonomous UI component for managing chat sessions.
+type model struct {
 	picker       *ui.Picker
 	textInput    textinput.Model
-	wf           Workflow
+	bus          bus
+	theme        *ui.Theme
 	fetching     bool
 	renaming     bool
 	renameItemID string
 	quitting     bool
 	err          error
 	selectedID   string
+	selectedName string
 }
 
-// NewModel creates a new session picker UI with an injected workflow.
-func NewModel(wf Workflow) *Model {
+// NewModel creates a new session picker UI with a bus and theme.
+func NewModel(b bus, theme *ui.Theme) *model {
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
 
-	return &Model{
-		wf:        wf,
+	return &model{
+		bus:       b,
+		theme:     theme,
 		textInput: ti,
 		fetching:  true,
 	}
 }
 
 // Init starts the session loading process.
-func (m *Model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
+	return m.pollBus()
+}
+
+func (m *model) pollBus() tea.Cmd {
 	return func() tea.Msg {
-		res, err := m.wf.PrepareSelection(context.Background())
-		return prepareResultMsg{data: res, err: err}
+		ev, ok := <-m.bus.UIUpdates()
+		if !ok {
+			return tea.Sequence(
+				tea.Printf("\n %s\n", m.theme.Error("Error: bus closed unexpectedly")),
+				tea.Quit,
+			)()
+		}
+		return ev
 	}
 }
 
 // Update handles UI interactions and translates them into workflow calls.
-func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case prepareResultMsg:
+	case domain.SessionListEvent:
 		m.fetching = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
-		}
-		m.initializePicker(msg.data)
-		return m, m.picker.Init()
+		m.initializePicker(&msg)
+		return m, m.pollBus()
 
-	case mutationResultMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
-		}
-		if msg.refresh {
-			return m, m.Init()
-		}
-		return m, nil
-
-	case applyResultMsg:
+	case domain.DoneEvent:
 		m.quitting = true
-		if msg.err != nil {
-			m.err = msg.err
+		if m.selectedID == "" {
 			return m, tea.Quit
 		}
-		m.selectedID = msg.id
 		return m, tea.Sequence(
-			tea.Printf("\nSelected session\n"),
+			tea.Printf("\nSelected session: %s\n", m.theme.Success(m.selectedName)),
 			tea.Quit,
 		)
 
@@ -112,10 +89,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					id := m.renameItemID
 					m.renaming = false
 					m.renameItemID = ""
-					return m, func() tea.Msg {
-						err := m.wf.RenameSession(context.Background(), id, newName)
-						return mutationResultMsg{err: err, refresh: true}
-					}
+					m.bus.SendAction(domain.RenameSessionAction{ID: id, Name: newName})
+					return m, m.pollBus()
 				}
 				m.renaming = false
 				return m, nil
@@ -130,21 +105,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.fetching {
 			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
-				m.quitting = true
-				return m, tea.Quit
+				m.bus.SendAction(domain.StopAction{})
+				return m, m.pollBus()
 			}
 			return m, nil
 		}
 
 		switch msg.String() {
 		case "n":
-			return m, func() tea.Msg {
-				id, err := m.wf.CreateSession(context.Background())
-				if err == nil {
-					return applyResultMsg{id: id}
-				}
-				return mutationResultMsg{err: err}
-			}
+			m.selectedName = "(new session)"
+			m.bus.SendAction(domain.CreateSessionAction{})
+			return m, m.pollBus()
 		case "r":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.renaming = true
@@ -155,20 +126,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d":
 			if item, ok := m.picker.CursorItem(); ok {
-				return m, func() tea.Msg {
-					err := m.wf.DeleteSession(context.Background(), item.ID)
-					return mutationResultMsg{err: err, refresh: true}
-				}
+				m.bus.SendAction(domain.DeleteSessionAction{ID: item.ID})
+				return m, m.pollBus()
 			}
 		case "enter":
 			if item, ok := m.picker.CursorItem(); ok {
-				return m, func() tea.Msg {
-					err := m.wf.ApplySelection(context.Background(), item.ID)
-					return applyResultMsg{id: item.ID, err: err}
-				}
+				m.selectedID = item.ID
+				m.selectedName = item.Label
+				m.bus.SendAction(domain.SelectSessionAction{ID: item.ID})
+				return m, m.pollBus()
 			}
 		case "q", "esc", "ctrl+c":
-			m.quitting = true
+			m.selectedID = "" // signal cancellation
+			m.selectedName = "Cancelled"
+			m.bus.SendAction(domain.StopAction{})
+			return m, m.pollBus()
 		}
 	}
 
@@ -181,12 +153,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) initializePicker(data *domain.SessionPickerSnapshot) {
+func (m *model) initializePicker(data *domain.SessionListEvent) {
 	var items []ui.Item
 	for _, s := range data.Sessions {
 		name := s.Name
 		if name == "" {
 			name = "(untitled)"
+		}
+
+		if s.ID == data.CurrentSessionID {
+			m.selectedID = s.ID
+			m.selectedName = name
 		}
 
 		items = append(items, ui.Item{
@@ -229,7 +206,7 @@ func getDateGroup(t time.Time) string {
 }
 
 // View determines what content to display based on the internal state.
-func (m *Model) View() string {
+func (m *model) View() string {
 	if m.quitting || m.err != nil {
 		return ""
 	}
@@ -246,11 +223,11 @@ func (m *Model) View() string {
 }
 
 // Err returns any error encountered during session management.
-func (m *Model) Err() error {
+func (m *model) Err() error {
 	return m.err
 }
 
 // SelectedID returns the ID of the chosen session if any.
-func (m *Model) SelectedID() string {
+func (m *model) SelectedID() string {
 	return m.selectedID
 }

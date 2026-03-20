@@ -1,146 +1,119 @@
 package session_picker
 
 import (
-	"context"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-type mockWorkflow struct {
+type mockBus struct {
 	mock.Mock
 }
 
-func (m *mockWorkflow) PrepareSelection(ctx context.Context) (*domain.SessionPickerSnapshot, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.SessionPickerSnapshot), args.Error(1)
+func (m *mockBus) UIUpdates() <-chan domain.UIUpdate {
+	args := m.Called()
+	return args.Get(0).(<-chan domain.UIUpdate)
 }
 
-func (m *mockWorkflow) ApplySelection(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
-}
-
-func (m *mockWorkflow) CreateSession(ctx context.Context) (string, error) {
-	args := m.Called(ctx)
-	return args.String(0), args.Error(1)
-}
-
-func (m *mockWorkflow) RenameSession(ctx context.Context, id, name string) error {
-	args := m.Called(ctx, id, name)
-	return args.Error(0)
-}
-
-func (m *mockWorkflow) DeleteSession(ctx context.Context, id string) error {
-	args := m.Called(ctx, id)
-	return args.Error(0)
+func (m *mockBus) SendAction(act domain.Action) {
+	m.Called(act)
 }
 
 func TestSessionPickerUI(t *testing.T) {
 	summaries := []domain.SessionSummary{
 		{ID: "s1", Name: "Session 1"},
 	}
-	result := &domain.SessionPickerSnapshot{
+	result := domain.SessionListEvent{
 		Sessions:         summaries,
 		CurrentSessionID: "s1",
 	}
+	theme := ui.NewTheme(ui.ThemeConfig{})
 
-	t.Run("Initial flow: Loading -> List", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("PrepareSelection", mock.Anything).Return(result, nil)
-
-		m := NewModel(wf)
+	t.Run("Initial loading view", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
 		assert.Contains(t, m.View(), "Fetching sessions")
+	})
 
-		msg := m.Init()()
-		m.Update(msg)
+	t.Run("Snapshot received -> List view", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+		
+		m.Update(result)
 
 		assert.Contains(t, m.View(), "SESSIONS")
 		assert.Contains(t, m.View(), "Session 1")
-		wf.AssertExpectations(t)
 	})
 
 	t.Run("Create session: 'n'", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("CreateSession", mock.Anything).Return("new-id", nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
+		bus := new(mockBus)
+		bus.On("SendAction", domain.CreateSessionAction{}).Return()
+		
+		m := NewModel(bus, theme)
+		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
 		assert.NotNil(t, cmd)
-		
-		msg := cmd() // Returns applyResultMsg
-		m.Update(msg) 
-		
-		wf.AssertExpectations(t)
+		assert.Equal(t, "(new session)", m.selectedName)
+		bus.AssertExpectations(t)
 	})
 
-	t.Run("Rename session: 'r' -> enter", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("RenameSession", mock.Anything, "s1", "Session 1 Edited").Return(nil)
-		wf.On("PrepareSelection", mock.Anything).Return(result, nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
+	t.Run("Rename session start: 'r'", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" Edited")})
-		
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		assert.NotNil(t, cmd)
-		
-		msg := cmd() // returns mutationResultMsg{refresh: true}
-		_, cmdRefresh := m.Update(msg)
-		assert.NotNil(t, cmdRefresh)
-		
-		msgRefresh := cmdRefresh() // returns prepareResultMsg
-		m.Update(msgRefresh)
+		assert.Contains(t, m.View(), "Rename session")
+	})
 
-		wf.AssertExpectations(t)
+	t.Run("Rename session submit: enter", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.RenameSessionAction{ID: "s1", Name: "Edited"}).Return()
+		
+		m := NewModel(bus, theme)
+		m.Update(result)
+
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+		m.textInput.SetValue("Edited")
+		
+		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		bus.AssertExpectations(t)
 	})
 
 	t.Run("Delete session: 'd'", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("DeleteSession", mock.Anything, "s1").Return(nil)
-		wf.On("PrepareSelection", mock.Anything).Return(result, nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
-
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
-		assert.NotNil(t, cmd)
+		bus := new(mockBus)
+		bus.On("SendAction", domain.DeleteSessionAction{ID: "s1"}).Return()
 		
-		msg := cmd() // returns mutationResultMsg{refresh: true}
-		_, cmdRefresh := m.Update(msg)
-		assert.NotNil(t, cmdRefresh)
-		
-		msgRefresh := cmdRefresh() // returns prepareResultMsg
-		m.Update(msgRefresh)
+		m := NewModel(bus, theme)
+		m.Update(result)
 
-		wf.AssertExpectations(t)
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+		bus.AssertExpectations(t)
 	})
 
 	t.Run("Select session: 'enter'", func(t *testing.T) {
-		wf := new(mockWorkflow)
-		wf.On("ApplySelection", mock.Anything, "s1").Return(nil)
-
-		m := NewModel(wf)
-		m.Update(prepareResultMsg{data: result})
-
-		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		assert.NotNil(t, cmd)
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectSessionAction{ID: "s1"}).Return()
 		
-		msg := cmd() // returns applyResultMsg
-		m.Update(msg)
+		m := NewModel(bus, theme)
+		m.Update(result)
 
+		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		bus.AssertExpectations(t)
+	})
+	
+	t.Run("DoneEvent -> Quitting", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+		m.Update(result)
+
+		m.Update(domain.DoneEvent{})
+		assert.Contains(t, m.selectedName, "Session 1")
 		assert.Empty(t, m.View())
-		wf.AssertExpectations(t)
 	})
 }

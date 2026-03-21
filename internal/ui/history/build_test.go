@@ -453,6 +453,36 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	assert.Contains(t, rendered[:borderIdx], "\n", "Tool box should appear after a newline")
 }
 
+func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
+	theme := newTestTheme()
+	width := 80
+	renderer := ui.NewGlamourRenderer(width, true)
+
+	msg := domain.AssistantMessage{
+		ToolCalls: []domain.ToolCall{
+			{ID: "tc-1", Name: "directory_list"},
+			{ID: "tc-2", Name: "todo_read"},
+		},
+	}
+	messages := domain.Messages{
+		msg,
+		domain.ToolMessage{ToolCallID: "tc-1", Content: "ok"},
+		domain.ToolMessage{ToolCallID: "tc-2", Content: "ok"},
+	}
+	displays := domain.ToolDisplays{
+		"tc-1": domain.NewStringDisplay("Listing iav"),
+		"tc-2": domain.NewStringDisplay("Reading todos"),
+	}
+
+	var sb strings.Builder
+	renderAssistantMessage(&sb, msg, messages, 0, displays, renderer, theme, width)
+	rendered := stripANSI(sb.String())
+
+	// Exactly one guttered blank line between adjacent tool boxes.
+	assert.Contains(t, rendered, "╯\n │\n │╭", "tool boxes should be separated by one blank line")
+	assert.NotContains(t, rendered, "╯\n │\n │\n │╭", "tool boxes should not have two blank lines between them")
+}
+
 func TestMessageHeaders(t *testing.T) {
 	// Force color profile for consistent testing
 	lipgloss.SetColorProfile(termenv.TrueColor)

@@ -159,7 +159,9 @@ func renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assi
 		}
 	}
 
-	body := strings.Join(parts, "\n\n")
+	// Parts may already include intentional leading spacing (e.g. Theme.Box starts with "\n"),
+	// so join with a single newline to avoid double-counting vertical gaps.
+	body := strings.Join(parts, "\n")
 	writeFramedWithGutter(sb, roleLine, contPrefix, body)
 }
 
@@ -266,7 +268,9 @@ func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, mes
 	}
 
 	// Frame the assistant message exactly once, regardless of how many parts it has.
-	body := strings.Join(parts, "\n\n")
+	// Parts may already include intentional leading spacing (e.g. Theme.Box starts with "\n"),
+	// so join with a single newline to avoid double-counting vertical gaps.
+	body := strings.Join(parts, "\n")
 	writeFramedWithGutter(sb, roleLine, contPrefix, body)
 }
 

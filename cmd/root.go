@@ -129,7 +129,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	// Loop UI Wiring
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
-	animator := prompt.NewTextAnimator(4) // 4 runes per tick
+	animator := prompt.NewTextAnimator(3) // 3 runes per tick
 	
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))

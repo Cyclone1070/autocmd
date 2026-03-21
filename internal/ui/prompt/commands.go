@@ -17,3 +17,10 @@ func animationTick(d time.Duration) tea.Cmd {
 		return tickMsg{}
 	})
 }
+
+// signalAnimatorDrained enqueues animatorDrainedMsg so the poll loop can resume if parked.
+func signalAnimatorDrained() tea.Cmd {
+	return func() tea.Msg {
+		return animatorDrainedMsg{}
+	}
+}

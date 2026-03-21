@@ -42,7 +42,7 @@ type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 	SendAction(domain.Action)
 }
-	
+
 type viewportGater interface {
 	Gate(content string) string
 }
@@ -73,7 +73,7 @@ type Model struct {
 	stream  stream
 	animator animator
 	tools   []toolSlot
-	
+
 	thinkingRenderer thinkingRenderer
 	toolRenderer     toolRenderer
 	spinnerProvider  spinnerProvider
@@ -85,6 +85,10 @@ type Model struct {
 	thinkingStart time.Time
 	spinnerFrame  int
 	nextState     uiState
+	// isPolling is true while a pollBus goroutine is blocked waiting on the bus.
+	isPolling bool
+	// isCancelling gates late bus events once Ctrl+C has initiated terminal cancel flow.
+	isCancelling bool
 }
 
 type Option func(*Model)
@@ -133,7 +137,8 @@ func NewModel(
 }
 
 func (m *Model) Init() tea.Cmd {
-	return animationTick(tickHighDelay)
+	m.isPolling = true
+	return tea.Batch(animationTick(tickHighDelay), m.pollBus())
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -141,22 +146,44 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCancel()
 	}
 
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tickMsg:
 		return m.handleTick()
+	case busEventMsg:
+		if m.isCancelling {
+			return m, nil
+		}
+		return m.handleBusEvent(msg.event)
+	case busClosedMsg:
+		return m.handleUnexpectedClose()
 	case flushDoneMsg:
 		return m.handleFlushDone()
+	case animatorDrainedMsg:
+		return m.tryResumePoll()
 	}
 
 	return m, nil
 }
+
+func (m *Model) pollBus() tea.Cmd {
+	return func() tea.Msg {
+		ev, ok := <-m.bus.UIUpdates()
+		if !ok {
+			return busClosedMsg{}
+		}
+		return busEventMsg{event: ev}
+	}
+}
+
 func (m *Model) handleTick() (tea.Model, tea.Cmd) {
-	// 1. Advance visual state (Spinners)
+	if m.state == stateFlushing {
+		return m, m.nextTick()
+	}
+
 	if m.state != stateIdle && m.state != stateDone && m.state != stateFlushing {
 		m.spinnerFrame++
 	}
 
-	// 2. Animate chunks or poll for events
 	if m.state == stateStreaming && m.animator.HasPending() {
 		chunk, ok := m.animator.NextChunk()
 		if !ok {
@@ -165,16 +192,34 @@ func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 		}
 		blocks := m.stream.Append(chunk)
 		if len(blocks) > 0 {
-			return m.doFlush(blocks, stateStreaming)
+			// Tick-triggered flush must still arm the next tick; handleFlushDone is poll-only.
+			_, flushCmd := m.doFlush(blocks, stateStreaming)
+			return m, tea.Batch(flushCmd, m.nextTick())
+		}
+		if !m.animator.HasPending() {
+			return m, tea.Batch(m.nextTick(), signalAnimatorDrained())
 		}
 		return m, m.nextTick()
 	}
 
-	if m.isReadyForEvent() {
-		return m.pollOneEvent()
-	}
-
 	return m, m.nextTick()
+}
+
+func (m *Model) tryResumePoll() (tea.Model, tea.Cmd) {
+	return m.withPollIfNeeded()
+}
+
+func (m *Model) withPollIfNeeded() (tea.Model, tea.Cmd) {
+	if !m.isPolling && m.isReadyForEvent() {
+		m.isPolling = true
+		return m, m.pollBus()
+	}
+	return m, nil
+}
+
+func (m *Model) schedulePollOnly() (tea.Model, tea.Cmd) {
+	m.isPolling = true
+	return m, m.pollBus()
 }
 
 func (m *Model) isReadyForEvent() bool {
@@ -187,19 +232,8 @@ func (m *Model) isReadyForEvent() bool {
 	return false
 }
 
-func (m *Model) pollOneEvent() (tea.Model, tea.Cmd) {
-	select {
-	case ev, ok := <-m.bus.UIUpdates():
-		if !ok {
-			return m.handleUnexpectedClose()
-		}
-		return m.handleEvent(ev)
-	default:
-		return m, m.nextTick()
-	}
-}
-
 func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
+	m.isPolling = false
 	errLine := "Error: bus closed unexpectedly"
 	if m.theme != nil {
 		errLine = m.theme.Error(errLine)
@@ -221,7 +255,6 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 				m.tools[i].errorMsg = "bus closed unexpectedly"
 			}
 		}
-		// In tooling, the error is displayed per-slot via m.renderAllTools()
 		return m.doFlush(m.renderAllTools(), stateDone)
 	default:
 		blocks := append(m.stream.Flush(), errLine)
@@ -229,10 +262,11 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
+func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
+	m.isPolling = false
+
 	var flushBlocks []string
 	if m.state == stateThinking {
-		// Whenever leaving Thinking state, flush the final result line
 		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider))
 	}
 
@@ -245,14 +279,14 @@ func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		return m.doFlush(flushBlocks, stateThinking)
 	case domain.TextEvent:
 		if u.IsThought {
-			return m, m.nextTick()
+			return m.schedulePollOnly()
 		}
 		m.animator.Enqueue(u.Text)
 		m.state = stateStreaming
 		if len(flushBlocks) > 0 {
 			return m.doFlush(flushBlocks, stateStreaming)
 		}
-		return m, m.nextTick()
+		return m, nil
 	case domain.ToolStartEvent:
 		m.tools = append(m.tools, toolSlot{
 			callID:   u.CallID,
@@ -276,7 +310,7 @@ func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m, m.nextTick()
+		return m.schedulePollOnly()
 	case domain.ToolEndEvent:
 		if m.state == stateTooling {
 			for i := range m.tools {
@@ -296,7 +330,6 @@ func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 				if len(m.tools) == 0 {
 					next = stateIdle
 				}
-				// Prepend any existing flush blocks (like thinking result)
 				flushed = append(flushBlocks, flushed...)
 				return m.doFlush(flushed, next)
 			}
@@ -307,20 +340,20 @@ func (m *Model) handleEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		if len(flushBlocks) > 0 {
 			return m.doFlush(flushBlocks, m.state)
 		}
-		return m, m.nextTick()
+		return m.schedulePollOnly()
 	}
 	if len(flushBlocks) > 0 {
 		return m.doFlush(flushBlocks, m.state)
 	}
-	return m, m.nextTick()
+	return m.schedulePollOnly()
 }
 
 func (m *Model) handleFlushDone() (tea.Model, tea.Cmd) {
 	m.state = m.nextState
-	if m.state == stateDone {
+	if m.state == stateDone || m.isCancelling {
 		return m, tea.Quit
 	}
-	return m, m.nextTick()
+	return m.withPollIfNeeded()
 }
 
 func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
@@ -329,25 +362,25 @@ func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
 		if m.state == stateDone {
 			return m, tea.Quit
 		}
-		return m, m.nextTick()
+		return m.withPollIfNeeded()
 	}
-	
+
 	m.state = stateFlushing
 	m.nextState = next
-	
+
 	var cmds []tea.Cmd
 	for _, b := range blocks {
 		if b != "" && m.flushFn != nil {
 			cmds = append(cmds, m.flushFn(b))
 		}
 	}
-	
+
 	if len(cmds) == 0 {
 		m.state = next
 		if m.state == stateDone {
 			return m, tea.Quit
 		}
-		return m, m.nextTick()
+		return m.withPollIfNeeded()
 	}
 
 	cmds = append(cmds, func() tea.Msg { return flushDoneMsg{} })
@@ -378,7 +411,13 @@ func (m *Model) View() string {
 }
 
 func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
+	if m.isCancelling {
+		return m, nil
+	}
+	m.isCancelling = true
 	m.bus.SendAction(domain.StopAction{})
+	m.isPolling = false
+
 	switch m.state {
 	case stateThinking:
 		return m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)}, stateDone)
@@ -393,6 +432,24 @@ func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 			}
 		}
 		return m.doFlush(m.renderAllTools(), stateDone)
+	case stateFlushing:
+		switch m.nextState {
+		case stateThinking:
+			return m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)}, stateDone)
+		case stateStreaming:
+			m.animator.FlushAll()
+			return m.doFlush(m.stream.Flush(), stateDone)
+		case stateTooling:
+			for i := range m.tools {
+				if m.tools[i].status == ui.StatusRunning {
+					m.tools[i].status = ui.StatusError
+					m.tools[i].errorMsg = "cancelled"
+				}
+			}
+			return m.doFlush(m.renderAllTools(), stateDone)
+		default:
+			return m.doFlush(m.stream.Flush(), stateDone)
+		}
 	default:
 		return m.doFlush(m.stream.Flush(), stateDone)
 	}

@@ -151,6 +151,6 @@ The workflow and UI communicate through a bidirectional event bus:
 
 **Polling Contract:**
 
-- **Heartbeat polling**: Components with autonomous visual state (e.g. `prompt`) use non-blocking `select` on a regular scale to maintain animations (spinners, typewriter text).
-- **Reactive polling**: Stationary components (e.g. `auth`, `pickers`) use blocking `pollBus()` commands that wait exclusively for the next event to save resources.
+- **Prompt (`internal/ui/prompt`)**: Uses **two independent loops**: `tea.Tick` drives animation (spinner, streaming chunks) and only `Init` / `handleTick` schedule the next tick; **`pollBus()`** (blocking on `UIUpdates()`) delivers bus events as messages. Polling is resumed from `handleFlushDone` and `tryResumePoll` (after `animatorDrainedMsg`) when appropriate — never batch `pollBus` with `nextTick` in the same command.
+- **Reactive polling**: Other stationary components (e.g. `auth`, `pickers`) use blocking `pollBus()` commands that wait exclusively for the next event to save resources.
 

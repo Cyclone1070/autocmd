@@ -178,24 +178,21 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 
 	for _, e := range elems {
 		for _, ev := range e.Events {
-			bus.updates <- ev
-			// Process the event by ticking until we aren't in stateFlushing 
-			// (because handleEvent might trigger a flush)
+			m.isPolling = true
+			res, _ := m.Update(busEventMsg{event: ev})
+			m = res.(*Model)
 			for i := 0; i < 100; i++ {
-				res, _ := m.Update(tickMsg{})
-				m = res.(*Model)
-				
-				// If we are flushing, we must process the flushDoneMsg to move on
 				if m.state == stateFlushing {
 					res, _ = m.Update(flushDoneMsg{})
 					m = res.(*Model)
+					continue
 				}
-				
-				// Stop ticking if we've reached a stable state and processed the event
-				// (Simplified: we'll call DrainAnimationForTest later for streaming)
-				if m.state != stateStreaming {
-					break 
+				if m.state == stateStreaming && m.animator.HasPending() {
+					res, _ = m.Update(tickMsg{})
+					m = res.(*Model)
+					continue
 				}
+				break
 			}
 		}
 	}
@@ -215,11 +212,16 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 
 func (m *Model) DrainAnimationForTest() *Model {
 	for i := 0; i < 1000; i++ {
-		if !m.animator.HasPending() && m.state != stateStreaming {
+		if !m.animator.HasPending() {
 			break
 		}
 		res, _ := m.Update(tickMsg{})
 		m = res.(*Model)
+		// Mirror tea.Batch(nextTick, signalAnimatorDrained) after last chunk drain (tests do not run cmds).
+		if m.state == stateStreaming && !m.animator.HasPending() {
+			res, _ = m.Update(animatorDrainedMsg{})
+			m = res.(*Model)
+		}
 	}
 	return m
 }

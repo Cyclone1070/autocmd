@@ -50,24 +50,71 @@ func TestModel_SyncPolling(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, &TextAnimator{runesPerTick: 4}, ui.NewNoOpGater(), 80)
 
-	// Specification: Init should start the heartbeat (100ms)
-	m.Init()
-
-	// Specification: On tick, if an event is waiting, it should be processed
-	bus.updates <- domain.ThinkingEvent{}
-	
-	// We call Update with a tickMsg (the heartbeat)
-	res, _ := m.Update(tickMsg{})
+	// pollBus delivers events as busEventMsg
+	m.isPolling = true
+	res, _ := m.Update(busEventMsg{event: domain.ThinkingEvent{}})
 	newModel := res.(*Model)
 
-	// Since ThinkingEvent triggers a flush, it should be in stateFlushing
 	assert.Equal(t, stateFlushing, newModel.state)
 	assert.Equal(t, stateThinking, newModel.nextState)
-	
-	// Receive flushDoneMsg -> should transition to stateThinking
+
 	res, _ = newModel.Update(flushDoneMsg{})
 	newModel = res.(*Model)
 	assert.Equal(t, stateThinking, newModel.state)
+}
+
+// TestModel_SpinnerIncrementsOncePerTick guards against duplicate tea.Tick chains (regression).
+func TestModel_SpinnerIncrementsOncePerTick(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, &TextAnimator{runesPerTick: 4}, ui.NewNoOpGater(), 80)
+	m.state = stateThinking
+	m.spinnerFrame = 0
+	for i := 0; i < 5; i++ {
+		res, _ := m.Update(tickMsg{})
+		m = res.(*Model)
+		assert.Equal(t, i+1, m.spinnerFrame, "exactly one spinner step per tick in thinking")
+	}
+}
+
+func TestModel_HandleCancel_DuringFlushingTowardThinking_FlushesErrorLine(t *testing.T) {
+	var flushed []string
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(s string) tea.Cmd {
+		flushed = append(flushed, s)
+		return nil
+	}))
+	m.state = stateFlushing
+	m.nextState = stateThinking
+	m.thinkingStart = time.Now()
+
+	_, _ = m.handleCancel()
+
+	assert.Contains(t, flushed, "thinking_rendered", "cancel mid-flush toward thinking must still flush thinking line with error styling")
+}
+
+func TestModel_CancelIgnoresSubsequentBusEvents(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+	m.state = stateThinking
+	m.thinkingStart = time.Now()
+	m.isPolling = true
+
+	// Start cancellation path.
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = res.(*Model)
+	assert.True(t, m.isCancelling)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateDone, m.nextState)
+
+	// Late bus completion must be ignored once cancellation is in progress.
+	res, _ = m.Update(busEventMsg{event: domain.DoneEvent{}})
+	m = res.(*Model)
+	assert.True(t, m.isCancelling)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateDone, m.nextState)
 }
 
 func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
@@ -93,7 +140,7 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	m.state = stateThinking
 	
 	// Transition to streaming
-	m.handleEvent(domain.TextEvent{Text: "hi"})
+	m.handleBusEvent(domain.TextEvent{Text: "hi"})
 	
 	assert.Contains(t, flushed, "thinking_rendered", "Thinking result should be flushed on transition")
 }
@@ -202,8 +249,9 @@ func TestModel_BusClosedUnexpectedly(t *testing.T) {
 	m.state = stateThinking
 	m.thinkingStart = time.Now()
 
-	// Act: Trigger a tick
-	m.Update(tickMsg{})
+	// Act: bus closed while a poll was in flight
+	m.isPolling = true
+	m.Update(busClosedMsg{})
 
 	// Assert: Should detect closed channel, mark tools as error, and transition to flushing/done
 	assert.Contains(t, flushed, "thinking_rendered")

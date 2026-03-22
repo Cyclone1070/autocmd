@@ -25,6 +25,7 @@ type model struct {
 	width           int
 	height          int
 	renderer        ui.Renderer
+	builder         *HistoryBuilder
 	viewport        viewport.Model
 	displays        domain.ToolDisplays
 	items           []renderItem
@@ -90,8 +91,14 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, width, height int, op
 		m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 	}
 
+	m.syncBuilder()
+
 	m.viewport = viewport.New(m.width, height)
 	return m
+}
+
+func (m *model) syncBuilder() {
+	m.builder = NewHistoryBuilder(m.renderer, m.theme, m.width)
 }
 
 func (m *model) initializeContent() {
@@ -137,11 +144,11 @@ func (m *model) renderMessage(idx int) string {
 	}
 	it := m.items[idx]
 	if len(it.assistantIndices) > 1 {
-		rendered := renderCoalescedAssistant(m.messages, it.assistantIndices, m.displays, m.renderer, m.theme, m.width, idx > 0)
+		rendered := m.builder.renderCoalescedAssistant(m.messages, it.assistantIndices, m.displays)
 		m.renderedMessages[idx] = rendered
 		return rendered
 	}
-	rendered := RenderMessage(m.messages, it.idx, m.displays, m.renderer, m.theme, m.width, idx > 0)
+	rendered := m.builder.RenderMessage(m.messages, it.idx, m.displays, idx > 0)
 	m.renderedMessages[idx] = rendered
 	return rendered
 }
@@ -225,6 +232,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				renderWidth = 10
 			}
 			m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
+			m.syncBuilder()
 			m.renderedMessages = make(map[int]string)
 		}
 		m.height = msg.Height

@@ -8,7 +8,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const gutterWidth = 2 // "A│" / "U│" / " │"
+const gutterWidth = 2 // "A│" / "U┃" / " │" (assistant) or " ┃" (user)
+
+// userGutterPipe is BOX DRAWINGS HEAVY VERTICAL (thicker than the light │ used for assistant).
+const userGutterPipe = "┃"
 
 type renderItem struct {
 	idx              int
@@ -53,8 +56,28 @@ func buildRenderItems(messages domain.Messages) []renderItem {
 	return items
 }
 
-// BuildHistory constructs a pre-rendered string representation of the session history.
-func BuildHistory(session *domain.Session, renderer ui.Renderer, theme *ui.Theme, width int) string {
+// HistoryBuilder renders session history using a markdown renderer, theme, and terminal width.
+type HistoryBuilder struct {
+	Renderer ui.Renderer
+	Theme    *ui.Theme
+	Width    int
+}
+
+// NewHistoryBuilder returns a HistoryBuilder. Width is the full chat column width (including gutter).
+func NewHistoryBuilder(renderer ui.Renderer, theme *ui.Theme, width int) *HistoryBuilder {
+	return &HistoryBuilder{Renderer: renderer, Theme: theme, Width: width}
+}
+
+func (h *HistoryBuilder) contentWidth() int {
+	cw := h.Width - gutterWidth
+	if cw < 10 {
+		return 10
+	}
+	return cw
+}
+
+// BuildSession renders the full session transcript.
+func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
 	var sb strings.Builder
 	messages := session.Messages
 	displays := session.ToolDisplays
@@ -62,39 +85,30 @@ func BuildHistory(session *domain.Session, renderer ui.Renderer, theme *ui.Theme
 	items := buildRenderItems(messages)
 	for renderedCount, it := range items {
 		if len(it.assistantIndices) > 1 {
-			sb.WriteString(renderCoalescedAssistant(messages, it.assistantIndices, displays, renderer, theme, width, renderedCount > 0))
+			sb.WriteString(h.renderCoalescedAssistant(messages, it.assistantIndices, displays))
 			continue
 		}
-		sb.WriteString(RenderMessage(messages, it.idx, displays, renderer, theme, width, renderedCount > 0))
+		sb.WriteString(h.RenderMessage(messages, it.idx, displays, renderedCount > 0))
 	}
 
 	return sb.String()
 }
 
-// renderMessageStandalone renders a single-message slice, ensuring spacing rules are applied
-// (used for coalesced assistant messages).
-func renderMessageStandalone(messages domain.Messages, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
-	return RenderMessage(messages, 0, displays, renderer, theme, width, includeLeadingNewline)
-}
-
-func renderCoalescedAssistant(messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
+func (h *HistoryBuilder) renderCoalescedAssistant(messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
-	renderAssistantSequence(&sb, messages, assistantIndices, displays, renderer, theme, width)
+	h.renderAssistantSequence(&sb, messages, assistantIndices, displays)
 	sb.WriteString("\n")
 	return sb.String()
 }
 
-func renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int) {
-	style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
+func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays) {
+	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
 
-	contentWidth := width - gutterWidth
-	if contentWidth < 10 {
-		contentWidth = 10
-	}
+	contentWidth := h.contentWidth()
 
 	var parts []string
 	for _, ai := range assistantIndices {
@@ -106,8 +120,8 @@ func renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assi
 		// Content at the point it was produced.
 		if am.Content != "" {
 			content := am.Content
-			if renderer != nil {
-				content = renderer.Render(am.Content)
+			if h.Renderer != nil {
+				content = h.Renderer.Render(am.Content)
 			}
 			parts = append(parts, content)
 		}
@@ -136,7 +150,7 @@ func renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assi
 			}
 
 			boxWidth := contentWidth - 2
-			tooling := ui.NewToolRenderer(theme, contentWidth, ui.NewToolOutputGater(12))
+			tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
 			prefix := tooling.StatusPrefix(status, "")
 			var rendered string
 			switch d := display.(type) {
@@ -167,7 +181,7 @@ func renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assi
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func RenderMessage(messages domain.Messages, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, includeLeadingNewline bool) string {
+func (h *HistoryBuilder) RenderMessage(messages domain.Messages, idx int, displays domain.ToolDisplays, includeLeadingNewline bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -177,43 +191,39 @@ func RenderMessage(messages domain.Messages, idx int, displays domain.ToolDispla
 
 	switch m := msg.(type) {
 	case domain.UserMessage:
-		renderUserMessage(&sb, m, renderer, theme, width)
+		h.renderUserMessage(&sb, m)
 	case domain.AssistantMessage:
-		renderAssistantMessage(&sb, m, messages, idx, displays, renderer, theme, width)
+		h.renderAssistantMessage(&sb, m, messages, idx, displays)
 	}
 
 	sb.WriteString("\n")
 	return sb.String()
 }
 
-func renderUserMessage(sb *strings.Builder, msg domain.UserMessage, renderer ui.Renderer, theme *ui.Theme, width int) {
-	_ = width
-	style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
-	roleLine := style.Render("U│")
-	contPrefix := style.Render(" │")
+func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg domain.UserMessage) {
+	style := lipgloss.NewStyle().Foreground(h.Theme.PrimaryColor()).Bold(true)
+	roleLine := style.Render("U" + userGutterPipe)
+	contPrefix := style.Render(" " + userGutterPipe)
 
 	content := msg.Content
-	if renderer != nil {
-		content = renderer.Render(msg.Content)
+	if h.Renderer != nil {
+		content = h.Renderer.Render(msg.Content)
 	}
 	writeFramedWithGutter(sb, roleLine, contPrefix, content)
 }
 
-func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages domain.Messages, idx int, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int) {
-	style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
+func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages domain.Messages, idx int, displays domain.ToolDisplays) {
+	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
 
-	contentWidth := width - gutterWidth
-	if contentWidth < 10 {
-		contentWidth = 10
-	}
+	contentWidth := h.contentWidth()
 
 	var parts []string
 	if am.Content != "" {
 		content := am.Content
-		if renderer != nil {
-			content = renderer.Render(am.Content)
+		if h.Renderer != nil {
+			content = h.Renderer.Render(am.Content)
 		}
 		parts = append(parts, content)
 	}
@@ -244,7 +254,7 @@ func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, mes
 		// Use width-2 for the content to account for the box borders,
 		// matching the logic in engine.go
 		boxWidth := contentWidth - 2
-		tooling := ui.NewToolRenderer(theme, contentWidth, ui.NewToolOutputGater(12))
+		tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
 		prefix := tooling.StatusPrefix(status, "")
 		var rendered string
 		switch d := display.(type) {
@@ -275,10 +285,10 @@ func renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, mes
 }
 
 // writeFramedWithGutter renders a symmetric, guttered frame:
-// - roleLine (e.g. "U│" or "A│") on its own line
-// - one guttered blank line (" │")
-// - the normalized content with every line prefixed by " │" (including blank lines)
-// - one guttered blank line (" │") at the end
+// - roleLine (e.g. "U┃" or "A│") on its own line
+// - one guttered blank line (" ┃" or " │")
+// - the normalized content with every line prefixed by " ┃" or " │" (including blank lines)
+// - one guttered blank line (" ┃" or " │") at the end
 //
 // The only unguttered blank lines should come from RenderMessage's outer padding.
 func writeFramedWithGutter(sb *strings.Builder, roleLine, contPrefix, content string) {

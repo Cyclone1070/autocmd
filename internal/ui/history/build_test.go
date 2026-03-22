@@ -25,6 +25,8 @@ type fixedRenderer struct {
 
 func (r *fixedRenderer) Render(_ string) string { return r.out }
 
+// testHistoryWidth matches common test layout; use one HistoryBuilder per test when deps are fixed.
+const testHistoryWidth = 80
 
 func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig().UI()
@@ -41,6 +43,7 @@ func newTestTheme() *ui.Theme {
 
 func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	captured := "output line 1\noutput line 2"
 
 	messages := domain.Messages{
@@ -63,7 +66,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
+	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
 	// Should contain the captured output
 	assert.Contains(t, rendered, "output line 1")
@@ -74,6 +77,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 
 func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	empty := ""
 
 	messages := domain.Messages{
@@ -96,7 +100,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
+	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
 	// Should NOT contain the exit code decoration
 	// THIS TEST IS EXPECTED TO FAIL IN THE RED PHASE
@@ -105,6 +109,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 
 func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
 	messages := domain.Messages{
 		domain.AssistantMessage{
@@ -126,7 +131,7 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
+	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
 	// Should fall back to tool response content
 	assert.Contains(t, rendered, "fallback output")
@@ -135,6 +140,7 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 
 func TestShellHistory_ErrorStatus(t *testing.T) {
 	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	empty := ""
 
 	messages := domain.Messages{
@@ -158,7 +164,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 		},
 	}
 
-	rendered := BuildHistory(&domain.Session{Messages: messages, ToolDisplays: displays}, nil, theme, 80)
+	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
 	// Should contain the error prefix indicator (X or similar depending on theme)
 	assert.Contains(t, rendered, "✘")
@@ -176,19 +182,19 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 		name    string
 		msg     domain.Message
 		render  string // renderer output for content (used for user/assistant)
-		roleTop string // "U│" or "A│"
+		roleTop string // "U┃" or "A│"
 	}{
 		{
 			name:    "UserPlain",
 			msg:     domain.UserMessage{Content: "hi"},
 			render:  "hi",
-			roleTop: "U│",
+			roleTop: "U┃",
 		},
 		{
 			name:    "UserLeadingTrailingNewlines",
 			msg:     domain.UserMessage{Content: "ignored"},
 			render:  "\nhello\nworld\n",
-			roleTop: "U│",
+			roleTop: "U┃",
 		},
 		{
 			name:    "AssistantPlain",
@@ -223,7 +229,8 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 			}
 
 			r := &fixedRenderer{out: tc.render}
-			out := stripANSI(RenderMessage(msgs, 0, nil, r, theme, width, false))
+			b := NewHistoryBuilder(r, theme, width)
+			out := stripANSI(b.RenderMessage(msgs, 0, nil, false))
 
 			// Exactly one unguttered blank line before and after.
 			assert.True(t, strings.HasPrefix(out, "\n"), "must start with one unguttered blank line")
@@ -235,8 +242,12 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 
 			// Bottom symmetry: last guttered line in the message body must be the continuation gutter.
 			// Since RenderMessage adds a trailing unguttered newline, we expect the message to end with:
-			// "\n │\n" (guttered blank line + final unguttered newline).
-			assert.True(t, strings.HasSuffix(out, "\n │\n"), "must end with a guttered blank line (symmetry)")
+			// "\n ┃\n" (user) or "\n │\n" (assistant) + final unguttered newline.
+			wantSuffix := "\n │\n"
+			if _, ok := tc.msg.(domain.UserMessage); ok {
+				wantSuffix = "\n ┃\n"
+			}
+			assert.True(t, strings.HasSuffix(out, wantSuffix), "must end with a guttered blank line (symmetry)")
 		})
 	}
 }
@@ -276,6 +287,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		}
 	}
 
+	b := NewHistoryBuilder(nil, theme, width)
 	for _, seq := range sequences {
 		nameParts := make([]string, 0, len(seq))
 		var msgs domain.Messages
@@ -287,16 +299,16 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		}
 
 		t.Run(strings.Join(nameParts, ""), func(t *testing.T) {
-			out := stripANSI(BuildHistory(&domain.Session{Messages: msgs}, nil, theme, width))
+			out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
 
 			// No triple unguttered blank lines anywhere.
 			assert.NotContains(t, out, "\n\n\n", "must not contain triple unguttered blank lines")
 
 			// Every non-first message role line must be preceded by exactly two unguttered newlines.
-			// We search for role lines as message starts: "\nU│\n" and "\nA│\n".
+			// We search for role lines as message starts: "\nU┃\n" and "\nA│\n".
 			starts := []int{}
 			for i := 0; i < len(out)-3; i++ {
-				if strings.HasPrefix(out[i:], "\nU│\n") || strings.HasPrefix(out[i:], "\nA│\n") {
+				if strings.HasPrefix(out[i:], "\nU┃\n") || strings.HasPrefix(out[i:], "\nA│\n") {
 					starts = append(starts, i+1) // index of 'U'/'A'
 				}
 			}
@@ -314,6 +326,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
+	b := NewHistoryBuilder(nil, theme, width)
 
 	msgs := domain.Messages{
 		domain.AssistantMessage{
@@ -331,7 +344,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 		"tc-1": domain.NewShellDisplay("List directory contents", "ls", nil, nil),
 	}
 
-	out := stripANSI(BuildHistory(&domain.Session{Messages: msgs, ToolDisplays: displays}, nil, theme, width))
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
 
 	// Should include the tool box and the summary text, but only a single assistant role line.
 	assert.Contains(t, out, "╭", "tool box should be present")
@@ -342,13 +355,14 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
+	b := NewHistoryBuilder(nil, theme, width)
 
 	msgs := domain.Messages{
 		domain.AssistantMessage{Content: "part1"},
 		domain.AssistantMessage{Content: "part2"},
 	}
 
-	out := stripANSI(BuildHistory(&domain.Session{Messages: msgs}, nil, theme, width))
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
 
 	assert.Contains(t, out, "part1")
 	assert.Contains(t, out, "part2")
@@ -372,7 +386,7 @@ func TestDivider_Color(t *testing.T) {
 
 	// Expected USER first-line gutter (primary color, bold so the pipe pops)
 	userStyle := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
-	expectedUserPrefix := userStyle.Render("U│")
+	expectedUserPrefix := userStyle.Render("U┃")
 
 	// Expected ASSISTANT first-line gutter (muted color, bold so the pipe pops)
 	assistantStyle := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
@@ -383,18 +397,19 @@ func TestDivider_Color(t *testing.T) {
 		domain.AssistantMessage{Content: "assistant content"},
 	}
 
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	// Render USER message
-	renderedUser := RenderMessage(messages, 0, nil, nil, theme, 80, false)
+	renderedUser := b.RenderMessage(messages, 0, nil, false)
 	assert.Contains(t, renderedUser, expectedUserPrefix, "USER gutter should use primary color + bold")
 
 	// Render ASSISTANT message
-	renderedAssistant := RenderMessage(messages, 1, nil, nil, theme, 80, true)
+	renderedAssistant := b.RenderMessage(messages, 1, nil, true)
 	assert.Contains(t, renderedAssistant, expectedAssistantPrefix, "ASSISTANT gutter should use muted color + bold")
 }
 
 func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 	theme := newTestTheme()
-	width := 80
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	messages := domain.Messages{
 		domain.UserMessage{Content: "one"},
 		// Tool messages should not contribute spacing in history view.
@@ -402,7 +417,7 @@ func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 		domain.AssistantMessage{Content: "two"},
 	}
 
-	rendered := BuildHistory(&domain.Session{Messages: messages}, nil, theme, width)
+	rendered := b.BuildSession(&domain.Session{Messages: messages})
 
 	// With one blank line before+after each message, adjacent messages must have exactly
 	// two blank lines between them, not three or more.
@@ -416,6 +431,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
+	b := NewHistoryBuilder(renderer, theme, width)
 
 	tcID := "1"
 	msg := domain.AssistantMessage{
@@ -433,7 +449,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	renderAssistantMessage(&sb, msg, messages, 0, displays, renderer, theme, width)
+	b.renderAssistantMessage(&sb, msg, messages, 0, displays)
 	rendered := sb.String()
 
 	// Re-rendering a box to see its start
@@ -457,6 +473,7 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
+	b := NewHistoryBuilder(renderer, theme, width)
 
 	msg := domain.AssistantMessage{
 		ToolCalls: []domain.ToolCall{
@@ -475,7 +492,7 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	renderAssistantMessage(&sb, msg, messages, 0, displays, renderer, theme, width)
+	b.renderAssistantMessage(&sb, msg, messages, 0, displays)
 	rendered := stripANSI(sb.String())
 
 	// Exactly one guttered blank line between adjacent tool boxes.
@@ -489,12 +506,13 @@ func TestMessageHeaders(t *testing.T) {
 	defer lipgloss.SetColorProfile(termenv.Ascii)
 
 	theme := newTestTheme()
-	width := 80
 
 	messages := domain.Messages{
 		domain.UserMessage{Content: "hello"},
 		domain.AssistantMessage{Content: "hi"},
 	}
+
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
 	t.Run("User Message Formatting", func(t *testing.T) {
 		theme := newTestTheme()
@@ -504,17 +522,19 @@ func TestMessageHeaders(t *testing.T) {
 			domain.UserMessage{Content: "Hello World"},
 		}
 
-		rendered := RenderMessage(messages, 0, nil, renderer, theme, width, false)
+		ub := NewHistoryBuilder(renderer, theme, width)
+		rendered := ub.RenderMessage(messages, 0, nil, false)
 
 		style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
-		assert.Contains(t, rendered, style.Render("U│"), "Should contain USER first-line gutter")
-		assert.Contains(t, rendered, style.Render(" │"), "Should contain USER continuation gutter")
+		assert.Contains(t, rendered, style.Render("U┃"), "Should contain USER first-line gutter")
+		assert.Contains(t, rendered, style.Render(" ┃"), "Should contain USER continuation gutter")
 		assert.Contains(t, rendered, "Hello World[rendered]", "User message content should be processed by renderer")
 	})
 
 	t.Run("Assistant Message Spacing", func(t *testing.T) {
 		theme := newTestTheme()
 		width := 80
+		ab := NewHistoryBuilder(nil, theme, width)
 		tcID := "tc-1"
 		messages := domain.Messages{
 			domain.AssistantMessage{
@@ -525,7 +545,7 @@ func TestMessageHeaders(t *testing.T) {
 			tcID: domain.NewShellDisplay("header", "ls", nil, nil),
 		}
 
-		rendered := RenderMessage(messages, 0, displays, nil, theme, width, false)
+		rendered := ab.RenderMessage(messages, 0, displays, false)
 
 		style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
 		assert.Contains(t, rendered, style.Render("A│"), "Should contain ASSISTANT first-line gutter")
@@ -534,18 +554,28 @@ func TestMessageHeaders(t *testing.T) {
 	})
 
 	t.Run("Assistant Header", func(t *testing.T) {
-		rendered := RenderMessage(messages, 1, nil, nil, theme, width, false)
+		rendered := b.RenderMessage(messages, 1, nil, false)
 
 		style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
 		assert.Contains(t, rendered, style.Render("A│"), "Assistant messages should use assistant gutter")
 	})
 
 	t.Run("User Header", func(t *testing.T) {
-		rendered := RenderMessage(messages, 0, nil, nil, theme, width, false)
+		rendered := b.RenderMessage(messages, 0, nil, false)
 
 		style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
-		assert.Contains(t, rendered, style.Render("U│"), "User messages should use user gutter")
+		assert.Contains(t, rendered, style.Render("U┃"), "User messages should use user gutter")
 	})
+}
+
+func TestUserGutter_UsesThickVerticalBar(t *testing.T) {
+	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
+	messages := domain.Messages{domain.UserMessage{Content: "hello"}}
+	out := stripANSI(b.RenderMessage(messages, 0, nil, false))
+	assert.Contains(t, out, "U┃", "user role line should use heavy vertical bar")
+	assert.Contains(t, out, " ┃", "user continuation gutter should use heavy vertical bar")
+	assert.NotContains(t, out, "U│", "user gutter should not use light vertical bar")
 }
 
 type mockRenderer struct{}

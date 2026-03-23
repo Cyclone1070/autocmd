@@ -73,9 +73,33 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 						continue
 					}
 					selectedProvider = p
+
+					var interactive []domain.AuthMethod
+					var envVars []string
+
+					for _, m := range p.SupportedAuthMethods() {
+						switch v := m.(type) {
+						case domain.EnvVarAuthMethod:
+							envVars = append(envVars, v.EnvVars...)
+						default:
+							interactive = append(interactive, m)
+						}
+					}
+
+					if len(interactive) == 0 {
+						if len(envVars) > 0 {
+							deps.Bus.SendUIUpdate(domain.EnvVarInstructionEvent{EnvVars: envVars})
+						} else {
+							deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: "Provider has no configuration options available"})
+						}
+						deps.Bus.SendUIUpdate(domain.DoneEvent{})
+						done <- nil
+						return
+					}
+
 					deps.Bus.SendUIUpdate(domain.AuthMethodEvent{
 						ProviderID: p.ID(),
-						Methods:    p.SupportedAuthMethods(),
+						Methods:    interactive,
 					})
 
 				case domain.RemoveAuthAction:
@@ -89,7 +113,16 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 
 				case domain.SelectAuthMethodAction:
 					for _, m := range selectedProvider.SupportedAuthMethods() {
-						if m.ID == a.ID {
+						var id string
+						switch v := m.(type) {
+						case domain.APIKeyAuthMethod:
+							id = v.ID
+						case domain.OAuthMethod:
+							id = v.ID
+						case domain.EnvVarAuthMethod:
+							id = v.ID
+						}
+						if id == a.ID {
 							selectedMethod = m
 							break
 						}

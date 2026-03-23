@@ -51,3 +51,9 @@ type AuthErrorEvent struct {
 }
 
 func (AuthErrorEvent) isUIUpdate() {}
+
+type EnvVarInstructionEvent struct {
+	EnvVars []string
+}
+
+func (EnvVarInstructionEvent) isUIUpdate() {}

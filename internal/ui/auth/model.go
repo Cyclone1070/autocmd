@@ -95,6 +95,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Don't quit! Show the error and keep polling.
 		return m, m.pollBus()
 
+	case domain.EnvVarInstructionEvent:
+		m.quitting = true
+		text := fmt.Sprintf("\n  %s %s\n", m.theme.Success("Instructions:"), "This provider relies on Environment Variables. Please set: " + strings.Join(msg.EnvVars, ", "))
+		return m, tea.Sequence(
+			tea.Printf("%s", text),
+			tea.Quit,
+		)
+
 	case domain.DoneEvent:
 		m.quitting = true
 		if m.providerID != "" {
@@ -152,16 +160,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil // Don't submit empty fields?
 				}
 				
-				// Identify credential. 
-				// The UI doesn't know the full cred until it sends SubmitCredentialAction.
-				// For now, let's assume we collect locally but workflow drives index.
-				field := m.method.Fields[m.fieldIndex]
+				apiKeyMeth, ok := m.method.(domain.APIKeyAuthMethod)
+				if !ok {
+					return m, nil
+				}
+				field := apiKeyMeth.Fields[m.fieldIndex]
 				m.values[field.ID] = val
 
-				if m.fieldIndex+1 >= len(m.method.Fields) {
+				if m.fieldIndex+1 >= len(apiKeyMeth.Fields) {
 					// All fields collected, save auth
-					cred := domain.Credential{Type: m.method.ID}
-					if m.method.ID == domain.AuthMethodAPIKey {
+					cred := domain.Credential{Type: apiKeyMeth.ID}
+					if apiKeyMeth.ID == domain.AuthMethodAPIKey {
 						cred.APIKey = m.values[domain.AuthFieldAPIKey]
 					}
 					m.bus.SendAction(domain.SubmitCredentialAction{Credential: cred})
@@ -206,9 +215,18 @@ func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {
 func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthMethod) {
 	var items []ui.Item
 	for _, meth := range methods {
+		var id, name string
+		switch v := meth.(type) {
+		case domain.APIKeyAuthMethod:
+			id, name = v.ID, v.Name
+		case domain.OAuthMethod:
+			id, name = v.ID, v.Name
+		case domain.EnvVarAuthMethod:
+			id, name = v.ID, v.Name
+		}
 		items = append(items, ui.Item{
-			ID:    meth.ID,
-			Label: meth.Label,
+			ID:    id,
+			Label: name,
 		})
 	}
 	m.picker = ui.NewPicker(ui.Config{
@@ -218,7 +236,11 @@ func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthM
 }
 
 func (m *model) initializeTextInput() {
-	field := m.method.Fields[m.fieldIndex]
+	apiKeyMeth, ok := m.method.(domain.APIKeyAuthMethod)
+	if !ok {
+		return
+	}
+	field := apiKeyMeth.Fields[m.fieldIndex]
 	m.textInput = textinput.New()
 	m.textInput.Placeholder = field.Placeholder
 	if field.IsSecret {
@@ -242,10 +264,14 @@ func (m *model) View() string {
 			return m.picker.View()
 		}
 	case stateFieldCollection:
-		if m.fieldIndex >= len(m.method.Fields) {
+		apiKeyMeth, ok := m.method.(domain.APIKeyAuthMethod)
+		if !ok {
+			return ""
+		}
+		if m.fieldIndex >= len(apiKeyMeth.Fields) {
 			return "\n  Saving...\n\n"
 		}
-		field := m.method.Fields[m.fieldIndex]
+		field := apiKeyMeth.Fields[m.fieldIndex]
 		return fmt.Sprintf("\n  %s\n\n  %s\n\n", field.Label, m.textInput.View())
 	}
 	return ""

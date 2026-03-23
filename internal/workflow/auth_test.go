@@ -103,7 +103,9 @@ func TestRunAuth(t *testing.T) {
 		// 2. Select Provider
 		p := new(mockProvider)
 		p.On("ID").Return("openai")
-		methods := []domain.AuthMethod{{ID: "api_key", Label: "API Key", Fields: []domain.AuthField{{ID: "key"}}}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+		}
 		p.On("SupportedAuthMethods").Return(methods)
 		registry.On("GetProvider", "openai").Return(p, true)
 		bus.On("SendUIUpdate", domain.AuthMethodEvent{ProviderID: "openai", Methods: methods}).Return()
@@ -172,5 +174,50 @@ func TestRunAuth(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "api_key", snapshot.Providers[0].AuthMethod)
 		assert.Empty(t, snapshot.Providers[1].AuthMethod)
+	})
+
+	t.Run("EnvVar Fallback Only", func(t *testing.T) {
+		registry := new(mockAuthRegistry)
+		authMgr := new(mockAuthManager)
+		state := new(mockAuthState)
+		bus := new(mockAuthBus)
+		actions := make(chan domain.Action, 10)
+		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
+
+		// 1. Initial Load
+		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{{ID: "google"}}, nil)
+		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
+
+		done := RunAuth(ctx, &AuthDeps{
+			Bus:      bus,
+			Registry: registry,
+			AuthMgr:  authMgr,
+			State:    state,
+		})
+
+		// 2. Select Provider
+		p := new(mockProvider)
+		p.On("ID").Return("google")
+		methods := []domain.AuthMethod{
+			domain.EnvVarAuthMethod{ID: "env", Name: "Env", EnvVars: []string{"GEMINI_API_KEY"}},
+		}
+		p.On("SupportedAuthMethods").Return(methods)
+		registry.On("GetProvider", "google").Return(p, true)
+
+		// Expect Instruction Event
+		bus.On("SendUIUpdate", domain.EnvVarInstructionEvent{EnvVars: []string{"GEMINI_API_KEY"}}).Return()
+		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+		actions <- domain.SelectProviderAction{ID: "google"}
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			t.Fatal("workflow timed out")
+		}
+
+		bus.AssertExpectations(t)
+		registry.AssertExpectations(t)
 	})
 }

@@ -179,8 +179,9 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 	provider := &authMockProvider{
 		id: "test-provider",
 		methods: []domain.AuthMethod{
-			{
-				ID: domain.AuthMethodAPIKey,
+			domain.APIKeyAuthMethod{
+				ID:   domain.AuthMethodAPIKey,
+				Name: "API Key",
 				Fields: []domain.AuthField{
 					{ID: domain.AuthFieldAPIKey, EnvVar: "TEST_API_KEY"},
 				},
@@ -218,8 +219,9 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 		pComplex := &authMockProvider{
 			id: "complex",
 			methods: []domain.AuthMethod{
-				{
-					ID: "complex",
+				domain.APIKeyAuthMethod{
+					ID:   "complex",
+					Name: "Complex",
 					Fields: []domain.AuthField{
 						{ID: domain.AuthFieldAPIKey, EnvVar: "VAL1"},
 						{ID: domain.AuthFieldProject, EnvVar: "VAL2"},

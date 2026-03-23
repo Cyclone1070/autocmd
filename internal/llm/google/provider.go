@@ -22,18 +22,22 @@ func (p *Provider) ID() string {
 
 func (p *Provider) SupportedAuthMethods() []domain.AuthMethod {
 	return []domain.AuthMethod{
-		{
-			ID:    domain.AuthMethodAPIKey,
-			Label: "API Key",
+		domain.APIKeyAuthMethod{
+			ID:   domain.AuthMethodAPIKey,
+			Name: "API Key",
 			Fields: []domain.AuthField{
 				{
 					ID:          domain.AuthFieldAPIKey,
 					Label:       "API Key",
 					Placeholder: "Enter your Gemini API Key",
-					EnvVar:      "GEMINI_API_KEY",
 					IsSecret:    true,
 				},
 			},
+		},
+		domain.EnvVarAuthMethod{
+			ID:      domain.AuthMethodEnv,
+			Name:    "Environment Variables",
+			EnvVars: []string{"GEMINI_API_KEY"},
 		},
 	}
 }

@@ -3,6 +3,7 @@ package google_test
 import (
 	"testing"
 
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/llm/google"
 )
 
@@ -20,10 +21,12 @@ func TestGoogleProviderAuthSpec(t *testing.T) {
 
 	foundAPIKey := false
 	for _, m := range methods {
-		if m.ID == "api_key" {
-			foundAPIKey = true
-			if len(m.Fields) == 0 {
-				t.Error("expected fields for api_key method")
+		if apiKeyMethod, ok := m.(domain.APIKeyAuthMethod); ok {
+			if apiKeyMethod.ID == "api_key" {
+				foundAPIKey = true
+				if len(apiKeyMethod.Fields) == 0 {
+					t.Error("expected fields for api_key method")
+				}
 			}
 		}
 	}

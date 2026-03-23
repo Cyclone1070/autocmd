@@ -19,9 +19,37 @@ type AuthField struct {
 	IsSecret    bool   `json:"is_secret"`
 }
 
-// AuthMethod defines a grouping of fields required for a specific authentication type.
-type AuthMethod struct {
-	ID     string      `json:"id"`
-	Label  string      `json:"label"`
-	Fields []AuthField `json:"fields"`
+// AuthMethod is a marker interface for authentication data descriptors.
+type AuthMethod interface {
+	IsAuthMethod()
 }
+
+// APIKeyAuthMethod represents an authentication method that requires user input of text fields.
+type APIKeyAuthMethod struct {
+	ID     string
+	Name   string
+	Fields []AuthField
+}
+
+func (APIKeyAuthMethod) IsAuthMethod() {}
+
+// EnvVarAuthMethod represents an authentication method that relies purely on environment variables.
+type EnvVarAuthMethod struct {
+	ID      string
+	Name    string
+	EnvVars []string
+}
+
+func (EnvVarAuthMethod) IsAuthMethod() {}
+
+// OAuthMethod represents an authentication method that follows the OAuth Device Flow.
+type OAuthMethod struct {
+	ID            string
+	Name          string
+	ClientID      string
+	DeviceAuthURL string
+	TokenURL      string
+	Scopes        []string
+}
+
+func (OAuthMethod) IsAuthMethod() {}

@@ -72,23 +72,36 @@ func (m *Manager) GetWithFallback(p domain.Provider) (*domain.Credential, error)
 	found := false
 
 	for _, method := range p.SupportedAuthMethods() {
-		for _, field := range method.Fields {
-			if field.EnvVar == "" {
-				continue
-			}
-			val := os.Getenv(field.EnvVar)
-			if val == "" {
-				continue
-			}
+		switch m := method.(type) {
+		case domain.APIKeyAuthMethod:
+			for _, field := range m.Fields {
+				if field.EnvVar == "" {
+					continue
+				}
+				val := os.Getenv(field.EnvVar)
+				if val == "" {
+					continue
+				}
 
-			found = true
-			switch field.ID {
-			case domain.AuthFieldAPIKey:
+				found = true
+				switch field.ID {
+				case domain.AuthFieldAPIKey:
+					fallback.APIKey = val
+				case domain.AuthFieldProject:
+					fallback.Project = val
+				case domain.AuthFieldLocation:
+					fallback.Location = val
+				}
+			}
+		case domain.EnvVarAuthMethod:
+			for _, envVar := range m.EnvVars {
+				val := os.Getenv(envVar)
+				if val == "" {
+					continue
+				}
+				found = true
 				fallback.APIKey = val
-			case domain.AuthFieldProject:
-				fallback.Project = val
-			case domain.AuthFieldLocation:
-				fallback.Location = val
+				break
 			}
 		}
 	}

@@ -1,66 +1,82 @@
 # ui Package
 
-## Responsibility
+## 1) Purpose
 
-The `ui` package is the presentation layer of the application. It provides an interactive command-line rendering engine that integrates plain-text flushing for static history and Bubble Tea for dynamic, currently-streaming content.
+The `ui` package renders workflow state to the terminal and captures user actions during interactive commands.
 
-**Owns:**
-- `Model` (`engine.go`): The main Bubble Tea model driving the presentation loop.
-- `Stream` (`stream.go`): Accumulating LLM streaming text, identifying safe blocks via `yuin/goldmark`, and rendering markdown syntax (via `glamour`).
-- Tool displays (`tool.go`): Formatting and coloring tool inputs, diffs, shell outputs, and results.
-- Viewport dynamics (`truncate.go`): Enforcing layout and height constraints to safeguard the terminal buffer.
+## 2) Scope
 
-**Does NOT own:**
-- Event generation or orchestration logic (delegated to `workflow` and `toolexecutor`).
-- Domain entity interfaces or data types (delegated to `domain`).
-- Core terminal lifecycle and application setup (delegated to `main.go` and its configuration logic).
+### Owns
+- Terminal rendering for prompt/history/auth/info/picker views.
+- Event-driven view models that consume `domain.UIUpdate`.
+- User action capture and forwarding as `domain.Action`.
 
----
+### Does NOT own
+- Workflow orchestration and decision logic.
+- Tool or LLM execution.
+- Session/state persistence.
 
-## Event Handling Contract
+## 3) Public Contract
 
-The `ui` engine acts as a consumer of `domain.Event` messages dispatched by the workflow over a go channel. It processes events sequentially while concurrently managing simulated streaming text patterns.
+### Inputs
+- `domain.UIUpdate` from workflow/event bus.
+- Terminal input (`tea.KeyMsg`, `tea.WindowSizeMsg`).
 
-### Event Processing Summary
+### Outputs
+- Rendered terminal frames and flushed text.
+- `domain.Action` to workflow (primarily `StopAction`).
 
-| Event Type       | Render Effect                                                                  |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `ThinkingEvent`  | Renders a spinner natively alongside the current thought process or status.    |
-| `TextEvent`      | Defers content to the internal text queue to simulate a typing effect.         |
-| `ToolStartEvent` | Flushes preceding completed blocks and adds the tool to the pending view.      |
-| `ToolEndEvent`   | Updates tool status (success/error), captures final output, and flushes it.    |
-| `DoneEvent`      | Flushes all remaining text and tool states to history, marks loop as complete. |
-| `CancelEvent`    | Gracefully interrupts rendering, prints cancellation state, and triggers exit. |
+### Invariants
+- UI does not decide business flow.
+- UI preserves chronological rendering order for stream/tool updates.
+- `DoneEvent` leads to clean terminal completion.
 
-### Internal Queuing and Flushing Requirements
+## 4) Runtime Behavior
 
-To prevent blocking the event channel while preserving visual continuity (like typewriter effects for text streaming), the UI decouples ingestion from display via `tea.Cmd`:
-1. **Event Ingestion**: Continuously polls the channel via `waitForEvent()`.
-2. **Text Processing**: `TextEvent` data is chunked and stored in a queue.
-3. **Stream Tick**: A recurring `streamTickMsg` drains the queue chunk-by-chunk, appending it to the `Stream`.
-4. **Visibility Guarantees**: Tool boxes must always be flushed to history before pending text to strictly preserve vertical ordering/visual hierarchy. 
-5. **Safe Flushing**: Only structurally complete "safe" chunks of Markdown are flushed fully out of the Bubble Tea view to standard output history. 
+1. Poll bus updates and convert to UI messages.
+2. Update model state (thinking/streaming/tooling/history/picker states).
+3. Render current view and flush stable output when appropriate.
+4. On `StopAction` request, cancel quickly and quit responsively.
 
----
+Cancellation:
+- User cancellation should be responsive and non-blocking from a UX perspective.
 
-## Error Handling Contract
+Concurrency:
+- Bubble Tea model updates are sequential; bus polling and tick commands drive message flow.
 
-The UI package treats its ingestion channel and rendering responsibilities as **display-only**. 
+## 5) Error Handling Policy
 
-### Rendering and System Failures
+UI should internalize recoverable display issues and only fail hard when the view cannot continue safely.
 
-| Scenario                   | Loop Effect                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Markdown Parser Error**  | **Continues** — Falls back to unstyled raw text rendering in the stream.                       |
-| **Unknown `domain.Event`** | **Continues** — Logged or ignored; the rendering loop proceeds to the next event continuously. |
-| **Terminal Resize**        | **Continues** — Automatically intercepts `tea.WindowSizeMsg` to adjust configured width.       |
+| Scenario | Internalize? | Return error? | Typical action |
+| --- | --- | --- | --- |
+| Recoverable render/format issue | Yes | No | Fallback output and continue |
+| Missing optional display metadata | Yes | No | Skip part and continue |
+| Unexpected bus close | No | Yes | Show visible error line and terminate |
+| Context/user cancellation | No | Yes (`ctx.Err` path upstream) | Request stop and quit |
+| Invariant violation in UI state machine | No | Yes | Abort cleanly |
 
-### Context / User Cancellation
+## 6) Dependencies
 
-- **`Ctrl+C` (Keyboard Interrupt)**: Intercepted via `tea.KeyMsg`. The UI terminates active loops, signals `tea.Quit`, and cleanly flushes any final buffer to standard output to preserve scrollback history.
+### Depends on
+- `domain` for events/actions/types.
+- `bubbletea`, `lipgloss`, markdown rendering utilities.
 
-**Key Rule**: The `ui` package is explicitly designed to never panic on misformed textual content or fail the overarching application workflow. Event errors are mapped gracefully to screen states, prioritizing application continuity over strict parsing enforcement.
+### Must NOT depend on
+- `workflow` package logic.
+- `cmd` wiring logic.
+- Internal tool/LLM/service orchestration behavior.
 
----
+## 7) Testing Expectations
 
-*See [UI Behavior & Architecture](ui_behaviour.md) for more comprehensive details on the safe block flushing strategy and terminal interactions.*
+- Model behavior is tested via concrete `tea.Msg` updates.
+- Snapshot/golden tests should be updated only for intentional visual changes.
+- Tests should assert event ordering, flush behavior, and cancellation semantics.
+
+## 8) Related Docs
+
+- [doc_standard.md](doc_standard.md)
+- [architecture.md](architecture.md)
+- [ui_behaviour.md](ui_behaviour.md)
+- [testing.md](testing.md)
+- [design.md](design.md)

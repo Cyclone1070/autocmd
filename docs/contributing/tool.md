@@ -1,44 +1,83 @@
 # tool Package
 
-## Responsibility
+## 1) Purpose
 
-The `tool` package contains the concrete implementations of tools and the registry that holds them.
+The `tool` package provides concrete tools and registry wiring used by the agent/tool execution path.
 
-**Owns:**
-- `Registry` — Implementation of the `toolRegistry` interface used by `workflow`.
-- Subpackages for each tool area:
-    - `file/` — File system operations (read, write, edit)
-    - `directory/` — Directory listing
-    - `search/` — File and content search
-    - `shell/` — Command execution
-    - `todo/` — Todo list management
+## 2) Scope
 
-**Does NOT own:**
-- `Tool`, `Invocation`, `Declaration` interfaces (in `domain`)
-- Workflow orchestration
+### Owns
+- Tool registry implementation and declaration exposure.
+- Tool domains (`file`, `directory`, `search`, `shell`, `todo`).
+- Tool prepare/execute contracts at package boundaries.
 
----
+### Does NOT own
+- Workflow orchestration and loop control.
+- UI rendering logic.
+- Provider-backed LLM logic.
 
-## Error Handling Contract
+## 3) Public Contract
 
-### Context Cancellation
+### Inputs
+- Tool invocations from executor/agent paths.
+- Invocation arguments and execution context.
 
-Context cancellation **always terminates the loop**. Both `Prepare()` and `Execute()` must check for it.
+### Outputs
+- Prepared invocations from `Prepare`.
+- Execution content and execution errors from `Execute`.
+- Tool declarations for model exposure.
 
-Go context is cooperative - functions must explicitly check `ctx.Err()`. Since `fs.Stat()` and similar I/O don't respect context, you must check after they return.
+### Invariants
+- `Prepare` validates and normalizes inputs before execution.
+- `Execute` produces content suitable for model feedback.
+- Context cancellation is respected cooperatively.
 
-### `Prepare()` Returns
+## 4) Runtime Behavior
 
-| Return                                  | When              | Loop Effect                             |
-| --------------------------------------- | ----------------- | --------------------------------------- |
-| `(invocation, nil)`                     | Validation passed | Continues to Execute                    |
-| `(nil, error)` where `ctx.Err() != nil` | Context cancelled | **Loop terminates**                     |
-| `(nil, error)` where `ctx.Err() == nil` | Validation failed | **Loop continues** — error shown to LLM |
+1. Registry resolves tool by name.
+2. Tool validates arguments in `Prepare`.
+3. Invocation executes in `Execute`.
+4. Executor decides continue-vs-terminate policy using return values.
 
-### `Execute()` Returns
+Cancellation:
+- `Execute` must check context and return promptly on cancellation.
+- `Prepare` should check context around potentially expensive I/O or external calls.
 
-| Return                                         | When              | Loop Effect                                           |
-| ---------------------------------------------- | ----------------- | ----------------------------------------------------- |
-| `(content, nil)`                               | Success           | **Loop continues**                                    |
-| `(errorContent, err)` where `ctx.Err() != nil` | Context cancelled | **Loop terminates**                                   |
-| `(errorContent, err)` where `ctx.Err() == nil` | Operation failed  | **Loop continues** — content shown to LLM, err logged |
+Concurrency:
+- Tool implementations should avoid hidden global mutable state.
+
+## 5) Error Handling Policy
+
+Tool methods surface validation/operation errors; the executor decides whether those errors are loop-fatal or converted into model-visible messages.
+
+| Scenario | Internalize in tool? | Return error from tool? | Typical action |
+| --- | --- | --- | --- |
+| Input validation failure in `Prepare` (ctx alive) | No | Yes | Return validation error; executor converts to model-visible message |
+| Execution operation failure (ctx alive) | Usually no | Often yes with error content | Return `(errorContent, err)`; executor typically continues loop |
+| Optional field/path missing where fallback exists | Yes | No | Apply fallback/default and continue |
+| Context cancellation | No | Yes (`ctx.Err`) | Abort current execution |
+| Invariant violation / unrecoverable corruption risk | No | Yes | Abort and surface error |
+
+## 6) Dependencies
+
+### Depends on
+- `domain` tool interfaces/types.
+- Tool-local helpers/services as needed.
+
+### Must NOT depend on
+- UI package internals.
+- Workflow command flow logic.
+
+## 7) Testing Expectations
+
+- Each tool package has focused unit tests for prepare/execute behavior.
+- Cancellation behavior should be explicitly tested.
+- Validation and failure-message shaping should be deterministic.
+
+## 8) Related Docs
+
+- [doc_standard.md](doc_standard.md)
+- [toolexecutor.md](toolexecutor.md)
+- [architecture.md](architecture.md)
+- [testing.md](testing.md)
+- [design.md](design.md)

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -42,7 +43,8 @@ func (r *Registry) GetProvider(id string) (domain.Provider, bool) {
 // ListProviders returns information about all registered providers, including resolved credentials.
 func (r *Registry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
 	var infos []domain.ProviderInfo
-	for id, p := range r.providers {
+	for _, id := range r.sortedProviderIDs() {
+		p := r.providers[id]
 		cred := (*domain.Credential)(nil)
 		if r.authManager != nil {
 			resolved, _ := r.authManager.GetWithFallback(p)
@@ -93,7 +95,8 @@ func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 // It tries to resolve credentials for all providers using the internal auth manager.
 func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 	var all []domain.LLMInfo
-	for id, p := range r.providers {
+	for _, id := range r.sortedProviderIDs() {
+		p := r.providers[id]
 		var cred *domain.Credential
 		if r.authManager != nil {
 			resolved, _ := r.authManager.GetWithFallback(p)
@@ -113,4 +116,13 @@ func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 		}
 	}
 	return all, nil
+}
+
+func (r *Registry) sortedProviderIDs() []string {
+	ids := make([]string, 0, len(r.providers))
+	for id := range r.providers {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }

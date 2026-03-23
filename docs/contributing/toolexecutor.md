@@ -1,37 +1,84 @@
 # Internal: toolExecutor
 
-## Responsibility
+## 1) Purpose
 
-The `toolExecutor` is a private struct within the `workflow` package. It bridges the gap between the orchestration loop and the `toolRegistry`.
+`toolExecutor` bridges model tool calls to concrete tool implementations and converts results into loop-consumable messages.
 
-**Owns:**
-- Calling `Tool.Prepare()` and `Invocation.Execute()` for tool calls
-- Managing the mapping of tool names to implementations (via `toolRegistry`)
-- Emitting tool-related events (`ThinkingEvent`)
-- Formatting tool results into `domain.Message`
+## 2) Scope
 
-**Does NOT own:**
-- Individual tool implementations (in `tool/` subpackages)
-- The main decision loop (that's `Workflow.Run`)
+### Owns
+- Tool lookup from registry.
+- `Prepare` then `Execute` lifecycle sequencing.
+- Tool progress/result UI events (`ToolStartEvent`, `ToolStreamEvent`, `ToolEndEvent`).
+- Conversion of outcomes to conversation-visible messages.
 
----
+### Does NOT own
+- Individual tool implementation internals.
+- Main loop control policy.
+- UI rendering.
 
-## Error Handling Contract
+## 3) Public Contract
 
-The `toolExecutor` is designed to be resilient, absorbing most errors to allow the LLM to self-correct.
+### Inputs
+- Tool call requests (name + arguments).
+- Registry/dependency interfaces.
+- Execution context.
 
-### Context Cancellation
+### Outputs
+- Conversation-ready tool result messages.
+- Fatal errors only when loop should stop.
 
-Context cancellation **always terminates the loop**. The executor checks `ctx.Err()` after `Prepare()` and `Execute()`. If cancelled, it returns the cancellation error.
+### Invariants
+- Exactly one tool lifecycle per resolved call.
+- Non-fatal tool failures remain model-visible.
+- Fatal errors are explicit and stop-capable.
 
-### Return Contract
+## 4) Runtime Behavior
 
-| Scenario                   | Return Type      | Loop Effect                              |
-| -------------------------- | ---------------- | ---------------------------------------- |
-| **Tool Not Found**         | `(message, nil)` | **Continues** — LLM sees available tools |
-| **Prepare Error** (ctx OK) | `(message, nil)` | **Continues** — LLM sees schema/reason   |
-| **Execute Error** (ctx OK) | `(message, nil)` | **Continues** — LLM sees error output    |
-| **Execute Success**        | `(message, nil)` | **Continues** — LLM sees output          |
-| **Context Cancelled**      | `(_, ctx.Err())` | **Terminates**                           |
+1. Resolve tool by name.
+2. Execute `Prepare`.
+3. Execute prepared invocation if valid.
+4. Emit tool lifecycle updates.
+5. Return formatted message or fatal error.
 
-**Key Rule**: If the executor returns `nil` error, the loop **expects** a message to add to history. If it returns `non-nil` error, the loop **aborts**.
+Cancellation:
+- `ctx.Err()` must terminate promptly.
+
+Concurrency:
+- Executor is run-scoped and should avoid hidden cross-run state.
+
+## 5) Error Handling Policy
+
+Executor should internalize recoverable tool failures into returned messages and only return fatal errors for stop conditions.
+
+| Scenario | Internalize? | Return error? | Typical action |
+| --- | --- | --- | --- |
+| Tool not found | Yes | No | Return message listing/clarifying available tools |
+| `Prepare` validation failure (ctx alive) | Yes | No | Return schema/validation message |
+| `Execute` operation failure (ctx alive) | Yes | No | Return error content message |
+| Context cancellation | No | Yes (`ctx.Err`) | Abort loop |
+| Unexpected executor invariant failure | No | Yes | Abort loop |
+
+## 6) Dependencies
+
+### Depends on
+- `domain` tool/event vocabulary.
+- Registry and tool interfaces.
+
+### Must NOT depend on
+- UI rendering package internals.
+- Command wiring concerns.
+
+## 7) Testing Expectations
+
+- Tests should assert lifecycle event order and message shaping.
+- Continue-loop vs terminate-loop paths must be explicit.
+- Throughput/batching behavior should remain deterministic under test harness.
+
+## 8) Related Docs
+
+- [doc_standard.md](doc_standard.md)
+- [tool.md](tool.md)
+- [workflow.md](workflow.md)
+- [testing.md](testing.md)
+- [design.md](design.md)

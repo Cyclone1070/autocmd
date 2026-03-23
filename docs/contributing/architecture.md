@@ -106,7 +106,8 @@ Small, independent packages that each do one thing:
 | `state/`   | Runtime state (current session, etc.)    |
 | `tool/`    | Tool declarations and implementations    |
 
-> **Import rule:** `domain/` only. Do **not** import each other, `workflow/`, `ui/`, or `cmd/`.
+> **Import rule:** Internal services must not depend on `cmd/`, `workflow/`, or `ui/` flow logic.  
+> They may compose other internal packages when necessary, but should keep coupling explicit and minimal.
 
 ---
 

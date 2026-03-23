@@ -1,63 +1,84 @@
 # workflow Package
 
-## Responsibility
+## 1) Purpose
 
-The `workflow` package is the core orchestrator of the one-shot CLI application. It manages the agent's think-act cycle for a single execution.
+The `workflow` package orchestrates command-level use cases by coordinating dependencies and emitting UI updates.
 
-**Coordinates:**
-- Main agent loop: `Run()` (lives in `agent/` package)
-- Tool execution and display logic (via `agent.ToolExecutor`)
-- Session management: Loading, updating, and saving the session state
-- Event emission: `ThinkingEvent`, `TextEvent`, `DoneEvent`
+## 2) Scope
 
-**Does NOT own:**
-- Tool implementations (in `tool/` subpackages)
-- LLM communication details (delegated to `llm` package via `modelRegistry`)
-- Persistence details (delegated to `session` package)
+### Owns
+- Use-case orchestration (`RunPrompt`, `RunHistory`, picker/info/auth flows).
+- Dependency coordination through consumer-defined interfaces.
+- UI update emission and action consumption through bus interfaces.
 
----
+### Does NOT own
+- Terminal rendering.
+- Tool implementation internals.
+- Provider-specific LLM adapter internals.
 
-## One-Shot Architecture
+## 3) Public Contract
 
-The workflow operates as a **one-shot process**.
-1.  **Start**: Loaded with a session and a model.
-2.  **Run**: Executes the loop until completion, error, or cancellation.
-3.  **Exit**: Saves state and returns.
+### Inputs
+- Command input (prompt text or command context).
+- Dependency interfaces (store/state/agent/registry/bus).
+- `domain.Action` events from UI bus.
 
-There is no concurrent state sharing or long-running background service.
+### Outputs
+- `domain.UIUpdate` events to UI.
+- Workflow completion errors/results.
 
----
+### Invariants
+- Workflow never performs UI rendering directly.
+- Workflow should emit terminal completion updates (`DoneEvent`) for UI-facing runs.
+- Dependency creation remains in wiring layer (`cmd`).
 
-## Error Handling Rules
+## 4) Runtime Behavior
 
-### Loop-Terminating Errors
+1. Resolve command context (session/state/model/provider as needed).
+2. Execute use case until completion or cancellation.
+3. Persist resulting state/session best-effort where applicable.
+4. Emit final UI updates and return completion status.
 
-These errors stop the loop immediately:
+Cancellation:
+- `StopAction` must propagate to active context cancellation quickly.
 
-1.  **Context Cancellation**: User cancelled (Ctrl+C) or timeout.
-    -   Action: Add `[Session cancelled by user]` to history, save session, return error.
-2.  **Model Error**: LLM returned a fatal error (network, API, rate limit).
-    -   Action: Save session, return error.
-3.  **Max Iterations**: Loop exceeded the configured limit.
-    -   Action: Add `[Max iterations reached]` to history, save session, return error.
+Concurrency:
+- Workflow run is command-scoped and one-shot.
+- Goroutines may be used for asynchronous waiting/bridging, but completion is still single-run.
 
-### Loop-Continuing Messages
+## 5) Error Handling Policy
 
-These are **not errors** — they are messages added to the conversation so the LLM can react:
+Workflow should internalize recoverable operational failures when useful for self-correction, and return errors for terminal failures.
 
-1.  **Tool Error**: A tool failed to execute (e.g., file not found).
-    -   Action: `toolExecutor` returns a formatted error message. Loop adds it to history and continues.
-2.  **Tool Validation Error**: LLM sent invalid arguments.
-    -   Action: `toolExecutor` returns a message with the schema. Loop continues.
+| Scenario | Internalize? | Return error? | Typical action |
+| --- | --- | --- | --- |
+| Tool failure that model can self-correct | Yes | No | Convert to conversation-visible message |
+| Non-critical metadata/load fallback | Yes | No | Continue with fallback/default |
+| Context cancellation | No | Yes (`ctx.Err`) | Abort run |
+| LLM/provider hard failure for active turn | No | Yes | Abort run and surface error |
+| Session/state dependency failure | No | Yes | Abort run |
+| Invariant violation | No | Yes | Abort run |
 
----
+## 6) Dependencies
 
-## Internal: Tool Executor
+### Depends on
+- `domain` vocabulary.
+- Consumer-defined interfaces over internal services.
 
-The `toolExecutor` is a private helper within `workflow` that handles the details of:
--   Looking up tools in `toolRegistry`
--   Calling `Prepare()` and `Execute()`
--   Emitting tool events
--   Formatting results for the LLM
+### Must NOT depend on
+- UI package internals.
+- cmd wiring concerns.
 
-It is **not** a separate package.
+## 7) Testing Expectations
+
+- Unit tests should mock dependency interfaces locally.
+- Tests should cover cancellation, done-event emission, and persistence interactions.
+- Tool error continuation vs terminal failure paths must be explicit in tests.
+
+## 8) Related Docs
+
+- [doc_standard.md](doc_standard.md)
+- [architecture.md](architecture.md)
+- [toolexecutor.md](toolexecutor.md)
+- [testing.md](testing.md)
+- [design.md](design.md)

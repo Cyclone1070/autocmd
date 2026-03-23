@@ -41,6 +41,23 @@ func TestRegistry(t *testing.T) {
 		assert.Equal(t, "mock", providers[0].ID)
 	})
 
+	t.Run("ListProviders returns deterministic sorted provider order", func(t *testing.T) {
+		pA := &mockProvider{id: "a-provider"}
+		pB := &mockProvider{id: "b-provider"}
+		pC := &mockProvider{id: "c-provider"}
+		rSorted := NewRegistry(store, pC, pA, pB)
+
+		// Run multiple times to ensure order is stable and sorted.
+		for i := 0; i < 20; i++ {
+			providers, err := rSorted.ListProviders(context.Background())
+			assert.NoError(t, err)
+			assert.Len(t, providers, 3)
+			assert.Equal(t, "a-provider", providers[0].ID)
+			assert.Equal(t, "b-provider", providers[1].ID)
+			assert.Equal(t, "c-provider", providers[2].ID)
+		}
+	})
+
 	t.Run("GetProvider", func(t *testing.T) {
 		got, ok := r.GetProvider("mock")
 		if !ok || got.ID() != "mock" {

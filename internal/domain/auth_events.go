@@ -57,3 +57,10 @@ type EnvVarInstructionEvent struct {
 }
 
 func (EnvVarInstructionEvent) isUIUpdate() {}
+
+type OAuthDeviceFlowEvent struct {
+	VerificationURI string
+	UserCode        string
+}
+
+func (OAuthDeviceFlowEvent) isUIUpdate() {}

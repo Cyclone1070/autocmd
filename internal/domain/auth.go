@@ -5,9 +5,8 @@ type Credential struct {
 	Type   string `json:"type"` // e.g., "api_key"
 	APIKey string `json:"api_key,omitempty"`
 
-	// Future-proofing for Vertex AI etc.
-	Project  string `json:"project,omitempty"`
-	Location string `json:"location,omitempty"`
+	// Future-proofing for OAuth device flow
+	OAuthToken string `json:"oauth_token,omitempty"`
 }
 
 // AuthField defines a single input field required for an authentication method.

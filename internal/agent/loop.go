@@ -88,7 +88,25 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 					})
 				}
 			case domain.ToolCall:
-				msg.ToolCalls = append(msg.ToolCalls, c)
+				// Merge tool call fragments by index
+				found := false
+				for i, existing := range msg.ToolCalls {
+					if existing.Index == c.Index {
+						if c.ID != "" {
+							existing.ID = c.ID
+						}
+						if c.Name != "" {
+							existing.Name = c.Name
+						}
+						existing.Arguments = append(existing.Arguments, c.Arguments...)
+						msg.ToolCalls[i] = existing
+						found = true
+						break
+					}
+				}
+				if !found {
+					msg.ToolCalls = append(msg.ToolCalls, c)
+				}
 				if c.ThoughtSignature != "" {
 					msg.ThoughtSignature = c.ThoughtSignature
 				}

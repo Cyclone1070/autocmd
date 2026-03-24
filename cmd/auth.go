@@ -32,6 +32,7 @@ var authCmd = &cobra.Command{
 			Bus:      bus,
 			Registry: deps.LLMRegistry,
 			AuthMgr:  deps.AuthManager,
+			OAuthMgr: deps.OAuthManager,
 			State:    deps.State,
 		})
 

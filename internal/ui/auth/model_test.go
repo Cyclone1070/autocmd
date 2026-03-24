@@ -89,4 +89,18 @@ func TestAuthUI_Interactive(t *testing.T) {
 		
 		assert.Empty(t, m.providerID)
 	})
+	t.Run("OAuthDeviceFlowEvent shows code", func(t *testing.T) {
+		m := NewModel(bus, theme).(*model)
+		
+		event := domain.OAuthDeviceFlowEvent{
+			VerificationURI: "https://github.com/login/device",
+			UserCode:        "ABCD-1234",
+		}
+		
+		m.Update(event)
+		
+		view := m.View()
+		assert.Contains(t, view, "https://github.com/login/device")
+		assert.Contains(t, view, "ABCD-1234")
+	})
 }

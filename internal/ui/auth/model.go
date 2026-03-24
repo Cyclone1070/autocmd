@@ -21,7 +21,13 @@ const (
 	stateProviderSelection uiState = iota
 	stateMethodSelection
 	stateFieldCollection
+	stateOAuthFlow
 )
+
+type oauthInfo struct {
+	uri  string
+	code string
+}
 
 // model is an autonomous UI component for managing authentication.
 type model struct {
@@ -35,6 +41,7 @@ type model struct {
 
 	picker    *ui.Picker
 	textInput textinput.Model
+	oauth     oauthInfo
 	quitting  bool
 	err       error
 }
@@ -88,6 +95,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.method = msg.Method
 		m.fieldIndex = msg.FieldIndex
 		m.initializeTextInput()
+		return m, m.pollBus()
+
+	case domain.OAuthDeviceFlowEvent:
+		m.state = stateOAuthFlow
+		m.oauth = oauthInfo{uri: msg.VerificationURI, code: msg.UserCode}
 		return m, m.pollBus()
 
 	case domain.AuthErrorEvent:
@@ -273,6 +285,13 @@ func (m *model) View() string {
 		}
 		field := apiKeyMeth.Fields[m.fieldIndex]
 		return fmt.Sprintf("\n  %s\n\n  %s\n\n", field.Label, m.textInput.View())
+	case stateOAuthFlow:
+		var s strings.Builder
+		s.WriteString(fmt.Sprintf("\n  %s\n\n", m.theme.Muted("OAuth Device Authorization:")))
+		s.WriteString(fmt.Sprintf("  1. Visit: %s\n", m.theme.Primary(m.oauth.uri)))
+		s.WriteString(fmt.Sprintf("  2. Enter code: %s\n", m.theme.Success(m.oauth.code)))
+		s.WriteString(fmt.Sprintf("\n  %s\n", m.theme.Muted("Waiting for authorization...")))
+		return s.String()
 	}
 	return ""
 }

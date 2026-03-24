@@ -84,8 +84,8 @@ func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 		cred = resolved
 	}
 
-	if cred == nil {
-		return nil, fmt.Errorf("no credential provided or found for %s", pID)
+	if !hasValidCredential(cred) {
+		return nil, fmt.Errorf("no valid credential found for %s", pID)
 	}
 
 	return p.GetLLM(ctx, cred, mID)
@@ -103,7 +103,7 @@ func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 			cred = resolved
 		}
 
-		if cred == nil || ((cred.Type == domain.AuthMethodAPIKey || cred.Type == domain.AuthMethodEnv) && cred.APIKey == "") {
+		if !hasValidCredential(cred) {
 			continue
 		}
 
@@ -116,6 +116,13 @@ func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 		}
 	}
 	return all, nil
+}
+
+func hasValidCredential(cred *domain.Credential) bool {
+	if cred == nil {
+		return false
+	}
+	return cred.APIKey != "" || cred.OAuthToken != ""
 }
 
 func (r *Registry) sortedProviderIDs() []string {

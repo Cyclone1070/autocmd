@@ -3,6 +3,7 @@ package domain
 // Provider IDs
 const (
 	ProviderGoogle = "google"
+	ProviderGitHub = "github"
 )
 
 // Auth Method and Field IDs
@@ -10,8 +11,6 @@ const (
 	AuthMethodAPIKey = "api_key"
 	AuthMethodEnv    = "env"
 	AuthFieldAPIKey   = "api_key"
-	AuthFieldProject  = "project"
-	AuthFieldLocation = "location"
 )
 
 // UI and Formatting

@@ -33,7 +33,12 @@ type AuthDeps struct {
 	Bus      authBus
 	Registry authRegistry
 	AuthMgr  authManager
+	OAuthMgr oauthManager
 	State    authState
+}
+
+type oauthManager interface {
+	RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod, onCode func(string, string)) (string, error)
 }
 
 // RunAuth starts the authentication workflow asynchronously.
@@ -41,7 +46,7 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		wf := NewAuthWorkflow(deps.Registry, deps.AuthMgr, deps.State)
+		wf := NewAuthWorkflow(deps.Registry, deps.AuthMgr, deps.OAuthMgr, deps.State)
 
 		// 1. Initial snapshot
 		snapshot, err := wf.Gather(ctx)
@@ -127,10 +132,34 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 							break
 						}
 					}
-					deps.Bus.SendUIUpdate(domain.CredentialFieldEvent{
-						Method:     selectedMethod,
-						FieldIndex: 0,
-					})
+					if selectedMethod == nil {
+						continue
+					}
+
+					switch v := selectedMethod.(type) {
+					case domain.APIKeyAuthMethod:
+						deps.Bus.SendUIUpdate(domain.CredentialFieldEvent{
+							Method:     selectedMethod,
+							FieldIndex: 0,
+						})
+					case domain.OAuthMethod:
+						token, err := wf.oauthMgr.RunDeviceFlow(ctx, v, func(uri, code string) {
+							deps.Bus.SendUIUpdate(domain.OAuthDeviceFlowEvent{
+								VerificationURI: uri,
+								UserCode:        code,
+							})
+						})
+						if err != nil {
+							deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: err.Error()})
+							continue
+						}
+
+						cred := domain.Credential{Type: v.ID, OAuthToken: token}
+						wf.authMgr.Set(selectedProvider.ID(), cred)
+						deps.Bus.SendUIUpdate(domain.DoneEvent{})
+						done <- nil
+						return
+					}
 
 				case domain.SubmitCredentialAction:
 					if err := wf.authMgr.Set(selectedProvider.ID(), a.Credential); err != nil {
@@ -156,14 +185,16 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 type AuthWorkflow struct {
 	registry authRegistry
 	authMgr  authManager
+	oauthMgr oauthManager
 	state    authState
 }
 
 // NewAuthWorkflow creates a new AuthWorkflow.
-func NewAuthWorkflow(registry authRegistry, authMgr authManager, state authState) *AuthWorkflow {
+func NewAuthWorkflow(registry authRegistry, authMgr authManager, oauthMgr oauthManager, state authState) *AuthWorkflow {
 	return &AuthWorkflow{
 		registry: registry,
 		authMgr:  authMgr,
+		oauthMgr: oauthMgr,
 		state:    state,
 	}
 }

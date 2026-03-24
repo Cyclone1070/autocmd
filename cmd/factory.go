@@ -18,6 +18,7 @@ type Deps struct {
 	StateManager *state.Manager
 	SessionStore *session.Store
 	AuthManager  *auth.Manager
+	OAuthManager *auth.OAuthManager
 	LLMRegistry  *llm.Registry
 	BootstrapFS  fs.FileSystem
 }
@@ -55,6 +56,7 @@ func Wire() (*Deps, error) {
 		StateManager: stateMgr,
 		SessionStore: sessionStore,
 		AuthManager:  authMgr,
+		OAuthManager: auth.NewOAuthManager(nil),
 		LLMRegistry:  buildLLMRegistry(authMgr),
 		BootstrapFS:  bootstrapFS,
 	}, nil

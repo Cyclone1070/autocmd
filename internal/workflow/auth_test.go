@@ -168,7 +168,7 @@ func TestRunAuth(t *testing.T) {
 		}
 		registry.On("ListProviders", mock.Anything).Return(infos, nil)
 
-		wf := NewAuthWorkflow(registry, authMgr, state)
+		wf := NewAuthWorkflow(registry, authMgr, nil, state)
 		snapshot, err := wf.Gather(ctx)
 
 		assert.NoError(t, err)
@@ -220,4 +220,73 @@ func TestRunAuth(t *testing.T) {
 		bus.AssertExpectations(t)
 		registry.AssertExpectations(t)
 	})
+
+	t.Run("OAuth Flow", func(t *testing.T) {
+		registry := new(mockAuthRegistry)
+		authMgr := new(mockAuthManager)
+		oauthMgr := new(mockOAuthManager)
+		state := new(mockAuthState)
+		bus := new(mockAuthBus)
+		actions := make(chan domain.Action, 10)
+		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
+
+		// 1. Initial Load
+		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}}, nil)
+		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
+
+		done := RunAuth(ctx, &AuthDeps{
+			Bus:      bus,
+			Registry: registry,
+			AuthMgr:  authMgr,
+			OAuthMgr: oauthMgr,
+			State:    state,
+		})
+
+		// 2. Select Provider
+		p := new(mockProvider)
+		p.On("ID").Return("github")
+		oauthMethod := domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"}
+		methods := []domain.AuthMethod{oauthMethod}
+		p.On("SupportedAuthMethods").Return(methods)
+		registry.On("GetProvider", "github").Return(p, true)
+		bus.On("SendUIUpdate", domain.AuthMethodEvent{ProviderID: "github", Methods: methods}).Return()
+
+		actions <- domain.SelectProviderAction{ID: "github"}
+
+		// 3. Select OAuth Method
+		oauthMgr.On("RunDeviceFlow", mock.Anything, oauthMethod, mock.Anything).Run(func(args mock.Arguments) {
+			onCode := args.Get(2).(func(string, string))
+			onCode("https://github.com/login/device", "CODE-123")
+		}).Return("gho_test_token", nil)
+
+		bus.On("SendUIUpdate", domain.OAuthDeviceFlowEvent{
+			VerificationURI: "https://github.com/login/device",
+			UserCode:        "CODE-123",
+		}).Return()
+
+		authMgr.On("Set", "github", domain.Credential{Type: "github_oauth", OAuthToken: "gho_test_token"}).Return(nil)
+		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+		actions <- domain.SelectAuthMethodAction{ID: "github_oauth"}
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			t.Fatal("workflow timed out")
+		}
+
+		bus.AssertExpectations(t)
+		oauthMgr.AssertExpectations(t)
+		authMgr.AssertExpectations(t)
+	})
+}
+
+type mockOAuthManager struct {
+	mock.Mock
+}
+
+func (m *mockOAuthManager) RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod, onCode func(string, string)) (string, error) {
+	args := m.Called(ctx, cfg, onCode)
+	return args.String(0), args.Error(1)
 }

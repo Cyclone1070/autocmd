@@ -63,7 +63,7 @@ func (m *Manager) GetWithFallback(p domain.Provider) (*domain.Credential, error)
 	if err != nil {
 		return nil, err
 	}
-	if cred != nil && cred.APIKey != "" {
+	if cred != nil && (cred.APIKey != "" || cred.OAuthToken != "") {
 		return cred, nil
 	}
 
@@ -87,10 +87,6 @@ func (m *Manager) GetWithFallback(p domain.Provider) (*domain.Credential, error)
 				switch field.ID {
 				case domain.AuthFieldAPIKey:
 					fallback.APIKey = val
-				case domain.AuthFieldProject:
-					fallback.Project = val
-				case domain.AuthFieldLocation:
-					fallback.Location = val
 				}
 			}
 		case domain.EnvVarAuthMethod:

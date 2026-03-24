@@ -85,6 +85,13 @@ func TestRegistry(t *testing.T) {
 		assert.NotEmpty(t, llms)
 	})
 
+	t.Run("List with OAuth Resolution", func(t *testing.T) {
+		store.creds["mock"] = &domain.Credential{OAuthToken: "gho_token", Type: "oauth"}
+		llms, err := r.List(context.Background())
+		assert.NoError(t, err)
+		assert.NotEmpty(t, llms)
+	})
+
 	t.Run("ListWithCreds - REMOVED", func(t *testing.T) {
 		// This test is no longer valid as we removed the explicit creds argument
 	})

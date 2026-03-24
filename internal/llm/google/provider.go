@@ -51,12 +51,6 @@ func (p *Provider) newClient(ctx context.Context, cred *domain.Credential) (*gen
 		APIKey: cred.APIKey,
 	}
 
-	if cred.Project != "" || cred.Location != "" {
-		cfg.Backend = genai.BackendVertexAI
-		cfg.Project = cred.Project
-		cfg.Location = cred.Location
-	}
-
 	return genai.NewClient(ctx, cfg)
 }
 

@@ -115,7 +115,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
-				domain.ToolCall{ID: "tc-1", Name: "get_weather"},
+				domain.ToolCall{Index: 0, ID: "tc-1", Name: "get_weather"},
 			}},
 			{chunks: []domain.StreamChunk{
 				domain.TextChunk{Text: "It's sunny!"},
@@ -151,7 +151,7 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
-				domain.ToolCall{ID: "tc-stream", Name: "bash"},
+				domain.ToolCall{Index: 0, ID: "tc-stream", Name: "bash"},
 			}},
 		},
 	}
@@ -183,9 +183,9 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 	m := &mockLLM{
 		id: "infinite",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
-			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
-			{chunks: []domain.StreamChunk{domain.ToolCall{ID: "tc-inf", Name: "infinite"}}},
+			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
+			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
+			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
 		},
 	}
 
@@ -236,8 +236,8 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
-				domain.ToolCall{ID: "tc-1", Name: "t1"},
-				domain.ToolCall{ID: "tc-2", Name: "t2"},
+				domain.ToolCall{Index: 0, ID: "tc-1", Name: "t1"},
+				domain.ToolCall{Index: 1, ID: "tc-2", Name: "t2"},
 			}},
 			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Done."}}},
 		},
@@ -316,8 +316,8 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []domain.StreamChunk{
-				domain.ToolCall{ID: "tc-1", Name: "t1"},
-				domain.ToolCall{ID: "tc-2", Name: "t2"},
+				domain.ToolCall{Index: 0, ID: "tc-1", Name: "t1"},
+				domain.ToolCall{Index: 1, ID: "tc-2", Name: "t2"},
 			}},
 		},
 	}

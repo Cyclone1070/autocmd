@@ -36,8 +36,9 @@ var debug bool
 
 var rootCmd = &cobra.Command{
 	Use:   "iav [prompt]",
-	Short: "IAV is an agentic AI coding assistant",
-	Args:  cobra.ArbitraryArgs,
+	Short:        "IAV is an agentic AI coding assistant",
+	Args:         cobra.ArbitraryArgs,
+	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupLogging()
 	},

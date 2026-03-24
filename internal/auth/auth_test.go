@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -215,6 +216,29 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 		assert.Equal(t, domain.AuthMethodEnv, got.Type)
 	})
 
+	t.Run("GetWithFallback returns stored OAuthToken", func(t *testing.T) {
+		fs := &mockFileSystem{files: make(map[string][]byte)}
+		p := &authMockProvider{
+			id: "github",
+			methods: []domain.AuthMethod{
+				domain.OAuthMethod{ID: "github_oauth"},
+			},
+		}
+
+		creds := map[string]domain.Credential{
+			"github": {Type: "github_oauth", OAuthToken: "gho_test"},
+		}
+		data, _ := json.Marshal(creds)
+		fs.files[storePath] = data
+
+		m := NewManager(fs, storePath)
+		cred, err := m.GetWithFallback(p)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, cred)
+		assert.Equal(t, "gho_test", cred.OAuthToken)
+	})
+
 	t.Run("Fallback to Env with Multiple Fields", func(t *testing.T) {
 		pComplex := &authMockProvider{
 			id: "complex",
@@ -224,20 +248,16 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 					Name: "Complex",
 					Fields: []domain.AuthField{
 						{ID: domain.AuthFieldAPIKey, EnvVar: "VAL1"},
-						{ID: domain.AuthFieldProject, EnvVar: "VAL2"},
 					},
 				},
 			},
 		}
 		os.Setenv("VAL1", "v1")
-		os.Setenv("VAL2", "v2")
 		defer os.Unsetenv("VAL1")
-		defer os.Unsetenv("VAL2")
 
 		got, err := mgr.GetWithFallback(pComplex)
 		assert.NoError(t, err)
 		assert.Equal(t, "v1", got.APIKey)
-		assert.Equal(t, "v2", got.Project)
 	})
 
 	t.Run("Returns Nil if neither exists", func(t *testing.T) {

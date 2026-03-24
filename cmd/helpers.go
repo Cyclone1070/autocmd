@@ -6,6 +6,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/llm"
 	"github.com/Cyclone1070/iav/internal/llm/google"
+	"github.com/Cyclone1070/iav/internal/llm/github"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
@@ -28,7 +29,7 @@ func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) (*session.S
 
 // buildLLMRegistry creates the LLM registry with supported providers.
 func buildLLMRegistry(authMgr *auth.Manager) *llm.Registry {
-	return llm.NewRegistry(authMgr, google.NewProvider())
+	return llm.NewRegistry(authMgr, google.NewProvider(), github.NewProvider())
 }
 
 func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {

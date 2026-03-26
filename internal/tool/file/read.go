@@ -11,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 	"github.com/Cyclone1070/iav/internal/tool/helper/pagination"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -58,25 +59,30 @@ func NewReadFileTool(
 	}
 }
 
-// Name returns the tool's identifier.
 func (t *ReadFileTool) Name() string {
 	return "read_file"
 }
 
-// Declaration returns the tool's schema for the LLM.
-func (t *ReadFileTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "read_file",
-		Description: "Read file contents with optional pagination. Use offset/limit to read large files in chunks.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"path":   {Type: domain.TypeString, Description: "Path to file"},
-				"offset": {Type: domain.TypeInteger, Description: "Start line index (0-indexed)"},
-				"limit":  {Type: domain.TypeInteger, Description: "Max lines to return"},
+// Definition returns the tool's schema for the LLM using eino schema.
+func (t *ReadFileTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "read_file",
+		Desc: "Read file contents with optional pagination. Use offset/limit to read large files in chunks.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"path": {
+				Type:     schema.String,
+				Desc:     "Path to file",
+				Required: true,
 			},
-			Required: []string{"path"},
-		},
+			"offset": {
+				Type: schema.Integer,
+				Desc: "Start line index (0-indexed)",
+			},
+			"limit": {
+				Type: schema.Integer,
+				Desc: "Max lines to return",
+			},
+		}),
 	}
 }
 
@@ -88,9 +94,9 @@ type ReadFileRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *ReadFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &ReadFileRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
@@ -124,13 +130,18 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		return nil, fmt.Errorf("path is a directory, not a file: %s", abs)
 	}
 
+	rel, err := t.pathResolver.Rel(abs)
+	if err != nil {
+		rel = filepath.Base(abs)
+	}
+
 	return &readFileInvocation{
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
 		offset:          req.Offset,
 		limit:           req.Limit,
-		display:         domain.NewStringDisplay(fmt.Sprintf("Read %s", filepath.Base(req.Path))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Read %s", filepath.ToSlash(rel))),
 	}, nil
 }
 

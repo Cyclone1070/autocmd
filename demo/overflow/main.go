@@ -16,6 +16,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 	tea "github.com/charmbracelet/bubbletea"
@@ -193,15 +195,14 @@ type mockLLM struct{}
 func (l *mockLLM) ID() string          { return "mock" }
 func (l *mockLLM) DisplayName() string { return "Mock LLM" }
 func (l *mockLLM) ContextWindow() int  { return 1000 }
-func (l *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
+func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
+
+func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
-}
-func (l *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
-	return nil, nil
 }
 
 
 type mockRegistry struct{}
 
-func (r *mockRegistry) Declarations() []domain.Declaration { return nil }
+func (r *mockRegistry) Definitions() []*schema.ToolInfo  { return nil }
 func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

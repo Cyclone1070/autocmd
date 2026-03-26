@@ -30,7 +30,7 @@ var authCmd = &cobra.Command{
 
 		done := workflow.RunAuth(cmd.Context(), &workflow.AuthDeps{
 			Bus:      bus,
-			Registry: deps.LLMRegistry,
+			Registry: deps.ProviderRegistry,
 			AuthMgr:  deps.AuthManager,
 			OAuthMgr: deps.OAuthManager,
 			State:    deps.State,

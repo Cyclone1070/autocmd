@@ -27,12 +27,12 @@ type mockAuthRegistry struct {
 	mock.Mock
 }
 
-func (m *mockAuthRegistry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
+func (m *mockAuthRegistry) List(ctx context.Context) ([]domain.ProviderInfo, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]domain.ProviderInfo), args.Error(1)
 }
 
-func (m *mockAuthRegistry) GetProvider(id string) (domain.Provider, bool) {
+func (m *mockAuthRegistry) Get(id string) (domain.Provider, bool) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return nil, false
@@ -69,8 +69,8 @@ func (m *mockProvider) Name() string { return m.Called().String(0) }
 func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return m.Called().Get(0).([]domain.AuthMethod)
 }
-func (m *mockProvider) ListLLMs() []domain.LLMInfo { return nil }
-func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
+func (m *mockProvider) List() []domain.LLMInfo { return nil }
+func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }
 
@@ -87,7 +87,7 @@ func TestRunAuth(t *testing.T) {
 
 	t.Run("Full Auth Flow", func(t *testing.T) {
 		// 1. Initial Load
-		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{{ID: "openai"}}, nil)
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "openai"}}, nil)
 		bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
 			snapshot, ok := ev.(domain.AuthProviderListEvent)
 			return ok && len(snapshot.Providers) == 1
@@ -107,7 +107,7 @@ func TestRunAuth(t *testing.T) {
 			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 		p.On("SupportedAuthMethods").Return(methods)
-		registry.On("GetProvider", "openai").Return(p, true)
+		registry.On("Get", "openai").Return(p, true)
 		bus.On("SendUIUpdate", domain.AuthMethodEvent{ProviderID: "openai", Methods: methods}).Return()
 
 		actions <- domain.SelectProviderAction{ID: "openai"}
@@ -136,7 +136,7 @@ func TestRunAuth(t *testing.T) {
 	})
 
 	t.Run("StopAction triggers DoneEvent and exits", func(t *testing.T) {
-		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{}, nil)
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{}, nil)
 		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
 		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
 
@@ -166,7 +166,7 @@ func TestRunAuth(t *testing.T) {
 			{ID: "openai", Credential: &domain.Credential{Type: "api_key"}},
 			{ID: "anthropic", Credential: nil},
 		}
-		registry.On("ListProviders", mock.Anything).Return(infos, nil)
+		registry.On("List", mock.Anything).Return(infos, nil)
 
 		wf := NewAuthWorkflow(registry, authMgr, nil, state)
 		snapshot, err := wf.Gather(ctx)
@@ -185,7 +185,7 @@ func TestRunAuth(t *testing.T) {
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
 
 		// 1. Initial Load
-		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{{ID: "google"}}, nil)
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "google"}}, nil)
 		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
 
 		done := RunAuth(ctx, &AuthDeps{
@@ -202,7 +202,7 @@ func TestRunAuth(t *testing.T) {
 			domain.EnvVarAuthMethod{ID: "env", Name: "Env", EnvVars: []string{"GEMINI_API_KEY"}},
 		}
 		p.On("SupportedAuthMethods").Return(methods)
-		registry.On("GetProvider", "google").Return(p, true)
+		registry.On("Get", "google").Return(p, true)
 
 		// Expect Instruction Event
 		bus.On("SendUIUpdate", domain.EnvVarInstructionEvent{EnvVars: []string{"GEMINI_API_KEY"}}).Return()
@@ -231,7 +231,7 @@ func TestRunAuth(t *testing.T) {
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
 
 		// 1. Initial Load
-		registry.On("ListProviders", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}}, nil)
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}}, nil)
 		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
 
 		done := RunAuth(ctx, &AuthDeps{
@@ -248,7 +248,7 @@ func TestRunAuth(t *testing.T) {
 		oauthMethod := domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"}
 		methods := []domain.AuthMethod{oauthMethod}
 		p.On("SupportedAuthMethods").Return(methods)
-		registry.On("GetProvider", "github").Return(p, true)
+		registry.On("Get", "github").Return(p, true)
 		bus.On("SendUIUpdate", domain.AuthMethodEvent{ProviderID: "github", Methods: methods}).Return()
 
 		actions <- domain.SelectProviderAction{ID: "github"}

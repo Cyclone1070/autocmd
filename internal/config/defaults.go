@@ -7,14 +7,16 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	tools   ToolsConfig
-	session SessionConfig
-	ui      UIConfig
+	tools     ToolsConfig
+	session   SessionConfig
+	ui        UIConfig
+	providers ProviderConfig
 }
 
-func (c *Config) Tools() ToolsConfig     { return c.tools }
-func (c *Config) Session() SessionConfig { return c.session }
-func (c *Config) UI() UIConfig           { return c.ui }
+func (c *Config) Tools() ToolsConfig        { return c.tools }
+func (c *Config) Session() SessionConfig    { return c.session }
+func (c *Config) UI() UIConfig              { return c.ui }
+func (c *Config) Providers() ProviderConfig { return c.providers }
 
 type SessionConfig struct {
 	storageDir string
@@ -28,9 +30,17 @@ type ToolsConfig struct {
 	maxIterations       int
 }
 
-func (c ToolsConfig) MaxFileSize() int64         { return c.maxFileSize }
-func (c ToolsConfig) DefaultShellTimeout() int   { return c.defaultShellTimeout }
-func (c ToolsConfig) MaxIterations() int         { return c.maxIterations }
+func (c ToolsConfig) MaxFileSize() int64       { return c.maxFileSize }
+func (c ToolsConfig) DefaultShellTimeout() int { return c.defaultShellTimeout }
+func (c ToolsConfig) MaxIterations() int       { return c.maxIterations }
+
+type ModelConfig struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ContextWindow int    `json:"context_window"`
+}
+
+type ProviderConfig map[string][]ModelConfig
 
 // DTOs for JSON persistence
 type sessionDTO struct {
@@ -44,9 +54,10 @@ type toolsDTO struct {
 }
 
 type configDTO struct {
-	Tools   toolsDTO   `json:"tools"`
-	Session sessionDTO `json:"session"`
-	UI      uiDTO      `json:"ui"`
+	Tools     toolsDTO       `json:"tools"`
+	Session   sessionDTO     `json:"session"`
+	UI        uiDTO          `json:"ui"`
+	Providers ProviderConfig `json:"providers,omitempty"`
 }
 
 // DefaultConfig returns the default configuration.
@@ -68,6 +79,20 @@ func DefaultConfig() *Config {
 			chatWindowWidth:   80,
 			shellOutputHeight: 12,
 			shortToolbox:      false,
+		},
+		providers: ProviderConfig{
+			"google": {
+				{ID: "google/gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite", ContextWindow: 1048576},
+				{ID: "google/gemini-2.5-flash", Name: "Gemini 2.5 Flash", ContextWindow: 1048576},
+				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: 2097152},
+				{ID: "google/gemini-2.5-pro", Name: "Gemini 2.5 Pro", ContextWindow: 2097152},
+				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: 2097152},
+			},
+			"github": {
+				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: 128000},
+				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: 2097152},
+				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: 128000},
+			},
 		},
 	}
 }

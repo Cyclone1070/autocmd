@@ -11,6 +11,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
+	"github.com/cloudwego/eino/schema"
 )
 
 // ShellTool executes commands on the local machine.
@@ -50,52 +51,50 @@ func (t *ShellTool) Name() string {
 	return "shell"
 }
 
-// Declaration returns the tool's schema for the LLM.
-func (t *ShellTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "shell",
-		Description: "Execute a shell command on the local machine.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"command": {
-					Type:        domain.TypeArray,
-					Description: "The command to execute, including arguments.",
-					Items: &domain.Schema{
-						Type: domain.TypeString,
-					},
+// Definition returns the tool's schema for the LLM using eino schema.
+func (t *ShellTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "shell",
+		Desc: "Execute a shell command on the local machine.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"command": {
+				Type: schema.Array,
+				Desc: "The command to execute, including arguments.",
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.String,
 				},
-				"working_dir": {
-					Type:        domain.TypeString,
-					Description: "Working directory for execution. Defaults to workspace root.",
-				},
-				"timeout_seconds": {
-					Type:        domain.TypeInteger,
-					Description: "Timeout in seconds. Defaults to configuration.",
-				},
-				"env": {
-					Type:        domain.TypeObject,
-					Description: "Environment variables to set.",
-				},
-				"env_files": {
-					Type:        domain.TypeArray,
-					Description: "Paths to .env files to load.",
-					Items: &domain.Schema{
-						Type: domain.TypeString,
-					},
-				},
-				"comment": {
-					Type:        domain.TypeString,
-					Description: "A brief comment describing the purpose of the command for display purposes.",
+				Required: true,
+			},
+			"working_dir": {
+				Type: schema.String,
+				Desc: "Working directory for execution. Defaults to workspace root.",
+			},
+			"timeout_seconds": {
+				Type: schema.Integer,
+				Desc: "Timeout in seconds. Defaults to configuration.",
+			},
+			"env": {
+				Type: schema.Object,
+				Desc: "Environment variables to set.",
+			},
+			"env_files": {
+				Type: schema.Array,
+				Desc: "Paths to .env files to load.",
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.String,
 				},
 			},
-			Required: []string{"command", "comment"},
-		},
+			"comment": {
+				Type:     schema.String,
+				Desc:     "A brief comment describing the purpose of the command for display purposes.",
+				Required: true,
+			},
+		}),
 	}
 }
 
 // Prepare validates the request, resolves paths, and starts the streaming command.
-func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *ShellTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	// 1. Parse Parameters
 	var req struct {
 		Command        []string          `json:"command"`
@@ -105,7 +104,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params json.RawMessage) (domain
 		EnvFiles       []string          `json:"env_files"`
 		Comment        string            `json:"comment"`
 	}
-	if err := json.Unmarshal(params, &req); err != nil {
+	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 

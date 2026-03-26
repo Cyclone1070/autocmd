@@ -84,7 +84,7 @@ func executeSearch(t *testing.T, stool *SearchContentTool, req *SearchContentReq
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
 
-	inv, err := stool.Prepare(context.Background(), params)
+	inv, err := stool.Prepare(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}

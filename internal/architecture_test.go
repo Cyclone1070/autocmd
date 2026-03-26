@@ -42,7 +42,7 @@ func TestArchitecture(t *testing.T) {
 		module + "/internal/auth",
 		module + "/internal/config",
 		module + "/internal/fs",
-		module + "/internal/llm",
+		module + "/internal/provider",
 		module + "/internal/session",
 		module + "/internal/state",
 		module + "/internal/tool/directory",
@@ -68,7 +68,7 @@ func TestArchitecture(t *testing.T) {
 		module + "/internal/auth",
 		module + "/internal/config",
 		module + "/internal/fs",
-		module + "/internal/llm",
+		module + "/internal/provider",
 		module + "/internal/session",
 		module + "/internal/state",
 	}
@@ -82,7 +82,7 @@ func TestArchitecture(t *testing.T) {
 
 	// 3. Service Isolation
 	services := []string{
-		"agent", "auth", "config", "fs", "llm/google", "session", "state",
+		"agent", "auth", "config", "fs", "provider", "session", "state",
 		"tool/directory", "tool/file", "tool/search", "tool/shell", "tool/todo",
 	}
 	for _, service := range services {

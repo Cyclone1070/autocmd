@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -59,34 +60,31 @@ func (t *SearchContentTool) Name() string {
 	return "search_content"
 }
 
-func (t *SearchContentTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "search_content",
-		Description: "Search for content matching a regex pattern in files.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"pattern": {
-					Type:        domain.TypeString,
-					Description: "The regex pattern to search for in file contents",
-				},
-				"path": {
-					Type:        domain.TypeString,
-					Description: "The file or directory to search in. Defaults to the current working directory.",
-				},
-				"include": {
-					Type:        domain.TypeString,
-					Description: "File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")",
-				},
+func (t *SearchContentTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "search_content",
+		Desc: "Search for content matching a regex pattern in files.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"pattern": {
+				Type:     schema.String,
+				Desc:     "The regex pattern to search for in file contents",
+				Required: true,
 			},
-			Required: []string{"pattern"},
-		},
+			"path": {
+				Type: schema.String,
+				Desc: "The file or directory to search in. Defaults to the current working directory.",
+			},
+			"include": {
+				Type: schema.String,
+				Desc: "File pattern to include in the search (e.g. \"*.js\", \"*.{ts,tsx}\")",
+			},
+		}),
 	}
 }
 
-func (t *SearchContentTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *SearchContentTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &SearchContentRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 

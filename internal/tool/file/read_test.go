@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/stretchr/testify/assert"
 )
 
 // Local mocks for read tests
@@ -103,7 +104,7 @@ func (m *mockChecksumManagerForRead) Get(path string) (string, bool) {
 func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (string, error) {
 	t.Helper()
 	params, _ := json.Marshal(req)
-	inv, err := rtool.Prepare(context.Background(), params)
+	inv, err := rtool.Prepare(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}
@@ -120,7 +121,7 @@ func TestReadFile(t *testing.T) {
 		content := []byte(contentStr)
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 0, Limit: 100}
 		output, err := executeRead(t, readTool, readReq)
@@ -148,7 +149,7 @@ func TestReadFile(t *testing.T) {
 		content := []byte("line1\nline2\nline3\nline4")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		// Read lines 2 and 3 (Offset=1, Limit=2)
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: 1, Limit: 2}
@@ -169,7 +170,7 @@ func TestReadFile(t *testing.T) {
 		content := []byte("line1")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 		offset := 100
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: offset, Limit: 10}
@@ -187,11 +188,11 @@ func TestReadFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createDir("/workspace/subdir")
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "subdir"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(context.Background(), params)
+		_, err := readTool.Prepare(context.Background(), string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for directory")
 		}
@@ -204,11 +205,11 @@ func TestReadFile(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(context.Background(), params)
+		_, err := readTool.Prepare(context.Background(), string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for non-existent file")
 		}
@@ -221,7 +222,7 @@ func TestReadFile(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: ""}
 		_, err := executeRead(t, readTool, readReq)
@@ -235,7 +236,7 @@ func TestReadFile(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "../outside.txt"}
 		_, err := executeRead(t, readTool, readReq)
@@ -250,7 +251,7 @@ func TestReadFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "test.txt", Offset: -5, Limit: 10}
 		output, err := executeRead(t, readTool, readReq)
@@ -268,7 +269,7 @@ func TestReadFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2\nline3"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "test.txt", Limit: 0}
 		output, err := executeRead(t, readTool, readReq)
@@ -289,7 +290,7 @@ func TestReadFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
 		readReq := &ReadFileRequest{Path: "test.txt", Limit: 100000}
 		output, err := executeRead(t, readTool, readReq)
@@ -311,7 +312,7 @@ func TestReadFile(t *testing.T) {
 		content := []byte("line1\r\nline2")
 		fs.createFile("/workspace/test.txt", content)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 		output, err := executeRead(t, readTool, &ReadFileRequest{Path: "test.txt"})
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
@@ -323,6 +324,27 @@ func TestReadFile(t *testing.T) {
 		}
 		assertContains(t, output, "00001| line1")
 		assertContains(t, output, "00002| line2")
+	})
+
+	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
+		fs := newMockFileSystemForRead()
+		checksumManager := newMockChecksumManagerForRead()
+		workspaceRoot := "/workspace"
+		absFile := "/workspace/subdir/test.txt"
+		fs.createFile(absFile, []byte("content"))
+		
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		
+		// Agent sends absolute path
+		params, _ := json.Marshal(&ReadFileRequest{Path: absFile})
+		inv, err := readTool.Prepare(context.Background(), string(params))
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+		
+		// Display should show "Read subdir/test.txt", not the full absolute path
+		display := inv.Display().(domain.StringDisplay)
+		assert.Equal(t, "Read subdir/test.txt", display.Content)
 	})
 }
 

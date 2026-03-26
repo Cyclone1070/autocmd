@@ -1,4 +1,4 @@
-package github
+package provider
 
 import (
 	"testing"
@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProvider(t *testing.T) {
-	p := NewProvider()
+func TestGitHubProvider(t *testing.T) {
+	p := NewGitHubProvider([]domain.LLMInfo{{ID: "gpt-4o"}})
 	
 	assert.Equal(t, domain.ProviderGitHub, p.ID())
 	
@@ -25,6 +25,6 @@ func TestProvider(t *testing.T) {
 	}
 	assert.True(t, foundOAuth)
 	
-	models := p.ListLLMs()
+	models := p.List()
 	assert.NotEmpty(t, models)
 }

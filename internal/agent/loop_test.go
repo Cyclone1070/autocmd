@@ -2,14 +2,18 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+
 	"testing"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 )
+
+func ptr[T any](v T) *T { return &v }
 
 // --- Mocks ---
 
@@ -25,24 +29,68 @@ func (m *mockLLM) ID() string          { return m.id }
 func (m *mockLLM) DisplayName() string { return m.displayName }
 func (m *mockLLM) ContextWindow() int  { return m.contextWindow }
 
-func (m *mockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
+func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 100, nil
 }
 
-func (m *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
-	if m.streamErr != nil && len(m.streams) == 0 {
-		return nil, m.streamErr
+func (m *mockLLM) Model() model.ToolCallingChatModel {
+	return &mockEinoModelBridge{llm: m}
+}
+
+// mockEinoModelBridge adapts the old mockLLM.Stream for the new loop.go
+type mockEinoModelBridge struct {
+	llm *mockLLM
+}
+
+func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return nil, nil
+}
+
+func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	if b.llm.streamErr != nil && len(b.llm.streams) == 0 {
+		return nil, b.llm.streamErr
 	}
-	if len(m.streams) == 0 {
+	if len(b.llm.streams) == 0 {
 		return nil, fmt.Errorf("no more streams")
 	}
-	s := m.streams[0]
-	m.streams = m.streams[1:]
-	return s, nil
+	s := b.llm.streams[0]
+	b.llm.streams = b.llm.streams[1:]
+
+	sr, sw := schema.Pipe[*schema.Message](1)
+	go func() {
+		defer sw.Close()
+		for _, chunk := range s.chunks {
+			msg := &schema.Message{
+				Role: schema.Assistant,
+			}
+			if chunk.toolCall != nil {
+				msg.ToolCalls = []schema.ToolCall{*chunk.toolCall}
+			} else if chunk.isThought {
+				msg.ReasoningContent = chunk.text
+			} else {
+				msg.Content = chunk.text
+			}
+			sw.Send(msg, nil)
+		}
+		if s.err != nil {
+			sw.Send(nil, s.err)
+		}
+	}()
+	return sr, nil
+}
+
+func (b *mockEinoModelBridge) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return b, nil
+}
+
+type mockChunk struct {
+	text      string
+	isThought bool
+	toolCall  *schema.ToolCall
 }
 
 type mockStream struct {
-	chunks []domain.StreamChunk
+	chunks []mockChunk
 	err    error
 	index  int
 }
@@ -55,7 +103,7 @@ func (m *mockStream) Next() bool {
 	return false
 }
 
-func (m *mockStream) Chunk() domain.StreamChunk {
+func (m *mockStream) Chunk() mockChunk {
 	return m.chunks[m.index-1]
 }
 
@@ -85,6 +133,9 @@ func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
 	return NewLoop(m, registry, 5, events)
 }
 
+
+// mockToolRegistry is defined in tool_executor_test.go
+
 // --- Tests ---
 
 func TestRun_SingleTurn_TextOnly(t *testing.T) {
@@ -92,7 +143,7 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Hello!"}}},
+			{chunks: []mockChunk{{text: "Hello!"}}},
 		},
 	}
 
@@ -114,18 +165,18 @@ func TestRun_SingleToolCall(t *testing.T) {
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{
-				domain.ToolCall{Index: 0, ID: "tc-1", Name: "get_weather"},
+			{chunks: []mockChunk{
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "get_weather"}}},
 			}},
-			{chunks: []domain.StreamChunk{
-				domain.TextChunk{Text: "It's sunny!"},
+			{chunks: []mockChunk{
+				{text: "It's sunny!"},
 			}},
 		},
 	}
 
 	mt := &mockTool{
 		name: "get_weather",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "Sunny"}, nil
 		},
 	}
@@ -150,15 +201,15 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{
-				domain.ToolCall{Index: 0, ID: "tc-stream", Name: "bash"},
+			{chunks: []mockChunk{
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-stream", Function: schema.FunctionCall{Name: "bash"}}},
 			}},
 		},
 	}
 
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Run Bash", "echo chunk", nil, nil),
 				execute: func(ctx context.Context) (string, error) {
@@ -172,8 +223,6 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 	l := newTestLoop([]domain.Tool{mt}, m, sender)
 	_ = l.Run(ctx, &domain.Session{}, "run")
 
-	// We don't verify the actual streaming here (that's in tool_executor_test),
-	// but we verify that ToolStart and ToolEnd are sent through the interface.
 	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
@@ -183,15 +232,15 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 	m := &mockLLM{
 		id: "infinite",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
-			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
-			{chunks: []domain.StreamChunk{domain.ToolCall{Index: 0, ID: "tc-inf", Name: "infinite"}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
 		},
 	}
 
 	mt := &mockTool{
 		name: "infinite",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "kept going"}, nil
 		},
 	}
@@ -203,7 +252,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "max iterations (3) reached")
-	lastMsg := session.Messages[len(session.Messages)-1].(domain.UserMessage)
+	lastMsg := session.Messages[len(session.Messages)-1]
 	assert.Equal(t, "[Max iterations reached]", lastMsg.Content)
 }
 
@@ -214,7 +263,7 @@ func TestRun_ContextCancelled(t *testing.T) {
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "ok"}}},
+			{chunks: []mockChunk{{text: "ok"}}},
 		},
 	}
 
@@ -223,7 +272,7 @@ func TestRun_ContextCancelled(t *testing.T) {
 	err := l.Run(ctx, session, "hi")
 
 	assert.ErrorIs(t, err, context.Canceled)
-	lastMsg := session.Messages[len(session.Messages)-1].(domain.UserMessage)
+	lastMsg := session.Messages[len(session.Messages)-1]
 	assert.Equal(t, "[Session cancelled by user]", lastMsg.Content)
 }
 
@@ -235,26 +284,25 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{
-				domain.ToolCall{Index: 0, ID: "tc-1", Name: "t1"},
-				domain.ToolCall{Index: 1, ID: "tc-2", Name: "t2"},
+			{chunks: []mockChunk{
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: ptr(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 			}},
-			{chunks: []domain.StreamChunk{domain.TextChunk{Text: "Done."}}},
+			{chunks: []mockChunk{{text: "Done."}}},
 		},
 	}
 
-	// Channels to coordinate deterministic parallel execution
 	t1Started := make(chan struct{})
 	t2Started := make(chan struct{})
 	canFinish := make(chan struct{})
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
 					close(t1Started)
-					<-canFinish // Wait until test says we can finish
+					<-canFinish
 					return "R1", nil
 				},
 			}, nil
@@ -262,11 +310,11 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
 					close(t2Started)
-					<-canFinish // Wait until test says we can finish
+					<-canFinish
 					return "R2", nil
 				},
 			}, nil
@@ -276,19 +324,15 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	l := newTestLoop([]domain.Tool{mt1, mt2}, m, sender)
 	session := &domain.Session{}
 
-	// Run in a separate goroutine so we can coordinate
 	runDone := make(chan error, 1)
 	go func() {
 		runDone <- l.Run(ctx, session, "run")
 	}()
 
-	// Wait for BOTH to have started. If they were serial, we would deadlock here
-	// because mt1 would be waiting on canFinish before it ever reached the code to start mt2.
 	select {
 	case <-t1Started:
 		select {
 		case <-t2Started:
-			// Success: both started
 		case <-time.After(500 * time.Millisecond):
 			t.Fatal("t2 did not start in parallel with t1")
 		}
@@ -296,38 +340,34 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		t.Fatal("t1 did not start")
 	}
 
-	// Now let them finish
 	close(canFinish)
 
 	err := <-runDone
 	assert.NoError(t, err)
 
-	// Verify order in session messages (TC order is preserved, but execution was parallel)
-	m2 := session.Messages[2].(domain.ToolMessage)
-	m3 := session.Messages[3].(domain.ToolMessage)
-	assert.Equal(t, "tc-1", m2.ToolCallID)
-	assert.Equal(t, "tc-2", m3.ToolCallID)
+	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
+	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
 }
 
 func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	m := &mockLLM{
 		id: "test",
 		streams: []*mockStream{
-			{chunks: []domain.StreamChunk{
-				domain.ToolCall{Index: 0, ID: "tc-1", Name: "t1"},
-				domain.ToolCall{Index: 1, ID: "tc-2", Name: "t2"},
+			{chunks: []mockChunk{
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: ptr(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 			}},
 		},
 	}
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
-					// Give enough time for the parallel executor to start both
 					time.Sleep(50 * time.Millisecond)
 					cancel()
 					return "", ctx.Err()
@@ -337,10 +377,9 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				execute: func(ctx context.Context) (string, error) {
-					// Should be cancelled by mt1
 					<-ctx.Done()
 					return "", ctx.Err()
 				},
@@ -354,19 +393,11 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	err := l.Run(ctx, session, "run")
 	assert.ErrorIs(t, err, context.Canceled)
 
-	// User message + Assistant (with 2 calls) + 2 Tool responses + User cancellation message
-	// Wait, prompt.go appends a cancellation message in a defer.
-	// We expect 5 messages:
-	// 0: User input
-	// 1: Assistant with tool calls
-	// 2: Tool 1 response (cancelled)
-	// 3: Tool 2 response (cancelled)
-	// 4: [Session cancelled by user]
 	assert.Equal(t, 5, len(session.Messages))
-	m2 := session.Messages[2].(domain.ToolMessage)
-	m3 := session.Messages[3].(domain.ToolMessage)
+	m2 := session.Messages[2]
+	m3 := session.Messages[3]
 	assert.Equal(t, "tc-1", m2.ToolCallID)
-	assert.True(t, m2.ToolError)
+	assert.True(t, m2.Extra["tool_error"].(bool))
 	assert.Equal(t, "tc-2", m3.ToolCallID)
-	assert.True(t, m3.ToolError)
+	assert.True(t, m3.Extra["tool_error"].(bool))
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudwego/eino/schema"
 )
 
 const gutterWidth = 2 // "A│" / "U┃" / " │" (assistant) or " ┃" (user)
@@ -18,27 +19,25 @@ type renderItem struct {
 	assistantIndices []int
 }
 
-func buildRenderItems(messages domain.Messages) []renderItem {
+func buildRenderItems(messages []*schema.Message) []renderItem {
 	var items []renderItem
 	for i := 0; i < len(messages); i++ {
 		// Tool messages are represented via tool boxes attached to the preceding assistant message.
 		// Rendering them as standalone entries would introduce extra blank lines and duplicate output.
-		if messages[i].Role() == domain.RoleTool {
+		if messages[i].Role == schema.Tool {
 			continue
 		}
 
 		// Coalesce consecutive assistant turns into a single rendered assistant block.
-		// IMPORTANT: preserve chronological order: tool boxes must render where the tool call occurred,
-		// not always after the final merged text.
-		if _, ok := messages[i].(domain.AssistantMessage); ok {
+		if messages[i].Role == schema.Assistant {
 			assistantIdxs := []int{i}
 			j := i + 1
 			for j < len(messages) {
-				if messages[j].Role() == domain.RoleTool {
+				if messages[j].Role == schema.Tool {
 					j++
 					continue
 				}
-				if _, ok := messages[j].(domain.AssistantMessage); !ok {
+				if messages[j].Role != schema.Assistant {
 					break
 				}
 				assistantIdxs = append(assistantIdxs, j)
@@ -94,7 +93,7 @@ func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderCoalescedAssistant(messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays) string {
+func (h *HistoryBuilder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
@@ -103,7 +102,7 @@ func (h *HistoryBuilder) renderCoalescedAssistant(messages domain.Messages, assi
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages domain.Messages, assistantIndices []int, displays domain.ToolDisplays) {
+func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
@@ -112,8 +111,8 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages d
 
 	var parts []string
 	for _, ai := range assistantIndices {
-		am, ok := messages[ai].(domain.AssistantMessage)
-		if !ok {
+		am := messages[ai]
+		if am.Role != schema.Assistant {
 			continue
 		}
 
@@ -138,9 +137,10 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages d
 			var toolErr string
 
 			for j := ai + 1; j < len(messages); j++ {
-				if msgJ, ok := messages[j].(domain.ToolMessage); ok && msgJ.ToolCallID == tc.ID {
+				msgJ := messages[j]
+				if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
 					toolOutput = msgJ.Content
-					if msgJ.ToolError {
+					if isToolError(msgJ) {
 						status = ui.StatusError
 						toolErr = strings.TrimPrefix(toolOutput, "Error:")
 						toolErr = strings.TrimSpace(toolErr)
@@ -181,7 +181,7 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages d
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func (h *HistoryBuilder) RenderMessage(messages domain.Messages, idx int, displays domain.ToolDisplays, includeLeadingNewline bool) string {
+func (h *HistoryBuilder) RenderMessage(messages []*schema.Message, idx int, displays domain.ToolDisplays, includeLeadingNewline bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -189,18 +189,18 @@ func (h *HistoryBuilder) RenderMessage(messages domain.Messages, idx int, displa
 	// When messages are concatenated, this yields two blank lines between them.
 	sb.WriteString("\n")
 
-	switch m := msg.(type) {
-	case domain.UserMessage:
-		h.renderUserMessage(&sb, m)
-	case domain.AssistantMessage:
-		h.renderAssistantMessage(&sb, m, messages, idx, displays)
+	switch msg.Role {
+	case schema.User:
+		h.renderUserMessage(&sb, msg)
+	case schema.Assistant:
+		h.renderAssistantMessage(&sb, msg, messages, idx, displays)
 	}
 
 	sb.WriteString("\n")
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg domain.UserMessage) {
+func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Message) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.PrimaryColor()).Bold(true)
 	roleLine := style.Render("U" + userGutterPipe)
 	contPrefix := style.Render(" " + userGutterPipe)
@@ -212,7 +212,7 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg domain.UserM
 	writeFramedWithGutter(sb, roleLine, contPrefix, content)
 }
 
-func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am domain.AssistantMessage, messages domain.Messages, idx int, displays domain.ToolDisplays) {
+func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, messages []*schema.Message, idx int, displays domain.ToolDisplays) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
@@ -240,9 +240,10 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am domain.A
 		var toolErr string
 
 		for j := idx + 1; j < len(messages); j++ {
-			if msgJ, ok := messages[j].(domain.ToolMessage); ok && msgJ.ToolCallID == tc.ID {
+			msgJ := messages[j]
+			if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
 				toolOutput = msgJ.Content
-				if msgJ.ToolError {
+				if isToolError(msgJ) {
 					status = ui.StatusError
 					toolErr = strings.TrimPrefix(toolOutput, "Error:")
 					toolErr = strings.TrimSpace(toolErr)
@@ -320,4 +321,12 @@ func writeFramedWithGutter(sb *strings.Builder, roleLine, contPrefix, content st
 	// Bottom guttered blank line (symmetry with role line).
 	sb.WriteString("\n")
 	sb.WriteString(contPrefix)
+}
+
+func isToolError(m *schema.Message) bool {
+	if m.Extra == nil {
+		return false
+	}
+	v, ok := m.Extra["tool_error"].(bool)
+	return ok && v
 }

@@ -1,0 +1,112 @@
+package provider
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino-ext/components/model/gemini"
+	"github.com/cloudwego/eino/components/model"
+	"google.golang.org/genai"
+)
+
+// GoogleProvider implements the domain.Provider interface for Google Gemini.
+type GoogleProvider struct {
+	models []domain.LLMInfo
+}
+
+// NewGoogleProvider creates a new Google provider factory.
+func NewGoogleProvider(models []domain.LLMInfo) *GoogleProvider {
+	return &GoogleProvider{models: models}
+}
+
+func (p *GoogleProvider) ID() string {
+	return domain.ProviderGoogle
+}
+
+func (p *GoogleProvider) SupportedAuthMethods() []domain.AuthMethod {
+	return []domain.AuthMethod{
+		domain.APIKeyAuthMethod{
+			ID:   domain.AuthMethodAPIKey,
+			Name: "API Key",
+			Fields: []domain.AuthField{
+				{
+					ID:          domain.AuthFieldAPIKey,
+					Label:       "API Key",
+					Placeholder: "Enter your Gemini API Key",
+					IsSecret:    true,
+				},
+			},
+		},
+		domain.EnvVarAuthMethod{
+			ID:      domain.AuthMethodEnv,
+			Name:    "Environment Variables",
+			EnvVars: []string{"GEMINI_API_KEY"},
+		},
+	}
+}
+
+func (p *GoogleProvider) newClient(ctx context.Context, cred *domain.Credential) (*genai.Client, error) {
+	if cred == nil || cred.APIKey == "" {
+		return nil, fmt.Errorf("google provider requires an API key")
+	}
+
+	cfg := &genai.ClientConfig{
+		APIKey: cred.APIKey,
+	}
+
+	return genai.NewClient(ctx, cfg)
+}
+
+func (p *GoogleProvider) List() []domain.LLMInfo {
+	return p.models
+}
+
+func (p *GoogleProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
+	client, err := p.newClient(ctx, cred)
+	if err != nil {
+		return nil, err
+	}
+
+	chatModel, err := gemini.NewChatModel(ctx, &gemini.Config{
+		Client: client,
+		Model:  strings.TrimPrefix(info.ID, domain.ProviderGoogle+domain.ModelIDSeparator),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create eino gemini model: %w", err)
+	}
+
+	return &geminiLLM{
+		client:        client,
+		model:         chatModel,
+		id:            info.ID,
+		displayName:   info.DisplayName,
+		contextWindow: info.ContextWindow,
+	}, nil
+}
+
+// geminiLLM implements domain.LLM for Google Gemini models.
+type geminiLLM struct {
+	client        *genai.Client
+	model         model.ToolCallingChatModel
+	id            string
+	displayName   string
+	contextWindow int
+}
+
+func (m *geminiLLM) ID() string {
+	return m.id
+}
+
+func (m *geminiLLM) DisplayName() string {
+	return m.displayName
+}
+
+func (m *geminiLLM) ContextWindow() int {
+	return m.contextWindow
+}
+
+func (m *geminiLLM) Model() model.ToolCallingChatModel {
+	return m.model
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // GenerateName creates a short title for a session based on the provided text.
@@ -14,27 +15,16 @@ func GenerateName(ctx context.Context, llm domain.LLM, target string) (string, e
 
 	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 
-	messages := domain.Messages{
-		domain.UserMessage{Content: prompt},
+	messages := []*schema.Message{
+		{Role: schema.User, Content: prompt},
 	}
 
-	stream, err := llm.Stream(ctx, messages, nil)
-	if err != nil || stream == nil {
+	resp, err := llm.Model().Generate(ctx, messages)
+	if err != nil || resp == nil {
 		return fallbackName(target), nil
 	}
 
-	var sb strings.Builder
-	for stream.Next() {
-		if chunk, ok := stream.Chunk().(domain.TextChunk); ok {
-			sb.WriteString(chunk.Text)
-		}
-	}
-
-	if err := stream.Err(); err != nil {
-		return fallbackName(target), nil
-	}
-
-	name := strings.TrimSpace(sb.String())
+	name := strings.TrimSpace(resp.Content)
 	if name == "" {
 		return fallbackName(target), nil
 	}

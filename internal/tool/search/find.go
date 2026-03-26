@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -55,32 +56,29 @@ func (t *FindFileTool) Name() string {
 	return "find_file"
 }
 
-// Declaration returns the JSON schema for the tool.
-func (t *FindFileTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        t.Name(),
-		Description: "Find files matching a glob pattern.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"pattern": {
-					Type:        domain.TypeString,
-					Description: "Glob pattern to match files.",
-				},
-				"path": {
-					Type:        domain.TypeString,
-					Description: "Path to search within. Defaults to workspace root.",
-				},
+// Definition returns the JSON schema for the tool.
+func (t *FindFileTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: t.Name(),
+		Desc: "Find files matching a glob pattern.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"pattern": {
+				Type:     schema.String,
+				Desc:     "Glob pattern to match files.",
+				Required: true,
 			},
-			Required: []string{"pattern"},
-		},
+			"path": {
+				Type: schema.String,
+				Desc: "Path to search within. Defaults to workspace root.",
+			},
+		}),
 	}
 }
 
 // Prepare validates input and resolves path.
-func (t *FindFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *FindFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &FindFileRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 

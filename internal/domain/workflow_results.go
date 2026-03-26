@@ -1,5 +1,7 @@
 package domain
 
+import "github.com/cloudwego/eino/schema"
+
 // InfoEvent contains gathered data for UI display of configuration and state.
 type InfoEvent struct {
 	Model          string
@@ -43,7 +45,7 @@ type ProviderSummary struct {
 
 // HistoryEvent contains the full conversation history for a session.
 type HistoryEvent struct {
-	Messages     Messages
+	Messages     []*schema.Message
 	ToolDisplays ToolDisplays
 }
 

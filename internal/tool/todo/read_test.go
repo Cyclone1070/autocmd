@@ -38,7 +38,7 @@ func (m *mockTodoStore) Write(todos []todo) error {
 // Helper to execute read tool
 func executeRead(t *testing.T, tool *ReadTodosTool, params string) (string, error) {
 	t.Helper()
-	inv, err := tool.Prepare(context.Background(), json.RawMessage(params))
+	inv, err := tool.Prepare(context.Background(), params)
 	if err != nil {
 		return "", err
 	}
@@ -52,13 +52,12 @@ func TestReadTodosTool_Name(t *testing.T) {
 	assert.Equal(t, "todoread", tool.Name())
 }
 
-func TestReadTodosTool_Declaration(t *testing.T) {
+func TestReadTodosTool_Definition(t *testing.T) {
 	store := &mockTodoStore{}
 	tool := NewReadTodosTool(store)
-
-	decl := tool.Declaration()
-	assert.Equal(t, "todoread", decl.Name)
-	assert.NotEmpty(t, decl.Description)
+	info := tool.Definition()
+	assert.Equal(t, "todoread", info.Name)
+	assert.NotEmpty(t, info.Desc)
 }
 
 func TestReadTodosTool_EmptyStore(t *testing.T) {
@@ -105,7 +104,7 @@ func TestReadTodosTool_ContextCancelled(t *testing.T) {
 	store := &mockTodoStore{}
 	tool := NewReadTodosTool(store)
 
-	inv, err := tool.Prepare(context.Background(), json.RawMessage("{}"))
+	inv, err := tool.Prepare(context.Background(), "{}")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

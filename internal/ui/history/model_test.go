@@ -5,6 +5,8 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -30,7 +32,7 @@ func TestModel_EventFlow(t *testing.T) {
 		m := NewModel(bus, theme, 80, 80, 40)
 		
 		ev := domain.HistoryEvent{
-			Messages: domain.Messages{domain.UserMessage{Content: "snapshot message"}},
+			Messages: []*schema.Message{{Role: schema.User, Content: "snapshot message"}},
 		}
 		
 		// Initial view should be empty (detecting no messages/displays yet)
@@ -48,5 +50,16 @@ func TestModel_EventFlow(t *testing.T) {
 		// This is hard to test purely with mock assertions unless we check if pollBus returned a cmd
 		// But we can verify it doesn't crash.
 		assert.True(t, m.loaded)
+	})
+
+	t.Run("ctrl+c -> Sends StopAction", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.StopAction{}).Once()
+		
+		m := NewModel(bus, theme, 80, 80, 40)
+		msg := tea.KeyMsg{Type: tea.KeyCtrlC}
+		m.Update(msg)
+		
+		bus.AssertCalled(t, "SendAction", domain.StopAction{})
 	})
 }

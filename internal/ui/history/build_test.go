@@ -9,6 +9,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudwego/eino/schema"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 )
@@ -46,13 +47,15 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	captured := "output line 1\noutput line 2"
 
-	messages := domain.Messages{
-		domain.AssistantMessage{
-			ToolCalls: []domain.ToolCall{
-				{ID: "tc-1", Name: "shell"},
+	messages := []*schema.Message{
+		{
+			Role: schema.Assistant,
+			ToolCalls: []schema.ToolCall{
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
 			},
 		},
-		domain.ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "output line 1\noutput line 2\n\n(Exit code: 0)",
 		},
@@ -80,13 +83,15 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	empty := ""
 
-	messages := domain.Messages{
-		domain.AssistantMessage{
-			ToolCalls: []domain.ToolCall{
-				{ID: "tc-1", Name: "shell"},
+	messages := []*schema.Message{
+		{
+			Role: schema.Assistant,
+			ToolCalls: []schema.ToolCall{
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
 			},
 		},
-		domain.ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "\n\n(Exit code: 0)",
 		},
@@ -111,13 +116,15 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
-	messages := domain.Messages{
-		domain.AssistantMessage{
-			ToolCalls: []domain.ToolCall{
-				{ID: "tc-1", Name: "shell"},
+	messages := []*schema.Message{
+		{
+			Role: schema.Assistant,
+			ToolCalls: []schema.ToolCall{
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
 			},
 		},
-		domain.ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "fallback output\n\n(Exit code: 0)",
 		},
@@ -143,16 +150,18 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	empty := ""
 
-	messages := domain.Messages{
-		domain.AssistantMessage{
-			ToolCalls: []domain.ToolCall{
-				{ID: "tc-1", Name: "shell"},
+	messages := []*schema.Message{
+		{
+			Role: schema.Assistant,
+			ToolCalls: []schema.ToolCall{
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
 			},
 		},
-		domain.ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "Error: Execution failed",
-			ToolError:  true,
+			Extra:      map[string]any{"tool_error": true},
 		},
 	}
 
@@ -180,37 +189,37 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 
 	cases := []struct {
 		name    string
-		msg     domain.Message
+		msg     *schema.Message
 		render  string // renderer output for content (used for user/assistant)
 		roleTop string // "U┃" or "A│"
 	}{
 		{
 			name:    "UserPlain",
-			msg:     domain.UserMessage{Content: "hi"},
+			msg:     &schema.Message{Role: schema.User, Content: "hi"},
 			render:  "hi",
 			roleTop: "U┃",
 		},
 		{
 			name:    "UserLeadingTrailingNewlines",
-			msg:     domain.UserMessage{Content: "ignored"},
+			msg:     &schema.Message{Role: schema.User, Content: "ignored"},
 			render:  "\nhello\nworld\n",
 			roleTop: "U┃",
 		},
 		{
 			name:    "AssistantPlain",
-			msg:     domain.AssistantMessage{Content: "hello"},
+			msg:     &schema.Message{Role: schema.Assistant, Content: "hello"},
 			render:  "hello",
 			roleTop: "A│",
 		},
 		{
 			name:    "AssistantInternalBlankLines",
-			msg:     domain.AssistantMessage{Content: "ignored"},
+			msg:     &schema.Message{Role: schema.Assistant, Content: "ignored"},
 			render:  "a\n\nb",
 			roleTop: "A│",
 		},
 		{
 			name:    "AssistantEmptyContent",
-			msg:     domain.AssistantMessage{Content: ""},
+			msg:     &schema.Message{Role: schema.Assistant, Content: ""},
 			render:  "",
 			roleTop: "A│",
 		},
@@ -218,15 +227,7 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var msgs domain.Messages
-			switch m := tc.msg.(type) {
-			case domain.UserMessage:
-				msgs = domain.Messages{m}
-			case domain.AssistantMessage:
-				msgs = domain.Messages{m}
-			default:
-				t.Fatalf("unsupported message type: %T", tc.msg)
-			}
+			msgs := []*schema.Message{tc.msg}
 
 			r := &fixedRenderer{out: tc.render}
 			b := NewHistoryBuilder(r, theme, width)
@@ -244,7 +245,7 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 			// Since RenderMessage adds a trailing unguttered newline, we expect the message to end with:
 			// "\n ┃\n" (user) or "\n │\n" (assistant) + final unguttered newline.
 			wantSuffix := "\n │\n"
-			if _, ok := tc.msg.(domain.UserMessage); ok {
+			if tc.msg.Role == schema.User {
 				wantSuffix = "\n ┃\n"
 			}
 			assert.True(t, strings.HasSuffix(out, wantSuffix), "must end with a guttered blank line (symmetry)")
@@ -269,12 +270,6 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		{role: "A", content: "x\n\ny"},       // internal blank line
 	}
 
-	makeMsg := func(e elem) domain.Message {
-		if e.role == "U" {
-			return domain.UserMessage{Content: e.content}
-		}
-		return domain.AssistantMessage{Content: e.content}
-	}
 
 	// Test all pairs and triples.
 	sequences := [][]elem{}
@@ -290,12 +285,16 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 	b := NewHistoryBuilder(nil, theme, width)
 	for _, seq := range sequences {
 		nameParts := make([]string, 0, len(seq))
-		var msgs domain.Messages
+		var msgs []*schema.Message
 		for _, e := range seq {
 			nameParts = append(nameParts, e.role)
-			msgs = append(msgs, makeMsg(e))
+			role := schema.User
+			if e.role == "A" {
+				role = schema.Assistant
+			}
+			msgs = append(msgs, &schema.Message{Role: role, Content: e.content})
 			// Include a tool message in between to ensure it doesn't affect spacing.
-			msgs = append(msgs, domain.ToolMessage{ToolCallID: "tc-ignore", Content: "ignored"})
+			msgs = append(msgs, &schema.Message{Role: schema.Tool, ToolCallID: "tc-ignore", Content: "ignored"})
 		}
 
 		t.Run(strings.Join(nameParts, ""), func(t *testing.T) {
@@ -328,15 +327,18 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 	width := 80
 	b := NewHistoryBuilder(nil, theme, width)
 
-	msgs := domain.Messages{
-		domain.AssistantMessage{
-			ToolCalls: []domain.ToolCall{{ID: "tc-1", Name: "shell"}},
+	msgs := []*schema.Message{
+		{
+			Role: schema.Assistant,
+			ToolCalls: []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}}},
 		},
-		domain.ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "README.md\n",
 		},
-		domain.AssistantMessage{
+		{
+			Role:    schema.Assistant,
 			Content: "Okay, I ran ls.",
 		},
 	}
@@ -357,9 +359,9 @@ func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 	width := 80
 	b := NewHistoryBuilder(nil, theme, width)
 
-	msgs := domain.Messages{
-		domain.AssistantMessage{Content: "part1"},
-		domain.AssistantMessage{Content: "part2"},
+	msgs := []*schema.Message{
+		{Role: schema.Assistant, Content: "part1"},
+		{Role: schema.Assistant, Content: "part2"},
 	}
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
@@ -392,9 +394,9 @@ func TestDivider_Color(t *testing.T) {
 	assistantStyle := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
 	expectedAssistantPrefix := assistantStyle.Render("A│")
 
-	messages := domain.Messages{
-		domain.UserMessage{Content: "user content"},
-		domain.AssistantMessage{Content: "assistant content"},
+	messages := []*schema.Message{
+		{Role: schema.User, Content: "user content"},
+		{Role: schema.Assistant, Content: "assistant content"},
 	}
 
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
@@ -410,11 +412,11 @@ func TestDivider_Color(t *testing.T) {
 func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
-	messages := domain.Messages{
-		domain.UserMessage{Content: "one"},
+	messages := []*schema.Message{
+		{Role: schema.User, Content: "one"},
 		// Tool messages should not contribute spacing in history view.
-		domain.ToolMessage{ToolCallID: "tc-ignored", Content: "should not render"},
-		domain.AssistantMessage{Content: "two"},
+		{Role: schema.Tool, ToolCallID: "tc-ignored", Content: "should not render"},
+		{Role: schema.Assistant, Content: "two"},
 	}
 
 	rendered := b.BuildSession(&domain.Session{Messages: messages})
@@ -433,19 +435,19 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	renderer := ui.NewGlamourRenderer(width, true)
 	b := NewHistoryBuilder(renderer, theme, width)
 
-	tcID := "1"
-	msg := domain.AssistantMessage{
+	msg := &schema.Message{
+		Role:    schema.Assistant,
 		Content: "thought",
-		ToolCalls: []domain.ToolCall{
+		ToolCalls: []schema.ToolCall{
 			{
-				ID:   tcID,
-				Name: "shell",
+				ID:       "1",
+				Function: schema.FunctionCall{Name: "shell"},
 			},
 		},
 	}
-	messages := domain.Messages{msg}
+	messages := []*schema.Message{msg}
 	displays := domain.ToolDisplays{
-		tcID: domain.NewShellDisplay("header", "ls", nil, nil),
+		"1": domain.NewShellDisplay("header", "ls", nil, nil),
 	}
 
 	var sb strings.Builder
@@ -475,16 +477,17 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	renderer := ui.NewGlamourRenderer(width, true)
 	b := NewHistoryBuilder(renderer, theme, width)
 
-	msg := domain.AssistantMessage{
-		ToolCalls: []domain.ToolCall{
-			{ID: "tc-1", Name: "directory_list"},
-			{ID: "tc-2", Name: "todo_read"},
+	msg := &schema.Message{
+		Role: schema.Assistant,
+		ToolCalls: []schema.ToolCall{
+			{ID: "tc-1", Function: schema.FunctionCall{Name: "directory_list"}},
+			{ID: "tc-2", Function: schema.FunctionCall{Name: "todo_read"}},
 		},
 	}
-	messages := domain.Messages{
+	messages := []*schema.Message{
 		msg,
-		domain.ToolMessage{ToolCallID: "tc-1", Content: "ok"},
-		domain.ToolMessage{ToolCallID: "tc-2", Content: "ok"},
+		{Role: schema.Tool, ToolCallID: "tc-1", Content: "ok"},
+		{Role: schema.Tool, ToolCallID: "tc-2", Content: "ok"},
 	}
 	displays := domain.ToolDisplays{
 		"tc-1": domain.NewStringDisplay("Listing iav"),
@@ -507,9 +510,9 @@ func TestMessageHeaders(t *testing.T) {
 
 	theme := newTestTheme()
 
-	messages := domain.Messages{
-		domain.UserMessage{Content: "hello"},
-		domain.AssistantMessage{Content: "hi"},
+	messages := []*schema.Message{
+		{Role: schema.User, Content: "hello"},
+		{Role: schema.Assistant, Content: "hi"},
 	}
 
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
@@ -518,8 +521,8 @@ func TestMessageHeaders(t *testing.T) {
 		theme := newTestTheme()
 		width := 80
 		renderer := &mockRenderer{}
-		messages := domain.Messages{
-			domain.UserMessage{Content: "Hello World"},
+		messages := []*schema.Message{
+			{Role: schema.User, Content: "Hello World"},
 		}
 
 		ub := NewHistoryBuilder(renderer, theme, width)
@@ -536,9 +539,10 @@ func TestMessageHeaders(t *testing.T) {
 		width := 80
 		ab := NewHistoryBuilder(nil, theme, width)
 		tcID := "tc-1"
-		messages := domain.Messages{
-			domain.AssistantMessage{
-				ToolCalls: []domain.ToolCall{{ID: tcID, Name: "shell"}},
+		messages := []*schema.Message{
+			{
+				Role:      schema.Assistant,
+				ToolCalls: []schema.ToolCall{{ID: tcID, Function: schema.FunctionCall{Name: "shell"}}},
 			},
 		}
 		displays := domain.ToolDisplays{
@@ -571,7 +575,7 @@ func TestMessageHeaders(t *testing.T) {
 func TestUserGutter_UsesThickVerticalBar(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
-	messages := domain.Messages{domain.UserMessage{Content: "hello"}}
+	messages := []*schema.Message{{Role: schema.User, Content: "hello"}}
 	out := stripANSI(b.RenderMessage(messages, 0, nil, false))
 	assert.Contains(t, out, "U┃", "user role line should use heavy vertical bar")
 	assert.Contains(t, out, " ┃", "user continuation gutter should use heavy vertical bar")

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // sessionStore defines the persistence operations for chat sessions.
@@ -23,7 +24,7 @@ type stateStore interface {
 }
 
 type toolRegistry interface {
-	Declarations() []domain.Declaration
+	Definitions() []*schema.ToolInfo
 	Get(name string) (domain.Tool, bool)
 }
 
@@ -89,11 +90,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 		// Capture first message content safely for naming
 		var target string
 		if len(sess.Messages) > 0 {
-			if msg, ok := sess.Messages[0].(domain.UserMessage); ok {
-				target = msg.Content
-			} else if msg, ok := sess.Messages[0].(domain.AssistantMessage); ok {
-				target = msg.Content
-			}
+			target = sess.Messages[0].Content
 		}
 		if target == "" {
 			target = input

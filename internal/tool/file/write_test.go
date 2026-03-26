@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/stretchr/testify/assert"
 )
 
 // Local mocks for write tests
@@ -57,6 +58,24 @@ func newMockFileSystemForWrite(maxFileSize int64) *mockFileSystemForWrite {
 		operationErrors: make(map[string]error),
 		maxFileSize:     maxFileSize,
 	}
+}
+
+type mockPathResolver struct {
+	workspaceRoot string
+}
+
+func (m *mockPathResolver) Abs(p string) (string, error) {
+	if strings.Contains(p, "..") {
+		return "", fmt.Errorf("path %s is outside workspace", p)
+	}
+	if strings.HasPrefix(p, "/") {
+		return p, nil
+	}
+	return filepath.Join(m.workspaceRoot, p), nil
+}
+
+func (m *mockPathResolver) Rel(path string) (string, error) {
+	return filepath.Rel(m.workspaceRoot, path)
 }
 
 func (m *mockFileSystemForWrite) createFile(path string, content []byte, mode os.FileMode) {
@@ -161,7 +180,7 @@ func executeWrite(t *testing.T, wtool *WriteFileTool, req *WriteFileRequest) (st
 	if err != nil {
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
-	inv, err := wtool.Prepare(context.Background(), params)
+	inv, err := wtool.Prepare(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}
@@ -178,7 +197,7 @@ func TestWriteFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 		content := "test content"
 
 		req := &WriteFileRequest{Path: "new.txt", Content: content}
@@ -211,7 +230,7 @@ func TestWriteFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/existing.txt", []byte("existing"), 0o644)
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{Path: "existing.txt", Content: "new content"}
 		_, err := executeWrite(t, writeTool, req)
@@ -230,7 +249,7 @@ func TestWriteFile(t *testing.T) {
 			largeContent[i] = 'A'
 		}
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{Path: "large.txt", Content: string(largeContent)}
 		_, err := executeWrite(t, writeTool, req)
@@ -243,7 +262,7 @@ func TestWriteFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 		// Content with NUL byte
 		binaryContent := []byte{0x48, 0x65, 0x6C, 0x00, 0x6C, 0x6F}
 
@@ -257,7 +276,7 @@ func TestWriteFile(t *testing.T) {
 	t.Run("verify default permissions 0o644", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		expectedPerm := os.FileMode(0o644)
 
@@ -280,7 +299,7 @@ func TestWriteFile(t *testing.T) {
 	t.Run("nested directory creation", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
 		_, err := executeWrite(t, writeTool, req)
@@ -303,7 +322,7 @@ func TestWriteFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.setOperationError("EnsureDirs", errors.New("failed to mkdir"))
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
 		result, err := executeWrite(t, writeTool, req)
@@ -319,7 +338,7 @@ func TestWriteFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 
-		writeTool := NewWriteFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{Path: "empty.txt", Content: ""}
 		_, err := executeWrite(t, writeTool, req)
@@ -334,5 +353,26 @@ func TestWriteFile(t *testing.T) {
 		if len(data) != 0 {
 			t.Errorf("expected empty content, got %q", string(data))
 		}
+	})
+
+	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
+		fs := newMockFileSystemForWrite(maxFileSize)
+		checksumManager := newMockChecksumManagerForWrite()
+		workspaceRoot := "/workspace"
+		absFile := "/workspace/subdir/new.txt"
+		
+		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		
+		// Agent sends absolute path
+		params, _ := json.Marshal(&WriteFileRequest{Path: absFile, Content: "test"})
+		inv, err := writeTool.Prepare(context.Background(), string(params))
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+		
+		// Display should show "Write new.txt" normalized from subdir/new.txt
+		// Wait, for Write, it showed "Write new.txt"? Let's check existing code.
+		display := inv.Display().(domain.StringDisplay)
+		assert.Equal(t, "Write subdir/new.txt", display.Content)
 	})
 }

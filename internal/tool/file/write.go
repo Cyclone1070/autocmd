@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
+	"github.com/cloudwego/eino/schema"
 )
 
 // fileWriter defines the minimal filesystem operations needed for writing files.
@@ -61,18 +62,23 @@ func (t *WriteFileTool) Name() string {
 	return "write_file"
 }
 
-func (t *WriteFileTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "write_file",
-		Description: "Create a new file with the specified content. File must not already exist.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"path":    {Type: domain.TypeString, Description: "Path to file"},
-				"content": {Type: domain.TypeString, Description: "File content"},
+// Definition returns the tool's schema for the LLM using eino schema.
+func (t *WriteFileTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "write_file",
+		Desc: "Create a new file with the specified content. File must not already exist.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"path": {
+				Type:     schema.String,
+				Desc:     "Path to file",
+				Required: true,
 			},
-			Required: []string{"path", "content"},
-		},
+			"content": {
+				Type:     schema.String,
+				Desc:     "File content",
+				Required: true,
+			},
+		}),
 	}
 }
 
@@ -82,9 +88,9 @@ type WriteFileRequest struct {
 	Content string `json:"content"`
 }
 
-func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &WriteFileRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
@@ -119,13 +125,18 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params json.RawMessage) (do
 		return nil, fmt.Errorf("cannot write binary content to: %s", req.Path)
 	}
 
+	rel, err := t.pathResolver.Rel(abs)
+	if err != nil {
+		rel = filepath.Base(abs)
+	}
+
 	return &writeFileInvocation{
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
 		relPath:         req.Path,
 		content:         []byte(req.Content),
-		display:         domain.NewStringDisplay(fmt.Sprintf("Write %s", filepath.Base(req.Path))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Write %s", filepath.ToSlash(rel))),
 	}, nil
 }
 

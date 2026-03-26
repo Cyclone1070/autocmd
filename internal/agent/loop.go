@@ -2,10 +2,13 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // Loop is the central orchestrator for the execution prompt.
@@ -37,21 +40,25 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		return fmt.Errorf("session is required")
 	}
 
-	session.Messages = append(session.Messages, domain.UserMessage{
+	session.Messages = append(session.Messages, &schema.Message{
+		Role:    schema.User,
 		Content: input,
 	})
 
 	defer func() {
 		if ctx.Err() != nil {
 			msgs := session.Messages
-			lastMsg, ok := msgs[len(msgs)-1].(domain.UserMessage)
-			if !ok || lastMsg.Content != "[Session cancelled by user]" {
-				session.Messages = append(session.Messages, domain.UserMessage{
+			if len(msgs) == 0 {
+				return
+			}
+			lastMsg := msgs[len(msgs)-1]
+			if lastMsg.Role != schema.User || lastMsg.Content != "[Session cancelled by user]" {
+				session.Messages = append(session.Messages, &schema.Message{
+					Role:    schema.User,
 					Content: "[Session cancelled by user]",
 				})
 			}
 		}
-
 	}()
 
 	for range l.maxIterations {
@@ -63,62 +70,54 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			l.events.SendUIUpdate(domain.ThinkingEvent{})
 		}
 
-		stream, err := l.llm.Stream(ctx, session.Messages, l.toolExecutor.declarations())
+		// Bind tools to the model
+		modelWithTools, err := l.llm.Model().WithTools(l.toolExecutor.definitions())
+		if err != nil {
+			return fmt.Errorf("bind tools: %w", err)
+		}
+
+		reader, err := modelWithTools.Stream(ctx, session.Messages)
 		if err != nil {
 			return fmt.Errorf("LLM.Stream: %w", err)
 		}
+		defer reader.Close()
 
-		var msg domain.AssistantMessage
+		var chunks []*schema.Message
+		for {
+			chunk, err := reader.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("reader.Recv: %w", err)
+			}
 
-		for stream.Next() {
-			switch c := stream.Chunk().(type) {
-			case domain.TextChunk:
-				if c.IsThought {
-					msg.Thought += c.Text
-					if c.ThoughtSignature != "" {
-						msg.ThoughtSignature = c.ThoughtSignature
-					}
-				} else {
-					msg.Content += c.Text
-				}
-				if l.events != nil {
+			chunks = append(chunks, chunk)
+
+			// Stream fragments to UI
+			if l.events != nil {
+				if chunk.Content != "" {
 					l.events.SendUIUpdate(domain.TextEvent{
-						Text:      c.Text,
-						IsThought: c.IsThought,
+						Text:      chunk.Content,
+						IsThought: false,
 					})
 				}
-			case domain.ToolCall:
-				// Merge tool call fragments by index
-				found := false
-				for i, existing := range msg.ToolCalls {
-					if existing.Index == c.Index {
-						if c.ID != "" {
-							existing.ID = c.ID
-						}
-						if c.Name != "" {
-							existing.Name = c.Name
-						}
-						existing.Arguments = append(existing.Arguments, c.Arguments...)
-						msg.ToolCalls[i] = existing
-						found = true
-						break
-					}
-				}
-				if !found {
-					msg.ToolCalls = append(msg.ToolCalls, c)
-				}
-				if c.ThoughtSignature != "" {
-					msg.ThoughtSignature = c.ThoughtSignature
+				if chunk.ReasoningContent != "" {
+					l.events.SendUIUpdate(domain.TextEvent{
+						Text:      chunk.ReasoningContent,
+						IsThought: true,
+					})
 				}
 			}
 		}
 
-		// Save the accumulated stream contents so far before checking for errors
-		session.Messages = append(session.Messages, msg)
-
-		if err := stream.Err(); err != nil {
-			return fmt.Errorf("stream.Err: %w", err)
+		msg, err := schema.ConcatMessages(chunks)
+		if err != nil {
+			return fmt.Errorf("ConcatMessages: %w", err)
 		}
+
+		// Save the accumulated stream contents so far
+		session.Messages = append(session.Messages, msg)
 
 		if len(msg.ToolCalls) == 0 {
 			return nil
@@ -126,14 +125,14 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		toolResponses := make(domain.Messages, len(msg.ToolCalls))
+		toolResponses := make([]*schema.Message, len(msg.ToolCalls))
 
 		for i, tc := range msg.ToolCalls {
 			wg.Add(1)
-			go func(idx int, call domain.ToolCall) {
+			go func(idx int, call schema.ToolCall) {
 				defer wg.Done()
 
-				resp, disp, err := l.toolExecutor.execute(ctx, call, l.events)
+				resp, disp, err := l.toolExecutor.execute(ctx, &call, l.events)
 
 				mu.Lock()
 				defer mu.Unlock()
@@ -144,14 +143,11 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 					}
 					session.ToolDisplays[call.ID] = disp
 				}
-				if resp.ToolCallID != "" {
+				if resp != nil {
 					toolResponses[idx] = resp
 				}
 
 				if err != nil {
-					// We've already handled individual tool errors inside toolExecutor.execute
-					// which returns a domain.Message with the error for the LLM.
-					// If there's a serious infrastructure error (context cancelled), we stop.
 					return
 				}
 			}(i, tc)
@@ -159,8 +155,6 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 
 		wg.Wait()
 
-		// Final update to the assistant message that launched the calls
-		session.Messages[len(session.Messages)-1] = msg
 		// Append all responses in the correct order
 		for _, r := range toolResponses {
 			if r != nil {
@@ -169,7 +163,8 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		}
 	}
 
-	session.Messages = append(session.Messages, domain.UserMessage{
+	session.Messages = append(session.Messages, &schema.Message{
+		Role:    schema.User,
 		Content: "[Max iterations reached]",
 	})
 

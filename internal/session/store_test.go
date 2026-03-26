@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // mockDirEntry implements os.DirEntry for testing
@@ -172,9 +173,9 @@ func TestGet_Success(t *testing.T) {
 	infoData, _ := json.MarshalIndent(infoDTO, "", "  ")
 
 	messagesDTO := sessionMessagesDTO{
-		Messages: domain.Messages{
-			domain.UserMessage{Content: "Hello"},
-			domain.AssistantMessage{Content: "Hi there"},
+		Messages: []*schema.Message{
+			{Role: schema.User, Content: "Hello"},
+			{Role: schema.Assistant, Content: "Hi there"},
 		},
 	}
 	messagesData, _ := json.MarshalIndent(messagesDTO, "", "  ")
@@ -295,8 +296,8 @@ func TestSave_Success(t *testing.T) {
 		Name:    "Test Session",
 		Created: time.Now(),
 		Updated: time.Now(),
-		Messages: domain.Messages{
-			domain.UserMessage{Content: "Hello"},
+		Messages: []*schema.Message{
+			{Role: schema.User, Content: "Hello"},
 		},
 	}
 
@@ -640,8 +641,8 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 
 	// Modify
 	sess.Name = "Roundtrip Test"
-	sess.Messages = domain.Messages{
-		domain.UserMessage{Content: "Test message"},
+	sess.Messages = []*schema.Message{
+		{Role: schema.User, Content: "Test message"},
 	}
 
 	// Save
@@ -667,14 +668,8 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 		t.Errorf("Messages count mismatch: got %d, want %d", len(loaded.Messages), len(sess.Messages))
 	}
 	if len(loaded.Messages) > 0 {
-		var content string
-		if m, ok := loaded.Messages[0].(domain.UserMessage); ok {
-			content = m.Content
-		}
-		var sessContent string
-		if m, ok := sess.Messages[0].(domain.UserMessage); ok {
-			sessContent = m.Content
-		}
+		content := loaded.Messages[0].Content
+		sessContent := sess.Messages[0].Content
 		if content != sessContent {
 			t.Errorf("Message content mismatch: got %q, want %q", content, sessContent)
 		}
@@ -794,7 +789,7 @@ func TestFindBlank(t *testing.T) {
 	}
 
 	// 3. Add a message - should no longer be blank
-	sess.Messages = append(sess.Messages, domain.UserMessage{Content: "hi"})
+	sess.Messages = append(sess.Messages, &schema.Message{Role: schema.User, Content: "hi"})
 	_ = store.Save(sess)
 
 	blank, err = store.FindBlank()
@@ -806,7 +801,7 @@ func TestFindBlank(t *testing.T) {
 	}
 
 	// 4. Add a name - should no longer be blank
-	sess.Messages = domain.Messages{}
+	sess.Messages = []*schema.Message{}
 	sess.Name = "Named Session"
 	_ = store.Save(sess)
 

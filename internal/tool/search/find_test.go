@@ -65,7 +65,7 @@ func executeFind(ctx context.Context, t *FindFileTool, req *FindFileRequest) (st
 		return "", err
 	}
 
-	invocation, err := t.Prepare(ctx, params)
+	invocation, err := t.Prepare(ctx, string(params))
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +254,7 @@ func TestFindFile_PrepareValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := &FindFileRequest{Pattern: tt.pattern, Path: tt.path}
 			params, _ := json.Marshal(req)
-			_, err := findTool.Prepare(context.Background(), params)
+			_, err := findTool.Prepare(context.Background(), string(params))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Prepare() error = %v, wantErr %v", err, tt.wantErr)
 			}

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -11,22 +10,25 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 )
+
+// ptr is defined in loop_test.go in the same package.
 
 // --- Mocks ---
 
 type mockTool struct {
 	name        string
 	description string
-	prepare     func(ctx context.Context, params json.RawMessage) (domain.Invocation, error)
+	prepare     func(ctx context.Context, params string) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
-func (mt *mockTool) Declaration() domain.Declaration {
-	return domain.Declaration{Name: mt.name, Description: mt.description}
+func (mt *mockTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{Name: mt.name, Desc: mt.description}
 }
-func (mt *mockTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (mt *mockTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -68,21 +70,24 @@ func newMockToolRegistry(tools []domain.Tool) *mockToolRegistry {
 	return m
 }
 
-func (m *mockToolRegistry) Declarations() []domain.Declaration {
-	var decls []domain.Declaration
+func (m *mockToolRegistry) Definitions() []*schema.ToolInfo {
+	var defs []*schema.ToolInfo
 	for _, t := range m.tools {
-		decls = append(decls, t.Declaration())
+		defs = append(defs, t.Definition())
 	}
-	sort.Slice(decls, func(i, j int) bool {
-		return decls[i].Name < decls[j].Name
+	sort.Slice(defs, func(i, j int) bool {
+		return defs[i].Name < defs[j].Name
 	})
-	return decls
+	return defs
 }
 
 func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
 	t, ok := m.tools[name]
 	return t, ok
 }
+
+// Ensure mockToolRegistry implements local toolRegistry
+var _ toolRegistry = (*mockToolRegistry)(nil)
 
 // --- Tests ---
 
@@ -93,9 +98,9 @@ func TestRegister_DuplicateName(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt1, mt2})
 	executor := newToolExecutor(registry)
 
-	decls := executor.declarations()
-	assert.Len(t, decls, 1)
-	assert.Equal(t, "v2", decls[0].Description)
+	defs := executor.definitions()
+	assert.Len(t, defs, 1)
+	assert.Equal(t, "v2", defs[0].Desc)
 }
 
 func TestDeclarations_SortedByName(t *testing.T) {
@@ -106,19 +111,21 @@ func TestDeclarations_SortedByName(t *testing.T) {
 	})
 	executor := newToolExecutor(registry)
 
-	decls := executor.declarations()
-	assert.Len(t, decls, 3)
-	assert.Equal(t, "a", decls[0].Name)
-	assert.Equal(t, "m", decls[1].Name)
-	assert.Equal(t, "z", decls[2].Name)
+	defs := executor.definitions()
+	assert.Len(t, defs, 3)
+	assert.Equal(t, "a", defs[0].Name)
+	assert.Equal(t, "m", defs[1].Name)
+	assert.Equal(t, "z", defs[2].Name)
 }
 
 func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{})
 	executor := newToolExecutor(registry)
-	res, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-123",
-		Name: "unknown",
+	res, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-123",
+		Function: schema.FunctionCall{
+			Name: "unknown",
+		},
 	}, nil)
 
 	assert.NoError(t, err)
@@ -127,10 +134,10 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 }
 
 func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
-	var capturedParams []byte
+	var capturedParams string
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			capturedParams = params
 			return &mockInvocation{content: "ok"}, nil
 		},
@@ -138,39 +145,43 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	_, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:        "tc-456",
-		Name:      "test",
-		Arguments: json.RawMessage(`{"value": "hello"}`),
+	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-456",
+		Function: schema.FunctionCall{
+			Name:      "test",
+			Arguments: `{"value": "hello"}`,
+		},
 	}, nil)
 
 	assert.NoError(t, err)
-	assert.Equal(t, `{"value": "hello"}`, string(capturedParams))
+	assert.Equal(t, `{"value": "hello"}`, capturedParams)
 }
 
 func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	res, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-789",
-		Name: "test",
+	res, _, _ := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-789",
+		Function: schema.FunctionCall{
+			Name: "test",
+		},
 	}, nil)
 
-	assert.NoError(t, err)
-	assert.Contains(t, res.Content, "Error: failed to prepare tool \"test\": bad params")
+	assert.Equal(t, schema.Tool, res.Role)
+	assert.Contains(t, res.Content, "failed to prepare tool \"test\": bad params")
 }
 
 func TestExecute_EmitsToolEvents(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "result",
 				display: domain.NewStringDisplay("display output"),
@@ -181,9 +192,11 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	executor := newToolExecutor(registry)
 
 	sender := newMockEventSender(10)
-	_, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-1",
-		Name: "test",
+	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-1",
+		Function: schema.FunctionCall{
+			Name: "test",
+		},
 	}, sender)
 
 	assert.NoError(t, err)
@@ -205,7 +218,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	mt := &mockTool{
 		name: "shell",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Command finished",
 				display: domain.NewShellDisplay("ls", "ls", strings.NewReader("file1\nfile2\n"), nil),
@@ -216,9 +229,11 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	executor := newToolExecutor(registry)
 
 	sender := newMockEventSender(10)
-	_, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-shell",
-		Name: "shell",
+	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-shell",
+		Function: schema.FunctionCall{
+			Name: "shell",
+		},
 	}, sender)
 
 	assert.NoError(t, err)
@@ -247,7 +262,7 @@ loop:
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	mt := &mockTool{
 		name: "fail",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Detailed error in content",
 				err:     fmt.Errorf("infra failure"),
@@ -258,9 +273,11 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	executor := newToolExecutor(registry)
 
 	sender := newMockEventSender(10)
-	res, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-fail",
-		Name: "fail",
+	res, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-fail",
+		Function: schema.FunctionCall{
+			Name: "fail",
+		},
 	}, sender)
 
 	assert.NoError(t, err)
@@ -279,17 +296,14 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 
 func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	t.Parallel()
-	// Mock an invocation that acts like a shell tool:
-	// It has an output stream and it returns an error in Execute.
 	output := io.NopCloser(strings.NewReader("some output"))
 
 	mt := &mockTool{
 		name: "shell",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Header", "cmd", output, nil),
 				execute: func(ctx context.Context) (string, error) {
-					// Simulate execution failure
 					return "error content", fmt.Errorf("execution failed")
 				},
 			}, nil
@@ -300,16 +314,16 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	executor := newToolExecutor(registry)
 	sender := newMockEventSender(10)
 
-	_, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "call-1",
-		Name: "shell",
+	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "call-1",
+		Function: schema.FunctionCall{
+			Name: "shell",
+		},
 	}, sender)
 
 	assert.NoError(t, err)
 
-	// Collect events sent to the UI
 	var endEvents []domain.ToolEndEvent
-	// Drain the sender channel to see what we received
 loop:
 	for {
 		select {
@@ -322,9 +336,6 @@ loop:
 		}
 	}
 
-	// REGRESSION SPECIFICATION:
-	// 1. Should receive EXACTLY one completion event.
-	// 2. The event MUST contain the true error status from Execute().
 	assert.Equal(t, 1, len(endEvents), "Must receive exactly ONE completion event (avoid race override). Got: %v", endEvents)
 	assert.Equal(t, "Execution failed", endEvents[0].Error, "Completion event must retain the execution error status")
 }
@@ -336,10 +347,12 @@ func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	results := make(chan bool, 10)
 	for i := range 10 {
 		go func(id int) {
-			_, _, err := executor.execute(context.Background(), domain.ToolCall{
-				ID:        fmt.Sprintf("tc-%d", id),
-				Name:      "tool",
-				Arguments: json.RawMessage(`{}`),
+			_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+				ID: fmt.Sprintf("tc-%d", id),
+				Function: schema.FunctionCall{
+					Name:      "tool",
+					Arguments: "{}",
+				},
 			}, nil)
 			results <- (err == nil)
 		}(i)
@@ -358,29 +371,26 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
-	res, _, err := executor.execute(ctx, domain.ToolCall{
-		ID:   "tc-cancel",
-		Name: "test",
+	res, _, err := executor.execute(ctx, &schema.ToolCall{
+		ID: "tc-cancel",
+		Function: schema.FunctionCall{
+			Name: "test",
+		},
 	}, nil)
 
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, domain.RoleTool, res.Role())
+	assert.Equal(t, schema.Tool, res.Role)
 	assert.Equal(t, "tc-cancel", res.ToolCallID)
-	assert.True(t, res.ToolError)
+	assert.True(t, res.Extra["tool_error"].(bool))
 	assert.Equal(t, "execution cancelled", res.Content)
 }
 
 func TestToolExecutor_Throughput_Batching(t *testing.T) {
-	// Root cause: The tool executor used to read in 4KB chunks, which fragmented
-	// large bursts of output into many small UI events.
-	// This test verifies that we can now batch larger bursts (e.g. 8KB) into a single event.
-
-	// Prepare 8KB of data
 	data := strings.Repeat("A", 8192)
 
 	mt := &mockTool{
 		name: "throughput-test",
-		prepare: func(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "done",
 				display: domain.NewShellDisplay("test", "test", strings.NewReader(data), nil),
@@ -393,9 +403,11 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 
 	sender := newMockEventSender(100)
 
-	_, _, err := executor.execute(context.Background(), domain.ToolCall{
-		ID:   "tc-1",
-		Name: "throughput-test",
+	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-1",
+		Function: schema.FunctionCall{
+			Name: "throughput-test",
+		},
 	}, sender)
 
 	assert.NoError(t, err)

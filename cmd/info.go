@@ -40,10 +40,11 @@ func runInfo(ctx context.Context, deps *Deps) error {
 	}
 
 	done := workflow.RunInfo(ctx, &workflow.InfoDeps{
-		Bus:      bus,
-		Registry: deps.LLMRegistry,
-		State:    deps.State,
-		Store:    store,
+		Bus:              bus,
+		ProviderRegistry: deps.ProviderRegistry,
+		LLMRegistry:      deps.LLMRegistry,
+		State:            deps.State,
+		Store:            store,
 	})
 
 	themeCfg := ui.ThemeConfig{

@@ -1,4 +1,4 @@
-package llm
+package provider
 
 import (
 	"context"
@@ -14,15 +14,15 @@ type CredentialStore interface {
 	GetWithFallback(p domain.Provider) (*domain.Credential, error)
 }
 
-// Registry resolves LLM IDs to LLM instances using provider-specific credentials.
-type Registry struct {
+// ProviderRegistry manages the set of available LLM providers.
+type ProviderRegistry struct {
 	providers   map[string]domain.Provider
 	authManager CredentialStore
 }
 
-// NewRegistry creates a Registry from providers and an optional auth manager.
-func NewRegistry(authManager CredentialStore, providers ...domain.Provider) *Registry {
-	r := &Registry{
+// NewProviderRegistry creates a ProviderRegistry from providers and an optional auth manager.
+func NewProviderRegistry(authManager CredentialStore, providers ...domain.Provider) *ProviderRegistry {
+	r := &ProviderRegistry{
 		providers:   make(map[string]domain.Provider),
 		authManager: authManager,
 	}
@@ -34,14 +34,14 @@ func NewRegistry(authManager CredentialStore, providers ...domain.Provider) *Reg
 	return r
 }
 
-// GetProvider returns a provider by its ID.
-func (r *Registry) GetProvider(id string) (domain.Provider, bool) {
+// Get returns a provider by its ID.
+func (r *ProviderRegistry) Get(id string) (domain.Provider, bool) {
 	p, ok := r.providers[id]
 	return p, ok
 }
 
-// ListProviders returns information about all registered providers, including resolved credentials.
-func (r *Registry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
+// List returns information about all registered providers, including resolved credentials.
+func (r *ProviderRegistry) List(ctx context.Context) ([]domain.ProviderInfo, error) {
 	var infos []domain.ProviderInfo
 	for _, id := range r.sortedProviderIDs() {
 		p := r.providers[id]
@@ -58,9 +58,31 @@ func (r *Registry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, er
 	return infos, nil
 }
 
-// Get resolves "google/gemini-2.5-flash" to an LLM.
-// It tries to resolve it using the internal auth manager.
-func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
+func (r *ProviderRegistry) sortedProviderIDs() []string {
+	ids := make([]string, 0, len(r.providers))
+	for id := range r.providers {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// LLMRegistry orchestrates model resolution using a ProviderRegistry and credentials.
+type LLMRegistry struct {
+	providers   *ProviderRegistry
+	authManager CredentialStore
+}
+
+// NewLLMRegistry creates an LLMRegistry.
+func NewLLMRegistry(authManager CredentialStore, providers *ProviderRegistry) *LLMRegistry {
+	return &LLMRegistry{
+		providers:   providers,
+		authManager: authManager,
+	}
+}
+
+// Get resolves "google/gemini-2.5-flash" to an LLM instance.
+func (r *LLMRegistry) Get(ctx context.Context, id string) (domain.LLM, error) {
 	parts := strings.SplitN(id, domain.ModelIDSeparator, 2)
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid LLM ID format: %s (expected provider/model)", id)
@@ -69,7 +91,7 @@ func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 	pID := parts[0]
 	mID := parts[1]
 
-	p, ok := r.providers[pID]
+	p, ok := r.providers.Get(pID)
 	if !ok {
 		return nil, fmt.Errorf("unknown provider: %s", pID)
 	}
@@ -88,15 +110,27 @@ func (r *Registry) Get(ctx context.Context, id string) (domain.LLM, error) {
 		return nil, fmt.Errorf("no valid credential found for %s", pID)
 	}
 
-	return p.GetLLM(ctx, cred, mID)
+	// Find the model info from the provider's list
+	var modelInfo *domain.LLMInfo
+	for _, m := range p.List() {
+		if m.ID == id {
+			modelInfo = &m
+			break
+		}
+	}
+
+	if modelInfo == nil {
+		return nil, fmt.Errorf("model %s not found in provider %s", mID, pID)
+	}
+
+	return p.GetLLM(ctx, cred, *modelInfo)
 }
 
 // List returns all LLMs from all providers.
-// It tries to resolve credentials for all providers using the internal auth manager.
-func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
+func (r *LLMRegistry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 	var all []domain.LLMInfo
-	for _, id := range r.sortedProviderIDs() {
-		p := r.providers[id]
+	for _, id := range r.providers.sortedProviderIDs() {
+		p, _ := r.providers.Get(id)
 		var cred *domain.Credential
 		if r.authManager != nil {
 			resolved, _ := r.authManager.GetWithFallback(p)
@@ -107,12 +141,9 @@ func (r *Registry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 			continue
 		}
 
-		llms := p.ListLLMs()
+		llms := p.List()
 		for _, m := range llms {
-			all = append(all, domain.LLMInfo{
-				ID:          id + domain.ModelIDSeparator + m.ID,
-				DisplayName: m.DisplayName,
-			})
+			all = append(all, m)
 		}
 	}
 	return all, nil
@@ -123,13 +154,4 @@ func hasValidCredential(cred *domain.Credential) bool {
 		return false
 	}
 	return cred.APIKey != "" || cred.OAuthToken != ""
-}
-
-func (r *Registry) sortedProviderIDs() []string {
-	ids := make([]string, 0, len(r.providers))
-	for id := range r.providers {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	return ids
 }

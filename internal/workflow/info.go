@@ -7,8 +7,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+type infoProviderRegistry interface {
+	List(ctx context.Context) ([]domain.ProviderInfo, error)
+}
+
 type infoLLMRegistry interface {
-	ListProviders(ctx context.Context) ([]domain.ProviderInfo, error)
 	Get(ctx context.Context, id string) (domain.LLM, error)
 }
 
@@ -27,16 +30,18 @@ type infoBus interface {
 
 // InfoWorkflow gathers information about the current configuration and state.
 type InfoWorkflow struct {
-	registry infoLLMRegistry
-	state    infoState
-	store    infoSessionStore
+	providerRegistry infoProviderRegistry
+	llmRegistry      infoLLMRegistry
+	state            infoState
+	store            infoSessionStore
 }
 
 type InfoDeps struct {
-	Bus      infoBus
-	Registry infoLLMRegistry
-	State    infoState
-	Store    infoSessionStore
+	Bus              infoBus
+	ProviderRegistry infoProviderRegistry
+	LLMRegistry      infoLLMRegistry
+	State            infoState
+	Store            infoSessionStore
 }
 
 // RunInfo executes the info gathering process asynchronously.
@@ -44,7 +49,7 @@ func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		wf := NewInfoWorkflow(deps.Registry, deps.State, deps.Store)
+		wf := NewInfoWorkflow(deps.ProviderRegistry, deps.LLMRegistry, deps.State, deps.Store)
 		res, err := wf.gather(ctx)
 		if err != nil {
 			done <- err
@@ -58,11 +63,12 @@ func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
 }
 
 // NewInfoWorkflow creates a new InfoWorkflow.
-func NewInfoWorkflow(registry infoLLMRegistry, state infoState, store infoSessionStore) *InfoWorkflow {
+func NewInfoWorkflow(pRegistry infoProviderRegistry, lRegistry infoLLMRegistry, state infoState, store infoSessionStore) *InfoWorkflow {
 	return &InfoWorkflow{
-		registry: registry,
-		state:    state,
-		store:    store,
+		providerRegistry: pRegistry,
+		llmRegistry:      lRegistry,
+		state:            state,
+		store:            store,
 	}
 }
 
@@ -71,7 +77,7 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 	res := domain.InfoEvent{}
 
 	// 1. Authorized Providers
-	providers, err := w.registry.ListProviders(ctx)
+	providers, err := w.providerRegistry.List(ctx)
 	if err != nil {
 		return domain.InfoEvent{}, fmt.Errorf("list providers: %w", err)
 	}
@@ -86,15 +92,15 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 
 	// 3. Session Info
 	sessionID := w.state.CurrentSessionID()
-	var sessionMessages domain.Messages
+	var sess *domain.Session
 	if sessionID != "" {
-		sess, err := w.store.Get(sessionID)
+		var err error
+		sess, err = w.store.Get(sessionID)
 		if err == nil {
 			res.SessionDisplay = sess.Name
 			if res.SessionDisplay == "" {
 				res.SessionDisplay = sess.ID
 			}
-			sessionMessages = sess.Messages
 		} else {
 			res.SessionDisplay = fmt.Sprintf("%s (not found)", sessionID)
 		}
@@ -104,15 +110,12 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 
 	// 4. LLM Specific Info (Context Window & Tokens)
 	if modelID != "" {
-		llm, err := w.registry.Get(ctx, modelID)
+		llm, err := w.llmRegistry.Get(ctx, modelID)
 		if err == nil {
 			res.Model = llm.DisplayName()
 			res.ContextWindow = llm.ContextWindow()
-			if len(sessionMessages) > 0 {
-				tokens, err := llm.ComputeTokens(ctx, sessionMessages)
-				if err == nil {
-					res.SessionTokens = tokens
-				}
+			if sess != nil {
+				res.SessionTokens = sess.TotalTokens()
 			}
 		} else {
 			// Fallback if not found in registry

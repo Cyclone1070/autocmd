@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	udiff "github.com/aymanbagabas/go-udiff"
+	"github.com/cloudwego/eino/schema"
 )
 
 // fileEditor defines the minimal filesystem operations needed for editing files.
@@ -76,38 +77,53 @@ func (t *EditFileTool) Name() string {
 	return "edit_file"
 }
 
-func (t *EditFileTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "edit_file",
-		Description: "Edit an existing file by replacing text. Supports multiple operations.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"path":    {Type: domain.TypeString, Description: "Path to file"},
-				"comment": {Type: domain.TypeString, Description: "A brief comment describing what this edit accomplishes (e.g. 'Adding auth middleware')"},
-				"operations": {
-					Type:        domain.TypeArray,
-					Description: "List of edit operations",
-					Items: &domain.Schema{
-						Type: domain.TypeObject,
-						Properties: map[string]*domain.Schema{
-							"before":                {Type: domain.TypeString, Description: "Text to find"},
-							"after":                 {Type: domain.TypeString, Description: "Replacement text"},
-							"expected_replacements": {Type: domain.TypeInteger, Description: "Expected match count"},
-						},
-						Required: []string{"before", "after"},
-					},
-				},
+// Definition returns the tool's schema for the LLM using eino schema.
+func (t *EditFileTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "edit_file",
+		Desc: "Edit an existing file by replacing text. Supports multiple operations.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"path": {
+				Type:     schema.String,
+				Desc:     "Path to file",
+				Required: true,
 			},
-			Required: []string{"path", "comment", "operations"},
-		},
+			"comment": {
+				Type:     schema.String,
+				Desc:     "A brief comment describing what this edit accomplishes (e.g. 'Adding auth middleware')",
+				Required: true,
+			},
+			"operations": {
+				Type: schema.Array,
+				Desc: "List of edit operations",
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.Object,
+					SubParams: map[string]*schema.ParameterInfo{
+						"before": {
+							Type: schema.String,
+							Desc: "Text to find",
+						},
+						"after": {
+							Type: schema.String,
+							Desc: "Replacement text",
+						},
+						"expected_replacements": {
+							Type: schema.Integer,
+							Desc: "Expected match count",
+						},
+					},
+					Required: true,
+				},
+				Required: true,
+			},
+		}),
 	}
 }
 
 // Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
-func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *EditFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &EditFileRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
@@ -208,6 +224,11 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 
 	diff, added, removed := computeUnifiedDiff(oldContent, content)
 
+	rel, err := t.pathResolver.Rel(abs)
+	if err != nil {
+		rel = filepath.Base(abs)
+	}
+
 	return &editFileInvocation{
 		fileOps:          t.fileOps,
 		checksumManager:  t.checksumManager,
@@ -218,7 +239,7 @@ func (t *EditFileTool) Prepare(ctx context.Context, params json.RawMessage) (dom
 		expectedChecksum: currentChecksum,
 		display: domain.NewDiffDisplay(
 			req.Comment,
-			fmt.Sprintf("Edit %s", filepath.Base(abs)),
+			fmt.Sprintf("Edit %s", filepath.ToSlash(rel)),
 			added,
 			removed,
 			diff,

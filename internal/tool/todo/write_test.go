@@ -14,7 +14,7 @@ import (
 func executeWrite(t *testing.T, tool *WriteTodosTool, req *WriteTodosRequest) (string, error) {
 	t.Helper()
 	params, _ := json.Marshal(req)
-	inv, err := tool.Prepare(context.Background(), params)
+	inv, err := tool.Prepare(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}
@@ -28,13 +28,12 @@ func TestWriteTodosTool_Name(t *testing.T) {
 	assert.Equal(t, "todowrite", tool.Name())
 }
 
-func TestWriteTodosTool_Declaration(t *testing.T) {
+func TestWriteTodosTool_Definition(t *testing.T) {
 	store := &mockTodoStore{}
 	tool := NewWriteTodosTool(store)
-
-	decl := tool.Declaration()
-	assert.Equal(t, "todowrite", decl.Name)
-	assert.NotEmpty(t, decl.Description)
+	info := tool.Definition()
+	assert.Equal(t, "todowrite", info.Name)
+	assert.NotEmpty(t, info.Desc)
 }
 
 func TestWriteTodosTool_Success(t *testing.T) {
@@ -82,7 +81,7 @@ func TestWriteTodosTool_InvalidStatus(t *testing.T) {
 	}
 
 	params, _ := json.Marshal(req)
-	_, err := tool.Prepare(context.Background(), params)
+	_, err := tool.Prepare(context.Background(), string(params))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid status")
 }
@@ -98,7 +97,7 @@ func TestWriteTodosTool_EmptyDescription(t *testing.T) {
 	}
 
 	params, _ := json.Marshal(req)
-	_, err := tool.Prepare(context.Background(), params)
+	_, err := tool.Prepare(context.Background(), string(params))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "description is required")
 }
@@ -152,7 +151,7 @@ func TestWriteTodosTool_ContextCancelled(t *testing.T) {
 	}
 
 	params, _ := json.Marshal(req)
-	inv, err := tool.Prepare(context.Background(), params)
+	inv, err := tool.Prepare(context.Background(), string(params))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

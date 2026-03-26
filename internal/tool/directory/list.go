@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -59,26 +60,25 @@ func (t *ListDirTool) Name() string {
 	return "list_directory"
 }
 
-// Declaration returns the JSON schema for the tool.
-func (t *ListDirTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        t.Name(),
-		Description: "Lists the contents of a directory. Returns the output as a tree structure. Truncates results if there are too many items.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"path": {
-					Type:        domain.TypeString,
-					Description: "Path to the directory.",
-				},
-				"ignore": {
-					Type:        domain.TypeArray,
-					Items:       &domain.Schema{Type: domain.TypeString},
-					Description: "Optional glob patterns to ignore (e.g. '*.test.ts').",
-				},
+// Definition returns the JSON schema for the tool using eino schema.
+func (t *ListDirTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: t.Name(),
+		Desc: "Lists the contents of a directory. Returns the output as a tree structure. Truncates results if there are too many items.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"path": {
+				Type:     schema.String,
+				Desc:     "Path to the directory.",
+				Required: true,
 			},
-			Required: []string{"path"},
-		},
+			"ignore": {
+				Type: schema.Array,
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.String,
+				},
+				Desc: "Optional glob patterns to ignore (e.g. '*.test.ts').",
+			},
+		}),
 	}
 }
 
@@ -100,9 +100,9 @@ type listDirInvocation struct {
 }
 
 // Prepare validates path existence and returns an Invocation.
-func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	var req ListDirRequest
-	if err := json.Unmarshal(params, &req); err != nil {
+	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
@@ -131,13 +131,18 @@ func (t *ListDirTool) Prepare(ctx context.Context, params json.RawMessage) (doma
 		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
+	rel, err := t.pathResolver.Rel(absPath)
+	if err != nil {
+		rel = filepath.Base(absPath)
+	}
+
 	return &listDirInvocation{
 		fs:             t.fs,
 		pathResolver:   t.pathResolver,
 		ignoreMatcher:  t.ignoreMatcher,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
-		display:        domain.NewStringDisplay(fmt.Sprintf("Listing %s", filepath.Base(absPath))),
+		display:        domain.NewStringDisplay(fmt.Sprintf("Listing %s", filepath.ToSlash(rel))),
 		maxResults:     t.maxResults,
 	}, nil
 }

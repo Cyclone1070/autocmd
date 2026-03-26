@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 type toolExecutor struct {
@@ -20,47 +21,52 @@ func newToolExecutor(registry toolRegistry) *toolExecutor {
 	}
 }
 
-func (e *toolExecutor) declarations() []domain.Declaration {
-	return e.registry.Declarations()
+func (e *toolExecutor) definitions() []*schema.ToolInfo {
+	return e.registry.Definitions()
 }
 
-func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events eventSender) (domain.ToolMessage, domain.ToolDisplay, error) {
-	t, ok := e.registry.Get(tc.Name)
+func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {
+	t, ok := e.registry.Get(tc.Function.Name)
 	if !ok {
-		decls := e.declarations()
-		declsJSON, jerr := json.MarshalIndent(decls, "", "  ")
+		defs := e.definitions()
+		defsJSON, jerr := json.MarshalIndent(defs, "", "  ")
 		if jerr != nil {
-			slog.Warn("Failed to marshal tool declarations for LLM prompt", "err", jerr)
+			slog.Warn("Failed to marshal tool definitions for LLM prompt", "err", jerr)
 		}
-		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Name, declsJSON)
+		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-		return domain.ToolMessage{
+		return &schema.Message{
+			Role:       schema.Tool,
 			ToolCallID: tc.ID,
-			ToolName:   tc.Name,
+			ToolName:   tc.Function.Name,
 			Content:    errMsg,
+			Extra:      map[string]any{"tool_error": true},
 		}, nil, nil
 	}
 
-	inv, err := t.Prepare(ctx, tc.Arguments)
+	inv, err := t.Prepare(ctx, tc.Function.Arguments)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.ToolMessage{
+			return &schema.Message{
+				Role:       schema.Tool,
 				ToolCallID: tc.ID,
-				ToolName:   tc.Name,
+				ToolName:   tc.Function.Name,
 				Content:    "execution cancelled",
-				ToolError:  true,
+				Extra:      map[string]any{"tool_error": true},
 			}, nil, ctx.Err()
 		}
-		declJSON, jerr := json.MarshalIndent(t.Declaration(), "", "  ")
+		defJSON, jerr := json.MarshalIndent(t.Definition(), "", "  ")
 		if jerr != nil {
-			slog.Warn("Failed to marshal tool declaration", "tool", t.Name(), "err", jerr)
+			slog.Warn("Failed to marshal tool definition", "tool", t.Name(), "err", jerr)
 		}
-		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Name, err, declJSON)
+		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
 
-		return domain.ToolMessage{
+		return &schema.Message{
+			Role:       schema.Tool,
 			ToolCallID: tc.ID,
-			ToolName:   tc.Name,
+			ToolName:   tc.Function.Name,
 			Content:    errMsg,
+			Extra:      map[string]any{"tool_error": true},
 		}, nil, nil
 	}
 
@@ -69,7 +75,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   tc.ID,
-			ToolName: tc.Name,
+			ToolName: tc.Function.Name,
 			Display:  display,
 		})
 	}
@@ -102,11 +108,12 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 	llmContent, err := inv.Execute(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return domain.ToolMessage{
+			return &schema.Message{
+				Role:       schema.Tool,
 				ToolCallID: tc.ID,
-				ToolName:   tc.Name,
+				ToolName:   tc.Function.Name,
 				Content:    "execution cancelled",
-				ToolError:  true,
+				Extra:      map[string]any{"tool_error": true},
 			}, display, err
 		}
 
@@ -117,11 +124,12 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 			})
 		}
 
-		return domain.ToolMessage{
+		return &schema.Message{
+			Role:       schema.Tool,
 			ToolCallID: tc.ID,
-			ToolName:   tc.Name,
+			ToolName:   tc.Function.Name,
 			Content:    llmContent,
-			ToolError:  true,
+			Extra:      map[string]any{"tool_error": true},
 		}, display, nil
 	}
 
@@ -135,9 +143,10 @@ func (e *toolExecutor) execute(ctx context.Context, tc domain.ToolCall, events e
 		})
 	}
 
-	return domain.ToolMessage{
+	return &schema.Message{
+		Role:       schema.Tool,
 		ToolCallID: tc.ID,
-		ToolName:   tc.Name,
+		ToolName:   tc.Function.Name,
 		Content:    llmContent,
 	}, display, nil
 }

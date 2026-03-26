@@ -8,6 +8,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -50,14 +52,18 @@ func (m *mockLLM) DisplayName() string {
 	return args.String(0)
 }
 
-func (m *mockLLM) Stream(ctx context.Context, messages domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
-	args := m.Called(ctx, messages, tools)
-	return args.Get(0).(domain.Stream), args.Error(1)
-}
 
-func (m *mockLLM) ComputeTokens(ctx context.Context, messages domain.Messages) (int, error) {
+func (m *mockLLM) ComputeTokens(ctx context.Context, messages []*schema.Message) (int, error) {
 	args := m.Called(ctx, messages)
 	return args.Int(0), args.Error(1)
+}
+
+func (m *mockLLM) Model() model.ToolCallingChatModel {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Get(0).(model.ToolCallingChatModel)
 }
 
 func (m *mockLLM) ContextWindow() int {
@@ -69,9 +75,9 @@ type mockToolRegistry struct {
 	mock.Mock
 }
 
-func (m *mockToolRegistry) Declarations() []domain.Declaration {
+func (m *mockToolRegistry) Definitions() []*schema.ToolInfo {
 	args := m.Called()
-	return args.Get(0).([]domain.Declaration)
+	return args.Get(0).([]*schema.ToolInfo)
 }
 
 func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
@@ -171,30 +177,10 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	store.AssertNotCalled(t, "GenerateName", mock.Anything, mock.Anything, mock.Anything)
 }
 
-type mockStream struct {
-	mock.Mock
-}
 
-func newMockStream() *mockStream {
-	m := &mockStream{}
-	m.On("Next").Return(false)
-	m.On("Err").Return(nil)
-	return m
-}
 
-func (m *mockStream) Next() bool {
-	args := m.Called()
-	return args.Bool(0)
-}
 
-func (m *mockStream) Chunk() domain.StreamChunk {
-	return nil
-}
 
-func (m *mockStream) Err() error {
-	args := m.Called()
-	return args.Error(0)
-}
 
 type trackableBus struct {
 	*eventbus.EventBus
@@ -279,7 +265,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 			s := args.Get(1).(*domain.Session)
 			// Append some messages to simulate work and race
 			for i := 0; i < 10; i++ {
-				s.Messages = append(s.Messages, domain.UserMessage{Content: "msg"})
+				s.Messages = append(s.Messages, &schema.Message{Role: schema.User, Content: "msg"})
 				if i == 5 {
 					close(agentStartedAppending) // Signal that we've started appending
 				}

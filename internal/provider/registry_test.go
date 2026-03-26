@@ -1,4 +1,4 @@
-package llm
+package provider
 
 import (
 	"context"
@@ -14,10 +14,10 @@ type mockProvider struct {
 
 func (m *mockProvider) ID() string                                     { return m.id }
 func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod      { return nil }
-func (m *mockProvider) ListLLMs() []domain.LLMInfo {
-	return []domain.LLMInfo{{ID: "model", DisplayName: "Model"}}
+func (m *mockProvider) List() []domain.LLMInfo {
+	return []domain.LLMInfo{{ID: m.id + "/" + "model", DisplayName: "Model"}}
 }
-func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, modelID string) (domain.LLM, error) {
+func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }
 
@@ -26,30 +26,34 @@ type mockStore struct {
 }
 
 func (s *mockStore) GetWithFallback(p domain.Provider) (*domain.Credential, error) {
+	if s.creds == nil {
+		return nil, nil
+	}
 	return s.creds[p.ID()], nil
 }
 
 func TestRegistry(t *testing.T) {
 	p := &mockProvider{id: "mock"}
 	store := &mockStore{creds: make(map[string]*domain.Credential)}
-	r := NewRegistry(store, p)
+	pr := NewProviderRegistry(store, p)
+	r := NewLLMRegistry(store, pr)
 
-	t.Run("ListProviders", func(t *testing.T) {
-		providers, err := r.ListProviders(context.Background())
+	t.Run("List", func(t *testing.T) {
+		providers, err := pr.List(context.Background())
 		assert.NoError(t, err)
 		assert.Len(t, providers, 1)
 		assert.Equal(t, "mock", providers[0].ID)
 	})
 
-	t.Run("ListProviders returns deterministic sorted provider order", func(t *testing.T) {
+	t.Run("List returns deterministic sorted provider order", func(t *testing.T) {
 		pA := &mockProvider{id: "a-provider"}
 		pB := &mockProvider{id: "b-provider"}
 		pC := &mockProvider{id: "c-provider"}
-		rSorted := NewRegistry(store, pC, pA, pB)
+		prSorted := NewProviderRegistry(store, pC, pA, pB)
 
 		// Run multiple times to ensure order is stable and sorted.
 		for i := 0; i < 20; i++ {
-			providers, err := rSorted.ListProviders(context.Background())
+			providers, err := prSorted.List(context.Background())
 			assert.NoError(t, err)
 			assert.Len(t, providers, 3)
 			assert.Equal(t, "a-provider", providers[0].ID)
@@ -58,16 +62,11 @@ func TestRegistry(t *testing.T) {
 		}
 	})
 
-	t.Run("GetProvider", func(t *testing.T) {
-		got, ok := r.GetProvider("mock")
+	t.Run("Get", func(t *testing.T) {
+		got, ok := pr.Get("mock")
 		if !ok || got.ID() != "mock" {
 			t.Errorf("expected provider 'mock', got %v", got)
 		}
-	})
-
-	t.Run("Get with Direct Credential - REMOVED", func(t *testing.T) {
-		// This test is no longer valid as we removed the explicit cred argument
-		// We'll rely on the auto-resolution tests
 	})
 
 	t.Run("Get with Auto-Resolution", func(t *testing.T) {
@@ -90,9 +89,5 @@ func TestRegistry(t *testing.T) {
 		llms, err := r.List(context.Background())
 		assert.NoError(t, err)
 		assert.NotEmpty(t, llms)
-	})
-
-	t.Run("ListWithCreds - REMOVED", func(t *testing.T) {
-		// This test is no longer valid as we removed the explicit creds argument
 	})
 }

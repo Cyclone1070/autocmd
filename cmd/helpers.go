@@ -3,10 +3,9 @@ package cmd
 import (
 	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/llm"
-	"github.com/Cyclone1070/iav/internal/llm/google"
-	"github.com/Cyclone1070/iav/internal/llm/github"
+	"github.com/Cyclone1070/iav/internal/provider"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 )
@@ -27,9 +26,32 @@ func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) (*session.S
 	return session.NewStore(filesystem, cfg.Session().StorageDir()), nil
 }
 
-// buildLLMRegistry creates the LLM registry with supported providers.
-func buildLLMRegistry(authMgr *auth.Manager) *llm.Registry {
-	return llm.NewRegistry(authMgr, google.NewProvider(), github.NewProvider())
+// buildRegistries creates the Provider and LLM registries with injected model lists.
+func buildRegistries(cfg *config.Config, authMgr *auth.Manager) (*provider.LLMRegistry, *provider.ProviderRegistry) {
+	googleModels := toDomainModels(cfg.Providers()["google"])
+	githubModels := toDomainModels(cfg.Providers()["github"])
+
+	providerRegistry := provider.NewProviderRegistry(
+		authMgr,
+		provider.NewGoogleProvider(googleModels),
+		provider.NewGitHubProvider(githubModels),
+	)
+
+	llmRegistry := provider.NewLLMRegistry(authMgr, providerRegistry)
+
+	return llmRegistry, providerRegistry
+}
+
+func toDomainModels(configs []config.ModelConfig) []domain.LLMInfo {
+	var models []domain.LLMInfo
+	for _, m := range configs {
+		models = append(models, domain.LLMInfo{
+			ID:            m.ID,
+			DisplayName:   m.Name,
+			ContextWindow: m.ContextWindow,
+		})
+	}
+	return models
 }
 
 func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {

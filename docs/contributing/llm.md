@@ -25,7 +25,7 @@ The `llm` package integrates provider backends and resolves model IDs to concret
 
 ### Outputs
 - `domain.LLM` instances.
-- Token count and streaming results (`domain.Stream`).
+- Token count and streaming results (`eino StreamReader`).
 - Wrapped provider/backend errors.
 
 ### Invariants

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -14,7 +16,7 @@ type infoMockLLMRegistry struct {
 	mock.Mock
 }
 
-func (m *infoMockLLMRegistry) ListProviders(ctx context.Context) ([]domain.ProviderInfo, error) {
+func (m *infoMockLLMRegistry) List(ctx context.Context) ([]domain.ProviderInfo, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]domain.ProviderInfo), args.Error(1)
 }
@@ -60,12 +62,8 @@ type infoMockLLM struct {
 func (m *infoMockLLM) ID() string                    { return m.Called().String(0) }
 func (m *infoMockLLM) DisplayName() string           { return m.Called().String(0) }
 func (m *infoMockLLM) ContextWindow() int            { return m.Called().Int(0) }
-func (m *infoMockLLM) ComputeTokens(ctx context.Context, msgs domain.Messages) (int, error) {
-	args := m.Called(ctx, msgs)
-	return args.Int(0), args.Error(1)
-}
-func (m *infoMockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
-	return nil, nil
+func (m *infoMockLLM) Model() model.ToolCallingChatModel {
+	return nil
 }
 
 func TestInfoWorkflow_Run(t *testing.T) {
@@ -77,7 +75,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		store := new(infoMockSessionStore)
 		llm := new(infoMockLLM)
 
-		registry.On("ListProviders", ctx).Return([]domain.ProviderInfo{
+		registry.On("List", ctx).Return([]domain.ProviderInfo{
 			{ID: "google", Credential: &domain.Credential{Type: domain.AuthMethodEnv}},
 			{ID: "openai", Credential: nil},
 		}, nil)
@@ -88,8 +86,17 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		session := &domain.Session{
 			ID:   "sess-123",
 			Name: "Test Session",
-			Messages: domain.Messages{
-				domain.UserMessage{Content: "Hello"},
+			Messages: []*schema.Message{
+				{Role: schema.User, Content: "Hello"},
+				{
+					Role:    schema.Assistant,
+					Content: "Hi!",
+					ResponseMeta: &schema.ResponseMeta{
+						Usage: &schema.TokenUsage{
+							TotalTokens: 100,
+						},
+					},
+				},
 			},
 		}
 		store.On("Get", "sess-123").Return(session, nil)
@@ -97,9 +104,9 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		registry.On("Get", ctx, "google/gemini-pro").Return(llm, nil)
 		llm.On("DisplayName").Return("Gemini 1.5 Pro")
 		llm.On("ContextWindow").Return(128000)
-		llm.On("ComputeTokens", ctx, session.Messages).Return(100, nil)
+		llm.On("ContextWindow").Return(128000)
 
-		wf := NewInfoWorkflow(registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store)
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -115,11 +122,11 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
-		registry.On("ListProviders", ctx).Return([]domain.ProviderInfo{}, nil)
+		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
 		state.On("Model").Return("")
 		state.On("CurrentSessionID").Return("")
 
-		wf := NewInfoWorkflow(registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store)
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -133,12 +140,12 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
-		registry.On("ListProviders", ctx).Return([]domain.ProviderInfo{}, nil)
+		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
 		state.On("Model").Return("")
 		state.On("CurrentSessionID").Return("missing-sess")
 		store.On("Get", "missing-sess").Return(nil, fmt.Errorf("not found"))
 
-		wf := NewInfoWorkflow(registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store)
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -150,9 +157,9 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
-		registry.On("ListProviders", ctx).Return([]domain.ProviderInfo{}, fmt.Errorf("registry fail"))
+		registry.On("List", ctx).Return([]domain.ProviderInfo{}, fmt.Errorf("registry fail"))
 
-		wf := NewInfoWorkflow(registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store)
 		_, err := wf.gather(ctx)
 
 		assert.Error(t, err)

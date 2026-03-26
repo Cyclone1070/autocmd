@@ -2,9 +2,12 @@ package session
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,19 +16,51 @@ type mockLLM struct {
 	streams []*mockStream
 }
 
-func (m *mockLLM) Stream(ctx context.Context, msgs domain.Messages, tools []domain.Declaration) (domain.Stream, error) {
-	if len(m.streams) == 0 {
-		return nil, nil
+func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
+	return 0, nil
+}
+func (m *mockLLM) Model() model.ToolCallingChatModel {
+	return &mockEinoModelBridge{llm: m}
+}
+
+// mockEinoModelBridge adapts the old mockLLM.Stream for the new GenerateName
+type mockEinoModelBridge struct {
+	llm *mockLLM
+}
+
+func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	s := m.streams[0]
-	m.streams = m.streams[1:]
-	return s, nil
+	if len(b.llm.streams) == 0 {
+		return nil, fmt.Errorf("no more streams")
+	}
+	s := b.llm.streams[0]
+	b.llm.streams = b.llm.streams[1:]
+
+	var content string
+	for _, chunk := range s.chunks {
+		content += chunk.text
+	}
+	return &schema.Message{Role: schema.Assistant, Content: content}, nil
+}
+
+func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return nil, nil
+}
+
+func (b *mockEinoModelBridge) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return b, nil
+}
+
+func (m *mockLLM) ID() string { return "test" }
+type mockChunk struct {
+	text string
 }
 
 type mockStream struct {
-	domain.Stream
 	ctx    context.Context
-	chunks []domain.StreamChunk
+	chunks []mockChunk
 	index  int
 }
 
@@ -44,7 +79,7 @@ func (m *mockStream) Next() bool {
 	return false
 }
 
-func (m *mockStream) Chunk() domain.StreamChunk {
+func (m *mockStream) Chunk() mockChunk {
 	return m.chunks[m.index-1]
 }
 
@@ -67,9 +102,9 @@ func TestGenerateName(t *testing.T) {
 
 		ms := &mockStream{
 			ctx: cancelCtx,
-			chunks: []domain.StreamChunk{
-				domain.TextChunk{Text: "Partial "},
-				domain.TextChunk{Text: "response"},
+			chunks: []mockChunk{
+				mockChunk{text: "Partial "},
+				mockChunk{text: "response"},
 			},
 		}
 		m := &mockLLM{
@@ -87,10 +122,10 @@ func TestGenerateName(t *testing.T) {
 		m := &mockLLM{
 			streams: []*mockStream{
 				{
-					chunks: []domain.StreamChunk{
-						domain.TextChunk{Text: "Fixing "},
-						domain.TextChunk{Text: "UI "},
-						domain.TextChunk{Text: "Bugs"},
+					chunks: []mockChunk{
+						mockChunk{text: "Fixing "},
+						mockChunk{text: "UI "},
+						mockChunk{text: "Bugs"},
 					},
 				},
 			},
@@ -105,8 +140,8 @@ func TestGenerateName(t *testing.T) {
 		m := &mockLLM{
 			streams: []*mockStream{
 				{
-					chunks: []domain.StreamChunk{
-						domain.TextChunk{Text: "Summary of First"},
+					chunks: []mockChunk{
+						mockChunk{text: "Summary of First"},
 					},
 				},
 			},
@@ -120,7 +155,7 @@ func TestGenerateName(t *testing.T) {
 	t.Run("Empty response fallback", func(t *testing.T) {
 		m := &mockLLM{
 			streams: []*mockStream{
-				{chunks: []domain.StreamChunk{}},
+				{chunks: []mockChunk{}},
 			},
 		}
 

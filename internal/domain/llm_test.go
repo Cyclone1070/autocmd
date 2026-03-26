@@ -4,24 +4,36 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMessageJSON_RoundTrip(t *testing.T) {
-	messages := Messages{
-		UserMessage{Content: "Hello from user"},
-		AssistantMessage{
+	messages := []*schema.Message{
+		{
+			Role:    schema.User,
+			Content: "Hello from user",
+		},
+		{
+			Role:    schema.Assistant,
 			Content: "Assistant response",
-			ToolCalls: []ToolCall{
-				{ID: "call-1", Name: "shell", Arguments: json.RawMessage(`{"command":"ls"}`)},
+			ToolCalls: []schema.ToolCall{
+				{
+					ID:   "call-1",
+					Type: "function",
+					Function: schema.FunctionCall{
+						Name:      "shell",
+						Arguments: `{"command":"ls"}`,
+					},
+				},
 			},
 		},
-		ToolMessage{
+		{
+			Role:       schema.Tool,
 			ToolCallID: "call-1",
 			ToolName:   "shell",
 			Content:    "file1.txt",
-			ToolError:  false,
 		},
 	}
 
@@ -34,7 +46,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 		},
 	}
 
-	// 1. Marshal the slice of interfaces
+	// 1. Marshal the slice
 	data, err := json.Marshal(messages)
 	require.NoError(t, err)
 
@@ -46,8 +58,8 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	assert.Equal(t, "assistant", raw[1]["role"])
 	assert.Equal(t, "tool", raw[2]["role"])
 
-	// 2. Unmarshal back into interface slice using the helper type
-	var decodedMessages Messages
+	// 2. Unmarshal back
+	var decodedMessages []*schema.Message
 	err = json.Unmarshal(data, &decodedMessages)
 	require.NoError(t, err)
 
@@ -59,13 +71,13 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, decodedMessages, 3)
-	assert.IsType(t, UserMessage{}, decodedMessages[0])
-	assert.IsType(t, AssistantMessage{}, decodedMessages[1])
-	assert.IsType(t, ToolMessage{}, decodedMessages[2])
+	assert.Equal(t, schema.User, decodedMessages[0].Role)
+	assert.Equal(t, schema.Assistant, decodedMessages[1].Role)
+	assert.Equal(t, schema.Tool, decodedMessages[2].Role)
 
-	assert.Equal(t, "Hello from user", decodedMessages[0].(UserMessage).Content)
-	assert.Equal(t, "Assistant response", decodedMessages[1].(AssistantMessage).Content)
-	assert.Equal(t, "call-1", decodedMessages[2].(ToolMessage).ToolCallID)
+	assert.Equal(t, "Hello from user", decodedMessages[0].Content)
+	assert.Equal(t, "Assistant response", decodedMessages[1].Content)
+	assert.Equal(t, "call-1", decodedMessages[2].ToolCallID)
 
 	require.Len(t, decodedDisplays, 1)
 	assert.IsType(t, ShellDisplay{}, decodedDisplays["call-1"])

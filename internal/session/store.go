@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +35,7 @@ type sessionInfoDTO struct {
 
 // sessionMessagesDTO is used for the .messages.json file.
 type sessionMessagesDTO struct {
-	Messages domain.Messages     `json:"messages"`
+	Messages []*schema.Message   `json:"messages"`
 	Displays domain.ToolDisplays `json:"displays,omitempty"`
 }
 
@@ -65,7 +66,7 @@ func (st *Store) Create() (*domain.Session, error) {
 		Name:     "",
 		Created:  now,
 		Updated:  now,
-		Messages: domain.Messages{},
+		Messages: []*schema.Message{},
 	}
 	if err := st.Save(s); err != nil {
 		return nil, err
@@ -89,7 +90,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 
 	// Read messages file
 	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
-	var messages domain.Messages
+	var messages []*schema.Message
 	var displays domain.ToolDisplays
 	messagesData, err := st.fs.ReadFile(messagesPath)
 	if err != nil {
@@ -97,7 +98,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 			return nil, fmt.Errorf("read session messages: %w", err)
 		}
 		// Messages file doesn't exist yet, use empty slice
-		messages = domain.Messages{}
+		messages = []*schema.Message{}
 	} else {
 		var messagesDTO sessionMessagesDTO
 		if err := json.Unmarshal(messagesData, &messagesDTO); err != nil {
@@ -122,6 +123,7 @@ func (st *Store) Save(s *domain.Session) error {
 	// Update the updated timestamp
 	s.Updated = time.Now()
 
+	// ... (rest of Save method stays identical because types are compatible with JSON)
 	// Write info file
 	infoPath := filepath.Join(st.storageDir, s.ID+".json")
 	infoDTO := sessionInfoDTO{

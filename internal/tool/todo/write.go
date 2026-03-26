@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // WriteTodosTool handles writing todos.
@@ -28,29 +29,32 @@ func (t *WriteTodosTool) Name() string {
 	return "todowrite"
 }
 
-// Declaration returns the tool's schema for the LLM.
-func (t *WriteTodosTool) Declaration() domain.Declaration {
-	return domain.Declaration{
-		Name:        "todowrite",
-		Description: "Update the todo list. Replaces all todos with the provided list.",
-		Parameters: &domain.Schema{
-			Type: domain.TypeObject,
-			Properties: map[string]*domain.Schema{
-				"todos": {
-					Type:        domain.TypeArray,
-					Description: "List of todo items",
-					Items: &domain.Schema{
-						Type: domain.TypeObject,
-						Properties: map[string]*domain.Schema{
-							"description": {Type: domain.TypeString, Description: "Todo description"},
-							"status":      {Type: domain.TypeString, Description: "Status: pending, in_progress, completed, cancelled"},
+// Definition returns the tool's schema for the LLM using eino schema.
+func (t *WriteTodosTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name: "todowrite",
+		Desc: "Update the todo list. Replaces all todos with the provided list.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"todos": {
+				Type: schema.Array,
+				Desc: "List of todo items",
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.Object,
+					SubParams: map[string]*schema.ParameterInfo{
+						"description": {
+							Type: schema.String,
+							Desc: "Todo description",
 						},
-						Required: []string{"description", "status"},
+						"status": {
+							Type: schema.String,
+							Desc: "Status: pending, in_progress, completed, cancelled",
+						},
 					},
+					Required: true,
 				},
+				Required: true,
 			},
-			Required: []string{"todos"},
-		},
+		}),
 	}
 }
 
@@ -60,9 +64,9 @@ type WriteTodosRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *WriteTodosTool) Prepare(ctx context.Context, params json.RawMessage) (domain.Invocation, error) {
+func (t *WriteTodosTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
 	req := &WriteTodosRequest{}
-	if err := json.Unmarshal(params, req); err != nil {
+	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudwego/eino/schema"
 	"golang.org/x/term"
 )
 
@@ -19,7 +20,7 @@ type bus interface {
 
 // model is the bubbletea model for the history viewer.
 type model struct {
-	messages        domain.Messages
+	messages        []*schema.Message
 	chatWindowWidth int
 	theme           *ui.Theme
 	width           int
@@ -214,6 +215,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
+			m.bus.SendAction(domain.StopAction{})
 			return m, tea.Quit
 		}
 

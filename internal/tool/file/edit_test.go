@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
+	"github.com/stretchr/testify/assert"
 )
 
 // executeEdit calls Prepare then Execute, returning the LLM output string.
@@ -21,7 +21,7 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 	if err != nil {
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
-	inv, err := etool.Prepare(context.Background(), params)
+	inv, err := etool.Prepare(context.Background(), string(params))
 	if err != nil {
 		return err.Error(), err
 	}
@@ -38,13 +38,13 @@ func TestEditFile(t *testing.T) {
 		originalContent := []byte("original content")
 		fs.createFile("/workspace/test.txt", originalContent, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		// Read file to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), params)
+		inv, _ := readTool.Prepare(context.Background(), string(params))
 		_, _ = inv.Execute(context.Background())
 
 		// Modify file externally (simulate external change)
@@ -74,7 +74,7 @@ func TestEditFile(t *testing.T) {
 		content := []byte("some content")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -98,13 +98,13 @@ func TestEditFile(t *testing.T) {
 		content := []byte("line1\nline2\nline3")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), params)
+		inv, _ := readTool.Prepare(context.Background(), string(params))
 		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -141,13 +141,13 @@ func TestEditFile(t *testing.T) {
 		content := []byte("line1\nline1\nline3")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), params)
+		inv, _ := readTool.Prepare(context.Background(), string(params))
 		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -172,13 +172,13 @@ func TestEditFile(t *testing.T) {
 		content := []byte("foo\nfoo\nbar")
 		fs.createFile("/workspace/test.txt", content, 0o644)
 
-		readTool := NewReadFileTool(fs, checksumManager, path.NewResolver(workspaceRoot))
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), params)
+		inv, _ := readTool.Prepare(context.Background(), string(params))
 		_, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -208,7 +208,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("content"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -230,7 +230,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("existing"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -258,7 +258,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -290,7 +290,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -314,7 +314,7 @@ func TestEditFile(t *testing.T) {
 		// File with CRLF line endings
 		fs.createFile("/workspace/test.txt", []byte("line1\r\nline2\r\nline3"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		ops := []EditOperation{
 			{
@@ -343,7 +343,7 @@ func TestEditFile(t *testing.T) {
 	t.Run("empty path returns error", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{Path: "", Comment: "test", Operations: []EditOperation{{Before: "old", After: "new"}}}
 		_, err := executeEdit(t, editTool, req)
@@ -356,7 +356,7 @@ func TestEditFile(t *testing.T) {
 	t.Run("empty operations returns error", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: []EditOperation{}}
 		_, err := executeEdit(t, editTool, req)
@@ -370,7 +370,7 @@ func TestEditFile(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("foo\nfoo\nbar"), 0o644)
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
 			Path:       "test.txt",
@@ -388,7 +388,7 @@ func TestEditFile(t *testing.T) {
 	t.Run("path outside workspace returns error", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{Path: "../outside.txt", Comment: "test", Operations: []EditOperation{{Before: "a", After: "b"}}}
 		_, err := executeEdit(t, editTool, req)
@@ -403,7 +403,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("original"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		// Prepare the edit
 		req := &EditFileRequest{
@@ -412,7 +412,7 @@ func TestEditFile(t *testing.T) {
 			Operations: []EditOperation{{Before: "original", After: "modified"}},
 		}
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(context.Background(), params)
+		inv, err := editTool.Prepare(context.Background(), string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -433,7 +433,7 @@ func TestEditFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		fs.createFile("/workspace/test.txt", []byte("old content"), 0o644)
 
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
 			Path:       "test.txt",
@@ -441,7 +441,7 @@ func TestEditFile(t *testing.T) {
 			Operations: []EditOperation{{Before: "old", After: "new"}},
 		}
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(context.Background(), params)
+		inv, err := editTool.Prepare(context.Background(), string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -466,13 +466,39 @@ func TestEditFile(t *testing.T) {
 	t.Run("missing comment returns error", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
 		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, path.NewResolver(workspaceRoot), maxFileSize)
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &EditFileRequest{Path: "test.txt", Comment: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
-		_, err := executeEdit(t, editTool, req)
+		editReq := &EditFileRequest{Path: "test.txt", Comment: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
+		_, err := executeEdit(t, editTool, editReq)
 		if err == nil {
 			t.Error("expected error for empty comment")
 		}
 		assertContains(t, err.Error(), "comment is required")
+	})
+
+	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
+		fs := newMockFileSystemForWrite(maxFileSize)
+		checksumManager := newMockChecksumManagerForWrite()
+		workspaceRoot := "/workspace"
+		absFile := "/workspace/subdir/test.txt"
+		fs.createFile(absFile, []byte("content"), 0o644)
+		
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		
+		// Agent sends absolute path
+		params, _ := json.Marshal(&EditFileRequest{
+			Path:    absFile,
+			Comment: "cleaning up",
+			Operations: []EditOperation{
+				{Before: "content", After: "new"},
+			},
+		})
+		inv, err := editTool.Prepare(context.Background(), string(params))
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+		
+		display := inv.Display().(domain.DiffDisplay)
+		assert.Equal(t, "Edit subdir/test.txt", display.Target)
 	})
 }

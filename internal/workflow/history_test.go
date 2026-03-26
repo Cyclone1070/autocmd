@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -55,7 +56,7 @@ func TestRunHistory(t *testing.T) {
 	ctx := context.Background()
 	store := &fakeHistoryStore{
 		sessions: map[string]*domain.Session{
-			"s1": {ID: "s1", Messages: domain.Messages{domain.UserMessage{Content: "hi"}}},
+			"s1": {ID: "s1", Messages: []*schema.Message{{Role: schema.User, Content: "hi"}}},
 		},
 	}
 	state := &fakeHistoryState{currentID: "s1"}

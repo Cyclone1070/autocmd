@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
 )
 
 // Registry holds tool instances and provides lookup.
@@ -20,16 +21,16 @@ func NewRegistry(tools []domain.Tool) *Registry {
 	return registry
 }
 
-// Declarations returns all tool declarations for the LLM, sorted by name.
-func (r *Registry) Declarations() []domain.Declaration {
-	decls := make([]domain.Declaration, 0, len(r.tools))
+// Definitions returns all tool definitions for the LLM, sorted by name.
+func (r *Registry) Definitions() []*schema.ToolInfo {
+	defs := make([]*schema.ToolInfo, 0, len(r.tools))
 	for _, t := range r.tools {
-		decls = append(decls, t.Declaration())
+		defs = append(defs, t.Definition())
 	}
-	sort.Slice(decls, func(i, j int) bool {
-		return decls[i].Name < decls[j].Name
+	sort.Slice(defs, func(i, j int) bool {
+		return defs[i].Name < defs[j].Name
 	})
-	return decls
+	return defs
 }
 
 // Get returns a tool by name.

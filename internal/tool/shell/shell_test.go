@@ -2,7 +2,6 @@ package shell
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"slices"
@@ -81,14 +80,10 @@ func TestShellTool_Name(t *testing.T) {
 
 func TestShellTool_Declaration(t *testing.T) {
 	tl := NewShellTool(&mockEnvFileOps{}, &mockCommandExecutor{}, time.Second, &mockPathResolver{})
-	decl := tl.Declaration()
-	assert.Equal(t, "shell", decl.Name)
-	assert.Contains(t, decl.Description, "shell command")
-	assert.NotNil(t, decl.Parameters)
-	assert.Contains(t, decl.Parameters.Properties, "command")
-	assert.Contains(t, decl.Parameters.Properties, "comment")
-	assert.Contains(t, decl.Parameters.Required, "command")
-	assert.Contains(t, decl.Parameters.Required, "comment")
+	info := tl.Definition()
+	assert.Equal(t, "shell", info.Name)
+	assert.Contains(t, info.Desc, "shell command")
+	assert.NotNil(t, info.ParamsOneOf)
 }
 
 func TestShellTool_Prepare_Validation(t *testing.T) {
@@ -119,7 +114,7 @@ func TestShellTool_Prepare_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tl.Prepare(ctx, json.RawMessage(tt.params))
+			_, err := tl.Prepare(ctx, tt.params)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -143,7 +138,7 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "comment": "say hello"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
@@ -173,7 +168,7 @@ func TestShellTool_Prepare_CustomWorkingDir(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["ls"], "working_dir": "/custom/path", "comment": "list"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	// custom/path is passed to executor in mocks, but not exposed in Display anymore
@@ -213,7 +208,7 @@ func TestShellTool_Prepare_EnvFiles(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo"], "env_files": [".env"], "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	mockEnv.AssertExpectations(t)
@@ -239,7 +234,7 @@ func TestShellTool_Prepare_CustomEnvVars(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo"], "env": {"CUSTOM_VAR": "custom_value"}, "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	mockCE.AssertExpectations(t)
@@ -263,7 +258,7 @@ func TestShellTool_Prepare_CustomTimeout(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["sleep"], "timeout_seconds": 30, "comment": "wait"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	mockCE.AssertExpectations(t)
@@ -287,7 +282,7 @@ func TestShellTool_Prepare_DefaultTimeout(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo"], "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	mockCE.AssertExpectations(t)
@@ -310,7 +305,7 @@ func TestShellTool_Prepare_ExecutorError(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["nonexistent"], "comment": "fail"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "command not found")
 }
@@ -327,7 +322,7 @@ func TestShellTool_Prepare_PathResolverError(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo"], "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "path error")
 }
@@ -349,7 +344,7 @@ func TestShellTool_Prepare_EnvFileError(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo"], "env_files": [".env"], "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, json.RawMessage(params))
+	_, err := tl.Prepare(ctx, params)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "file not found")
 }
@@ -372,7 +367,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "comment": "test"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	// Consume output
@@ -404,7 +399,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["false"], "comment": "fail"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
@@ -433,7 +428,7 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["sleep", "10"], "timeout_seconds": 1, "comment": "sleep"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
@@ -462,7 +457,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	params := `{"command": ["sleep", "10"], "comment": "sleep"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
@@ -492,7 +487,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["cat", "bigfile"], "comment": "cat"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
@@ -521,7 +516,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "streaming"], "comment": "stream"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
@@ -553,7 +548,7 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "captured"], "comment": "test capture"}`
 
-	inv, err := tl.Prepare(ctx, json.RawMessage(params))
+	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)

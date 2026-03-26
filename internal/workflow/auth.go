@@ -8,8 +8,8 @@ import (
 )
 
 type authRegistry interface {
-	ListProviders(ctx context.Context) ([]domain.ProviderInfo, error)
-	GetProvider(id string) (domain.Provider, bool)
+	List(ctx context.Context) ([]domain.ProviderInfo, error)
+	Get(id string) (domain.Provider, bool)
 }
 
 type authManager interface {
@@ -72,7 +72,7 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 
 				switch a := act.(type) {
 				case domain.SelectProviderAction:
-					p, ok := wf.registry.GetProvider(a.ID)
+					p, ok := wf.registry.Get(a.ID)
 					if !ok {
 						deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: "Provider not found"})
 						continue
@@ -201,7 +201,7 @@ func NewAuthWorkflow(registry authRegistry, authMgr authManager, oauthMgr oauthM
 
 // Gather returns the providers and their authentication status.
 func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderListEvent, error) {
-	infos, err := w.registry.ListProviders(ctx)
+	infos, err := w.registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -240,5 +240,5 @@ func (w *AuthWorkflow) RemoveAuth(ctx context.Context, providerID string) error 
 
 // GetProvider returns a provider from the registry.
 func (w *AuthWorkflow) GetProvider(id string) (domain.Provider, bool) {
-	return w.registry.GetProvider(id)
+	return w.registry.Get(id)
 }

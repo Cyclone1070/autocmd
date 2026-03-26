@@ -231,7 +231,7 @@ func TestListDirTool_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jsonParams, _ := json.Marshal(tt.params)
-			_, err := toolInstance.Prepare(context.Background(), jsonParams)
+			_, err := toolInstance.Prepare(context.Background(), string(jsonParams))
 
 			if tt.wantErr != "" {
 				if err == nil {
@@ -263,7 +263,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	// Prepare
 	req := ListDirRequest{Path: "src"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), jsonParams)
+	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -304,6 +304,27 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	} else if compIdx > utilsIdx {
 		t.Errorf("Sorting error: directories should come before files. components/ at %d, utils.go at %d", compIdx, utilsIdx)
 	}
+
+	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
+		absDir := "/workspace/src/components"
+		req := ListDirRequest{Path: absDir}
+		jsonParams, _ := json.Marshal(req)
+		
+		invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+		if err != nil {
+			t.Fatalf("Prepare failed: %v", err)
+		}
+		
+		display := invocation.Display().(domain.StringDisplay)
+		// Current behavior uses filepath.Base(absPath) -> "components"
+		// Desired behavior: "src/components" (relative to /workspace)
+		if strings.Contains(display.Content, "Listing /workspace/src/components") {
+			t.Errorf("Display should not contain absolute path: %s", display.Content)
+		}
+		if !strings.Contains(display.Content, "Listing src/components") {
+			t.Errorf("Display should contain relative path 'src/components', got: %s", display.Content)
+		}
+	})
 }
 
 func TestListDirTool_Execute_Truncation(t *testing.T) {
@@ -322,7 +343,7 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 
 	req := ListDirRequest{Path: "big"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), jsonParams)
+	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -354,7 +375,7 @@ func TestListDirTool_Execute_Ignore(t *testing.T) {
 		Ignore: []string{"*.log"},
 	}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), jsonParams)
+	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -383,7 +404,7 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 	// 1. Prepare (Success)
 	req := ListDirRequest{Path: "temp"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), jsonParams)
+	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}

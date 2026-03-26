@@ -86,6 +86,7 @@ func newConfig(dto configDTO) (*Config, error) {
 			shellOutputHeight: dto.UI.ShellOutputHeight,
 			shortToolbox:      dto.UI.ShortToolbox,
 		},
+		providers: dto.Providers,
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -117,6 +118,7 @@ func (m *Manager) Load() (*Config, error) {
 			ShellOutputHeight: defaults.ui.shellOutputHeight,
 			ShortToolbox:      defaults.ui.shortToolbox,
 		},
+		Providers: defaults.providers,
 	}
 
 	homeDir, err := m.fs.UserHomeDir()

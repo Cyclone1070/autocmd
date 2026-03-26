@@ -12,6 +12,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +20,7 @@ var update = flag.Bool("update", false, "update golden files")
 
 type TestElement struct {
 	ID       string
-	Msg      domain.Message
+	Msg      *schema.Message
 	Displays domain.ToolDisplays
 	Desc     string
 }
@@ -29,39 +30,44 @@ func getHistoryElements() []TestElement {
 	return []TestElement{
 		{
 			ID: "TXT",
-			Msg: domain.AssistantMessage{
+			Msg: &schema.Message{
+				Role:    schema.Assistant,
 				Content: "This is a paragraph of text.",
 			},
 		},
 		{
 			ID: "QUOTE",
-			Msg: domain.AssistantMessage{
+			Msg: &schema.Message{
+				Role:    schema.Assistant,
 				Content: "> This is a blockquote.\n> It has multiple lines.",
 			},
 		},
 		{
 			ID: "LIST",
-			Msg: domain.AssistantMessage{
+			Msg: &schema.Message{
+				Role:    schema.Assistant,
 				Content: "- Item 1\n- Item 2\n  - Nested Item",
 			},
 		},
 		{
 			ID: "CODE",
-			Msg: domain.AssistantMessage{
+			Msg: &schema.Message{
+				Role:    schema.Assistant,
 				Content: "```go\nfunc hello() {\n\tfmt.Println(\"world\")\n}\n```",
 			},
 		},
-		{ID: "H1", Msg: domain.AssistantMessage{Content: "# Header 1"}},
-		{ID: "H2", Msg: domain.AssistantMessage{Content: "## Header 2"}},
-		{ID: "H3", Msg: domain.AssistantMessage{Content: "### Header 3"}},
-		{ID: "H4", Msg: domain.AssistantMessage{Content: "#### Header 4"}},
-		{ID: "H5", Msg: domain.AssistantMessage{Content: "##### Header 5"}},
-		{ID: "H6", Msg: domain.AssistantMessage{Content: "###### Header 6"}},
+		{ID: "H1", Msg: &schema.Message{Role: schema.Assistant, Content: "# Header 1"}},
+		{ID: "H2", Msg: &schema.Message{Role: schema.Assistant, Content: "## Header 2"}},
+		{ID: "H3", Msg: &schema.Message{Role: schema.Assistant, Content: "### Header 3"}},
+		{ID: "H4", Msg: &schema.Message{Role: schema.Assistant, Content: "#### Header 4"}},
+		{ID: "H5", Msg: &schema.Message{Role: schema.Assistant, Content: "##### Header 5"}},
+		{ID: "H6", Msg: &schema.Message{Role: schema.Assistant, Content: "###### Header 6"}},
 		{
 			ID: "TOOL_OK",
-			Msg: domain.AssistantMessage{
-				ToolCalls: []domain.ToolCall{
-					{ID: "tc-ok", Name: "shell"},
+			Msg: &schema.Message{
+				Role: schema.Assistant,
+				ToolCalls: []schema.ToolCall{
+					{ID: "tc-ok", Function: schema.FunctionCall{Name: "shell"}},
 				},
 			},
 			Displays: domain.ToolDisplays{
@@ -75,9 +81,10 @@ func getHistoryElements() []TestElement {
 		},
 		{
 			ID: "TOOL_ERR",
-			Msg: domain.AssistantMessage{
-				ToolCalls: []domain.ToolCall{
-					{ID: "tc-err", Name: "shell"},
+			Msg: &schema.Message{
+				Role: schema.Assistant,
+				ToolCalls: []schema.ToolCall{
+					{ID: "tc-err", Function: schema.FunctionCall{Name: "shell"}},
 				},
 			},
 			Displays: domain.ToolDisplays{
@@ -90,7 +97,8 @@ func getHistoryElements() []TestElement {
 		},
 		{
 			ID: "THINK",
-			Msg: domain.AssistantMessage{
+			Msg: &schema.Message{
+				Role:    schema.Assistant,
 				Content: "✔ Thought for 1s",
 			},
 		},
@@ -157,34 +165,35 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	}
 }
 
-func createHistoryData(elems ...TestElement) (domain.Messages, domain.ToolDisplays) {
+func createHistoryData(elems ...TestElement) ([]*schema.Message, domain.ToolDisplays) {
 	var contents []string
-	var calls []domain.ToolCall
+	var calls []schema.ToolCall
 	displays := make(domain.ToolDisplays)
 
 	for _, e := range elems {
-		if am, ok := e.Msg.(domain.AssistantMessage); ok {
-			if am.Content != "" {
-				contents = append(contents, am.Content)
+		if e.Msg.Role == schema.Assistant {
+			if e.Msg.Content != "" {
+				contents = append(contents, e.Msg.Content)
 			}
-			calls = append(calls, am.ToolCalls...)
+			calls = append(calls, e.Msg.ToolCalls...)
 		}
 		for k, v := range e.Displays {
 			displays[k] = v
 		}
 	}
 
-	msg := domain.AssistantMessage{
+	msg := &schema.Message{
+		Role:      schema.Assistant,
 		Content:   strings.Join(contents, "\n\n"),
 		ToolCalls: calls,
 	}
-	return domain.Messages{msg}, displays
+	return []*schema.Message{msg}, displays
 }
 
-func renderHistoryToGolden(w *bytes.Buffer, name string, msgs domain.Messages, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
 	var sb strings.Builder
-	am, ok := msgs[0].(domain.AssistantMessage)
-	if !ok {
+	am := msgs[0]
+	if am.Role != schema.Assistant {
 		// This golden test only renders assistant messages for now
 		return
 	}

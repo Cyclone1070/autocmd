@@ -6,7 +6,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/llm"
+	"github.com/Cyclone1070/iav/internal/provider"
 	"github.com/Cyclone1070/iav/internal/session"
 	"github.com/Cyclone1070/iav/internal/state"
 )
@@ -19,7 +19,8 @@ type Deps struct {
 	SessionStore *session.Store
 	AuthManager  *auth.Manager
 	OAuthManager *auth.OAuthManager
-	LLMRegistry  *llm.Registry
+	LLMRegistry  *provider.LLMRegistry
+	ProviderRegistry *provider.ProviderRegistry
 	BootstrapFS  fs.FileSystem
 }
 
@@ -45,6 +46,8 @@ func Wire() (*Deps, error) {
 		return nil, err
 	}
 
+	llmRegistry, providerRegistry := buildRegistries(cfg, authMgr)
+
 	sessionStore, err := buildSessionStore(cfg, bootstrapFS)
 	if err != nil {
 		return nil, err
@@ -57,7 +60,8 @@ func Wire() (*Deps, error) {
 		SessionStore: sessionStore,
 		AuthManager:  authMgr,
 		OAuthManager: auth.NewOAuthManager(nil),
-		LLMRegistry:  buildLLMRegistry(authMgr),
+		LLMRegistry:  llmRegistry,
+		ProviderRegistry: providerRegistry,
 		BootstrapFS:  bootstrapFS,
 	}, nil
 }

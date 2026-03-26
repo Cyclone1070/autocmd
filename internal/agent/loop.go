@@ -111,6 +111,46 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			}
 		}
 
+		// Ambiguity resolution: Ensure every unique ToolID has a stable, unique Index.
+		// Some providers (like GitHub Gemini bridge) emit colliding/missing indices for parallel tools.
+		// We use a Real-Time Memory Cop to remember which fixed slot each buggy 'original index' 
+		// currently points to as we process the stream in order.
+		idToFixedIdx := make(map[string]int)
+		origToFixedIdx := make(map[int]int)
+		nextAvailableIdx := 0
+
+		for _, chunk := range chunks {
+			for i := range chunk.ToolCalls {
+				tc := &chunk.ToolCalls[i]
+				
+				// 1. Identify the buggy original index (default 0)
+				origIdx := 0
+				if tc.Index != nil {
+					origIdx = *tc.Index
+				}
+
+				if tc.ID != "" {
+					// 2. We have an ID. Map it to a stable slot.
+					fixedIdx, ok := idToFixedIdx[tc.ID]
+					if !ok {
+						fixedIdx = nextAvailableIdx
+						idToFixedIdx[tc.ID] = fixedIdx
+						nextAvailableIdx++
+					}
+					
+					// 3. Update the chunk and REMEMBER this mapping for this Index
+					tc.Index = &fixedIdx
+					origToFixedIdx[origIdx] = fixedIdx
+					
+				} else if tc.Index != nil {
+					// 4. Fragment without ID. Check the Memory Cop for the latest mapping.
+					if fixedIdx, ok := origToFixedIdx[origIdx]; ok {
+						tc.Index = &fixedIdx
+					}
+				}
+			}
+		}
+
 		msg, err := schema.ConcatMessages(chunks)
 		if err != nil {
 			return fmt.Errorf("ConcatMessages: %w", err)

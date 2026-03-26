@@ -401,3 +401,100 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	assert.Equal(t, "tc-2", m3.ToolCallID)
 	assert.True(t, m3.Extra["tool_error"].(bool))
 }
+
+func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sender := newMockEventSender(20)
+
+	// Simulate a "buggy" provider like GitHub Gemini bridge
+	// Two DIFFERENT tool calls, both claiming Index 0 (or nil index)
+	m := &mockLLM{
+		id: "buggy-gemini-bridge",
+		streams: []*mockStream{
+			{chunks: []mockChunk{
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+			}},
+			{chunks: []mockChunk{{text: "Done."}}},
+		},
+	}
+
+	mt1 := &mockTool{
+		name: "t1",
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			return &mockInvocation{content: "R1"}, nil
+		},
+	}
+	mt2 := &mockTool{
+		name: "t2",
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			return &mockInvocation{content: "R2"}, nil
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{mt1, mt2}, m, sender)
+	session := &domain.Session{}
+
+	err := l.Run(ctx, session, "run")
+	// RED: Should fail with "ConcatMessages: cannot concat ToolCalls with different tool id"
+	// GREEN: Patch in loop.go should stably re-index them to 0 and 1, allowing success.
+	assert.NoError(t, err)
+}
+
+func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sender := newMockEventSender(20)
+
+	// Simulate a "Buggy but Sequential" provider (Like GitHub Gemini bridge)
+	// Tool 1 starts at Index 0, finishes args.
+	// Tool 2 starts at Index 0, finishes args.
+	m := &mockLLM{
+		id: "sequential-buggy-gemini-bridge",
+		streams: []*mockStream{
+			{chunks: []mockChunk{
+				// Tool 1: Index 0
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: ptr(0), Function: schema.FunctionCall{Arguments: `{"a":1}`}}},
+				
+				// Tool 2: ALSO Index 0 (Collision starts here)
+				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				{toolCall: &schema.ToolCall{Index: ptr(0), Function: schema.FunctionCall{Arguments: `{"b":2}`}}},
+			}},
+			{chunks: []mockChunk{{text: "Done."}}},
+		},
+	}
+
+	mt1 := &mockTool{
+		name: "t1",
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			return &mockInvocation{content: "R1:" + params}, nil
+		},
+	}
+	mt2 := &mockTool{
+		name: "t2",
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			return &mockInvocation{content: "R2:" + params}, nil
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{mt1, mt2}, m, sender)
+	session := &domain.Session{}
+
+	err := l.Run(ctx, session, "run")
+	assert.NoError(t, err)
+
+	// Verify argument routing
+	for _, msg := range session.Messages {
+		if msg.Role == schema.Tool {
+			if msg.ToolCallID == "tc-1" {
+				assert.Contains(t, msg.Content, `{"a":1}`, "tc-1 should have its own args")
+				assert.NotContains(t, msg.Content, `{"b":2}`, "tc-1 should NOT steal tc-2's args")
+			}
+			if msg.ToolCallID == "tc-2" {
+				assert.Contains(t, msg.Content, `{"b":2}`, "tc-2 should have its own args")
+			}
+		}
+	}
+}

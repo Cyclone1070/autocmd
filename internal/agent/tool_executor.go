@@ -36,11 +36,12 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
+		display := domain.NewStringDisplay("", "Unknown tool")
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
 				ToolName: tc.Function.Name,
-				Display:  domain.NewStringDisplay("", "Tool call failed"),
+				Display:  display,
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
@@ -54,7 +55,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolName:   tc.Function.Name,
 			Content:    errMsg,
 			Extra:      map[string]any{"tool_error": true},
-		}, nil, nil
+		}, display, nil
 	}
 
 	inv, err := t.Prepare(ctx, tc.Function.Arguments)
@@ -74,15 +75,17 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
 
+		toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
+		display := domain.NewStringDisplay("", toolLabel)
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
 				ToolName: tc.Function.Name,
-				Display:  domain.NewStringDisplay("", "Tool call failed"),
+				Display:  display,
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " "))),
+				Error:  toolLabel,
 			})
 		}
 
@@ -92,7 +95,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolName:   tc.Function.Name,
 			Content:    errMsg,
 			Extra:      map[string]any{"tool_error": true},
-		}, nil, nil
+		}, display, nil
 	}
 
 	display := inv.Display()

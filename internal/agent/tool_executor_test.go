@@ -183,7 +183,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-789", start.CallID)
-	assert.Equal(t, domain.NewStringDisplay("", "Tool call failed"), start.Display)
+	assert.Equal(t, domain.NewStringDisplay("", "Bad TEST request"), start.Display)
 
 	// Verify generic error event
 	e2 := <-sender.events
@@ -227,6 +227,37 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", end.CallID)
 	assert.Empty(t, end.Error)
+}
+
+func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
+	registry := newMockToolRegistry([]domain.Tool{
+		&mockTool{
+			name: "read_file",
+			prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+				return nil, fmt.Errorf("failed to prepare")
+			},
+		},
+	})
+	executor := newToolExecutor(registry)
+	sender := newMockEventSender(10)
+
+	// Verify lookup failure (TC-1)
+	tc1 := &schema.ToolCall{ID: "tc-1", Function: schema.FunctionCall{Name: "unknown"}}
+	msg1, disp1, err1 := executor.execute(context.Background(), tc1, sender)
+	assert.NoError(t, err1)
+	assert.NotNil(t, disp1)
+	assert.Equal(t, domain.NewStringDisplay("", "Unknown tool"), disp1)
+	assert.Equal(t, "tc-1", msg1.ToolCallID)
+	assert.Contains(t, msg1.Content, "does not exist")
+
+	// Verify prepare failure (TC-2)
+	tc2 := &schema.ToolCall{ID: "tc-2", Function: schema.FunctionCall{Name: "read_file", Arguments: "invalid"}}
+	msg2, disp2, err2 := executor.execute(context.Background(), tc2, sender)
+	assert.NoError(t, err2)
+	assert.NotNil(t, disp2)
+	assert.Equal(t, domain.NewStringDisplay("", "Bad READ FILE request"), disp2)
+	assert.Equal(t, "tc-2", msg2.ToolCallID)
+	assert.Contains(t, msg2.Content, "failed to prepare")
 }
 
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {

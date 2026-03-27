@@ -36,6 +36,7 @@ type StringDisplay struct {
 	TypeField string `json:"type"`
 	Comment   string `json:"comment"`
 	Content   string `json:"content"`
+	Error     string `json:"error,omitempty"`
 }
 
 func (StringDisplay) isToolDisplay() {}
@@ -54,10 +55,11 @@ type DiffDisplay struct {
 	Added     int    `json:"added"`   // Lines added
 	Removed   int    `json:"removed"` // Lines removed
 	Diff      string `json:"diff"`    // Unified diff content
+	Error     string `json:"error,omitempty"`
 }
 
-func (DiffDisplay) isToolDisplay() {}
-func (d DiffDisplay) Type() string { return d.TypeField }
+func (DiffDisplay) isToolDisplay()    {}
+func (d DiffDisplay) Type() string    { return d.TypeField }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
 func NewDiffDisplay(comment, target string, added, removed int, diff string) DiffDisplay {
@@ -78,10 +80,11 @@ type ShellDisplay struct {
 	Command        string    `json:"command"`         // The command being run (e.g. "npm install")
 	CapturedOutput *string   `json:"captured_output"` // Pointer to raw output captured after execution (baked)
 	Output         io.Reader `json:"-"`               // Stream stdout/stderr (transient)
+	Error          string    `json:"error,omitempty"`
 }
 
-func (ShellDisplay) isToolDisplay() {}
-func (s ShellDisplay) Type() string { return s.TypeField }
+func (ShellDisplay) isToolDisplay()    {}
+func (s ShellDisplay) Type() string    { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
 func NewShellDisplay(comment, command string, output io.Reader, capturedOutput *string) ShellDisplay {

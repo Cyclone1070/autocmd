@@ -36,7 +36,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-		display := domain.NewStringDisplay("", "Unknown tool")
+		display := domain.NewStringDisplay("", "Invalid tool call")
+		display.Error = "Unknown tool"
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -45,7 +46,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  "Unknown tool",
+				Error:  display.Error,
 			})
 		}
 
@@ -76,7 +77,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
 
 		toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
-		display := domain.NewStringDisplay("", toolLabel)
+		display := domain.NewStringDisplay("", "Invalid tool call")
+		display.Error = toolLabel
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -85,7 +87,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  toolLabel,
+				Error:  display.Error,
 			})
 		}
 
@@ -142,13 +144,23 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 				ToolName:   tc.Function.Name,
 				Content:    "execution cancelled",
 				Extra:      map[string]any{"tool_error": true},
-			}, display, err
+			}, display, ctx.Err()
+		}
+
+		errStr := err.Error()
+		switch d := display.(type) {
+		case *domain.StringDisplay:
+			d.Error = errStr
+		case *domain.DiffDisplay:
+			d.Error = errStr
+		case *domain.ShellDisplay:
+			d.Error = errStr
 		}
 
 		if events != nil {
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  "Execution failed",
+				Error:  errStr,
 			})
 		}
 
@@ -158,7 +170,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolName:   tc.Function.Name,
 			Content:    fmt.Sprintf("Error: execution failed: %v", err),
 			Extra:      map[string]any{"tool_error": true},
-		}, display, nil
+		}, display, err
 	}
 
 	// Ensure all streaming chunks are sent before sending the end event

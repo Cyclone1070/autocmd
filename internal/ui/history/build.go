@@ -136,15 +136,11 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 			var toolOutput string
 			var toolErr string
 
+			// We still need the tool output message for ShellDisplay's actual output
 			for j := ai + 1; j < len(messages); j++ {
 				msgJ := messages[j]
 				if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
 					toolOutput = msgJ.Content
-					if isToolError(msgJ) {
-						status = ui.StatusError
-						toolErr = strings.TrimPrefix(toolOutput, "Error:")
-						toolErr = strings.TrimSpace(toolErr)
-					}
 					break
 				}
 			}
@@ -155,10 +151,25 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 			var rendered string
 			switch d := display.(type) {
 			case domain.StringDisplay:
+				if d.Error != "" {
+					status = ui.StatusError
+					toolErr = d.Error
+					prefix = tooling.StatusPrefix(status, "")
+				}
 				rendered = tooling.RenderString(d, status, toolErr, prefix)
 			case domain.DiffDisplay:
+				if d.Error != "" {
+					status = ui.StatusError
+					toolErr = d.Error
+					prefix = tooling.StatusPrefix(status, "")
+				}
 				rendered = tooling.RenderDiff(d, status, toolErr, prefix)
 			case domain.ShellDisplay:
+				if d.Error != "" {
+					status = ui.StatusError
+					toolErr = d.Error
+					prefix = tooling.StatusPrefix(status, "")
+				}
 				output := toolOutput
 				if d.CapturedOutput != nil {
 					output = *d.CapturedOutput
@@ -234,36 +245,47 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 			continue
 		}
 
-		// Status determination: look for the tool result message
 		status := ui.StatusSuccess
 		var toolOutput string
 		var toolErr string
-
-		for j := idx + 1; j < len(messages); j++ {
-			msgJ := messages[j]
-			if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
-				toolOutput = msgJ.Content
-				if isToolError(msgJ) {
-					status = ui.StatusError
-					toolErr = strings.TrimPrefix(toolOutput, "Error:")
-					toolErr = strings.TrimSpace(toolErr)
-				}
-				break
-			}
-		}
 
 		// Use width-2 for the content to account for the box borders,
 		// matching the logic in engine.go
 		boxWidth := contentWidth - 2
 		tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
 		prefix := tooling.StatusPrefix(status, "")
+
+		// We still need the tool output message for ShellDisplay's actual output
+		for j := idx + 1; j < len(messages); j++ {
+			msgJ := messages[j]
+			if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
+				toolOutput = msgJ.Content
+				break
+			}
+		}
+
 		var rendered string
 		switch d := display.(type) {
 		case domain.StringDisplay:
+			if d.Error != "" {
+				status = ui.StatusError
+				toolErr = d.Error
+				prefix = tooling.StatusPrefix(status, "")
+			}
 			rendered = tooling.RenderString(d, status, toolErr, prefix)
 		case domain.DiffDisplay:
+			if d.Error != "" {
+				status = ui.StatusError
+				toolErr = d.Error
+				prefix = tooling.StatusPrefix(status, "")
+			}
 			rendered = tooling.RenderDiff(d, status, toolErr, prefix)
 		case domain.ShellDisplay:
+			if d.Error != "" {
+				status = ui.StatusError
+				toolErr = d.Error
+				prefix = tooling.StatusPrefix(status, "")
+			}
 			// Prefer baked captured output over the decorated toolOutput (which includes exit codes for LLM)
 			output := toolOutput
 			if d.CapturedOutput != nil {

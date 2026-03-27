@@ -57,35 +57,60 @@ func (r *ToolRenderer) Pad(text, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (r *ToolRenderer) formatError(header string, err string) string {
-	return fmt.Sprintf("%s — %s", header, r.Theme.Error(err))
+func (r *ToolRenderer) formatError(prefix string, err string, isMuted bool) string {
+	if prefix == "" {
+		return r.Theme.Error(err)
+	}
+	separator := " - "
+	if isMuted {
+		return r.Theme.Muted(prefix+separator) + r.Theme.Error(err)
+	}
+	return prefix + separator + r.Theme.Error(err)
 }
 
 // RenderString renders StringDisplay.
 func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
-	header := d.Comment
-	content := d.Content
+	var parts []string
+	contentLines := strings.Split(d.Content, "\n")
 
-	if status == StatusError {
-		if header != "" {
-			header = r.formatError(header, err)
+	// 1. Header (Comment or first line of Content)
+	if d.Comment != "" {
+		header := "# " + d.Comment
+		if status == StatusError && err != "" {
+			header = r.formatError(header, err, true)
 		} else {
-			header = r.formatError(content, err)
-			content = ""
+			header = r.Theme.Muted(header)
 		}
+		parts = append(parts, header)
+		// Body: all of content
+		if d.Content != "" {
+			parts = append(parts, d.Content)
+		}
+	} else if d.Content != "" {
+		// No comment, error label goes on the first line of content
+		firstLine := contentLines[0]
+		if status == StatusError && err != "" {
+			firstLine = r.formatError(firstLine, err, false)
+		}
+		parts = append(parts, firstLine)
+		// Body: remaining lines
+		if len(contentLines) > 1 {
+			parts = append(parts, strings.Join(contentLines[1:], "\n"))
+		}
+	} else if status == StatusError && err != "" {
+		// No comment AND no content (edge case), just show the error
+		parts = append(parts, r.Theme.Error(err))
 	}
 
-	if header == "" {
-		return r.gater.Gate(r.Pad(content, prefix))
+	if len(parts) == 0 {
+		return ""
 	}
 
-	header = r.Theme.Muted("# " + header)
-	parts := []string{header}
-	if content != "" {
-		parts = append(parts, content)
-	}
-
-	return r.Pad(strings.Join(parts, "\n\n"), prefix)
+	// Join parts with a blank line ONLY IF we have both a comment and content
+	// or if we have multi-line content following a labeled first line.
+	// Actually, standard behavior is a blank line between header and content.
+	content := strings.Join(parts, "\n\n")
+	return r.Pad(r.gater.Gate(content), prefix)
 }
 
 // RenderDiff renders DiffDisplay.
@@ -97,8 +122,7 @@ func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err s
 	}
 
 	if status == StatusError {
-		header = r.formatError(header, err)
-		header = r.Theme.Muted("# " + header)
+		header = r.formatError("# "+header, err, true)
 		parts := []string{header, target}
 		return r.Pad(strings.Join(parts, "\n\n"), prefix)
 	}
@@ -144,8 +168,7 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
 	header := d.Comment
 	if status == StatusError {
-		header = r.formatError(header, err)
-		header = r.Theme.Muted("# " + header)
+		header = r.formatError("# "+header, err, true)
 		cmdLine := fmt.Sprintf("$ %s", d.Command)
 		content := strings.Join([]string{header, cmdLine}, "\n\n")
 		return r.Pad(content, prefix)

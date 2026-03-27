@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/cloudwego/eino/schema"
 )
@@ -86,7 +87,7 @@ func (t *ShellTool) Definition() *schema.ToolInfo {
 			},
 			"comment": {
 				Type:     schema.String,
-				Desc:     "A brief comment describing the purpose of the command for display purposes.",
+				Desc:     "A brief comment (under 80 characters) describing the purpose of the command for display in the UI. Mandatory.",
 				Required: true,
 			},
 		}),
@@ -157,7 +158,7 @@ func (t *ShellTool) Prepare(ctx context.Context, params string) (domain.Invocati
 	empty := ""
 	return &shellInvocation{
 		streamCmd:      streamCmd,
-		commandStr:     strings.Join(req.Command, " "),
+		commandStr:     summary.Summarize(strings.Join(req.Command, " ")),
 		comment:        req.Comment,
 		capturedOutput: &empty,
 	}, nil
@@ -186,7 +187,6 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
 
 	// Wait for command to complete and get result
 	result, err := i.streamCmd.Wait()
-
 	// Handle infrastructure errors
 	if err != nil {
 		if errors.Is(err, executor.ErrTimeout) {

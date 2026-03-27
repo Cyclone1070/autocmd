@@ -90,7 +90,7 @@ func (t *EditFileTool) Definition() *schema.ToolInfo {
 			},
 			"comment": {
 				Type:     schema.String,
-				Desc:     "A brief comment describing what this edit accomplishes (e.g. 'Adding auth middleware')",
+				Desc:     "A brief comment (under 80 characters) describing what this edit accomplishes for display in the UI. Mandatory.",
 				Required: true,
 			},
 			"operations": {
@@ -239,7 +239,7 @@ func (t *EditFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 		expectedChecksum: currentChecksum,
 		display: domain.NewDiffDisplay(
 			req.Comment,
-			fmt.Sprintf("Edit %s", filepath.ToSlash(rel)),
+			fmt.Sprintf("EDIT %s", filepath.ToSlash(rel)),
 			added,
 			removed,
 			diff,
@@ -305,7 +305,7 @@ func computeUnifiedDiff(oldContent, newContent string) (diff string, added, remo
 	// Strip the --- and +++ header lines, keep only hunks
 	var lines []string
 	for line := range strings.SplitSeq(rawDiff, "\n") {
-		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "@@") {
+		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "\\") {
 			continue
 		}
 		if strings.HasPrefix(line, "+") {

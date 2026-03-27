@@ -167,15 +167,29 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := newToolExecutor(registry)
 
+	sender := newMockEventSender(10)
 	res, _, _ := executor.execute(context.Background(), &schema.ToolCall{
 		ID: "tc-789",
 		Function: schema.FunctionCall{
 			Name: "test",
 		},
-	}, nil)
+	}, sender)
 
 	assert.Equal(t, schema.Tool, res.Role)
 	assert.Contains(t, res.Content, "failed to prepare tool \"test\": bad params")
+
+	// Verify start event
+	e1 := <-sender.events
+	start, ok := e1.(domain.ToolStartEvent)
+	assert.True(t, ok)
+	assert.Equal(t, "tc-789", start.CallID)
+	assert.Equal(t, domain.NewStringDisplay("", "Tool call failed"), start.Display)
+
+	// Verify generic error event
+	e2 := <-sender.events
+	end, ok := e2.(domain.ToolEndEvent)
+	assert.True(t, ok)
+	assert.Equal(t, "Bad TEST request", end.Error)
 }
 
 func TestExecute_EmitsToolEvents(t *testing.T) {
@@ -281,7 +295,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	}, sender)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "Detailed error in content", res.Content)
+	assert.Equal(t, "Error: execution failed: infra failure", res.Content)
 
 	// ToolStartEvent
 	<-sender.events
@@ -304,7 +318,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Header", "cmd", output, nil),
 				execute: func(ctx context.Context) (string, error) {
-					return "error content", fmt.Errorf("execution failed")
+					return "specific error", fmt.Errorf("execution failed")
 				},
 			}, nil
 		},

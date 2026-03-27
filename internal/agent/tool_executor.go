@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -35,6 +36,18 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
+		if events != nil {
+			events.SendUIUpdate(domain.ToolStartEvent{
+				CallID:   tc.ID,
+				ToolName: tc.Function.Name,
+				Display:  domain.NewStringDisplay("", "Tool call failed"),
+			})
+			events.SendUIUpdate(domain.ToolEndEvent{
+				CallID: tc.ID,
+				Error:  "Unknown tool",
+			})
+		}
+
 		return &schema.Message{
 			Role:       schema.Tool,
 			ToolCallID: tc.ID,
@@ -60,6 +73,18 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			slog.Warn("Failed to marshal tool definition", "tool", t.Name(), "err", jerr)
 		}
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
+
+		if events != nil {
+			events.SendUIUpdate(domain.ToolStartEvent{
+				CallID:   tc.ID,
+				ToolName: tc.Function.Name,
+				Display:  domain.NewStringDisplay("", "Tool call failed"),
+			})
+			events.SendUIUpdate(domain.ToolEndEvent{
+				CallID: tc.ID,
+				Error:  fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " "))),
+			})
+		}
 
 		return &schema.Message{
 			Role:       schema.Tool,
@@ -128,7 +153,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			Role:       schema.Tool,
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
-			Content:    llmContent,
+			Content:    fmt.Sprintf("Error: execution failed: %v", err),
 			Extra:      map[string]any{"tool_error": true},
 		}, display, nil
 	}

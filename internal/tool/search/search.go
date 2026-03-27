@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -114,6 +115,11 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params string) (domain.
 		return nil, fmt.Errorf("failed to stat %s: %w", searchPath, err)
 	}
 
+	relPath, err := t.pathResolver.Rel(absSearchPath)
+	if err != nil {
+		relPath = filepath.Base(absSearchPath)
+	}
+
 	return &searchContentInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
@@ -121,7 +127,7 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params string) (domain.
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("Searching for '%s' in %s", req.Pattern, filepath.Base(absSearchPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("SEARCH '%s' IN %s", summary.Summarize(req.Pattern), filepath.ToSlash(relPath))),
 		maxLineLength:   t.maxLineLength,
 	}, nil
 }
@@ -172,7 +178,14 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 	// Double check pattern/path separation
 	cmd = append(cmd, "--", i.pattern, i.absPath)
 
-	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, nil)
+	// Ensure working directory is a directory
+	workDir := i.absPath
+	stat, err := i.fs.Stat(workDir)
+	if err == nil && !stat.IsDir() {
+		workDir = filepath.Dir(workDir)
+	}
+
+	res, err := i.commandExecutor.Run(ctx, cmd, workDir, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()

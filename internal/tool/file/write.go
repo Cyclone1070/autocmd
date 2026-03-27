@@ -80,7 +80,7 @@ func (t *WriteFileTool) Definition() *schema.ToolInfo {
 			},
 			"comment": {
 				Type:     schema.String,
-				Desc:     "A brief comment describing why the file is being created.",
+				Desc:     "A brief comment (under 80 characters) describing why the file is being created for display in the UI. Mandatory.",
 				Required: true,
 			},
 		}),
@@ -102,6 +102,9 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invo
 
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
+	}
+	if req.Comment == "" {
+		return nil, fmt.Errorf("comment is required")
 	}
 	/* Empty content allowed */
 	if int64(len(req.Content)) > t.maxFileSize {
@@ -140,9 +143,9 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invo
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
-		relPath:         req.Path,
-		content:         []byte(req.Content),
-		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("Write %s", filepath.ToSlash(rel))),
+		relPath:         rel,
+		content:         contentBytes,
+		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE %s", filepath.ToSlash(rel))),
 	}, nil
 }
 

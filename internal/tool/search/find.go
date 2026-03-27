@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -116,13 +117,18 @@ func (t *FindFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
+	relPath, err := t.pathResolver.Rel(absPath)
+	if err != nil {
+		relPath = filepath.Base(absPath)
+	}
+
 	return &findFileInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("Finding '%s' in %s", req.Pattern, filepath.Base(absPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("FIND %s", summary.Summarize(req.Pattern)), fmt.Sprintf("FIND '%s' IN %s", summary.Summarize(req.Pattern), filepath.ToSlash(relPath))),
 	}, nil
 }
 
@@ -162,7 +168,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 	// fd --glob "pattern" searchPath
 	cmd := []string{"fd", "--glob", i.pattern, i.absPath}
 
-	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, nil)
+	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()

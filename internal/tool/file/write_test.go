@@ -200,7 +200,7 @@ func TestWriteFile(t *testing.T) {
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 		content := "test content"
 
-		req := &WriteFileRequest{Path: "new.txt", Content: content}
+		req := &WriteFileRequest{Path: "new.txt", Content: content, Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -232,7 +232,7 @@ func TestWriteFile(t *testing.T) {
 
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{Path: "existing.txt", Content: "new content"}
+		req := &WriteFileRequest{Path: "existing.txt", Content: "new content", Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for existing file, got nil")
@@ -251,7 +251,7 @@ func TestWriteFile(t *testing.T) {
 
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{Path: "large.txt", Content: string(largeContent)}
+		req := &WriteFileRequest{Path: "large.txt", Content: string(largeContent), Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for large content, got nil")
@@ -266,7 +266,7 @@ func TestWriteFile(t *testing.T) {
 		// Content with NUL byte
 		binaryContent := []byte{0x48, 0x65, 0x6C, 0x00, 0x6C, 0x6F}
 
-		req := &WriteFileRequest{Path: "binary.bin", Content: string(binaryContent)}
+		req := &WriteFileRequest{Path: "binary.bin", Content: string(binaryContent), Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected error for binary content, got nil")
@@ -280,7 +280,7 @@ func TestWriteFile(t *testing.T) {
 
 		expectedPerm := os.FileMode(0o644)
 
-		req := &WriteFileRequest{Path: "default_perm.txt", Content: "content"}
+		req := &WriteFileRequest{Path: "default_perm.txt", Content: "content", Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -301,7 +301,7 @@ func TestWriteFile(t *testing.T) {
 		checksumManager := newMockChecksumManagerForWrite()
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
+		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content", Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -324,7 +324,7 @@ func TestWriteFile(t *testing.T) {
 
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content"}
+		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content", Comment: "test comment"}
 		result, err := executeWrite(t, writeTool, req)
 		if err == nil {
 			t.Errorf("expected operation error for logging per tool.md contract")
@@ -340,7 +340,7 @@ func TestWriteFile(t *testing.T) {
 
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{Path: "empty.txt", Content: ""}
+		req := &WriteFileRequest{Path: "empty.txt", Content: "", Comment: "test comment"}
 		_, err := executeWrite(t, writeTool, req)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -364,15 +364,14 @@ func TestWriteFile(t *testing.T) {
 		writeTool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 		
 		// Agent sends absolute path
-		params, _ := json.Marshal(&WriteFileRequest{Path: absFile, Content: "test"})
+		params, _ := json.Marshal(&WriteFileRequest{Path: absFile, Content: "test", Comment: "test comment"})
 		inv, err := writeTool.Prepare(context.Background(), string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
 		
-		// Display should show "Write new.txt" normalized from subdir/new.txt
-		// Wait, for Write, it showed "Write new.txt"? Let's check existing code.
+		// Display should show "WRITE subdir/new.txt" normalized from subdir/new.txt
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "Write subdir/new.txt", display.Content)
+		assert.Equal(t, "WRITE subdir/new.txt", display.Content)
 	})
 }

@@ -279,7 +279,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	content, ok := display.(domain.StringDisplay)
 	if !ok {
 		t.Errorf("Display() returned wrong type")
-	} else if !strings.Contains(content.Content, "Listing") {
+	} else if !strings.Contains(content.Content, "LIST src") {
 		t.Errorf("Display() content mismatch: %s", content.Content)
 	}
 
@@ -318,10 +318,10 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 		display := invocation.Display().(domain.StringDisplay)
 		// Current behavior uses filepath.Base(absPath) -> "components"
 		// Desired behavior: "src/components" (relative to /workspace)
-		if strings.Contains(display.Content, "Listing /workspace/src/components") {
+		if strings.Contains(display.Content, "LIST /workspace/src/components") {
 			t.Errorf("Display should not contain absolute path: %s", display.Content)
 		}
-		if !strings.Contains(display.Content, "Listing src/components") {
+		if !strings.Contains(display.Content, "LIST src/components") {
 			t.Errorf("Display should contain relative path 'src/components', got: %s", display.Content)
 		}
 	})

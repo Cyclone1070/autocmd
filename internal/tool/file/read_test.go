@@ -342,9 +342,9 @@ func TestReadFile(t *testing.T) {
 			t.Fatalf("Prepare failed: %v", err)
 		}
 		
-		// Display should show "Read subdir/test.txt", not the full absolute path
+		// Display should show "READ subdir/test.txt", not the full absolute path
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "Read subdir/test.txt", display.Content)
+		assert.Equal(t, "READ subdir/test.txt", display.Content)
 	})
 }
 

@@ -100,9 +100,6 @@ func (r *Resolver) Rel(path string) (string, error) {
 		return "", fmt.Errorf("path is outside workspace root: %s", path)
 	}
 
-	if rel == "." {
-		return "", nil
-	}
 
 	return filepath.ToSlash(rel), nil
 }

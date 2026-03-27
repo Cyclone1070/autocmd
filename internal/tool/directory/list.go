@@ -142,7 +142,7 @@ func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invoca
 		ignoreMatcher:  t.ignoreMatcher,
 		resolvedPath:   absPath,
 		ignorePatterns: req.Ignore,
-		display:        domain.NewStringDisplay("", fmt.Sprintf("Listing %s", filepath.ToSlash(rel))),
+		display:        domain.NewStringDisplay("", fmt.Sprintf("LIST %s", filepath.ToSlash(rel))),
 		maxResults:     t.maxResults,
 	}, nil
 }

@@ -113,7 +113,7 @@ func TestRel(t *testing.T) {
 		{
 			name:      "workspace root",
 			input:     "/workspace",
-			expected:  "",
+			expected:  ".",
 			wantError: false,
 		},
 		{

@@ -499,6 +499,32 @@ func TestEditFile(t *testing.T) {
 		}
 		
 		display := inv.Display().(domain.DiffDisplay)
-		assert.Equal(t, "Edit subdir/test.txt", display.Target)
+		assert.Equal(t, "EDIT subdir/test.txt", display.Target)
+	})
+
+	t.Run("suppresses 'No newline at end of file' metadata", func(t *testing.T) {
+		fs := newMockFileSystemForWrite(maxFileSize)
+		checksumManager := newMockChecksumManagerForWrite()
+		// File WITHOUT trailing newline
+		fs.createFile("/workspace/test.txt", []byte("line1\nline2"), 0o644)
+		
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		
+		req := &EditFileRequest{
+			Path:    "test.txt",
+			Comment: "no newline test",
+			Operations: []EditOperation{
+				{Before: "line2", After: "modified"},
+			},
+		}
+		
+		params, _ := json.Marshal(req)
+		inv, err := editTool.Prepare(context.Background(), string(params))
+		assert.NoError(t, err)
+		
+		display := inv.Display().(domain.DiffDisplay)
+		assert.NotContains(t, display.Diff, "\\ No newline at end of file")
+		assert.Contains(t, display.Diff, "-line2")
+		assert.Contains(t, display.Diff, "+modified")
 	})
 }

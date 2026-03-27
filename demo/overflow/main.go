@@ -102,7 +102,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 1. StringDisplay Overflow
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "string-overflow",
-		Display: domain.NewStringDisplay("Short Header"),
+		Display: domain.NewStringDisplay("", "Short Header"),
 	})
 	select {
 	case <-ctx.Done():
@@ -121,7 +121,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "string-overflow-2",
-		Display: domain.NewStringDisplay(longHeader),
+		Display: domain.NewStringDisplay("", longHeader),
 	})
 	select {
 	case <-ctx.Done():

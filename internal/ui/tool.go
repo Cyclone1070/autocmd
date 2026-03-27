@@ -63,11 +63,29 @@ func (r *ToolRenderer) formatError(header string, err string) string {
 
 // RenderString renders StringDisplay.
 func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
-	s := d.Content
+	header := d.Comment
+	content := d.Content
+
 	if status == StatusError {
-		s = r.formatError(s, err)
+		if header != "" {
+			header = r.formatError(header, err)
+		} else {
+			header = r.formatError(content, err)
+			content = ""
+		}
 	}
-	return r.gater.Gate(r.Pad(s, prefix))
+
+	if header == "" {
+		return r.gater.Gate(r.Pad(content, prefix))
+	}
+
+	header = r.Theme.Muted("# " + header)
+	parts := []string{header}
+	if content != "" {
+		parts = append(parts, content)
+	}
+
+	return r.Pad(strings.Join(parts, "\n\n"), prefix)
 }
 
 // RenderDiff renders DiffDisplay.

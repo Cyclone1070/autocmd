@@ -490,8 +490,8 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 		{Role: schema.Tool, ToolCallID: "tc-2", Content: "ok"},
 	}
 	displays := domain.ToolDisplays{
-		"tc-1": domain.NewStringDisplay("Listing iav"),
-		"tc-2": domain.NewStringDisplay("Reading todos"),
+		"tc-1": domain.NewStringDisplay("", "Listing iav"),
+		"tc-2": domain.NewStringDisplay("", "Reading todos"),
 	}
 
 	var sb strings.Builder

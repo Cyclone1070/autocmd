@@ -34,6 +34,7 @@ type ToolDisplay interface {
 // StringDisplay is for simple text output (most tools).
 type StringDisplay struct {
 	TypeField string `json:"type"`
+	Comment   string `json:"comment"`
 	Content   string `json:"content"`
 }
 
@@ -41,8 +42,8 @@ func (StringDisplay) isToolDisplay() {}
 func (s StringDisplay) Type() string { return s.TypeField }
 
 // NewStringDisplay creates a new StringDisplay with correct type.
-func NewStringDisplay(content string) StringDisplay {
-	return StringDisplay{TypeField: "string", Content: content}
+func NewStringDisplay(comment, content string) StringDisplay {
+	return StringDisplay{TypeField: "string", Comment: comment, Content: content}
 }
 
 // DiffDisplay is for file edit operations with unified diff content.

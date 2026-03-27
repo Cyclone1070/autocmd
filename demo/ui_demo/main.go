@@ -122,7 +122,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",
-		Display: domain.NewStringDisplay("Reading main.go"),
+		Display: domain.NewStringDisplay("", "Reading main.go"),
 	})
 	select {
 	case <-ctx.Done():

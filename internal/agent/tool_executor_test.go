@@ -184,7 +184,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "result",
-				display: domain.NewStringDisplay("display output"),
+				display: domain.NewStringDisplay("", "display output"),
 			}, nil
 		},
 	}
@@ -206,7 +206,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", start.CallID)
 	assert.Equal(t, "test", start.ToolName)
-	assert.Equal(t, domain.NewStringDisplay("display output"), start.Display)
+	assert.Equal(t, domain.NewStringDisplay("", "display output"), start.Display)
 
 	e2 := <-sender.events
 	end, ok := e2.(domain.ToolEndEvent)

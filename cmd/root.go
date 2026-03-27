@@ -21,7 +21,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/git"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
-	"github.com/Cyclone1070/iav/internal/tool/todo"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
@@ -80,7 +79,6 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
 	cmdExecutor := executor.NewOSCommandExecutor()
 	checksumMgr := hash.NewChecksumManager()
-	todoStore := todo.NewInMemoryTodoStore()
 
 	ignoreMatcher, err := git.NewIgnoreMatcher(pathResolver.Root(), fileSystem)
 	if err != nil {
@@ -95,8 +93,6 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
 		shell.NewShellTool(fileSystem, cmdExecutor, time.Duration(deps.Config.Tools().DefaultShellTimeout())*time.Second, pathResolver),
-		todo.NewReadTodosTool(todoStore),
-		todo.NewWriteTodosTool(todoStore),
 	}
 	toolRegistry := tool.NewRegistry(tools)
 

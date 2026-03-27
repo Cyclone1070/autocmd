@@ -155,9 +155,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 1. String Suite
 	if err := runSuite("STRING",
-		domain.NewStringDisplay("String 1 (Slow)"),
-		domain.NewStringDisplay("String 2 (Fast)"),
-		domain.NewStringDisplay("String 3 (Medium/Fail)")); err != nil {
+		domain.NewStringDisplay("Analyzing codebase", "String 1 (Slow)"),
+		domain.NewStringDisplay("", "String 2 (Fast)"),
+		domain.NewStringDisplay("", "String 3 (Medium/Fail)")); err != nil {
 		return err
 	}
 

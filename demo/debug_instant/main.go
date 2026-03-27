@@ -98,7 +98,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",
-		Display: domain.NewStringDisplay("This tool call display should be sandwiched."),
+		Display: domain.NewStringDisplay("", "This tool call display should be sandwiched."),
 	})
 	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
 

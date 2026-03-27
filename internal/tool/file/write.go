@@ -78,6 +78,11 @@ func (t *WriteFileTool) Definition() *schema.ToolInfo {
 				Desc:     "File content",
 				Required: true,
 			},
+			"comment": {
+				Type:     schema.String,
+				Desc:     "A brief comment describing why the file is being created.",
+				Required: true,
+			},
 		}),
 	}
 }
@@ -86,6 +91,7 @@ func (t *WriteFileTool) Definition() *schema.ToolInfo {
 type WriteFileRequest struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	Comment string `json:"comment"`
 }
 
 func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
@@ -136,7 +142,7 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invo
 		absPath:         abs,
 		relPath:         req.Path,
 		content:         []byte(req.Content),
-		display:         domain.NewStringDisplay(fmt.Sprintf("Write %s", filepath.ToSlash(rel))),
+		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("Write %s", filepath.ToSlash(rel))),
 	}, nil
 }
 

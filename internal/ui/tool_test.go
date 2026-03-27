@@ -39,7 +39,7 @@ func TestToolRenderer_RespectsGater(t *testing.T) {
 	tr := NewToolRenderer(theme, 80, g)
 	
 	// Specification: Should use the injected gater
-	got := tr.RenderString(domain.NewStringDisplay("raw"), StatusSuccess, "", "✓")
+	got := tr.RenderString(domain.NewStringDisplay("", "raw"), StatusSuccess, "", "✓")
 	assert.Contains(t, got, "raw_gated", "ToolRenderer should use the injected gater for output")
 }
 
@@ -66,14 +66,14 @@ func assertGolden(t *testing.T, name string, actual string) {
 
 func TestRenderString_Running(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	display := domain.NewStringDisplay("Reading massive_file.txt...")
+	display := domain.NewStringDisplay("", "Reading massive_file.txt...")
 	got := tr.RenderString(display, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderString_Running", got)
 }
 
 func TestRenderString_ErrorWrap(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	display := domain.NewStringDisplay("Reading file")
+	display := domain.NewStringDisplay("", "Reading file")
 	got := tr.RenderString(display, StatusError, "permission denied", "✗")
 	assertGolden(t, "RenderString_Error_Wrap", got)
 }

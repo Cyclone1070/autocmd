@@ -326,7 +326,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	}, sender)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "Error: execution failed: infra failure", res.Content)
+	assert.Equal(t, "Detailed error in content", res.Content)
 
 	// ToolStartEvent
 	<-sender.events
@@ -336,7 +336,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
-	assert.Equal(t, "Execution failed", end.Error)
+	assert.Equal(t, "infra failure", end.Error)
 }
 
 func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
@@ -349,7 +349,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Header", "cmd", output, nil),
 				execute: func(ctx context.Context) (string, error) {
-					return "specific error", fmt.Errorf("execution failed")
+					return "specific error", fmt.Errorf("command timeout")
 				},
 			}, nil
 		},
@@ -382,7 +382,7 @@ loop:
 	}
 
 	assert.Equal(t, 1, len(endEvents), "Must receive exactly ONE completion event (avoid race override). Got: %v", endEvents)
-	assert.Equal(t, "Execution failed", endEvents[0].Error, "Completion event must retain the execution error status")
+	assert.Equal(t, "command timeout", endEvents[0].Error, "Completion event must retain the execution error status")
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {

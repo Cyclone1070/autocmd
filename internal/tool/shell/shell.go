@@ -190,12 +190,12 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
 	// Handle infrastructure errors
 	if err != nil {
 		if errors.Is(err, executor.ErrTimeout) {
-			return fmt.Sprintf("Error: %s\n(Command timed out)", result.Stdout), executor.ErrTimeout
+			return fmt.Sprintf("Error: %s\n(Command timed out)", result.Stdout), errors.New("Execution failed")
 		}
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return "", err
 		}
-		return fmt.Sprintf("Error: %v", err), err
+		return fmt.Sprintf("Error: %v", err), errors.New("Execution failed")
 	}
 
 	// Format output

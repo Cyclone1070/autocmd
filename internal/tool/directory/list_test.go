@@ -418,6 +418,9 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 		// Per new tool.md contract, operation errors return err for logging
 		t.Fatalf("Expected operation error for logging per new tool.md contract")
 	}
+	if err.Error() != "Execution failed" {
+		t.Errorf("Expected 'Execution failed' error, got: %v", err)
+	}
 
 	if !strings.Contains(output, "no longer exists") {
 		t.Errorf("Expected TOCTOU error message, got: %s", output)

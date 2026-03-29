@@ -425,6 +425,9 @@ func TestEditFile(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected operation error for logging per tool.md contract")
 		}
+		if err.Error() != "Execution failed" {
+			t.Errorf("expected 'Execution failed' error, got: %v", err)
+		}
 		assertContains(t, output, "file changed since edit was prepared")
 	})
 

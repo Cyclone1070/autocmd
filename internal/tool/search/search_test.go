@@ -107,3 +107,26 @@ func TestSearchContent_FileTarget_Regression(t *testing.T) {
 
 	exec.AssertExpectations(t)
 }
+
+func TestSearchContent_ExecutionFailure(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockCommandExecutor{}
+	pathResolver := &mockPathResolver{}
+
+	pathResolver.On("Abs", ".").Return("/workspace", nil)
+	pathResolver.On("Rel", "/workspace").Return(".", nil)
+
+	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+
+	// Simulate rg failure
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
+		Return(&executor.Result{Stderr: "fatal error", ExitCode: 2}, nil)
+
+	tool := NewSearchContentTool(fs, exec, pathResolver)
+	req := &SearchContentRequest{Pattern: "pattern"}
+
+	result, err := executeSearch(t, tool, req)
+	assert.Error(t, err)
+	assert.Equal(t, "Execution failed", err.Error())
+	assert.Contains(t, result, "fatal error")
+}

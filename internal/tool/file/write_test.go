@@ -329,6 +329,9 @@ func TestWriteFile(t *testing.T) {
 		if err == nil {
 			t.Errorf("expected operation error for logging per tool.md contract")
 		}
+		if err.Error() != "Execution failed" {
+			t.Errorf("expected 'Execution failed' error, got: %v", err)
+		}
 		if !strings.Contains(result, "failed to create directories") {
 			t.Errorf("expected error message about directories, got: %s", result)
 		}

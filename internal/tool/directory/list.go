@@ -160,21 +160,20 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 			return "", ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), err
+			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), errors.New("Execution failed")
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), err
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), errors.New("Execution failed")
 	}
 	if !info.IsDir() {
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), fmt.Errorf("path is no longer a directory: %s", i.resolvedPath)
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), errors.New("Execution failed")
 	}
 
-	// 2. List Directory (Shallow / Depth 1)
 	entries, err := i.fs.ListDir(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), err
+		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), errors.New("Execution failed")
 	}
 
 	// 3. Filter & Convert

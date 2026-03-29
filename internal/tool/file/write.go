@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -176,7 +177,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), errors.New("Execution failed")
 	}
 
 	// Ensure parent directories exist
@@ -185,7 +186,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to create directories: %v", err), err
+		return fmt.Sprintf("Error: failed to create directories: %v", err), errors.New("Execution failed")
 	}
 
 	// Note: Binary check already done in Prepare
@@ -196,7 +197,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), err
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), errors.New("Execution failed")
 	}
 
 	// Update checksum cache

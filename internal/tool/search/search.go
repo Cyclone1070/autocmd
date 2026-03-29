@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -159,9 +160,9 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 			return "", ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), err
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), errors.New("Execution failed")
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), err
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), errors.New("Execution failed")
 	}
 
 	maxResults := maxSearchResults
@@ -190,11 +191,11 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		return fmt.Sprintf("Error: rg failed to start: %v", err), err
+		return fmt.Sprintf("Error: rg failed to start: %v", err), errors.New("Execution failed")
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), fmt.Errorf("rg exit code %d", res.ExitCode)
+		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), errors.New("Execution failed")
 	}
 
 	// Process output

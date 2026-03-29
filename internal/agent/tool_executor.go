@@ -36,8 +36,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-		display := domain.NewStringDisplay("", "Invalid tool call")
-		display.Error = "Unknown tool"
+		display := domain.NewStringDisplay("", "Unknown tool")
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -46,7 +45,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  display.Error,
+				Error:  "Unknown tool",
 			})
 		}
 
@@ -77,8 +76,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
 
 		toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
-		display := domain.NewStringDisplay("", "Invalid tool call")
-		display.Error = toolLabel
+		display := domain.NewStringDisplay("", toolLabel)
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -87,7 +85,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID: tc.ID,
-				Error:  display.Error,
+				Error:  toolLabel,
 			})
 		}
 
@@ -149,12 +147,15 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 
 		errStr := err.Error()
 		switch d := display.(type) {
-		case *domain.StringDisplay:
+		case domain.StringDisplay:
 			d.Error = errStr
-		case *domain.DiffDisplay:
+			display = d
+		case domain.DiffDisplay:
 			d.Error = errStr
-		case *domain.ShellDisplay:
+			display = d
+		case domain.ShellDisplay:
 			d.Error = errStr
+			display = d
 		}
 
 		if events != nil {
@@ -168,9 +169,9 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			Role:       schema.Tool,
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
-			Content:    fmt.Sprintf("Error: execution failed: %v", err),
+			Content:    llmContent,
 			Extra:      map[string]any{"tool_error": true},
-		}, display, err
+		}, display, nil
 	}
 
 	// Ensure all streaming chunks are sent before sending the end event

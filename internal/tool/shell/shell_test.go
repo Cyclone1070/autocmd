@@ -435,7 +435,7 @@ func TestShellTool_Execute_Timeout(t *testing.T) {
 	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
 
 	output, err := inv.Execute(ctx)
-	assert.ErrorIs(t, err, executor.ErrTimeout)
+	assert.ErrorContains(t, err, "Execution failed")
 	assert.Contains(t, output, "(Command timed out)")
 }
 

@@ -170,6 +170,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 			TypeField:      "shell",
 			Command:        "false",
 			CapturedOutput: &empty,
+			Error:          "Execution failed",
 		},
 	}
 

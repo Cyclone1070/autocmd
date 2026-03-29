@@ -12,6 +12,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Local mocks for read tests
@@ -324,6 +325,29 @@ func TestReadFile(t *testing.T) {
 		}
 		assertContains(t, output, "00001| line1")
 		assertContains(t, output, "00002| line2")
+	})
+
+	t.Run("read failure after prepare", func(t *testing.T) {
+		fs := newMockFileSystemForRead()
+		checksumManager := newMockChecksumManagerForRead()
+		fs.createFile("/workspace/test.txt", []byte("content"))
+
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+
+		readReq := &ReadFileRequest{Path: "test.txt"}
+		params, _ := json.Marshal(readReq)
+		inv, err := readTool.Prepare(context.Background(), string(params))
+		require.NoError(t, err)
+
+		// Delete file after prepare to cause Execute failure
+		delete(fs.files, "/workspace/test.txt")
+
+		output, err := inv.Execute(context.Background())
+		if err == nil {
+			t.Fatal("expected Execute to fail")
+		}
+		assert.Equal(t, "Execution failed", err.Error())
+		assertContains(t, output, "Error:")
 	})
 
 	t.Run("absolute path in request is normalized for display", func(t *testing.T) {

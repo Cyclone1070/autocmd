@@ -35,26 +35,45 @@ func (mt *mockTool) Prepare(ctx context.Context, params string) (domain.Invocati
 	if mt.prepare != nil {
 		return mt.prepare(ctx, params)
 	}
-	return &mockInvocation{content: "ok"}, nil
+	return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
 }
 
 type mockInvocation struct {
 	content string
 	err     error
 	display domain.ToolDisplay
-	execute func(ctx context.Context) (string, error)
+	execute func(ctx context.Context) (string, domain.ToolDisplay, error)
 }
 
-func (m *mockInvocation) Execute(ctx context.Context) (string, error) {
+func (m *mockInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return "", m.display, err
 	}
 	if m.execute != nil {
 		return m.execute(ctx)
 	}
-	return m.content, m.err
+	if m.err != nil {
+		return m.content, withToolError(m.display, m.err.Error()), m.err
+	}
+	return m.content, m.display, nil
 }
 func (m *mockInvocation) Display() domain.ToolDisplay { return m.display }
+
+func withToolError(d domain.ToolDisplay, msg string) domain.ToolDisplay {
+	switch d := d.(type) {
+	case domain.StringDisplay:
+		d.Error = msg
+		return d
+	case domain.DiffDisplay:
+		d.Error = msg
+		return d
+	case domain.ShellDisplay:
+		d.Error = msg
+		return d
+	default:
+		return d
+	}
+}
 
 // mockStreamInvocation implements domain.StreamableInvocation for streaming tests.
 type mockStreamInvocation struct {
@@ -66,11 +85,14 @@ type mockStreamInvocation struct {
 
 func (m *mockStreamInvocation) Stream() io.Reader { return m.stream }
 func (m *mockStreamInvocation) Display() domain.ToolDisplay { return m.display }
-func (m *mockStreamInvocation) Execute(ctx context.Context) (string, error) {
+func (m *mockStreamInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return "", m.display, err
 	}
-	return m.content, m.err
+	if m.err != nil {
+		return m.content, withToolError(m.display, m.err.Error()), m.err
+	}
+	return m.content, m.display, nil
 }
 
 type mockToolRegistry struct {
@@ -156,7 +178,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 		name: "test",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			capturedParams = params
-			return &mockInvocation{content: "ok"}, nil
+			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
@@ -200,13 +222,13 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-789", start.CallID)
-	assert.Equal(t, domain.NewStringDisplay("", "Bad TEST request"), start.Display)
+	assert.Equal(t, domain.NewStringDisplay("", "Tool call failed"), start.Display)
 
 	// Verify generic error event
 	e2 := <-sender.events
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
-	assert.Equal(t, "Bad TEST request", end.Error)
+	assert.Equal(t, "Bad TEST request", end.Display.GetError())
 }
 
 func TestExecute_EmitsToolEvents(t *testing.T) {
@@ -243,7 +265,8 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", end.CallID)
-	assert.Empty(t, end.Error)
+	assert.Empty(t, end.Display.GetError())
+	assert.Equal(t, domain.NewStringDisplay("", "display output"), end.Display)
 }
 
 func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
@@ -263,7 +286,9 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg1, disp1, err1 := executor.execute(context.Background(), tc1, sender)
 	assert.NoError(t, err1)
 	assert.NotNil(t, disp1)
-	assert.Equal(t, domain.NewStringDisplay("", "Unknown tool"), disp1)
+	exp1 := domain.NewStringDisplay("", "Tool call failed")
+	exp1.Error = "Unknown tool"
+	assert.Equal(t, exp1, disp1)
 	assert.Equal(t, "tc-1", msg1.ToolCallID)
 	assert.Contains(t, msg1.Content, "does not exist")
 
@@ -272,7 +297,9 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg2, disp2, err2 := executor.execute(context.Background(), tc2, sender)
 	assert.NoError(t, err2)
 	assert.NotNil(t, disp2)
-	assert.Equal(t, domain.NewStringDisplay("", "Bad READ FILE request"), disp2)
+	exp2 := domain.NewStringDisplay("", "Tool call failed")
+	exp2.Error = "Bad READ FILE request"
+	assert.Equal(t, exp2, disp2)
 	assert.Equal(t, "tc-2", msg2.ToolCallID)
 	assert.Contains(t, msg2.Content, "failed to prepare")
 }
@@ -314,12 +341,37 @@ loop:
 			streamOutput.WriteString(ev.Chunk)
 		case domain.ToolEndEvent:
 			assert.Equal(t, "tc-shell", ev.CallID)
-			assert.Empty(t, ev.Error)
+			assert.Empty(t, ev.Display.GetError())
 			break loop
 		}
 	}
 
 	assert.Equal(t, "file1\nfile2\n", streamOutput.String())
+}
+
+func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
+	mt := &mockTool{
+		name: "test",
+		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				content: "oops",
+				display: domain.NewStringDisplay("", "preview"),
+				err:     fmt.Errorf("infra failure"),
+			}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+
+	_, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-1",
+		Function: schema.FunctionCall{Name: "test"},
+	}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "infra failure", disp.GetError())
+	sd, ok := disp.(domain.StringDisplay)
+	assert.True(t, ok)
+	assert.Equal(t, "infra failure", sd.Error)
 }
 
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
@@ -328,6 +380,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Detailed error in content",
+				display: domain.NewStringDisplay("", ""),
 				err:     fmt.Errorf("infra failure"),
 			}, nil
 		},
@@ -354,7 +407,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
-	assert.Equal(t, "infra failure", end.Error)
+	assert.Equal(t, "infra failure", end.Display.GetError())
 }
 
 func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
@@ -400,7 +453,7 @@ loop:
 	}
 
 	assert.Equal(t, 1, len(endEvents), "Must receive exactly ONE completion event (avoid race override). Got: %v", endEvents)
-	assert.Equal(t, "command timeout", endEvents[0].Error, "Completion event must retain the execution error status")
+	assert.Equal(t, "command timeout", endEvents[0].Display.GetError(), "Completion event must retain the execution error status")
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
@@ -444,7 +497,7 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, schema.Tool, res.Role)
 	assert.Equal(t, "tc-cancel", res.ToolCallID)
-	assert.True(t, res.Extra["tool_error"].(bool))
+	assert.Nil(t, res.Extra)
 	assert.Equal(t, "execution cancelled", res.Content)
 }
 

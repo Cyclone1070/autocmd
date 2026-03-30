@@ -146,24 +146,29 @@ func (i *findFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
+func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+	d := i.display.(domain.StringDisplay)
+
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
 
 	// Re-verify State
 	info, err := i.fs.Stat(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), errors.New("Execution failed")
+			d.Error = err.Error()
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, errors.New("Execution failed")
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, errors.New("Execution failed")
 	}
 	if !info.IsDir() {
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), errors.New("Execution failed")
+		d.Error = "path is not a directory"
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d, errors.New("Execution failed")
 	}
 
 	// fd --glob "pattern" searchPath
@@ -172,13 +177,15 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: fd failed to start: %v", err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: fd failed to start: %v", err), d, errors.New("Execution failed")
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), errors.New("Execution failed")
+		d.Error = fmt.Sprintf("exit code %d", res.ExitCode)
+		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d, errors.New("Execution failed")
 	}
 
 	maxResults := maxFindResults
@@ -204,7 +211,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 	}
 
 	if len(matches) == 0 {
-		return "No matches found.", nil
+		return "No matches found.", d, nil
 	}
 
 	formattedMatches := strings.Join(matches, "\n")
@@ -212,5 +219,5 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, error) {
 		formattedMatches += "\n\n(Results truncated. Consider using a more specific pattern.)"
 	}
 
-	return formattedMatches, nil
+	return formattedMatches, d, nil
 }

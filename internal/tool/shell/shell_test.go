@@ -190,6 +190,34 @@ func TestShellTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
 	assert.Contains(t, err.Error(), "workspace root not set")
 }
 
+func TestShellTool_Execute_FinalDisplay(t *testing.T) {
+	mockPR := new(mockPathResolver)
+	mockCE := new(mockCommandExecutor)
+
+	tl := NewShellTool(mockCE, mockPR)
+
+	mockPR.On("Root").Return("/workspace")
+	streamCmd := newTestStreamingCmd("hello world", &executor.Result{Stdout: "hello world", ExitCode: 0}, nil)
+	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything).
+		Return(streamCmd, nil)
+
+	ctx := context.Background()
+	params := `{"command": ["echo", "hello"], "comment": "test"}`
+
+	inv, err := tl.Prepare(ctx, params)
+	require.NoError(t, err)
+
+	si := inv.(domain.StreamableInvocation)
+	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
+
+	llm, disp, err := inv.Execute(ctx)
+	require.NoError(t, err)
+	sh := disp.(domain.ShellDisplay)
+	assert.Equal(t, "hello world", sh.CapturedOutput)
+	assert.Empty(t, sh.GetError())
+	assert.Contains(t, llm, "(Exit code: 0)")
+}
+
 func TestShellTool_Execute_Success(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
@@ -210,7 +238,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, err := inv.Execute(ctx)
+	output, _, err := inv.Execute(ctx)
 	require.NoError(t, err)
 
 	assert.Contains(t, output, "hello world")
@@ -237,7 +265,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, err := inv.Execute(ctx)
+	output, _, err := inv.Execute(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, output, "(Exit code: 1)")
 }
@@ -264,7 +292,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 
 	cancel()
 
-	_, err = inv.Execute(ctx)
+	_, _, err = inv.Execute(ctx)
 	assert.ErrorIs(t, err, context.Canceled)
 }
 
@@ -288,7 +316,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, err := inv.Execute(ctx)
+	output, _, err := inv.Execute(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, output, "(Output truncated)")
 }
@@ -319,7 +347,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 		close(done)
 	}()
 
-	_, _ = inv.Execute(ctx)
+	_, _, _ = inv.Execute(ctx)
 	<-done
 
 	assert.Contains(t, buf.String(), "streaming_test")
@@ -344,7 +372,7 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	disp := inv.Display().(domain.ShellDisplay)
 	assert.Empty(t, disp.CapturedOutput)
 
-	out, err := inv.Execute(ctx)
+	out, _, err := inv.Execute(ctx)
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "captured")

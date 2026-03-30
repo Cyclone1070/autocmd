@@ -120,16 +120,17 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's the result of my investigation:"})
 
+	tool0Disp := domain.NewStringDisplay("", "Reading main.go")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",
-		Display: domain.NewStringDisplay("", "Reading main.go"),
+		Display: tool0Disp,
 	})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1 * time.Second):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0", Display: tool0Disp})
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Now let's run some tools in parallel. Tools will be displayed in toolStart order."})
 	select {
@@ -139,9 +140,10 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// 3. Parallel Tool Calls (3 tools)
+	tool1Disp := domain.NewShellDisplay("Finish last", "npm list --depth=0", "")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-1",
-		Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", ""),
+		Display: tool1Disp,
 	})
 	select {
 	case <-ctx.Done():
@@ -149,9 +151,10 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(400 * time.Millisecond):
 	}
 
+	tool2Disp := domain.NewShellDisplay("Finish first", "eslint .", "")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-2",
-		Display: domain.NewShellDisplay("Finish first", "eslint .", ""),
+		Display: tool2Disp,
 	})
 	select {
 	case <-ctx.Done():
@@ -166,9 +169,10 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(400 * time.Millisecond):
 	}
 
+	tool3Disp := domain.NewShellDisplay("Finish second", "go test ./...", "")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-3",
-		Display: domain.NewShellDisplay("Finish second", "go test ./...", ""),
+		Display: tool3Disp,
 	})
 	select {
 	case <-ctx.Done():
@@ -183,7 +187,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-2"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-2", Display: tool2Disp})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -197,7 +201,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-3"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-3", Display: tool3Disp})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -211,7 +215,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-1"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-1", Display: tool1Disp})
 
 	// 6. Final text
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Refactoring complete! The UI is looking great. ✨"})

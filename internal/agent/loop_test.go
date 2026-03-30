@@ -177,7 +177,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 	mt := &mockTool{
 		name: "get_weather",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "Sunny"}, nil
+			return &mockInvocation{content: "Sunny", display: domain.NewStringDisplay("", "weather")}, nil
 		},
 	}
 
@@ -212,8 +212,8 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Run Bash", "echo chunk", ""),
-				execute: func(ctx context.Context) (string, error) {
-					return "done", nil
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					return "done", domain.NewShellDisplay("Run Bash", "echo chunk", ""), nil
 				},
 			}, nil
 		},
@@ -241,7 +241,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 	mt := &mockTool{
 		name: "infinite",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "kept going"}, nil
+			return &mockInvocation{content: "kept going", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 
@@ -300,10 +300,11 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		name: "t1",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				execute: func(ctx context.Context) (string, error) {
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					close(t1Started)
 					<-canFinish
-					return "R1", nil
+					return "R1", domain.NewStringDisplay("", ""), nil
 				},
 			}, nil
 		},
@@ -312,10 +313,11 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		name: "t2",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				execute: func(ctx context.Context) (string, error) {
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					close(t2Started)
 					<-canFinish
-					return "R2", nil
+					return "R2", domain.NewStringDisplay("", ""), nil
 				},
 			}, nil
 		},
@@ -367,10 +369,11 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 		name: "t1",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				execute: func(ctx context.Context) (string, error) {
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					time.Sleep(50 * time.Millisecond)
 					cancel()
-					return "", ctx.Err()
+					return "", domain.NewStringDisplay("", ""), ctx.Err()
 				},
 			}, nil
 		},
@@ -379,9 +382,10 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 		name: "t2",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				execute: func(ctx context.Context) (string, error) {
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					<-ctx.Done()
-					return "", ctx.Err()
+					return "", domain.NewStringDisplay("", ""), ctx.Err()
 				},
 			}, nil
 		},
@@ -397,9 +401,9 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	m2 := session.Messages[2]
 	m3 := session.Messages[3]
 	assert.Equal(t, "tc-1", m2.ToolCallID)
-	assert.True(t, m2.Extra["tool_error"].(bool))
+	assert.Equal(t, "execution cancelled", m2.Content)
 	assert.Equal(t, "tc-2", m3.ToolCallID)
-	assert.True(t, m3.Extra["tool_error"].(bool))
+	assert.Equal(t, "execution cancelled", m3.Content)
 }
 
 func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
@@ -423,13 +427,13 @@ func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
 	mt1 := &mockTool{
 		name: "t1",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "R1"}, nil
+			return &mockInvocation{content: "R1", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
 		name: "t2",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "R2"}, nil
+			return &mockInvocation{content: "R2", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 
@@ -469,13 +473,13 @@ func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
 	mt1 := &mockTool{
 		name: "t1",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "R1:" + params}, nil
+			return &mockInvocation{content: "R1:" + params, display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
 		name: "t2",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{content: "R2:" + params}, nil
+			return &mockInvocation{content: "R2:" + params, display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 

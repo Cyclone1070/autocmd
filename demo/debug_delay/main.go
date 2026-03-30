@@ -106,16 +106,17 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(1 * time.Second):
 	}
 
+	dbgDisp := domain.NewStringDisplay("", "This tool call display should be sandwiched.")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",
-		Display: domain.NewStringDisplay("", "This tool call display should be sandwiched."),
+		Display: dbgDisp,
 	})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1 * time.Second):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0", Display: dbgDisp})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

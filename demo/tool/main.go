@@ -91,6 +91,23 @@ type mockAgent struct {
 	bus *eventbus.EventBus
 }
 
+// toolDisplayWithError copies the display and sets Error for demo ToolEndEvent (matches executor baking).
+func toolDisplayWithError(d domain.ToolDisplay, msg string) domain.ToolDisplay {
+	switch x := d.(type) {
+	case domain.StringDisplay:
+		x.Error = msg
+		return x
+	case domain.DiffDisplay:
+		x.Error = msg
+		return x
+	case domain.ShellDisplay:
+		x.Error = msg
+		return x
+	default:
+		return d
+	}
+}
+
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
 	runSuite := func(name string, display1, display2, display3 domain.ToolDisplay) error {
 		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("### SUITE: %s\n\n", name)})
@@ -109,21 +126,21 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(500 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1", Display: display1})
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(1000 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Display: toolDisplayWithError(display3, "operation failed: middle tool error")})
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(1500 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2", Display: display2})
 			}
 		} else {
 			// Default: 2 (0.5s), 3 (1.5s, error), 1 (3s)
@@ -131,21 +148,21 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(500 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-2", Display: display2})
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(1000 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Error: "operation failed: middle tool error"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-3", Display: toolDisplayWithError(display3, "operation failed: middle tool error")})
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(1500 * time.Millisecond):
-				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1"})
+				a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: name + "-1", Display: display1})
 			}
 		}
 		return nil
@@ -194,19 +211,21 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// Finishes
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-2"}) // Fast
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", "")}) // Fast
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1000 * time.Millisecond):
-		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-3", Error: "exit status 1: middle tool error"}) // Medium/Fail
+		shell3 := domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", "")
+		shell3.Error = "exit status 1: middle tool error"
+		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-3", Display: shell3}) // Medium/Fail
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1000 * time.Millisecond):
-		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-1"}) // Slow
+		a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", "")}) // Slow
 	}
 
 	return nil

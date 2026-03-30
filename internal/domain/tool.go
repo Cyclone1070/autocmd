@@ -17,10 +17,11 @@ type Invocation interface {
 	// Display returns what to show in UI (computed during Prepare).
 	Display() ToolDisplay
 
-	// Execute runs the operation and returns content for the LLM.
-	// Success: (content, nil)
-	// Failure: (errorContent, err) - errorContent shown to LLM, err signals failure.
-	Execute(ctx context.Context) (llmContent string, err error)
+	// Execute runs the operation and returns LLM-facing content, the finalized display for UI/history,
+	// and err. err is non-nil when the tool invocation itself fails (e.g. cancelled context, I/O failure);
+	// semantic outcomes stay in content and display without err for cases like non-zero shell exit.
+	// When err is non-nil, finalDisplay must surface the failure via GetError() (executor does not patch this).
+	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
 // StreamableInvocation is an Invocation that exposes a live stdout/stderr stream for UI
@@ -36,6 +37,7 @@ type StreamableInvocation interface {
 type ToolDisplay interface {
 	Type() string
 	isToolDisplay()
+	GetError() string
 }
 
 // StringDisplay is for simple text output (most tools).
@@ -48,6 +50,7 @@ type StringDisplay struct {
 
 func (StringDisplay) isToolDisplay() {}
 func (s StringDisplay) Type() string { return s.TypeField }
+func (s StringDisplay) GetError() string { return s.Error }
 
 // NewStringDisplay creates a new StringDisplay with correct type.
 func NewStringDisplay(comment, content string) StringDisplay {
@@ -67,6 +70,7 @@ type DiffDisplay struct {
 
 func (DiffDisplay) isToolDisplay()    {}
 func (d DiffDisplay) Type() string    { return d.TypeField }
+func (d DiffDisplay) GetError() string { return d.Error }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
 func NewDiffDisplay(comment, target string, added, removed int, diff string) DiffDisplay {
@@ -91,6 +95,7 @@ type ShellDisplay struct {
 
 func (ShellDisplay) isToolDisplay() {}
 func (s ShellDisplay) Type() string   { return s.TypeField }
+func (s ShellDisplay) GetError() string { return s.Error }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
 func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {

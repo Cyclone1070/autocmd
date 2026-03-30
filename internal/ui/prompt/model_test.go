@@ -9,6 +9,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockBus struct {
@@ -209,6 +210,56 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	// we get "\nBox1" + "\n" + "\nBox2" = "\nBox1\n\nBox2".
 	// The blank line is EXACTLY there.
 	assert.Contains(t, v, "╯\n\n╭", "There should be a blank line between the boxes")
+}
+
+func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{callID: "first", toolName: "t", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
+		{callID: "second", toolName: "t", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning, errorMsg: "stale"},
+	}
+
+	res, _ := m.handleBusEvent(domain.ToolEndEvent{
+		CallID:  "second",
+		Display: domain.NewStringDisplay("", "baked second"),
+	})
+	newM := res.(*Model)
+
+	require.Len(t, newM.tools, 2)
+	assert.Equal(t, "preview first", newM.tools[0].display.(domain.StringDisplay).Content)
+	sd := newM.tools[1].display.(domain.StringDisplay)
+	assert.Equal(t, "baked second", sd.Content)
+	assert.Empty(t, sd.GetError())
+	assert.Equal(t, ui.StatusSuccess, newM.tools[1].status)
+	assert.Empty(t, newM.tools[1].errorMsg, "atomic swap clears stale slot errorMsg")
+
+}
+
+func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{callID: "first", toolName: "t", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
+		{callID: "second", toolName: "t", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning},
+	}
+	failDisp := domain.NewStringDisplay("", "baked")
+	failDisp.Error = "boom"
+
+	res, _ := m.handleBusEvent(domain.ToolEndEvent{CallID: "second", Display: failDisp})
+	newM := res.(*Model)
+
+	require.Len(t, newM.tools, 2)
+	assert.Equal(t, ui.StatusError, newM.tools[1].status)
+	assert.Equal(t, "boom", newM.tools[1].display.GetError())
 }
 
 func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {

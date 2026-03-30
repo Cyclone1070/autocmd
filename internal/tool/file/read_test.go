@@ -109,7 +109,8 @@ func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (strin
 	if err != nil {
 		return "", err
 	}
-	return inv.Execute(context.Background())
+	out, _, err := inv.Execute(context.Background())
+	return out, err
 }
 
 func TestReadFile(t *testing.T) {
@@ -342,7 +343,7 @@ func TestReadFile(t *testing.T) {
 		// Delete file after prepare to cause Execute failure
 		delete(fs.files, "/workspace/test.txt")
 
-		output, err := inv.Execute(context.Background())
+		output, _, err := inv.Execute(context.Background())
 		if err == nil {
 			t.Fatal("expected Execute to fail")
 		}

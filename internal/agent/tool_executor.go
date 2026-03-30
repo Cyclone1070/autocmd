@@ -36,7 +36,9 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 		errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-		display := domain.NewStringDisplay("", "Unknown tool")
+		display := domain.NewStringDisplay("", "Tool call failed")
+		endDisp := display
+		endDisp.Error = "Unknown tool"
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -44,8 +46,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 				Display:  display,
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
-				CallID: tc.ID,
-				Error:  "Unknown tool",
+				CallID:  tc.ID,
+				Display: endDisp,
 			})
 		}
 
@@ -54,8 +56,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
 			Content:    errMsg,
-			Extra:      map[string]any{"tool_error": true},
-		}, display, nil
+		}, endDisp, nil
 	}
 
 	inv, err := t.Prepare(ctx, tc.Function.Arguments)
@@ -66,7 +67,6 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 				ToolCallID: tc.ID,
 				ToolName:   tc.Function.Name,
 				Content:    "execution cancelled",
-				Extra:      map[string]any{"tool_error": true},
 			}, nil, ctx.Err()
 		}
 		defJSON, jerr := json.MarshalIndent(t.Definition(), "", "  ")
@@ -76,7 +76,9 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, err, defJSON)
 
 		toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
-		display := domain.NewStringDisplay("", toolLabel)
+		display := domain.NewStringDisplay("", "Tool call failed")
+		endDisp := display
+		endDisp.Error = toolLabel
 		if events != nil {
 			events.SendUIUpdate(domain.ToolStartEvent{
 				CallID:   tc.ID,
@@ -84,8 +86,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 				Display:  display,
 			})
 			events.SendUIUpdate(domain.ToolEndEvent{
-				CallID: tc.ID,
-				Error:  toolLabel,
+				CallID:  tc.ID,
+				Display: endDisp,
 			})
 		}
 
@@ -94,17 +96,16 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
 			Content:    errMsg,
-			Extra:      map[string]any{"tool_error": true},
-		}, display, nil
+		}, endDisp, nil
 	}
 
-	display := inv.Display()
+	previewDisplay := inv.Display()
 
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   tc.ID,
 			ToolName: tc.Function.Name,
-			Display:  display,
+			Display:  previewDisplay,
 		})
 	}
 
@@ -135,7 +136,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}
 	}
 
-	llmContent, err := inv.Execute(ctx)
+	llmContent, finalDisplay, err := inv.Execute(ctx)
+
 	if err != nil {
 		if ctx.Err() != nil {
 			return &schema.Message{
@@ -143,27 +145,13 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 				ToolCallID: tc.ID,
 				ToolName:   tc.Function.Name,
 				Content:    "execution cancelled",
-				Extra:      map[string]any{"tool_error": true},
-			}, display, ctx.Err()
-		}
-
-		errStr := err.Error()
-		switch d := display.(type) {
-		case domain.StringDisplay:
-			d.Error = errStr
-			display = d
-		case domain.DiffDisplay:
-			d.Error = errStr
-			display = d
-		case domain.ShellDisplay:
-			d.Error = errStr
-			display = d
+			}, finalDisplay, ctx.Err()
 		}
 
 		if events != nil {
 			events.SendUIUpdate(domain.ToolEndEvent{
-				CallID: tc.ID,
-				Error:  errStr,
+				CallID:  tc.ID,
+				Display: finalDisplay,
 			})
 		}
 
@@ -172,8 +160,7 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 			ToolCallID: tc.ID,
 			ToolName:   tc.Function.Name,
 			Content:    llmContent,
-			Extra:      map[string]any{"tool_error": true},
-		}, display, nil
+		}, finalDisplay, nil
 	}
 
 	// Ensure all streaming chunks are sent before sending the end event
@@ -182,7 +169,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 	// Always send the end event after Execute returns (regardless of tool type)
 	if events != nil {
 		events.SendUIUpdate(domain.ToolEndEvent{
-			CallID: tc.ID,
+			CallID:  tc.ID,
+			Display: finalDisplay,
 		})
 	}
 
@@ -191,5 +179,5 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		ToolCallID: tc.ID,
 		ToolName:   tc.Function.Name,
 		Content:    llmContent,
-	}, display, nil
+	}, finalDisplay, nil
 }

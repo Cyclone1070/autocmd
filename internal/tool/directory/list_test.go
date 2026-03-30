@@ -269,7 +269,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	}
 
 	// Execute
-	output, err := invocation.Execute(context.Background())
+	output, _, err := invocation.Execute(context.Background())
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 		t.Fatalf("Prepare failed: %v", err)
 	}
 
-	output, err := invocation.Execute(context.Background())
+	output, _, err := invocation.Execute(context.Background())
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestListDirTool_Execute_Ignore(t *testing.T) {
 		t.Fatalf("Prepare failed: %v", err)
 	}
 
-	output, err := invocation.Execute(context.Background())
+	output, _, err := invocation.Execute(context.Background())
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 	fs.remove("/workspace/temp")
 
 	// 3. Execute (Should return error for logging per tool.md, loop continues)
-	output, err := invocation.Execute(context.Background())
+	output, _, err := invocation.Execute(context.Background())
 	if err == nil {
 		// Per new tool.md contract, operation errors return err for logging
 		t.Fatalf("Expected operation error for logging per new tool.md contract")

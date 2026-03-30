@@ -73,7 +73,8 @@ func executeSearch(t *testing.T, tool *SearchContentTool, req *SearchContentRequ
 		return "", err
 	}
 
-	return invocation.Execute(context.Background())
+	out, _, err := invocation.Execute(context.Background())
+	return out, err
 }
 
 func executeFind(t *testing.T, tool *FindFileTool, req *FindFileRequest) (string, error) {
@@ -85,5 +86,6 @@ func executeFind(t *testing.T, tool *FindFileTool, req *FindFileRequest) (string
 		return "", err
 	}
 
-	return invocation.Execute(context.Background())
+	out, _, err := invocation.Execute(context.Background())
+	return out, err
 }

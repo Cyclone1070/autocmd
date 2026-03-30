@@ -184,7 +184,8 @@ func executeWrite(t *testing.T, wtool *WriteFileTool, req *WriteFileRequest) (st
 	if err != nil {
 		return "", err
 	}
-	return inv.Execute(context.Background())
+	out, _, err := inv.Execute(context.Background())
+	return out, err
 }
 
 // Test functions

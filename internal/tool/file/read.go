@@ -165,17 +165,20 @@ func (i *readFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
+func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
+
+	d := i.display.(domain.StringDisplay)
 
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: %s", err.Error()), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: %s", err.Error()), d, errors.New("Execution failed")
 	}
 
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
@@ -191,7 +194,7 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, error) {
 		endLine = startLine - 1
 	}
 
-	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), nil
+	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d, nil
 }
 
 func formatFileContent(lines []string, startLine, endLine, totalLines int) string {

@@ -67,8 +67,8 @@ func getPromptElements() []PromptElement {
 					Display: domain.NewShellDisplay("Running Tests", "go test ./...", ""),
 				},
 				domain.ToolEndEvent{
-					CallID: tcID,
-					Error:  "",
+					CallID:  tcID,
+					Display: domain.NewShellDisplay("Running Tests", "go test ./...", ""),
 				},
 			},
 		},
@@ -79,10 +79,11 @@ func getPromptElements() []PromptElement {
 					CallID:  tcErrID,
 					Display: domain.NewShellDisplay("Failing Command", "false", ""),
 				},
-				domain.ToolEndEvent{
-					CallID: tcErrID,
-					Error:  "Execution failed",
-				},
+				func() domain.ToolEndEvent {
+					d := domain.NewShellDisplay("Failing Command", "false", "")
+					d.Error = "Execution failed"
+					return domain.ToolEndEvent{CallID: tcErrID, Display: d}
+				}(),
 			},
 		},
 		{

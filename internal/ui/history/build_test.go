@@ -109,7 +109,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	assert.NotContains(t, rendered, "(Exit code: 0)", "History should not leak exit code for successful empty stdout commands")
 }
 
-func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
+func TestShellHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
@@ -123,7 +123,7 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 		{
 			Role:       schema.Tool,
 			ToolCallID: "tc-1",
-			Content:    "fallback output\n\n(Exit code: 0)",
+			Content:    "only in tool message — must not appear in history shell box",
 		},
 	}
 
@@ -131,15 +131,13 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 		"tc-1": domain.ShellDisplay{
 			TypeField: "shell",
 			Command:   "ls",
-			// Legacy session: no captured_output in storage — zero value falls back to tool message.
 		},
 	}
 
 	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
-	// Should fall back to tool response content
-	assert.Contains(t, rendered, "fallback output")
-	assert.Contains(t, rendered, "(Exit code: 0)")
+	assert.NotContains(t, rendered, "only in tool message")
+	assert.Contains(t, rendered, "ls", "command still comes from display")
 }
 
 func TestShellHistory_ErrorStatus(t *testing.T) {
@@ -157,7 +155,6 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 			Role:       schema.Tool,
 			ToolCallID: "tc-1",
 			Content:    "Error: Execution failed",
-			Extra:      map[string]any{"tool_error": true},
 		},
 	}
 
@@ -442,13 +439,12 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 			},
 		},
 	}
-	messages := []*schema.Message{msg}
 	displays := domain.ToolDisplays{
 		"1": domain.NewShellDisplay("header", "ls", ""),
 	}
 
 	var sb strings.Builder
-	b.renderAssistantMessage(&sb, msg, messages, 0, displays)
+	b.renderAssistantMessage(&sb, msg, displays)
 	rendered := sb.String()
 
 	// Re-rendering a box to see its start
@@ -481,18 +477,13 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 			{ID: "tc-2", Function: schema.FunctionCall{Name: "todo_read"}},
 		},
 	}
-	messages := []*schema.Message{
-		msg,
-		{Role: schema.Tool, ToolCallID: "tc-1", Content: "ok"},
-		{Role: schema.Tool, ToolCallID: "tc-2", Content: "ok"},
-	}
 	displays := domain.ToolDisplays{
 		"tc-1": domain.NewStringDisplay("", "Listing iav"),
 		"tc-2": domain.NewStringDisplay("", "Reading todos"),
 	}
 
 	var sb strings.Builder
-	b.renderAssistantMessage(&sb, msg, messages, 0, displays)
+	b.renderAssistantMessage(&sb, msg, displays)
 	rendered := stripANSI(sb.String())
 
 	// Exactly one guttered blank line between adjacent tool boxes.

@@ -91,20 +91,17 @@ func (t *ShellTool) Prepare(ctx context.Context, params string) (domain.Invocati
 		return nil, err
 	}
 
-	empty := ""
 	return &shellInvocation{
-		streamCmd:      streamCmd,
-		commandStr:     summary.Summarize(strings.Join(req.Command, " ")),
-		comment:        req.Comment,
-		capturedOutput: &empty,
+		streamCmd:  streamCmd,
+		commandStr: summary.Summarize(strings.Join(req.Command, " ")),
+		comment:    req.Comment,
 	}, nil
 }
 
 type shellInvocation struct {
-	streamCmd      *executor.StreamingCmd
-	commandStr     string
-	comment        string
-	capturedOutput *string
+	streamCmd  *executor.StreamingCmd
+	commandStr string
+	comment    string
 }
 
 func (i *shellInvocation) Stream() io.Reader {
@@ -115,30 +112,29 @@ func (i *shellInvocation) Display() domain.ToolDisplay {
 	return domain.NewShellDisplay(i.comment, i.commandStr, "")
 }
 
-func (i *shellInvocation) Execute(ctx context.Context) (string, error) {
+func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.Display(), ctx.Err()
 	}
 
 	result, err := i.streamCmd.Wait()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", err
+			return "", i.Display(), err
 		}
-		return fmt.Sprintf("Error: %v", err), errors.New("Execution failed")
+		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+		sh.Error = err.Error()
+		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
 	}
 
 	output := result.Stdout
 	exitCode := result.ExitCode
-
-	if i.capturedOutput != nil {
-		*i.capturedOutput = output
-	}
 
 	var truncationNote string
 	if result.Truncated {
 		truncationNote = "\n(Output truncated)"
 	}
 
-	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), nil
+	sh := domain.NewShellDisplay(i.comment, i.commandStr, output)
+	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), sh, nil
 }

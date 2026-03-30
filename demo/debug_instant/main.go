@@ -96,11 +96,12 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "1st text: This text should be above tool call at all stages of the display."})
 
+	dbgDisp := domain.NewStringDisplay("", "This tool call display should be sandwiched.")
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-0",
-		Display: domain.NewStringDisplay("", "This tool call display should be sandwiched."),
+		Display: dbgDisp,
 	})
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0", Display: dbgDisp})
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "2nd text: This text should be bellow tool call at all stages of the display."})
 

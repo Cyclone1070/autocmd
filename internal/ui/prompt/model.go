@@ -315,11 +315,14 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		if m.state == stateTooling {
 			for i := range m.tools {
 				if m.tools[i].callID == u.CallID {
-					if u.Error != "" {
-						m.tools[i].status = ui.StatusError
-						m.tools[i].errorMsg = u.Error
-					} else {
-						m.tools[i].status = ui.StatusSuccess
+					if u.Display != nil {
+						m.tools[i].display = u.Display
+						m.tools[i].errorMsg = ""
+						if u.Display.GetError() != "" {
+							m.tools[i].status = ui.StatusError
+						} else {
+							m.tools[i].status = ui.StatusSuccess
+						}
 					}
 					break
 				}
@@ -471,18 +474,23 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 	}
 	prefix := m.toolRenderer.StatusPrefix(slot.status, m.spinnerProvider.Frame(m.spinnerFrame))
 
+	errorMsg := slot.errorMsg
+	if de := slot.display.GetError(); de != "" {
+		errorMsg = de
+	}
+
 	var rendered string
 	switch d := slot.display.(type) {
 	case domain.StringDisplay:
-		rendered = m.toolRenderer.RenderString(d, slot.status, slot.errorMsg, prefix)
+		rendered = m.toolRenderer.RenderString(d, slot.status, errorMsg, prefix)
 	case domain.DiffDisplay:
-		rendered = m.toolRenderer.RenderDiff(d, slot.status, slot.errorMsg, prefix)
+		rendered = m.toolRenderer.RenderDiff(d, slot.status, errorMsg, prefix)
 	case domain.ShellDisplay:
 		output := slot.streamOutput
 		if d.CapturedOutput != "" {
 			output = d.CapturedOutput
 		}
-		rendered = m.toolRenderer.RenderShell(d, output, slot.status, slot.errorMsg, prefix)
+		rendered = m.toolRenderer.RenderShell(d, output, slot.status, errorMsg, prefix)
 	default:
 		return ""
 	}

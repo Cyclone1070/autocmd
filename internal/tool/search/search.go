@@ -148,21 +148,25 @@ func (i *searchContentInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
+func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+	d := i.display.(domain.StringDisplay)
+
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
 
 	// Re-verify state
 	_, err := i.fs.Stat(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), errors.New("Execution failed")
+			d.Error = err.Error()
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, errors.New("Execution failed")
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, errors.New("Execution failed")
 	}
 
 	maxResults := maxSearchResults
@@ -189,13 +193,15 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 	res, err := i.commandExecutor.Run(ctx, cmd, workDir, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: rg failed to start: %v", err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: rg failed to start: %v", err), d, errors.New("Execution failed")
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), errors.New("Execution failed")
+		d.Error = fmt.Sprintf("exit code %d", res.ExitCode)
+		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), d, errors.New("Execution failed")
 	}
 
 	// Process output
@@ -250,7 +256,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, error) {
 		}
 	}
 
-	return formatSearchMatches(matches, hitMaxResults), nil
+	return formatSearchMatches(matches, hitMaxResults), d, nil
 }
 
 // searchContentMatch represents a single match in a file

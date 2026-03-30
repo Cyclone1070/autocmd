@@ -148,32 +148,38 @@ func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invoca
 }
 
 // Execute performs the safe directory listing (re-verifying existence).
-func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
+func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+	d := i.display.(domain.StringDisplay)
+
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
 
 	// 1. Re-verify State (TOCTOU Safety)
 	info, err := i.fs.Stat(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), errors.New("Execution failed")
+			d.Error = err.Error()
+			return fmt.Sprintf("Error: Directory %s no longer exists.", i.resolvedPath), d, errors.New("Execution failed")
 		}
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.resolvedPath, err), d, errors.New("Execution failed")
 	}
 	if !info.IsDir() {
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), errors.New("Execution failed")
+		d.Error = "path is not a directory"
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.resolvedPath), d, errors.New("Execution failed")
 	}
 
 	entries, err := i.fs.ListDir(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), d, errors.New("Execution failed")
 	}
 
 	// 3. Filter & Convert
@@ -255,7 +261,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, error) {
 		sb.WriteString("  (empty)")
 	}
 
-	return sb.String(), nil
+	return sb.String(), d, nil
 }
 
 // Display returns the user-facing description.

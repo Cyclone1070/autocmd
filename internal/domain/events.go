@@ -52,10 +52,10 @@ type ToolStreamEvent struct {
 
 func (ToolStreamEvent) isUIUpdate() {}
 
-// ToolEndEvent is emitted when tool execution completes.
+// ToolEndEvent is emitted when tool execution completes with the final baked ToolDisplay.
 type ToolEndEvent struct {
-	CallID string
-	Error  string // Empty = success, non-empty = failure message for UI
+	CallID  string
+	Display ToolDisplay // Final state for UI (use GetError() for failure vs success)
 }
 
 func (ToolEndEvent) isUIUpdate() {}

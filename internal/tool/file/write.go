@@ -163,30 +163,36 @@ func (i *writeFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
+func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+	d := i.display.(domain.StringDisplay)
+
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
 
 	// Check if file already exists (TOCTOU protection)
 	_, err := i.fileOps.Stat(i.absPath)
 	if err == nil {
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath), fmt.Errorf("file already exists: %s", i.relPath)
+		e := fmt.Errorf("file already exists: %s", i.relPath)
+		d.Error = e.Error()
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d, e
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), d, errors.New("Execution failed")
 	}
 
 	// Ensure parent directories exist
 	parentDir := filepath.Dir(i.absPath)
 	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to create directories: %v", err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: failed to create directories: %v", err), d, errors.New("Execution failed")
 	}
 
 	// Note: Binary check already done in Prepare
@@ -195,9 +201,10 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 	perm := os.FileMode(0o644)
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")
 	}
 
 	// Update checksum cache
@@ -206,5 +213,5 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, error) {
 	i.checksumManager.Update(i.absPath, checksum)
 
 	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
-		i.relPath, len(i.content)), nil
+		i.relPath, len(i.content)), d, nil
 }

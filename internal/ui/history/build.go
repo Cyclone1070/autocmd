@@ -127,7 +127,7 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 
 		// Tool boxes exactly where tool calls occurred.
 		for _, tc := range am.ToolCalls {
-			rendered := h.renderToolCall(messages, ai, &tc, displays, contentWidth)
+			rendered := h.renderToolCall(&tc, displays, contentWidth)
 			if rendered != "" {
 				parts = append(parts, rendered)
 			}
@@ -154,7 +154,7 @@ func (h *HistoryBuilder) RenderMessage(messages []*schema.Message, idx int, disp
 	case schema.User:
 		h.renderUserMessage(&sb, msg)
 	case schema.Assistant:
-		h.renderAssistantMessage(&sb, msg, messages, idx, displays)
+		h.renderAssistantMessage(&sb, msg, displays)
 	}
 
 	sb.WriteString("\n")
@@ -173,7 +173,7 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 	writeFramedWithGutter(sb, roleLine, contPrefix, content)
 }
 
-func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, messages []*schema.Message, idx int, displays domain.ToolDisplays) {
+func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
@@ -190,7 +190,7 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 	}
 
 	for _, tc := range am.ToolCalls {
-		rendered := h.renderToolCall(messages, idx, &tc, displays, contentWidth)
+		rendered := h.renderToolCall(&tc, displays, contentWidth)
 		if rendered != "" {
 			parts = append(parts, rendered)
 		}
@@ -203,24 +203,14 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 	writeFramedWithGutter(sb, roleLine, contPrefix, body)
 }
 
-func (h *HistoryBuilder) renderToolCall(messages []*schema.Message, assistantIdx int, tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
+func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
 	display, ok := displays[tc.ID]
 	if !ok {
 		return ""
 	}
 
 	status := ui.StatusSuccess
-	var toolOutput string
 	var toolErr string
-
-	// We still need the tool output message for ShellDisplay's actual output
-	for j := assistantIdx + 1; j < len(messages); j++ {
-		msgJ := messages[j]
-		if msgJ.Role == schema.Tool && msgJ.ToolCallID == tc.ID {
-			toolOutput = msgJ.Content
-			break
-		}
-	}
 
 	boxWidth := contentWidth - 2
 	tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
@@ -248,12 +238,7 @@ func (h *HistoryBuilder) renderToolCall(messages []*schema.Message, assistantIdx
 			toolErr = d.Error
 			prefix = tooling.StatusPrefix(status, "")
 		}
-		// Prefer baked captured output over the decorated toolOutput (which includes exit codes for LLM)
-		output := toolOutput
-		if d.CapturedOutput != "" {
-			output = d.CapturedOutput
-		}
-		rendered = tooling.RenderShell(d, output, status, toolErr, prefix)
+		rendered = tooling.RenderShell(d, d.CapturedOutput, status, toolErr, prefix)
 	}
 
 	if rendered == "" {
@@ -299,12 +284,4 @@ func writeFramedWithGutter(sb *strings.Builder, roleLine, contPrefix, content st
 	// Bottom guttered blank line (symmetry with role line).
 	sb.WriteString("\n")
 	sb.WriteString(contPrefix)
-}
-
-func isToolError(m *schema.Message) bool {
-	if m.Extra == nil {
-		return false
-	}
-	v, ok := m.Extra["tool_error"].(bool)
-	return ok && v
 }

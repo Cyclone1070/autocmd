@@ -263,32 +263,37 @@ func (i *editFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
+func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	// Check context
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return "", i.display, ctx.Err()
 	}
+
+	d := i.display.(domain.DiffDisplay)
 
 	// Re-read file and verify checksum to prevent TOCTOU race
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), d, errors.New("Execution failed")
 	}
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
 	currentChecksum := i.checksumManager.Compute([]byte(normalized))
 	if currentChecksum != i.expectedChecksum {
-		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), errors.New("Execution failed")
+		d.Error = "file changed since edit was prepared"
+		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), d, errors.New("Execution failed")
 	}
 
 	// Write the modified content atomically using pre-computed content
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.newContent, i.originalPerm); err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", i.display, ctx.Err()
 		}
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), errors.New("Execution failed")
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")
 	}
 
 	// Update checksum cache with normalized content
@@ -296,7 +301,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, error) {
 	newChecksum := i.checksumManager.Compute([]byte(newNormalized))
 	i.checksumManager.Update(i.absPath, newChecksum)
 
-	return fmt.Sprintf("Successfully modified file: %s", i.relPath), nil
+	return fmt.Sprintf("Successfully modified file: %s", i.relPath), d, nil
 }
 
 func computeUnifiedDiff(oldContent, newContent string) (diff string, added, removed int) {

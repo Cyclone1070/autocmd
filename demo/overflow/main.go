@@ -123,7 +123,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	argsObj := map[string]string{"pattern": longArg, "path": "internal/agent"}
 	argsData, _ := json.Marshal(argsObj)
 	inv, _ := searchTool.Prepare(ctx, string(argsData))
+	var searchEnd domain.ToolDisplay
 	if inv != nil {
+		searchEnd = inv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "search-overflow",
 			ToolName: "search_content",
@@ -131,13 +133,15 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "search-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "search-overflow", Display: searchEnd})
 
 	// 2. find_file Overflow
 	findArgsObj := map[string]string{"pattern": longArg, "path": "internal"}
 	findArgsData, _ := json.Marshal(findArgsObj)
 	findInv, _ := findTool.Prepare(ctx, string(findArgsData))
+	var findEnd domain.ToolDisplay
 	if findInv != nil {
+		findEnd = findInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "find-overflow",
 			ToolName: "find_file",
@@ -145,7 +149,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "find-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "find-overflow", Display: findEnd})
 
 	// 3. shell Overflow
 	shellArgsObj := map[string]any{
@@ -154,7 +158,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 	shellArgsData, _ := json.Marshal(shellArgsObj)
 	shellInv, _ := shellTool.Prepare(ctx, string(shellArgsData))
+	var shellEnd domain.ToolDisplay
 	if shellInv != nil {
+		shellEnd = shellInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "shell-overflow",
 			ToolName: "shell",
@@ -167,7 +173,11 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		Chunk:  longArg,
 	})
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "shell-overflow"})
+	if sd, ok := shellEnd.(domain.ShellDisplay); ok {
+		sd.CapturedOutput = longArg
+		shellEnd = sd
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "shell-overflow", Display: shellEnd})
 
 	// 4. write_file Overflow
 	writeArgsObj := map[string]string{
@@ -177,7 +187,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 	writeArgsData, _ := json.Marshal(writeArgsObj)
 	writeInv, _ := writeTool.Prepare(ctx, string(writeArgsData))
+	var writeEnd domain.ToolDisplay
 	if writeInv != nil {
+		writeEnd = writeInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "write-overflow",
 			ToolName: "write_file",
@@ -185,7 +197,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "write-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "write-overflow", Display: writeEnd})
 
 	// 5. edit_file Overflow
 	editArgsObj := map[string]any{
@@ -200,7 +212,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	if err != nil {
 		fmt.Printf("Edit Prepare Error: %v\n", err)
 	}
+	var editEnd domain.ToolDisplay
 	if editInv != nil {
+		editEnd = editInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "edit-overflow",
 			ToolName: "edit_file",
@@ -208,13 +222,15 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "edit-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "edit-overflow", Display: editEnd})
 
 	// 6. list_directory Overflow (Wrapped path)
 	listArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/dir/that/is/very/long/and/will/definitely/wrap"}
 	listArgsData, _ := json.Marshal(listArgsObj)
 	listInv, _ := listTool.Prepare(ctx, string(listArgsData))
+	var listEnd domain.ToolDisplay
 	if listInv != nil {
+		listEnd = listInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "list-overflow",
 			ToolName: "list_directory",
@@ -222,13 +238,15 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "list-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "list-overflow", Display: listEnd})
 
 	// 7. read_file (Full Path Verification)
 	readArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/main.go"}
 	readArgsData, _ := json.Marshal(readArgsObj)
 	readInv, _ := readTool.Prepare(ctx, string(readArgsData))
+	var readEnd domain.ToolDisplay
 	if readInv != nil {
+		readEnd = readInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "read-overflow",
 			ToolName: "read_file",
@@ -236,7 +254,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		})
 	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "read-overflow"})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "read-overflow", Display: readEnd})
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Demo finished. Each tool displayed above had at least one multi-line or extremely long argument."})
 

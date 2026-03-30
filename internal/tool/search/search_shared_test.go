@@ -68,7 +68,7 @@ func executeSearch(t *testing.T, tool *SearchContentTool, req *SearchContentRequ
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	invocation, err := tool.Prepare(context.Background(), string(params))
+	invocation, err := tool.Prepare(string(params))
 	if err != nil {
 		return "", err
 	}
@@ -81,7 +81,7 @@ func executeFind(t *testing.T, tool *FindFileTool, req *FindFileRequest) (string
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	invocation, err := tool.Prepare(context.Background(), string(params))
+	invocation, err := tool.Prepare(string(params))
 	if err != nil {
 		return "", err
 	}

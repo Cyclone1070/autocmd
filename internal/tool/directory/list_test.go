@@ -231,7 +231,7 @@ func TestListDirTool_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jsonParams, _ := json.Marshal(tt.params)
-			_, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+			_, err := toolInstance.Prepare(string(jsonParams))
 
 			if tt.wantErr != "" {
 				if err == nil {
@@ -263,7 +263,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 	// Prepare
 	req := ListDirRequest{Path: "src"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+	invocation, err := toolInstance.Prepare(string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestListDirTool_Execute_TreeOutput(t *testing.T) {
 		req := ListDirRequest{Path: absDir}
 		jsonParams, _ := json.Marshal(req)
 		
-		invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+		invocation, err := toolInstance.Prepare(string(jsonParams))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -343,7 +343,7 @@ func TestListDirTool_Execute_Truncation(t *testing.T) {
 
 	req := ListDirRequest{Path: "big"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+	invocation, err := toolInstance.Prepare(string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestListDirTool_Execute_Ignore(t *testing.T) {
 		Ignore: []string{"*.log"},
 	}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+	invocation, err := toolInstance.Prepare(string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 	// 1. Prepare (Success)
 	req := ListDirRequest{Path: "temp"}
 	jsonParams, _ := json.Marshal(req)
-	invocation, err := toolInstance.Prepare(context.Background(), string(jsonParams))
+	invocation, err := toolInstance.Prepare(string(jsonParams))
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -424,5 +424,33 @@ func TestListDirTool_Execute_ReverificationSafety(t *testing.T) {
 
 	if !strings.Contains(output, "no longer exists") {
 		t.Errorf("Expected TOCTOU error message, got: %s", output)
+	}
+}
+
+func TestListDirTool_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
+	workspaceRoot := "/workspace"
+	fs := newMockFileSystemForList()
+	fs.createDir("/workspace")
+	fs.createDir("/workspace/src")
+
+	toolInstance := NewListDirectoryTool(fs, path.NewResolver(workspaceRoot), nil)
+	req := ListDirRequest{Path: "src"}
+	jsonParams, _ := json.Marshal(req)
+	inv, err := toolInstance.Prepare(string(jsonParams))
+	if err != nil {
+		t.Fatalf("Prepare failed: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, disp, execErr := inv.Execute(ctx)
+	if execErr == nil {
+		t.Fatalf("expected cancellation error")
+	}
+	if disp == nil {
+		t.Fatalf("expected non-nil display")
+	}
+	if disp.GetError() != domain.ToolErrorCancelled {
+		t.Fatalf("expected ToolErrorCancelled, got: %q", disp.GetError())
 	}
 }

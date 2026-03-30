@@ -59,16 +59,8 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 		}, endDisp, nil
 	}
 
-	inv, err := t.Prepare(ctx, tc.Function.Arguments)
+	inv, err := t.Prepare(tc.Function.Arguments)
 	if err != nil {
-		if ctx.Err() != nil {
-			return &schema.Message{
-				Role:       schema.Tool,
-				ToolCallID: tc.ID,
-				ToolName:   tc.Function.Name,
-				Content:    "execution cancelled",
-			}, nil, ctx.Err()
-		}
 		defJSON, jerr := json.MarshalIndent(t.Definition(), "", "  ")
 		if jerr != nil {
 			slog.Warn("Failed to marshal tool definition", "tool", t.Name(), "err", jerr)
@@ -137,9 +129,18 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 	}
 
 	llmContent, finalDisplay, err := inv.Execute(ctx)
+	if finalDisplay == nil {
+		panic(fmt.Sprintf("tool %q Execute returned nil finalDisplay (callID=%s)", tc.Function.Name, tc.ID))
+	}
 
 	if err != nil {
 		if ctx.Err() != nil {
+			if events != nil {
+				events.SendUIUpdate(domain.ToolEndEvent{
+					CallID:  tc.ID,
+					Display: finalDisplay,
+				})
+			}
 			return &schema.Message{
 				Role:       schema.Tool,
 				ToolCallID: tc.ID,

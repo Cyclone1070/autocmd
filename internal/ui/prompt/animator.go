@@ -51,6 +51,11 @@ func (a *TextAnimator) FlushAll() string {
 	return out
 }
 
+// Clear discards any pending streamed runes without returning them.
+func (a *TextAnimator) Clear() {
+	a.pending = ""
+}
+
 // Pending returns read-only access to the pending buffer (for test assertions).
 func (a *TextAnimator) Pending() string {
 	return a.pending

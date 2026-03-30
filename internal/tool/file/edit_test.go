@@ -21,7 +21,7 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 	if err != nil {
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
-	inv, err := etool.Prepare(context.Background(), string(params))
+	inv, err := etool.Prepare(string(params))
 	if err != nil {
 		return err.Error(), err
 	}
@@ -32,6 +32,35 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 func TestEditFile(t *testing.T) {
 	workspaceRoot := "/workspace"
 	maxFileSize := int64(1024 * 1024) // 1MB
+
+	t.Run("Execute cancelled returns ToolErrorCancelled display", func(t *testing.T) {
+		fs := newMockFileSystemForWrite(maxFileSize)
+		checksumManager := newMockChecksumManagerForWrite()
+		fs.createFile("/workspace/test.txt", []byte("line1"), 0o644)
+
+		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			Path:    "test.txt",
+			Comment: "edit",
+			Operations: []EditOperation{{
+				Before:               "line1",
+				After:                "line2",
+				ExpectedReplacements: 1,
+			}},
+		}
+		params, _ := json.Marshal(req)
+		inv, err := editTool.Prepare(string(params))
+		assert.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, disp, execErr := inv.Execute(ctx)
+
+		assert.ErrorIs(t, execErr, context.Canceled)
+		assert.NotNil(t, disp)
+		assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
+	})
 
 	t.Run("conflict detection when cache checksum differs", func(t *testing.T) {
 		fs := newMockFileSystemForWrite(maxFileSize)
@@ -45,7 +74,7 @@ func TestEditFile(t *testing.T) {
 		// Read file to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), string(params))
+		inv, _ := readTool.Prepare(string(params))
 		_, _, _ = inv.Execute(context.Background())
 
 		// Modify file externally (simulate external change)
@@ -105,7 +134,7 @@ func TestEditFile(t *testing.T) {
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), string(params))
+		inv, _ := readTool.Prepare(string(params))
 		_, _, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -148,7 +177,7 @@ func TestEditFile(t *testing.T) {
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), string(params))
+		inv, _ := readTool.Prepare(string(params))
 		_, _, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -179,7 +208,7 @@ func TestEditFile(t *testing.T) {
 		// Read first to populate cache
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(context.Background(), string(params))
+		inv, _ := readTool.Prepare(string(params))
 		_, _, _ = inv.Execute(context.Background())
 
 		ops := []EditOperation{
@@ -413,7 +442,7 @@ func TestEditFile(t *testing.T) {
 			Operations: []EditOperation{{Before: "original", After: "modified"}},
 		}
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(context.Background(), string(params))
+		inv, err := editTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -445,7 +474,7 @@ func TestEditFile(t *testing.T) {
 			Operations: []EditOperation{{Before: "old", After: "new"}},
 		}
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(context.Background(), string(params))
+		inv, err := editTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -497,7 +526,7 @@ func TestEditFile(t *testing.T) {
 				{Before: "content", After: "new"},
 			},
 		})
-		inv, err := editTool.Prepare(context.Background(), string(params))
+		inv, err := editTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
@@ -523,7 +552,7 @@ func TestEditFile(t *testing.T) {
 		}
 		
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(context.Background(), string(params))
+		inv, err := editTool.Prepare(string(params))
 		assert.NoError(t, err)
 		
 		display := inv.Display().(domain.DiffDisplay)

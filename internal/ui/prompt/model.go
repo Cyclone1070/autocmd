@@ -35,6 +35,9 @@ type animator interface {
 	Enqueue(text string)
 	NextChunk() (string, bool)
 	HasPending() bool
+	// Clear discards any pending streamed runes.
+	// Used on Ctrl+C during stateStreaming to avoid flushing queued text events.
+	Clear()
 	FlushAll() string
 }
 
@@ -68,11 +71,11 @@ type toolSlot struct {
 }
 
 type Model struct {
-	state   uiState
-	bus     bus
-	stream  stream
+	state    uiState
+	bus      bus
+	stream   stream
 	animator animator
-	tools   []toolSlot
+	tools    []toolSlot
 
 	thinkingRenderer thinkingRenderer
 	toolRenderer     toolRenderer
@@ -87,8 +90,8 @@ type Model struct {
 	nextState     uiState
 	// isPolling is true while a pollBus goroutine is blocked waiting on the bus.
 	isPolling bool
-	// isCancelling gates late bus events once Ctrl+C has initiated terminal cancel flow.
-	isCancelling bool
+	// cancelRequested is set on first Ctrl+C; workflow continues until DoneEvent (StopAction already sent).
+	cancelRequested bool
 }
 
 type Option func(*Model)
@@ -150,8 +153,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick()
 	case busEventMsg:
-		if m.isCancelling {
-			return m, nil
+		if m.cancelRequested {
+			switch msg.event.(type) {
+			case domain.ToolEndEvent, domain.DoneEvent:
+				return m.handleBusEvent(msg.event)
+			default:
+				// Trash queued non-terminal workflow activity after cancellation.
+				// But re-arm polling so we can still receive already-buffered terminal events
+				// (DoneEvent / ToolEndEvent) and avoid UI freezing.
+				m.isPolling = false
+				return m.withPollIfNeeded()
+			}
 		}
 		return m.handleBusEvent(msg.event)
 	case busClosedMsg:
@@ -227,6 +239,9 @@ func (m *Model) isReadyForEvent() bool {
 	case stateIdle, stateThinking, stateTooling:
 		return true
 	case stateStreaming:
+		if m.cancelRequested {
+			return true
+		}
 		return !m.animator.HasPending()
 	}
 	return false
@@ -267,7 +282,11 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 
 	var flushBlocks []string
 	if m.state == stateThinking {
-		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(ui.StatusSuccess, m.thinkingStart, m.spinnerFrame, m.spinnerProvider))
+		thinkingStatus := ui.StatusSuccess
+		if m.cancelRequested {
+			thinkingStatus = ui.StatusError
+		}
+		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(thinkingStatus, m.thinkingStart, m.spinnerFrame, m.spinnerProvider))
 	}
 
 	switch u := u.(type) {
@@ -353,7 +372,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleFlushDone() (tea.Model, tea.Cmd) {
 	m.state = m.nextState
-	if m.state == stateDone || m.isCancelling {
+	if m.state == stateDone {
 		return m, tea.Quit
 	}
 	return m.withPollIfNeeded()
@@ -404,7 +423,11 @@ func (m *Model) View() string {
 	case stateIdle, stateFlushing:
 		content = m.stream.Pending()
 	case stateThinking:
-		content = m.thinkingRenderer.RenderThinking(ui.StatusRunning, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
+		status := ui.StatusRunning
+		if m.cancelRequested {
+			status = ui.StatusError
+		}
+		content = m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
 	case stateStreaming:
 		content = m.stream.Pending()
 	case stateTooling:
@@ -414,48 +437,16 @@ func (m *Model) View() string {
 }
 
 func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
-	if m.isCancelling {
+	if m.cancelRequested {
 		return m, nil
 	}
-	m.isCancelling = true
+	m.cancelRequested = true
 	m.bus.SendAction(domain.StopAction{})
-	m.isPolling = false
-
-	switch m.state {
-	case stateThinking:
-		return m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)}, stateDone)
-	case stateStreaming:
-		m.animator.FlushAll()
-		return m.doFlush(m.stream.Flush(), stateDone)
-	case stateTooling:
-		for i := range m.tools {
-			if m.tools[i].status == ui.StatusRunning {
-				m.tools[i].status = ui.StatusError
-				m.tools[i].errorMsg = "cancelled"
-			}
-		}
-		return m.doFlush(m.renderAllTools(), stateDone)
-	case stateFlushing:
-		switch m.nextState {
-		case stateThinking:
-			return m.doFlush([]string{m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)}, stateDone)
-		case stateStreaming:
-			m.animator.FlushAll()
-			return m.doFlush(m.stream.Flush(), stateDone)
-		case stateTooling:
-			for i := range m.tools {
-				if m.tools[i].status == ui.StatusRunning {
-					m.tools[i].status = ui.StatusError
-					m.tools[i].errorMsg = "cancelled"
-				}
-			}
-			return m.doFlush(m.renderAllTools(), stateDone)
-		default:
-			return m.doFlush(m.stream.Flush(), stateDone)
-		}
-	default:
-		return m.doFlush(m.stream.Flush(), stateDone)
+	if m.state == stateStreaming && m.animator != nil {
+		// Avoid draining/flush-updating any queued streamed text after cancellation.
+		m.animator.Clear()
 	}
+	return m.withPollIfNeeded()
 }
 
 func (m *Model) flushCompletedToolPrefix() []string {

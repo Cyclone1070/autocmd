@@ -95,7 +95,7 @@ type WriteFileRequest struct {
 	Comment string `json:"comment"`
 }
 
-func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 	req := &WriteFileRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -124,9 +124,6 @@ func (t *WriteFileTool) Prepare(ctx context.Context, params string) (domain.Invo
 		return nil, fmt.Errorf("file already exists: %s", req.Path)
 	}
 	if !os.IsNotExist(err) {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		return nil, fmt.Errorf("failed to stat %s: %w", req.Path, err)
 	}
 

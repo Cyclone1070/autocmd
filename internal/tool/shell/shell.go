@@ -8,10 +8,10 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
-	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -63,8 +63,10 @@ func (t *ShellTool) Definition() *schema.ToolInfo {
 	}
 }
 
-// Prepare validates the request, resolves paths, and starts the streaming command.
-func (t *ShellTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+// Prepare validates the request and returns an Invocation.
+// Note: we intentionally do not start the streaming process here so cancellation
+// can be driven solely by Execute's ctx.
+func (t *ShellTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		Command []string `json:"command"`
 		Comment string   `json:"comment"`
@@ -86,26 +88,35 @@ func (t *ShellTool) Prepare(ctx context.Context, params string) (domain.Invocati
 	}
 
 	env := os.Environ()
-	streamCmd, err := t.commandExecutor.RunStreaming(ctx, req.Command, wd, env)
-	if err != nil {
-		return nil, err
-	}
 
 	return &shellInvocation{
-		streamCmd:  streamCmd,
-		commandStr: summary.Summarize(strings.Join(req.Command, " ")),
-		comment:    req.Comment,
+		commandExecutor: t.commandExecutor,
+		wd:              wd,
+		env:             env,
+		command:        req.Command,
+		commandStr:     summary.Summarize(strings.Join(req.Command, " ")),
+		comment:        req.Comment,
 	}, nil
 }
 
 type shellInvocation struct {
-	streamCmd  *executor.StreamingCmd
-	commandStr string
-	comment    string
+	commandExecutor commandExecutor
+	wd              string
+	env             []string
+	command        []string
+	commandStr     string
+	comment        string
+
+	pipeOnce   sync.Once
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
 }
 
 func (i *shellInvocation) Stream() io.Reader {
-	return i.streamCmd.Output()
+	i.pipeOnce.Do(func() {
+		i.pipeReader, i.pipeWriter = io.Pipe()
+	})
+	return i.pipeReader
 }
 
 func (i *shellInvocation) Display() domain.ToolDisplay {
@@ -120,12 +131,36 @@ func (i *shellInvocation) cancelledDisplay() domain.ShellDisplay {
 
 func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if ctx.Err() != nil {
+		if i.pipeWriter != nil {
+			_ = i.pipeWriter.CloseWithError(ctx.Err())
+		}
 		return "", i.cancelledDisplay(), ctx.Err()
 	}
 
-	result, err := i.streamCmd.Wait()
+	streamCmd, err := i.commandExecutor.RunStreaming(ctx, i.command, i.wd, i.env)
+	if err != nil {
+		if i.pipeWriter != nil {
+			_ = i.pipeWriter.CloseWithError(err)
+		}
+		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+		sh.Error = err.Error()
+		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
+	}
+
+	// Pump streamed stdout/stderr to the pipe so the UI can consume chunks.
+	if i.pipeWriter != nil {
+		go func() {
+			_, _ = io.Copy(i.pipeWriter, streamCmd.Output())
+			_ = i.pipeWriter.Close()
+		}()
+	}
+
+	result, err := streamCmd.Wait()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if i.pipeWriter != nil {
+				_ = i.pipeWriter.CloseWithError(err)
+			}
 			return "", i.cancelledDisplay(), err
 		}
 		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")

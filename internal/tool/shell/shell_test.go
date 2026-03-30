@@ -79,7 +79,6 @@ func TestShellTool_Definition_OnlyCommandAndComment(t *testing.T) {
 
 func TestShellTool_Prepare_Validation(t *testing.T) {
 	tl := NewShellTool(&mockCommandExecutor{}, &mockPathResolver{})
-	ctx := context.Background()
 
 	tests := []struct {
 		name    string
@@ -120,7 +119,7 @@ func TestShellTool_Prepare_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tl.Prepare(ctx, tt.params)
+			_, err := tl.Prepare(tt.params)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
@@ -139,10 +138,9 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	mockCE.On("RunStreaming", mock.Anything, []string{"echo", "hello"}, "/workspace", mock.Anything).
 		Return(streamCmd, nil)
 
-	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "comment": "say hello"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
@@ -166,12 +164,20 @@ func TestShellTool_Prepare_ExecutorError(t *testing.T) {
 	mockCE.On("RunStreaming", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("command not found"))
 
-	ctx := context.Background()
 	params := `{"command": ["nonexistent"], "comment": "fail"}`
 
-	_, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
+	require.NoError(t, err)
+	require.NotNil(t, inv)
+
+	// The executor is now invoked during Execute (so cancellation can be driven by ctx).
+	si := inv.(domain.StreamableInvocation)
+	_ = si.Stream()
+
+	ctx := context.Background()
+	_, disp, err := inv.Execute(ctx)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "command not found")
+	assert.Contains(t, disp.GetError(), "command not found")
 }
 
 func TestShellTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
@@ -182,10 +188,9 @@ func TestShellTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
 
 	mockPR.On("Root").Return("")
 
-	ctx := context.Background()
 	params := `{"command": ["echo"], "comment": "test"}`
 
-	_, err := tl.Prepare(ctx, params)
+	_, err := tl.Prepare(params)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "workspace root not set")
 }
@@ -204,7 +209,7 @@ func TestShellTool_Execute_FinalDisplay(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "comment": "test"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -232,7 +237,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "hello"], "comment": "test"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -259,7 +264,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["false"], "comment": "fail"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -284,7 +289,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	params := `{"command": ["sleep", "10"], "comment": "sleep"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -311,7 +316,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["cat", "bigfile"], "comment": "cat"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -336,7 +341,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "streaming"], "comment": "stream"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
@@ -367,7 +372,7 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	ctx := context.Background()
 	params := `{"command": ["echo", "captured"], "comment": "test capture"}`
 
-	inv, err := tl.Prepare(ctx, params)
+	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)

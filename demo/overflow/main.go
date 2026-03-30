@@ -122,7 +122,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 1. search_content Overflow
 	argsObj := map[string]string{"pattern": longArg, "path": "internal/agent"}
 	argsData, _ := json.Marshal(argsObj)
-	inv, _ := searchTool.Prepare(ctx, string(argsData))
+	inv, _ := searchTool.Prepare(string(argsData))
 	var searchEnd domain.ToolDisplay
 	if inv != nil {
 		searchEnd = inv.Display()
@@ -138,7 +138,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 2. find_file Overflow
 	findArgsObj := map[string]string{"pattern": longArg, "path": "internal"}
 	findArgsData, _ := json.Marshal(findArgsObj)
-	findInv, _ := findTool.Prepare(ctx, string(findArgsData))
+	findInv, _ := findTool.Prepare(string(findArgsData))
 	var findEnd domain.ToolDisplay
 	if findInv != nil {
 		findEnd = findInv.Display()
@@ -157,7 +157,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"comment": "Running a multi-line echo for overflow testing. " + longArg,
 	}
 	shellArgsData, _ := json.Marshal(shellArgsObj)
-	shellInv, _ := shellTool.Prepare(ctx, string(shellArgsData))
+	shellInv, _ := shellTool.Prepare(string(shellArgsData))
 	var shellEnd domain.ToolDisplay
 	if shellInv != nil {
 		shellEnd = shellInv.Display()
@@ -186,7 +186,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"comment": "Writing exactly one file with intent: " + longArg,
 	}
 	writeArgsData, _ := json.Marshal(writeArgsObj)
-	writeInv, _ := writeTool.Prepare(ctx, string(writeArgsData))
+	writeInv, _ := writeTool.Prepare(string(writeArgsData))
 	var writeEnd domain.ToolDisplay
 	if writeInv != nil {
 		writeEnd = writeInv.Display()
@@ -208,7 +208,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		},
 	}
 	editArgsData, _ := json.Marshal(editArgsObj)
-	editInv, err := editTool.Prepare(ctx, string(editArgsData))
+	editInv, err := editTool.Prepare(string(editArgsData))
 	if err != nil {
 		fmt.Printf("Edit Prepare Error: %v\n", err)
 	}
@@ -227,7 +227,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 6. list_directory Overflow (Wrapped path)
 	listArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/dir/that/is/very/long/and/will/definitely/wrap"}
 	listArgsData, _ := json.Marshal(listArgsObj)
-	listInv, _ := listTool.Prepare(ctx, string(listArgsData))
+	listInv, _ := listTool.Prepare(string(listArgsData))
 	var listEnd domain.ToolDisplay
 	if listInv != nil {
 		listEnd = listInv.Display()
@@ -243,7 +243,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 7. read_file (Full Path Verification)
 	readArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/main.go"}
 	readArgsData, _ := json.Marshal(readArgsObj)
-	readInv, _ := readTool.Prepare(ctx, string(readArgsData))
+	readInv, _ := readTool.Prepare(string(readArgsData))
 	var readEnd domain.ToolDisplay
 	if readInv != nil {
 		readEnd = readInv.Display()

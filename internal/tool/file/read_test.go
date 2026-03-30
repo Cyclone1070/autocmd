@@ -105,7 +105,7 @@ func (m *mockChecksumManagerForRead) Get(path string) (string, bool) {
 func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (string, error) {
 	t.Helper()
 	params, _ := json.Marshal(req)
-	inv, err := rtool.Prepare(context.Background(), string(params))
+	inv, err := rtool.Prepare(string(params))
 	if err != nil {
 		return "", err
 	}
@@ -115,6 +115,28 @@ func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (strin
 
 func TestReadFile(t *testing.T) {
 	workspaceRoot := "/workspace"
+
+	t.Run("Execute cancelled returns ToolErrorCancelled display", func(t *testing.T) {
+		fs := newMockFileSystemForRead()
+		fs.createDir("/workspace")
+		fs.createFile("/workspace/a.txt", []byte("hello"))
+
+		checksumManager := newMockChecksumManagerForRead()
+		rtool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+
+		req := &ReadFileRequest{Path: "a.txt"}
+		params, _ := json.Marshal(req)
+		inv, err := rtool.Prepare(string(params))
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, disp, execErr := inv.Execute(ctx)
+
+		require.ErrorIs(t, execErr, context.Canceled)
+		require.NotNil(t, disp)
+		assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
+	})
 
 	t.Run("full read caches checksum", func(t *testing.T) {
 		fs := newMockFileSystemForRead()
@@ -194,7 +216,7 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &ReadFileRequest{Path: "subdir"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(context.Background(), string(params))
+		_, err := readTool.Prepare(string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for directory")
 		}
@@ -211,7 +233,7 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &ReadFileRequest{Path: "nonexistent.txt"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(context.Background(), string(params))
+		_, err := readTool.Prepare(string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for non-existent file")
 		}
@@ -337,7 +359,7 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, err := readTool.Prepare(context.Background(), string(params))
+		inv, err := readTool.Prepare(string(params))
 		require.NoError(t, err)
 
 		// Delete file after prepare to cause Execute failure
@@ -362,7 +384,7 @@ func TestReadFile(t *testing.T) {
 		
 		// Agent sends absolute path
 		params, _ := json.Marshal(&ReadFileRequest{Path: absFile})
-		inv, err := readTool.Prepare(context.Background(), string(params))
+		inv, err := readTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}

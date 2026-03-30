@@ -21,19 +21,16 @@ import (
 type mockTool struct {
 	name        string
 	description string
-	prepare     func(ctx context.Context, params string) (domain.Invocation, error)
+	prepare     func(params string) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
 func (mt *mockTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{Name: mt.name, Desc: mt.description}
 }
-func (mt *mockTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+func (mt *mockTool) Prepare(params string) (domain.Invocation, error) {
 	if mt.prepare != nil {
-		return mt.prepare(ctx, params)
+		return mt.prepare(params)
 	}
 	return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
 }
@@ -176,7 +173,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 	var capturedParams string
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			capturedParams = params
 			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
 		},
@@ -199,7 +196,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
 		},
 	}
@@ -234,7 +231,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 func TestExecute_EmitsToolEvents(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "result",
 				display: domain.NewStringDisplay("", "display output"),
@@ -273,7 +270,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{
 		&mockTool{
 			name: "read_file",
-			prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+			prepare: func(params string) (domain.Invocation, error) {
 				return nil, fmt.Errorf("failed to prepare")
 			},
 		},
@@ -307,7 +304,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	mt := &mockTool{
 		name: "shell",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				content: "Command finished",
 				stream:  strings.NewReader("file1\nfile2\n"),
@@ -352,7 +349,7 @@ loop:
 func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "oops",
 				display: domain.NewStringDisplay("", "preview"),
@@ -377,7 +374,7 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	mt := &mockTool{
 		name: "fail",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Detailed error in content",
 				display: domain.NewStringDisplay("", ""),
@@ -416,7 +413,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 
 	mt := &mockTool{
 		name: "shell",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				stream:  output,
 				display: domain.NewShellDisplay("Header", "cmd", ""),
@@ -501,12 +498,94 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	assert.Equal(t, "execution cancelled", res.Content)
 }
 
+func TestExecute_ContextCancelled_EmitsToolEndEventWithCancelledDisplay(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cancelDisp := domain.NewStringDisplay("", "preview")
+	cancelDisp.Error = domain.ToolErrorCancelled
+
+	mt := &mockTool{
+		name: "test",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: cancelDisp,
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					// Simulate tool properly finalizing its display on cancellation.
+					return "", cancelDisp, context.Canceled
+				},
+			}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+
+	sender := newMockEventSender(16)
+
+	_, _, err := executor.execute(ctx, &schema.ToolCall{
+		ID: "tc-cancel",
+		Function: schema.FunctionCall{
+			Name:      "test",
+			Arguments: "{}",
+		},
+	}, sender)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// We expect a ToolStartEvent then a ToolEndEvent, and the end display must show Cancelled.
+	var sawStart bool
+	var end domain.ToolEndEvent
+	for i := 0; i < 4; i++ {
+		select {
+		case ev := <-sender.events:
+			switch x := ev.(type) {
+			case domain.ToolStartEvent:
+				sawStart = true
+			case domain.ToolEndEvent:
+				end = x
+				assert.Equal(t, domain.ToolErrorCancelled, x.Display.GetError())
+				assert.Equal(t, "tc-cancel", x.CallID)
+				assert.True(t, sawStart, "must emit ToolStartEvent before ToolEndEvent")
+				return
+			}
+		case <-time.After(250 * time.Millisecond):
+			t.Fatal("timed out waiting for ToolEndEvent")
+		}
+	}
+	t.Fatalf("did not receive ToolEndEvent, last end=%+v", end)
+}
+
+func TestExecute_PanicsWhenFinalDisplayIsNil(t *testing.T) {
+	mt := &mockTool{
+		name: "bad",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: domain.NewStringDisplay("", "preview"),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					return "", nil, context.Canceled
+				},
+			}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+
+	assert.Panics(t, func() {
+		_, _, _ = executor.execute(context.Background(), &schema.ToolCall{
+			ID: "tc-nil",
+			Function: schema.FunctionCall{
+				Name:      "bad",
+				Arguments: "{}",
+			},
+		}, nil)
+	})
+}
+
 func TestToolExecutor_Throughput_Batching(t *testing.T) {
 	data := strings.Repeat("A", 8192)
 
 	mt := &mockTool{
 		name: "throughput-test",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				content: "done",
 				stream:  strings.NewReader(data),

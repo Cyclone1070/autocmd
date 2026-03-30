@@ -78,7 +78,7 @@ func (t *FindFileTool) Definition() *schema.ToolInfo {
 }
 
 // Prepare validates input and resolves path.
-func (t *FindFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *FindFileTool) Prepare(params string) (domain.Invocation, error) {
 	req := &FindFileRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -106,9 +106,6 @@ func (t *FindFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 	// Fail Fast: Verify path exists and is a directory
 	info, err := t.fs.Stat(absPath)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", absPath)
 		}

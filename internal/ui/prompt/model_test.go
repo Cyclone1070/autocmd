@@ -39,10 +39,21 @@ func (a *mockAnimator) NextChunk() (string, bool) {
 	return "", false 
 }
 func (a *mockAnimator) HasPending() bool { return a.pending }
+func (a *mockAnimator) Clear()          { a.pending = false }
 func (a *mockAnimator) FlushAll() string { return "" }
 
 type mockThinkingRenderer struct{}
 func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
+	return "thinking_rendered"
+}
+
+// mockThinkingRecorder records the last status passed to RenderThinking (for cancel / bus-driven flush tests).
+type mockThinkingRecorder struct {
+	lastStatus ui.ToolStatus
+}
+
+func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
+	t.lastStatus = status
 	return "thinking_rendered"
 }
 
@@ -78,24 +89,42 @@ func TestModel_SpinnerIncrementsOncePerTick(t *testing.T) {
 	}
 }
 
-func TestModel_HandleCancel_DuringFlushingTowardThinking_FlushesErrorLine(t *testing.T) {
-	var flushed []string
+func TestModel_CancelRequested_ThinkingFlushUsesErrorStatusOnNextBusEvent(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})
-	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(func(s string) tea.Cmd {
-		flushed = append(flushed, s)
-		return nil
-	}))
-	m.state = stateFlushing
-	m.nextState = stateThinking
+	th := &mockThinkingRecorder{}
+	m := NewModel(bus, th, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+	m.state = stateThinking
 	m.thinkingStart = time.Now()
+	m.isPolling = true
 
-	_, _ = m.handleCancel()
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = res.(*Model)
+	assert.True(t, m.cancelRequested)
+	assert.Equal(t, stateThinking, m.state)
 
-	assert.Contains(t, flushed, "thinking_rendered", "cancel mid-flush toward thinking must still flush thinking line with error styling")
+	// After cancel, queued non-terminal bus events are trashed, but View in stateThinking
+	// must still render cancelled thinking using error styling.
+	_ = m.View()
+	assert.Equal(t, ui.StatusError, th.lastStatus, "View in stateThinking uses error styling after cancel")
 }
 
-func TestModel_CancelIgnoresSubsequentBusEvents(t *testing.T) {
+func TestModel_HandleCancel_DoesNotStartDuplicatePollWhenAlreadyPolling(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.isPolling = true // simulate pollBus goroutine already in flight
+
+	res, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = res.(*Model)
+
+	assert.True(t, m.cancelRequested)
+	assert.True(t, m.isPolling, "cancel must not reset isPolling when a poll is already in flight")
+	assert.Nil(t, cmd, "cancel must not start a second poll when already polling")
+}
+
+func TestModel_CancelProcessesDoneEvent(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
@@ -103,18 +132,60 @@ func TestModel_CancelIgnoresSubsequentBusEvents(t *testing.T) {
 	m.thinkingStart = time.Now()
 	m.isPolling = true
 
-	// Start cancellation path.
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = res.(*Model)
-	assert.True(t, m.isCancelling)
+	assert.True(t, m.cancelRequested)
+	assert.Equal(t, stateThinking, m.state)
+	require.Len(t, bus.actions, 1)
+	_, ok := bus.actions[0].(domain.StopAction)
+	assert.True(t, ok, "first cancel should send StopAction")
+
+	res, _ = m.Update(busEventMsg{event: domain.DoneEvent{}})
+	m = res.(*Model)
 	assert.Equal(t, stateFlushing, m.state)
 	assert.Equal(t, stateDone, m.nextState)
 
-	// Late bus completion must be ignored once cancellation is in progress.
+	res, cmd := m.Update(flushDoneMsg{})
+	m = res.(*Model)
+	assert.Equal(t, stateDone, m.state)
+	assert.NotNil(t, cmd)
+}
+
+func TestModel_CancelRequested_IgnoresQueuedTextAndThinkingEventsInStreaming(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	th := &mockThinkingRecorder{lastStatus: ui.StatusSuccess}
+
+	anim := &mockAnimator{pending: true}
+	m := NewModel(bus, th, nil, &mockSpinner{}, theme, &mockStream{}, anim, ui.NewNoOpGater(), 80)
+
+	// Start streaming and arm polling.
+	m.state = stateStreaming
+	m.isPolling = true
+	m.spinnerFrame = 7
+
+	// Cancel while streaming.
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = res.(*Model)
+	assert.True(t, m.cancelRequested)
+	assert.False(t, m.animator.HasPending(), "animator pending runes should be cleared on cancel during stateStreaming")
+
+	// Queued thinking/text activity must be ignored after cancel.
+	res, _ = m.Update(busEventMsg{event: domain.TextEvent{Text: "ignored", IsThought: false}})
+	m = res.(*Model)
+	assert.Equal(t, stateStreaming, m.state)
+
+	res, _ = m.Update(busEventMsg{event: domain.ThinkingEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateStreaming, m.state)
+
+	// View should not have called RenderThinking (so status must remain zero value).
+	assert.Equal(t, ui.StatusSuccess, th.lastStatus, "queued non-terminal events after cancel must be ignored")
+
+	// DoneEvent is terminal and must still be processed.
 	res, _ = m.Update(busEventMsg{event: domain.DoneEvent{}})
 	m = res.(*Model)
-	assert.True(t, m.isCancelling)
-	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateFlushing, m.state, "DoneEvent should transition into flushing before quitting")
 	assert.Equal(t, stateDone, m.nextState)
 }
 
@@ -262,7 +333,7 @@ func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
 	assert.Equal(t, "boom", newM.tools[1].display.GetError())
 }
 
-func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {
+func TestModel_HandleCancel_ToolEndEventSetsCancelledDisplay(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
@@ -270,18 +341,28 @@ func TestModel_HandleCancel_SetsGenericErrorOnRunningTools(t *testing.T) {
 
 	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
+	// Keep another tool running in front so the cancelled slot is not flushed from the prefix queue in this step.
 	m.tools = []toolSlot{
-		{callID: "1", toolName: "t1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
+		{callID: "1", toolName: "t1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "still running"}},
+		{callID: "2", toolName: "t2", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
 	}
+	m.isPolling = true
 
-	// Act: simulate Ctrl+C cancel
-	res, _ := m.handleCancel()
-	newModel := res.(*Model)
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	cancelled := res.(*Model)
+	assert.True(t, cancelled.cancelRequested)
+	require.Len(t, cancelled.tools, 2)
+	assert.Equal(t, ui.StatusRunning, cancelled.tools[0].status, "cancel must not locally mark running tools as error")
+	assert.Equal(t, ui.StatusRunning, cancelled.tools[1].status)
 
-	if assert.Len(t, newModel.tools, 1) {
-		assert.Equal(t, ui.StatusError, newModel.tools[0].status, "Running tool should be marked as error on cancel")
-		assert.Equal(t, "cancelled", newModel.tools[0].errorMsg, "Cancelled tools should carry a generic error message")
-	}
+	cancelDisp := domain.NewStringDisplay("", "Run something")
+	cancelDisp.Error = domain.ToolErrorCancelled
+	res2, _ := cancelled.handleBusEvent(domain.ToolEndEvent{CallID: "2", Display: cancelDisp})
+	final := res2.(*Model)
+	require.Len(t, final.tools, 2)
+	assert.Equal(t, ui.StatusRunning, final.tools[0].status)
+	assert.Equal(t, ui.StatusError, final.tools[1].status)
+	assert.Equal(t, domain.ToolErrorCancelled, final.tools[1].display.GetError())
 }
 
 func TestModel_BusClosedUnexpectedly(t *testing.T) {

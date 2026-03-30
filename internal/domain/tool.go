@@ -159,5 +159,5 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 type Tool interface {
 	Name() string
 	Definition() *schema.ToolInfo
-	Prepare(ctx context.Context, params string) (Invocation, error)
+	Prepare(params string) (Invocation, error)
 }

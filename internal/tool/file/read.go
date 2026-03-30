@@ -95,7 +95,7 @@ type ReadFileRequest struct {
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 	req := &ReadFileRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -119,9 +119,6 @@ func (t *ReadFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 	// Fail Fast: Verify file exists and is not a directory
 	info, err := t.fileOps.Stat(abs)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("file does not exist: %s", abs)
 		}

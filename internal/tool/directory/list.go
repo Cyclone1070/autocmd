@@ -100,7 +100,7 @@ type listDirInvocation struct {
 }
 
 // Prepare validates path existence and returns an Invocation.
-func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *ListDirTool) Prepare(params string) (domain.Invocation, error) {
 	var req ListDirRequest
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -119,9 +119,6 @@ func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invoca
 	// 2. Validate Existence (Fail Fast)
 	info, err := t.fs.Stat(absPath)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", absPath)
 		}

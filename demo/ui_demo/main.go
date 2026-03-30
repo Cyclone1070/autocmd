@@ -11,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/demo/demoutil"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/eventbus"
@@ -91,6 +92,9 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	tt := demoutil.NewToolTracker(a.bus)
+	defer tt.FlushOpenCancelled()
+
 	// 1. Text Stream
 	markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response."
 	a.bus.SendUIUpdate(domain.TextEvent{Text: markdown})
@@ -121,16 +125,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's the result of my investigation:"})
 
 	tool0Disp := domain.NewStringDisplay("", "Reading main.go")
-	a.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  "tool-0",
-		Display: tool0Disp,
-	})
+	tt.Start("tool-0", "read_file", tool0Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1 * time.Second):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0", Display: tool0Disp})
+	tt.End("tool-0", tool0Disp)
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Now let's run some tools in parallel. Tools will be displayed in toolStart order."})
 	select {
@@ -141,10 +142,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 3. Parallel Tool Calls (3 tools)
 	tool1Disp := domain.NewShellDisplay("Finish last", "npm list --depth=0", "")
-	a.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  "tool-1",
-		Display: tool1Disp,
-	})
+	tt.Start("tool-1", "shell", tool1Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -152,10 +150,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	tool2Disp := domain.NewShellDisplay("Finish first", "eslint .", "")
-	a.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  "tool-2",
-		Display: tool2Disp,
-	})
+	tt.Start("tool-2", "shell", tool2Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -170,10 +165,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	tool3Disp := domain.NewShellDisplay("Finish second", "go test ./...", "")
-	a.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  "tool-3",
-		Display: tool3Disp,
-	})
+	tt.Start("tool-3", "shell", tool3Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -187,7 +179,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-2", Display: tool2Disp})
+	tt.End("tool-2", tool2Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -201,7 +193,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-3", Display: tool3Disp})
+	tt.End("tool-3", tool3Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -215,7 +207,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return ctx.Err()
 	case <-time.After(400 * time.Millisecond):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-1", Display: tool1Disp})
+	tt.End("tool-1", tool1Disp)
 
 	// 6. Final text
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Refactoring complete! The UI is looking great. ✨"})

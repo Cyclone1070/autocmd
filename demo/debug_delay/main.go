@@ -11,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/demo/demoutil"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/eventbus"
@@ -91,6 +92,9 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	tt := demoutil.NewToolTracker(a.bus)
+	defer tt.FlushOpenCancelled()
+
 	// 1. Thinking
 	a.bus.SendUIUpdate(domain.ThinkingEvent{})
 	select {
@@ -107,16 +111,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	dbgDisp := domain.NewStringDisplay("", "This tool call display should be sandwiched.")
-	a.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  "tool-0",
-		Display: dbgDisp,
-	})
+	tt.Start("tool-0", "debug", dbgDisp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1 * time.Second):
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "tool-0", Display: dbgDisp})
+	tt.End("tool-0", dbgDisp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

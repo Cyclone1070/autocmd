@@ -84,7 +84,7 @@ func (t *SearchContentTool) Definition() *schema.ToolInfo {
 	}
 }
 
-func (t *SearchContentTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *SearchContentTool) Prepare(params string) (domain.Invocation, error) {
 	req := &SearchContentRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -107,9 +107,6 @@ func (t *SearchContentTool) Prepare(ctx context.Context, params string) (domain.
 	// Check if path exists (file or directory is fine)
 	_, err = t.fs.Stat(absSearchPath)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("path does not exist: %s", searchPath)
 		}

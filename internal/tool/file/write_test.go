@@ -60,6 +60,27 @@ func newMockFileSystemForWrite(maxFileSize int64) *mockFileSystemForWrite {
 	}
 }
 
+func TestWriteFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
+	workspaceRoot := "/workspace"
+	fs := newMockFileSystemForWrite(1024 * 1024)
+	fs.dirs["/workspace"] = true
+	checksumManager := newMockChecksumManagerForWrite()
+	wtool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, 1024*1024)
+
+	req := &WriteFileRequest{Path: "a.txt", Content: "hello", Comment: "write"}
+	params, _ := json.Marshal(req)
+	inv, err := wtool.Prepare(string(params))
+	assert.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, disp, execErr := inv.Execute(ctx)
+
+	assert.ErrorIs(t, execErr, context.Canceled)
+	assert.NotNil(t, disp)
+	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
+}
+
 type mockPathResolver struct {
 	workspaceRoot string
 }
@@ -180,7 +201,7 @@ func executeWrite(t *testing.T, wtool *WriteFileTool, req *WriteFileRequest) (st
 	if err != nil {
 		t.Fatalf("Failed to marshal request: %v", err)
 	}
-	inv, err := wtool.Prepare(context.Background(), string(params))
+	inv, err := wtool.Prepare(string(params))
 	if err != nil {
 		return "", err
 	}
@@ -369,7 +390,7 @@ func TestWriteFile(t *testing.T) {
 		
 		// Agent sends absolute path
 		params, _ := json.Marshal(&WriteFileRequest{Path: absFile, Content: "test", Comment: "test comment"})
-		inv, err := writeTool.Prepare(context.Background(), string(params))
+		inv, err := writeTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}

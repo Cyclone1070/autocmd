@@ -122,7 +122,7 @@ func (t *EditFileTool) Definition() *schema.ToolInfo {
 }
 
 // Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
-func (t *EditFileTool) Prepare(ctx context.Context, params string) (domain.Invocation, error) {
+func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 	req := &EditFileRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -148,17 +148,9 @@ func (t *EditFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 		return nil, err
 	}
 
-	// Check context before I/O
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-
 	// Read file and apply edits in memory to compute diff
 	info, err := t.fileOps.Stat(abs)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("file does not exist: %s", req.Path)
 		}
@@ -167,9 +159,6 @@ func (t *EditFileTool) Prepare(ctx context.Context, params string) (domain.Invoc
 
 	data, err := t.fileOps.ReadFile(abs)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		return nil, fmt.Errorf("failed to read file %s: %w", req.Path, err)
 	}
 

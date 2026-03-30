@@ -176,7 +176,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 
 	mt := &mockTool{
 		name: "get_weather",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "Sunny", display: domain.NewStringDisplay("", "weather")}, nil
 		},
 	}
@@ -209,7 +209,7 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewShellDisplay("Run Bash", "echo chunk", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -240,7 +240,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 
 	mt := &mockTool{
 		name: "infinite",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "kept going", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
@@ -298,7 +298,7 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -311,7 +311,7 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -367,7 +367,7 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -380,7 +380,7 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -426,13 +426,13 @@ func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R1", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R2", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
@@ -472,13 +472,13 @@ func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R1:" + params, display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
+		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R2:" + params, display: domain.NewStringDisplay("", "")}, nil
 		},
 	}

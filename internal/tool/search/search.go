@@ -140,7 +140,7 @@ type searchContentInvocation struct {
 	absPath         string
 	pattern         string
 	include         string
-	display         domain.ToolDisplay
+	display         domain.StringDisplay
 	maxLineLength   int
 }
 
@@ -149,17 +149,19 @@ func (i *searchContentInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
-	d := i.display.(domain.StringDisplay)
+	d := i.display
 
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
 
 	// Re-verify state
 	_, err := i.fs.Stat(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -193,7 +195,8 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 	res, err := i.commandExecutor.Run(ctx, cmd, workDir, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: rg failed to start: %v", err), d, errors.New("Execution failed")

@@ -256,7 +256,7 @@ type editFileInvocation struct {
 	newContent       []byte
 	originalPerm     os.FileMode
 	expectedChecksum string
-	display          domain.ToolDisplay
+	display          domain.DiffDisplay
 }
 
 func (i *editFileInvocation) Display() domain.ToolDisplay {
@@ -264,18 +264,18 @@ func (i *editFileInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
-	// Check context
+	d := i.display
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
-
-	d := i.display.(domain.DiffDisplay)
 
 	// Re-read file and verify checksum to prevent TOCTOU race
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), d, errors.New("Execution failed")
@@ -290,7 +290,8 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	// Write the modified content atomically using pre-computed content
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.newContent, i.originalPerm); err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")

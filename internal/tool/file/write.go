@@ -156,7 +156,7 @@ type writeFileInvocation struct {
 	absPath         string
 	relPath         string
 	content         []byte
-	display         domain.ToolDisplay
+	display         domain.StringDisplay
 }
 
 func (i *writeFileInvocation) Display() domain.ToolDisplay {
@@ -164,10 +164,11 @@ func (i *writeFileInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
-	d := i.display.(domain.StringDisplay)
+	d := i.display
 
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
 
 	// Check if file already exists (TOCTOU protection)
@@ -179,7 +180,8 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), d, errors.New("Execution failed")
@@ -189,7 +191,8 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	parentDir := filepath.Dir(i.absPath)
 	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to create directories: %v", err), d, errors.New("Execution failed")
@@ -201,7 +204,8 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	perm := os.FileMode(0o644)
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")

@@ -9,6 +9,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+// ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
+const ToolErrorCancelled = "Cancelled"
 
 // Invocation is a validated, prepared tool call ready for execution.
 // Returned by Tool.Prepare(), enforces prepare-before-execute sequence.

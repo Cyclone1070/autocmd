@@ -292,8 +292,9 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 
 	cancel()
 
-	_, _, err = inv.Execute(ctx)
+	_, disp, err := inv.Execute(ctx)
 	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
 
 func TestShellTool_Execute_Truncation(t *testing.T) {

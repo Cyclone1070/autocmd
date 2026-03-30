@@ -158,7 +158,7 @@ type readFileInvocation struct {
 	absPath         string
 	offset          int
 	limit           int
-	display         domain.ToolDisplay
+	display         domain.StringDisplay
 }
 
 func (i *readFileInvocation) Display() domain.ToolDisplay {
@@ -166,16 +166,17 @@ func (i *readFileInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+	d := i.display
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
-
-	d := i.display.(domain.StringDisplay)
 
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: %s", err.Error()), d, errors.New("Execution failed")

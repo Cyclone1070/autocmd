@@ -95,7 +95,7 @@ type listDirInvocation struct {
 	ignoreMatcher  ignoreMatcher
 	resolvedPath   string
 	ignorePatterns []string
-	display        domain.ToolDisplay
+	display        domain.StringDisplay
 	maxResults     int
 }
 
@@ -149,17 +149,19 @@ func (t *ListDirTool) Prepare(ctx context.Context, params string) (domain.Invoca
 
 // Execute performs the safe directory listing (re-verifying existence).
 func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
-	d := i.display.(domain.StringDisplay)
+	d := i.display
 
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
 
 	// 1. Re-verify State (TOCTOU Safety)
 	info, err := i.fs.Stat(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -176,7 +178,8 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDis
 	entries, err := i.fs.ListDir(i.resolvedPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), d, errors.New("Execution failed")

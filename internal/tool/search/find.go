@@ -139,7 +139,7 @@ type findFileInvocation struct {
 	pathResolver    pathResolver
 	absPath         string
 	pattern         string
-	display         domain.ToolDisplay
+	display         domain.StringDisplay
 }
 
 func (i *findFileInvocation) Display() domain.ToolDisplay {
@@ -147,17 +147,19 @@ func (i *findFileInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
-	d := i.display.(domain.StringDisplay)
+	d := i.display
 
 	if ctx.Err() != nil {
-		return "", i.display, ctx.Err()
+		d.Error = domain.ToolErrorCancelled
+		return "", d, ctx.Err()
 	}
 
 	// Re-verify State
 	info, err := i.fs.Stat(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -177,7 +179,8 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, os.Environ())
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", i.display, ctx.Err()
+			d.Error = domain.ToolErrorCancelled
+			return "", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: fd failed to start: %v", err), d, errors.New("Execution failed")

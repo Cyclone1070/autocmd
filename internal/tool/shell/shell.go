@@ -112,15 +112,21 @@ func (i *shellInvocation) Display() domain.ToolDisplay {
 	return domain.NewShellDisplay(i.comment, i.commandStr, "")
 }
 
+func (i *shellInvocation) cancelledDisplay() domain.ShellDisplay {
+	sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+	sh.Error = domain.ToolErrorCancelled
+	return sh
+}
+
 func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if ctx.Err() != nil {
-		return "", i.Display(), ctx.Err()
+		return "", i.cancelledDisplay(), ctx.Err()
 	}
 
 	result, err := i.streamCmd.Wait()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", i.Display(), err
+			return "", i.cancelledDisplay(), err
 		}
 		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
 		sh.Error = err.Error()

@@ -1,5 +1,7 @@
 package domain
 
+// Picker, info-bar, and history workflow→UI events.
+
 import "github.com/cloudwego/eino/schema"
 
 // InfoEvent contains gathered data for UI display of configuration and state.

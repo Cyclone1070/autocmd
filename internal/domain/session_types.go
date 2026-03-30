@@ -1,5 +1,7 @@
 package domain
 
+// Session aggregate and summary types.
+
 import (
 	"time"
 

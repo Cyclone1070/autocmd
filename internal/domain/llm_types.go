@@ -1,5 +1,7 @@
 package domain
 
+// LLM and provider interfaces and listing metadata.
+
 import (
 	"context"
 
@@ -35,4 +37,3 @@ type ProviderInfo struct {
 	ID         string
 	Credential *Credential
 }
-

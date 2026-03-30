@@ -1,5 +1,7 @@
 package domain
 
+// Auth flow user actions and workflow→auth-UI updates.
+
 // AuthAction defines user intents for authentication.
 type SelectProviderAction struct {
 	ID string

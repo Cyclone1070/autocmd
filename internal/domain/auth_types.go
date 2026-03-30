@@ -1,5 +1,7 @@
 package domain
 
+// Auth vocabulary: credentials and method descriptors.
+
 // Credential represents a stored or resolved credential for an LLM provider.
 type Credential struct {
 	Type   string `json:"type"` // e.g., "api_key"

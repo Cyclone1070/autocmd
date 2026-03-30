@@ -1,5 +1,7 @@
 package domain
 
+// Tool contract, invocations, and JSON-serializable tool displays.
+
 import (
 	"context"
 	"encoding/json"
@@ -50,8 +52,8 @@ type StringDisplay struct {
 	Error     string `json:"error,omitempty"`
 }
 
-func (StringDisplay) isToolDisplay() {}
-func (s StringDisplay) Type() string { return s.TypeField }
+func (StringDisplay) isToolDisplay()     {}
+func (s StringDisplay) Type() string     { return s.TypeField }
 func (s StringDisplay) GetError() string { return s.Error }
 
 // NewStringDisplay creates a new StringDisplay with correct type.
@@ -70,8 +72,8 @@ type DiffDisplay struct {
 	Error     string `json:"error,omitempty"`
 }
 
-func (DiffDisplay) isToolDisplay()    {}
-func (d DiffDisplay) Type() string    { return d.TypeField }
+func (DiffDisplay) isToolDisplay()     {}
+func (d DiffDisplay) Type() string     { return d.TypeField }
 func (d DiffDisplay) GetError() string { return d.Error }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
@@ -89,14 +91,14 @@ func NewDiffDisplay(comment, target string, added, removed int, diff string) Dif
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
 	TypeField      string `json:"type"`
-	Comment        string `json:"comment"` // Description from tool (e.g. "Installing dependencies")
-	Command        string `json:"command"` // The command being run (e.g. "npm install")
+	Comment        string `json:"comment"`         // Description from tool (e.g. "Installing dependencies")
+	Command        string `json:"command"`         // The command being run (e.g. "npm install")
 	CapturedOutput string `json:"captured_output"` // Raw output captured after execution (baked)
 	Error          string `json:"error,omitempty"`
 }
 
-func (ShellDisplay) isToolDisplay() {}
-func (s ShellDisplay) Type() string   { return s.TypeField }
+func (ShellDisplay) isToolDisplay()     {}
+func (s ShellDisplay) Type() string     { return s.TypeField }
 func (s ShellDisplay) GetError() string { return s.Error }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.

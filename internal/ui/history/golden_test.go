@@ -75,7 +75,7 @@ func getHistoryElements() []TestElement {
 					TypeField:      "shell",
 					Comment:        "Running Tests",
 					Command:        "go test ./...",
-					CapturedOutput: &captured,
+					CapturedOutput: captured,
 				},
 			},
 		},

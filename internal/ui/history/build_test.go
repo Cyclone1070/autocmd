@@ -65,7 +65,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 		"tc-1": domain.ShellDisplay{
 			TypeField:      "shell",
 			Command:        "ls",
-			CapturedOutput: &captured,
+			CapturedOutput: captured,
 		},
 	}
 
@@ -81,7 +81,6 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
-	empty := ""
 
 	messages := []*schema.Message{
 		{
@@ -93,7 +92,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		{
 			Role:       schema.Tool,
 			ToolCallID: "tc-1",
-			Content:    "\n\n(Exit code: 0)",
+			Content:    "",
 		},
 	}
 
@@ -101,14 +100,12 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		"tc-1": domain.ShellDisplay{
 			TypeField:      "shell",
 			Command:        "touch t.txt",
-			CapturedOutput: &empty,
+			CapturedOutput: "",
 		},
 	}
 
 	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
 
-	// Should NOT contain the exit code decoration
-	// THIS TEST IS EXPECTED TO FAIL IN THE RED PHASE
 	assert.NotContains(t, rendered, "(Exit code: 0)", "History should not leak exit code for successful empty stdout commands")
 }
 
@@ -132,9 +129,9 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 
 	displays := domain.ToolDisplays{
 		"tc-1": domain.ShellDisplay{
-			TypeField:      "shell",
-			Command:        "ls",
-			CapturedOutput: nil, // Legacy session
+			TypeField: "shell",
+			Command:   "ls",
+			// Legacy session: no captured_output in storage — zero value falls back to tool message.
 		},
 	}
 
@@ -148,7 +145,6 @@ func TestShellHistory_NilCapturedOutput_Fallback(t *testing.T) {
 func TestShellHistory_ErrorStatus(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
-	empty := ""
 
 	messages := []*schema.Message{
 		{
@@ -169,7 +165,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 		"tc-1": domain.ShellDisplay{
 			TypeField:      "shell",
 			Command:        "false",
-			CapturedOutput: &empty,
+			CapturedOutput: "",
 			Error:          "Execution failed",
 		},
 	}
@@ -344,7 +340,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 		},
 	}
 	displays := domain.ToolDisplays{
-		"tc-1": domain.NewShellDisplay("List directory contents", "ls", nil, nil),
+		"tc-1": domain.NewShellDisplay("List directory contents", "ls", ""),
 	}
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
@@ -448,7 +444,7 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	}
 	messages := []*schema.Message{msg}
 	displays := domain.ToolDisplays{
-		"1": domain.NewShellDisplay("header", "ls", nil, nil),
+		"1": domain.NewShellDisplay("header", "ls", ""),
 	}
 
 	var sb strings.Builder
@@ -547,7 +543,7 @@ func TestMessageHeaders(t *testing.T) {
 			},
 		}
 		displays := domain.ToolDisplays{
-			tcID: domain.NewShellDisplay("header", "ls", nil, nil),
+			tcID: domain.NewShellDisplay("header", "ls", ""),
 		}
 
 		rendered := ab.RenderMessage(messages, 0, displays, false)

@@ -56,6 +56,23 @@ func (m *mockInvocation) Execute(ctx context.Context) (string, error) {
 }
 func (m *mockInvocation) Display() domain.ToolDisplay { return m.display }
 
+// mockStreamInvocation implements domain.StreamableInvocation for streaming tests.
+type mockStreamInvocation struct {
+	stream  io.Reader
+	display domain.ToolDisplay
+	content string
+	err     error
+}
+
+func (m *mockStreamInvocation) Stream() io.Reader { return m.stream }
+func (m *mockStreamInvocation) Display() domain.ToolDisplay { return m.display }
+func (m *mockStreamInvocation) Execute(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return m.content, m.err
+}
+
 type mockToolRegistry struct {
 	tools map[string]domain.Tool
 }
@@ -264,9 +281,10 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 	mt := &mockTool{
 		name: "shell",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{
+			return &mockStreamInvocation{
 				content: "Command finished",
-				display: domain.NewShellDisplay("ls", "ls", strings.NewReader("file1\nfile2\n"), nil),
+				stream:  strings.NewReader("file1\nfile2\n"),
+				display:   domain.NewShellDisplay("ls", "ls", ""),
 			}, nil
 		},
 	}
@@ -346,11 +364,11 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	mt := &mockTool{
 		name: "shell",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{
-				display: domain.NewShellDisplay("Header", "cmd", output, nil),
-				execute: func(ctx context.Context) (string, error) {
-					return "specific error", fmt.Errorf("command timeout")
-				},
+			return &mockStreamInvocation{
+				stream:  output,
+				display: domain.NewShellDisplay("Header", "cmd", ""),
+				content: "specific error",
+				err:     fmt.Errorf("command timeout"),
 			}, nil
 		},
 	}
@@ -436,9 +454,10 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 	mt := &mockTool{
 		name: "throughput-test",
 		prepare: func(ctx context.Context, params string) (domain.Invocation, error) {
-			return &mockInvocation{
+			return &mockStreamInvocation{
 				content: "done",
-				display: domain.NewShellDisplay("test", "test", strings.NewReader(data), nil),
+				stream:  strings.NewReader(data),
+				display:   domain.NewShellDisplay("test", "test", ""),
 			}, nil
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -106,13 +107,12 @@ type shellInvocation struct {
 	capturedOutput *string
 }
 
+func (i *shellInvocation) Stream() io.Reader {
+	return i.streamCmd.Output()
+}
+
 func (i *shellInvocation) Display() domain.ToolDisplay {
-	return domain.NewShellDisplay(
-		i.comment,
-		i.commandStr,
-		i.streamCmd.Output(),
-		i.capturedOutput,
-	)
+	return domain.NewShellDisplay(i.comment, i.commandStr, "")
 }
 
 func (i *shellInvocation) Execute(ctx context.Context) (string, error) {

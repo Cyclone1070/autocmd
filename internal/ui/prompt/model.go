@@ -479,8 +479,8 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 		rendered = m.toolRenderer.RenderDiff(d, slot.status, slot.errorMsg, prefix)
 	case domain.ShellDisplay:
 		output := slot.streamOutput
-		if d.CapturedOutput != nil && *d.CapturedOutput != "" {
-			output = *d.CapturedOutput
+		if d.CapturedOutput != "" {
+			output = d.CapturedOutput
 		}
 		rendered = m.toolRenderer.RenderShell(d, output, slot.status, slot.errorMsg, prefix)
 	default:

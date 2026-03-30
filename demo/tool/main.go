@@ -171,9 +171,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 3. Shell Suite (with more streaming)
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "### SUITE: SHELL (Heavy Streaming)\n\n"})
-	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", nil, nil)})
-	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", nil, nil)})
-	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", nil, nil)})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-1", Display: domain.NewShellDisplay("Slow Shell", "slow-cmd", "")})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-2", Display: domain.NewShellDisplay("Fast Shell", "fast-cmd", "")})
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: "SHELL-3", Display: domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", "")})
 
 	// Heavy streaming
 	for i := 1; i <= 20; i++ {

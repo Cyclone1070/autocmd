@@ -250,8 +250,8 @@ func (h *HistoryBuilder) renderToolCall(messages []*schema.Message, assistantIdx
 		}
 		// Prefer baked captured output over the decorated toolOutput (which includes exit codes for LLM)
 		output := toolOutput
-		if d.CapturedOutput != nil {
-			output = *d.CapturedOutput
+		if d.CapturedOutput != "" {
+			output = d.CapturedOutput
 		}
 		rendered = tooling.RenderShell(d, output, status, toolErr, prefix)
 	}

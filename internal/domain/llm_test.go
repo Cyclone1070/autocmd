@@ -42,7 +42,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 			TypeField:      "shell",
 			Comment:        "Listing files",
 			Command:        "ls",
-			CapturedOutput: nil,
+			CapturedOutput: "",
 		},
 	}
 

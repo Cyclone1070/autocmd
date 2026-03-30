@@ -150,7 +150,9 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	shellDisp := disp.(domain.ShellDisplay)
 	assert.Equal(t, "echo hello", shellDisp.Command)
 	assert.Equal(t, "say hello", shellDisp.Comment)
-	assert.NotNil(t, shellDisp.Output)
+	assert.Empty(t, shellDisp.CapturedOutput)
+	si := inv.(domain.StreamableInvocation)
+	assert.NotNil(t, si.Stream())
 }
 
 func TestShellTool_Prepare_ExecutorError(t *testing.T) {
@@ -205,8 +207,8 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
-	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
+	si := inv.(domain.StreamableInvocation)
+	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err)
@@ -232,8 +234,8 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
-	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
+	si := inv.(domain.StreamableInvocation)
+	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err)
@@ -257,8 +259,8 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
-	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
+	si := inv.(domain.StreamableInvocation)
+	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	cancel()
 
@@ -283,8 +285,8 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
-	go func() { _, _ = io.Copy(io.Discard, disp.Output) }()
+	si := inv.(domain.StreamableInvocation)
+	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, err := inv.Execute(ctx)
 	require.NoError(t, err)
@@ -308,12 +310,12 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	inv, err := tl.Prepare(ctx, params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
+	si := inv.(domain.StreamableInvocation)
 
 	var buf strings.Builder
 	done := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(&buf, disp.Output)
+		_, _ = io.Copy(&buf, si.Stream())
 		close(done)
 	}()
 
@@ -340,11 +342,11 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	disp := inv.Display().(domain.ShellDisplay)
-	require.NotNil(t, disp.CapturedOutput)
-	assert.Equal(t, "", *disp.CapturedOutput)
+	assert.Empty(t, disp.CapturedOutput)
 
-	_, err = inv.Execute(ctx)
+	out, err := inv.Execute(ctx)
 	require.NoError(t, err)
 
-	assert.Equal(t, "captured\n", *disp.CapturedOutput)
+	assert.Contains(t, out, "captured")
+	assert.Contains(t, out, "(Exit code: 0)")
 }

@@ -112,25 +112,27 @@ func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 	// The broker/Loop will handle the async nature of streaming.
 
 	var streamWG sync.WaitGroup
-	if sh, ok := display.(domain.ShellDisplay); ok && sh.Output != nil && events != nil {
-		streamWG.Add(1)
-		go func() {
-			defer streamWG.Done()
-			buf := make([]byte, 1024*1024)
-			for {
-				n, err := sh.Output.Read(buf)
-				if n > 0 {
-					events.SendUIUpdate(domain.ToolStreamEvent{
-						CallID: tc.ID,
-						Chunk:  string(buf[:n]),
-					})
+	if si, ok := inv.(domain.StreamableInvocation); ok && events != nil {
+		stream := si.Stream()
+		if stream != nil {
+			streamWG.Add(1)
+			go func() {
+				defer streamWG.Done()
+				buf := make([]byte, 1024*1024)
+				for {
+					n, err := stream.Read(buf)
+					if n > 0 {
+						events.SendUIUpdate(domain.ToolStreamEvent{
+							CallID: tc.ID,
+							Chunk:  string(buf[:n]),
+						})
+					}
+					if err != nil {
+						break
+					}
 				}
-				if err != nil {
-					break
-				}
-			}
-
-		}()
+			}()
+		}
 	}
 
 	llmContent, err := inv.Execute(ctx)

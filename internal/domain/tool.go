@@ -23,6 +23,13 @@ type Invocation interface {
 	Execute(ctx context.Context) (llmContent string, err error)
 }
 
+// StreamableInvocation is an Invocation that exposes a live stdout/stderr stream for UI
+// (e.g. shell). The stream is not part of ToolDisplay so displays stay JSON-serializable.
+type StreamableInvocation interface {
+	Invocation
+	Stream() io.Reader
+}
+
 // ToolDisplay is implemented by all display types returned from tools.
 // The UI uses type switches to render each type appropriately.
 // Must be in domain so tools can implement without importing workflow.
@@ -75,24 +82,22 @@ func NewDiffDisplay(comment, target string, added, removed int, diff string) Dif
 
 // ShellDisplay is for shell command execution with streaming output.
 type ShellDisplay struct {
-	TypeField      string    `json:"type"`
-	Comment        string    `json:"comment"`         // Description from tool (e.g. "Installing dependencies")
-	Command        string    `json:"command"`         // The command being run (e.g. "npm install")
-	CapturedOutput *string   `json:"captured_output"` // Pointer to raw output captured after execution (baked)
-	Output         io.Reader `json:"-"`               // Stream stdout/stderr (transient)
-	Error          string    `json:"error,omitempty"`
+	TypeField      string `json:"type"`
+	Comment        string `json:"comment"` // Description from tool (e.g. "Installing dependencies")
+	Command        string `json:"command"` // The command being run (e.g. "npm install")
+	CapturedOutput string `json:"captured_output"` // Raw output captured after execution (baked)
+	Error          string `json:"error,omitempty"`
 }
 
-func (ShellDisplay) isToolDisplay()    {}
-func (s ShellDisplay) Type() string    { return s.TypeField }
+func (ShellDisplay) isToolDisplay() {}
+func (s ShellDisplay) Type() string   { return s.TypeField }
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
-func NewShellDisplay(comment, command string, output io.Reader, capturedOutput *string) ShellDisplay {
+func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
 	return ShellDisplay{
 		TypeField:      "shell",
 		Comment:        comment,
 		Command:        command,
-		Output:         output,
 		CapturedOutput: capturedOutput,
 	}
 }

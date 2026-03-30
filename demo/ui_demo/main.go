@@ -141,7 +141,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 3. Parallel Tool Calls (3 tools)
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-1",
-		Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", nil, nil),
+		Display: domain.NewShellDisplay("Finish last", "npm list --depth=0", ""),
 	})
 	select {
 	case <-ctx.Done():
@@ -151,7 +151,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-2",
-		Display: domain.NewShellDisplay("Finish first", "eslint .", nil, nil),
+		Display: domain.NewShellDisplay("Finish first", "eslint .", ""),
 	})
 	select {
 	case <-ctx.Done():
@@ -168,7 +168,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:  "tool-3",
-		Display: domain.NewShellDisplay("Finish second", "go test ./...", nil, nil),
+		Display: domain.NewShellDisplay("Finish second", "go test ./...", ""),
 	})
 	select {
 	case <-ctx.Done():

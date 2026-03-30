@@ -41,6 +41,7 @@ The `workflow` package orchestrates command-level use cases by coordinating depe
 
 Cancellation:
 - `StopAction` must propagate to active context cancellation quickly.
+- Workflows that participate in coordinated UI shutdown must emit a terminal `DoneEvent` after handling `StopAction`, so UIs can exit deterministically.
 
 Concurrency:
 - Workflow run is command-scoped and one-shot.

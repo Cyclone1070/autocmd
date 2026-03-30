@@ -20,7 +20,7 @@ The `tool` package provides concrete tools and registry wiring used by the agent
 
 ### Inputs
 - Tool invocations from executor/agent paths.
-- Invocation arguments and execution context.
+- Invocation arguments and execution context (provided to `Execute`).
 
 ### Outputs
 - Prepared invocations from `Prepare`.
@@ -41,7 +41,7 @@ The `tool` package provides concrete tools and registry wiring used by the agent
 
 Cancellation:
 - `Execute` must check context and return promptly on cancellation.
-- `Prepare` should check context around potentially expensive I/O or external calls.
+- `Prepare` is context-free and should be fast/pure (validation + display construction). Cancellation must be handled in `Execute(ctx)`.
 
 Concurrency:
 - Tool implementations should avoid hidden global mutable state.
@@ -52,8 +52,8 @@ Tool methods surface validation/operation errors; the executor decides whether t
 
 | Scenario | Internalize in tool? | Return error from tool? | Typical action |
 | --- | --- | --- | --- |
-| Input validation failure in `Prepare` (ctx alive) | No | Yes | Return validation error; executor converts to model-visible message |
-| Execution operation failure (ctx alive) | Usually no | Often yes with error content | Return `(errorContent, err)`; executor typically continues loop |
+| Input validation failure in `Prepare` | No | Yes | Return validation error; executor converts to model-visible message |
+| Execution operation failure | Usually no | Often yes with error content | Return `(errorContent, err)`; executor typically continues loop |
 | Optional field/path missing where fallback exists | Yes | No | Apply fallback/default and continue |
 | Context cancellation | No | Yes (`ctx.Err`) | Abort current execution |
 | Invariant violation / unrecoverable corruption risk | No | Yes | Abort and surface error |

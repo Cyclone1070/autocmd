@@ -36,10 +36,12 @@ The `ui` package renders workflow state to the terminal and captures user action
 1. Poll bus updates and convert to UI messages.
 2. Update model state (thinking/streaming/tooling/history/picker states).
 3. Render current view and flush stable output when appropriate.
-4. On `StopAction` request, cancel quickly and quit responsively.
+4. On user cancel, send `StopAction` and follow the command’s shutdown contract (coordinated vs immediate).
 
 Cancellation:
 - User cancellation should be responsive and non-blocking from a UX perspective.
+- **Coordinated shutdown (default for interactive workflows)**: UI sends `StopAction`, marks `cancelRequested`, keeps polling, and filters non-terminal updates until `DoneEvent`, then quits.
+- **Immediate shutdown (exceptions)**: for one-shot/read-only flows, UI may quit immediately on keypress.
 
 Concurrency:
 - Bubble Tea model updates are sequential; bus polling and tick commands drive message flow.
@@ -53,7 +55,7 @@ UI should internalize recoverable display issues and only fail hard when the vie
 | Recoverable render/format issue | Yes | No | Fallback output and continue |
 | Missing optional display metadata | Yes | No | Skip part and continue |
 | Unexpected bus close | No | Yes | Show visible error line and terminate |
-| Context/user cancellation | No | Yes (`ctx.Err` path upstream) | Request stop and quit |
+| Context/user cancellation | No | Yes (`ctx.Err` path upstream) | Send `StopAction`; either wait for `DoneEvent` (coordinated flows) or quit immediately (exceptions) |
 | Invariant violation in UI state machine | No | Yes | Abort cleanly |
 
 ## 6) Dependencies

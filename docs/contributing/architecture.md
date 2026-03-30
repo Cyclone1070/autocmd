@@ -148,7 +148,8 @@ The workflow and UI communicate through a bidirectional event bus:
 **Termination Contract:**
 
 - **Natural Completion (Success Path)**: The workflow sends a `DoneEvent` as its final acknowledgement. The UI **waits** for this signal before printing success messages (e.g., "Authorized [Provider]") and quitting, ensuring all background state persistence (saves) has finished.
-- **User Cancellation (Quit Path)**: When the user initiates a quit (`ctrl+c`, `esc`, `q`), the UI sends a `StopAction` and returns `tea.Quit` **immediately** to ensure the interface feels snappy. The workflow terminates independently upon receiving the action or when the `cmd` layer closes the bus.
+- **User Cancellation (Coordinated Quit Path)**: For long-running interactive workflows (e.g. `prompt`, `auth`, `model_picker`, `session_picker`), when the user initiates a quit (`ctrl+c`, `esc`, `q`), the UI sends a `StopAction`, marks cancellation locally, and continues polling while filtering non-terminal events until the workflow emits `DoneEvent`. The UI then flushes and quits. This ensures all terminal events (e.g. tool endings) and persistence have completed before exit.
+- **User Cancellation (Immediate Quit Exceptions)**: For one-shot/read-only flows (e.g. `info`, `history`), the UI may quit immediately on keypress. These flows either complete quickly or do not rely on a cancellable background action loop.
 
 **Polling Contract:**
 

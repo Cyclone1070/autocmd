@@ -43,6 +43,10 @@
 
 Cancellation:
 - `ctx.Err()` must terminate promptly.
+- On cancellation, executor must still emit a `ToolEndEvent` for any tool that started, using the tool-provided `finalDisplay` (which should surface cancellation via `GetError()`, typically `domain.ToolErrorCancelled`).
+
+Streaming:
+- For streamable tools, executor may forward `ToolStreamEvent` chunks while the tool runs. Regardless of streaming, a single `ToolEndEvent` terminates the tool lifecycle.
 
 Concurrency:
 - Executor is run-scoped and should avoid hidden cross-run state.
@@ -54,10 +58,13 @@ Executor should internalize recoverable tool failures into returned messages and
 | Scenario | Internalize? | Return error? | Typical action |
 | --- | --- | --- | --- |
 | Tool not found | Yes | No | Return message listing/clarifying available tools |
-| `Prepare` validation failure (ctx alive) | Yes | No | Return schema/validation message |
-| `Execute` operation failure (ctx alive) | Yes | No | Return error content message |
+| `Prepare` validation failure | Yes | No | Return schema/validation message |
+| `Execute` operation failure | Yes | No | Return error content message |
 | Context cancellation | No | Yes (`ctx.Err`) | Abort loop |
 | Unexpected executor invariant failure | No | Yes | Abort loop |
+
+Additional invariant:
+- `Invocation.Execute(ctx)` must return a non-nil `finalDisplay` on all paths (including cancellation). The executor treats a nil `finalDisplay` as a programmer error.
 
 ## 6) Dependencies
 

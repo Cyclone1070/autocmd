@@ -31,11 +31,18 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		m.state = stateProviderSelection
 		
+		ch := make(chan domain.UIUpdate, 1)
+		ch <- domain.DoneEvent{}
+		close(ch)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		bus.On("SendAction", domain.StopAction{}).Return()
 		
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		
-		assert.NotNil(t, cmd) // MUST quit immediately
+		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent (not quit immediately)")
+		msg := cmd()
+		_, ok := msg.(domain.DoneEvent)
+		assert.True(t, ok, "cancel should schedule pollBus (next msg should be DoneEvent)")
 		bus.AssertCalled(t, "SendAction", domain.StopAction{})
 	})
 
@@ -79,15 +86,54 @@ func TestAuthUI_Interactive(t *testing.T) {
 	})
 
 	t.Run("Cancellation clears providerID", func(t *testing.T) {
+		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
 		m.state = stateMethodSelection
 		m.providerID = "openai"
 
+		ch := make(chan domain.UIUpdate, 1)
+		ch <- domain.DoneEvent{}
+		close(ch)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		bus.On("SendAction", domain.StopAction{}).Return()
 		
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		
 		assert.Empty(t, m.providerID)
+		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent")
+		msg := cmd()
+		_, ok := msg.(domain.DoneEvent)
+		assert.True(t, ok, "cancel should schedule pollBus (next msg should be DoneEvent)")
+	})
+
+	t.Run("CancelRequested ignores subsequent bus events until DoneEvent", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		m.state = stateProviderSelection
+
+		// Cancel first (will schedule a poll).
+		ch1 := make(chan domain.UIUpdate, 1)
+		ch1 <- domain.DoneEvent{}
+		close(ch1)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch1)).Once()
+		bus.On("SendAction", domain.StopAction{}).Return().Once()
+
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		assert.True(t, m.cancelRequested)
+
+		// While cancelled, receiving new UI updates should be ignored (but keep polling).
+		ch2 := make(chan domain.UIUpdate, 1)
+		ch2 <- domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: "github"}}}
+		close(ch2)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch2)).Once()
+
+		prevState := m.state
+		prevPicker := m.picker
+		_, cmd := m.Update(domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: "github"}}})
+		assert.NotNil(t, cmd)
+		_ = cmd() // drain the pollBus command
+		assert.Equal(t, prevState, m.state, "cancelRequested must prevent state changes from new events")
+		assert.Equal(t, prevPicker, m.picker, "cancelRequested must prevent picker reinitialization")
 	})
 	t.Run("OAuthDeviceFlowEvent shows code", func(t *testing.T) {
 		m := NewModel(bus, theme).(*model)

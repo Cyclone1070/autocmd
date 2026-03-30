@@ -43,6 +43,7 @@ type model struct {
 	textInput textinput.Model
 	oauth     oauthInfo
 	quitting  bool
+	cancelRequested bool
 	err       error
 }
 
@@ -78,7 +79,27 @@ func (m *model) pollBus() tea.Cmd {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	if m.cancelRequested {
+		switch msg.(type) {
+		case domain.DoneEvent:
+			// handled below
+		default:
+			// Keep polling until workflow terminates.
+			return m, m.pollBus()
+		}
+	}
+
 	switch msg := msg.(type) {
+	case domain.DoneEvent:
+		m.quitting = true
+		if m.providerID != "" {
+			return m, tea.Sequence(
+				tea.Printf("\nAuthorized %s\n", m.providerID),
+				tea.Quit,
+			)
+		}
+		return m, tea.Quit
+
 	case domain.AuthProviderListEvent:
 		m.state = stateProviderSelection
 		m.initializeProviderPicker(msg.Providers)
@@ -115,27 +136,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.Quit,
 		)
 
-	case domain.DoneEvent:
-		m.quitting = true
-		if m.providerID != "" {
-			return m, tea.Sequence(
-				tea.Printf("\nAuthorized %s\n", m.providerID),
-				tea.Quit,
-			)
-		}
-		return m, tea.Quit
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
+			m.cancelRequested = true
 			m.providerID = ""
 			m.bus.SendAction(domain.StopAction{})
-			return m, tea.Quit
+			return m, m.pollBus()
 		case "q":
 			if m.state != stateFieldCollection {
+				m.cancelRequested = true
 				m.providerID = ""
 				m.bus.SendAction(domain.StopAction{})
-				return m, tea.Quit
+				return m, m.pollBus()
 			}
 		}
 

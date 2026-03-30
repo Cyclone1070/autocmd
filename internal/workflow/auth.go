@@ -58,10 +58,15 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 
 		var selectedProvider domain.Provider
 		var selectedMethod domain.AuthMethod
+		var oauthCancel context.CancelFunc
 
 		for {
 			select {
 			case <-ctx.Done():
+				if oauthCancel != nil {
+					oauthCancel()
+					oauthCancel = nil
+				}
 				done <- ctx.Err()
 				return
 			case act, ok := <-deps.Bus.WorkflowActions():
@@ -143,22 +148,64 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 							FieldIndex: 0,
 						})
 					case domain.OAuthMethod:
-						token, err := wf.oauthMgr.RunDeviceFlow(ctx, v, func(uri, code string) {
-							deps.Bus.SendUIUpdate(domain.OAuthDeviceFlowEvent{
-								VerificationURI: uri,
-								UserCode:        code,
-							})
-						})
-						if err != nil {
-							deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: err.Error()})
+						// Run device flow asynchronously so StopAction can be handled promptly.
+						if wf.oauthMgr == nil {
+							deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: "OAuth manager not configured"})
 							continue
 						}
 
-						cred := domain.Credential{Type: v.ID, OAuthToken: token}
-						wf.authMgr.Set(selectedProvider.ID(), cred)
-						deps.Bus.SendUIUpdate(domain.DoneEvent{})
-						done <- nil
-						return
+						oauthCtx, cancel := context.WithCancel(ctx)
+						oauthCancel = cancel
+						resultCh := make(chan struct {
+							token string
+							err   error
+						}, 1)
+
+						go func() {
+							token, err := wf.oauthMgr.RunDeviceFlow(oauthCtx, v, func(uri, code string) {
+								deps.Bus.SendUIUpdate(domain.OAuthDeviceFlowEvent{
+									VerificationURI: uri,
+									UserCode:        code,
+								})
+							})
+							resultCh <- struct {
+								token string
+								err   error
+							}{token: token, err: err}
+						}()
+
+						select {
+						case <-ctx.Done():
+							cancel()
+							oauthCancel = nil
+							done <- ctx.Err()
+							return
+						case act2, ok := <-deps.Bus.WorkflowActions():
+							// Only StopAction is meaningful while we are blocked waiting for OAuth.
+							if ok {
+								if _, isStop := act2.(domain.StopAction); isStop {
+									cancel()
+									oauthCancel = nil
+									deps.Bus.SendUIUpdate(domain.DoneEvent{})
+									done <- nil
+									return
+								}
+							}
+							// Any other action is ignored while waiting; continue loop and let next iteration handle it.
+							continue
+						case res := <-resultCh:
+							oauthCancel = nil
+							if res.err != nil {
+								deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: res.err.Error()})
+								continue
+							}
+
+							cred := domain.Credential{Type: v.ID, OAuthToken: res.token}
+							wf.authMgr.Set(selectedProvider.ID(), cred)
+							deps.Bus.SendUIUpdate(domain.DoneEvent{})
+							done <- nil
+							return
+						}
 					}
 
 				case domain.SubmitCredentialAction:
@@ -171,6 +218,10 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 					return
 
 				case domain.StopAction:
+					if oauthCancel != nil {
+						oauthCancel()
+						oauthCancel = nil
+					}
 					deps.Bus.SendUIUpdate(domain.DoneEvent{})
 					done <- nil
 					return

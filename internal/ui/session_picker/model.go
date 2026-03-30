@@ -25,6 +25,7 @@ type model struct {
 	renaming     bool
 	renameItemID string
 	quitting     bool
+	cancelRequested bool
 	err          error
 	selectedID   string
 	selectedName string
@@ -62,6 +63,15 @@ func (m *model) pollBus() tea.Cmd {
 
 // Update handles UI interactions and translates them into workflow calls.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.cancelRequested {
+		switch msg.(type) {
+		case domain.DoneEvent:
+			// handled below
+		default:
+			return m, m.pollBus()
+		}
+	}
+
 	switch msg := msg.(type) {
 	case domain.SessionListEvent:
 		m.initializePicker(&msg)
@@ -102,8 +112,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.picker == nil {
 			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
+				m.cancelRequested = true
+				m.selectedID = ""
+				m.selectedName = ""
 				m.bus.SendAction(domain.StopAction{})
-				return m, nil
+				return m, m.pollBus()
 			}
 			return m, nil
 		}
@@ -134,10 +147,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "q", "esc", "ctrl+c":
-			m.selectedID = "" // signal cancellation
+			m.cancelRequested = true
+			m.selectedID = "" // signal cancellation (suppresses DoneEvent print)
 			m.selectedName = "Cancelled"
 			m.bus.SendAction(domain.StopAction{})
-			return m, tea.Quit
+			return m, m.pollBus()
 		}
 	}
 

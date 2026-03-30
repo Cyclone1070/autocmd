@@ -120,12 +120,47 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("StopAction on 'q'", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.StopAction{}).Return()
+		ch := make(chan domain.UIUpdate, 1)
+		ch <- domain.DoneEvent{}
+		close(ch)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		m := NewModel(bus, theme)
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
 		
-		assert.NotNil(t, cmd) // MUST quit immediately
+		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent (not quit immediately)")
+		msg := cmd()
+		_, ok := msg.(domain.DoneEvent)
+		assert.True(t, ok, "cancel should schedule pollBus (next msg should be DoneEvent)")
 		bus.AssertCalled(t, "SendAction", domain.StopAction{})
+	})
+
+	t.Run("CancelRequested ignores subsequent SessionListEvent until DoneEvent", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.StopAction{}).Return()
+
+		ch1 := make(chan domain.UIUpdate, 1)
+		ch1 <- domain.DoneEvent{}
+		close(ch1)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch1)).Once()
+
+		m := NewModel(bus, theme)
+		m.Update(result)
+		assert.NotNil(t, m.picker)
+
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+		assert.True(t, m.cancelRequested)
+
+		prevPicker := m.picker
+		ch2 := make(chan domain.UIUpdate, 1)
+		ch2 <- domain.SessionListEvent{Sessions: []domain.SessionSummary{{ID: "sx", Name: "X"}}, CurrentSessionID: ""}
+		close(ch2)
+		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch2)).Once()
+
+		_, cmd := m.Update(domain.SessionListEvent{Sessions: []domain.SessionSummary{{ID: "sx", Name: "X"}}, CurrentSessionID: ""})
+		assert.NotNil(t, cmd)
+		_ = cmd()
+		assert.Equal(t, prevPicker, m.picker)
 	})
 }

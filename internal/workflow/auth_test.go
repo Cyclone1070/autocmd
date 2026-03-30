@@ -280,6 +280,61 @@ func TestRunAuth(t *testing.T) {
 		oauthMgr.AssertExpectations(t)
 		authMgr.AssertExpectations(t)
 	})
+
+	t.Run("OAuth Flow StopAction cancels promptly", func(t *testing.T) {
+		registry := new(mockAuthRegistry)
+		authMgr := new(mockAuthManager)
+		oauthMgr := new(mockOAuthManager)
+		state := new(mockAuthState)
+		bus := new(mockAuthBus)
+		actions := make(chan domain.Action, 10)
+		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
+
+		// 1. Initial Load
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}}, nil)
+		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		done := RunAuth(ctx, &AuthDeps{
+			Bus:      bus,
+			Registry: registry,
+			AuthMgr:  authMgr,
+			OAuthMgr: oauthMgr,
+			State:    state,
+		})
+
+		// 2. Select Provider
+		p := new(mockProvider)
+		p.On("ID").Return("github")
+		oauthMethod := domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"}
+		methods := []domain.AuthMethod{oauthMethod}
+		p.On("SupportedAuthMethods").Return(methods)
+		registry.On("Get", "github").Return(p, true)
+		bus.On("SendUIUpdate", domain.AuthMethodEvent{ProviderID: "github", Methods: methods}).Return()
+
+		actions <- domain.SelectProviderAction{ID: "github"}
+
+		// 3. Select OAuth Method: block forever unless ctx is cancelled.
+		blocked := make(chan struct{})
+		oauthMgr.On("RunDeviceFlow", mock.Anything, oauthMethod, mock.Anything).Return("", context.Canceled).Run(func(args mock.Arguments) {
+			<-blocked
+		})
+
+		// Workflow should still emit DoneEvent on StopAction without waiting for device flow to finish.
+		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+		actions <- domain.SelectAuthMethodAction{ID: "github_oauth"}
+		actions <- domain.StopAction{}
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Fatal("workflow timed out on StopAction during OAuth flow")
+		}
+	})
 }
 
 type mockOAuthManager struct {

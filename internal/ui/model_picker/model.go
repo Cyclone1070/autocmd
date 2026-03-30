@@ -19,6 +19,7 @@ type model struct {
 	selectedName string
 	err          error
 	quitting   bool
+	cancelRequested bool
 }
 
 // NewModel creates a new model picker UI model with a bus and theme.
@@ -49,6 +50,15 @@ func (m *model) pollBus() tea.Cmd {
 
 // Update handles UI messages.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.cancelRequested {
+		switch msg.(type) {
+		case domain.DoneEvent:
+			// handled below
+		default:
+			return m, m.pollBus()
+		}
+	}
+
 	switch msg := msg.(type) {
 	case domain.ModelListEvent:
 		m.initializePicker(&msg)
@@ -67,8 +77,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.picker == nil {
 			if msg.String() == "ctrl+c" || msg.String() == "q" || msg.String() == "esc" {
+				m.cancelRequested = true
 				m.bus.SendAction(domain.StopAction{})
-				return m, nil
+				m.selectedName = ""
+				return m, m.pollBus()
 			}
 			return m, nil
 		}
@@ -80,9 +92,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "q", "esc", "ctrl+c":
-			m.selectedName = "" // Signal cancellation
+			m.cancelRequested = true
+			m.selectedName = "" // Signal cancellation (suppresses DoneEvent print)
 			m.bus.SendAction(domain.StopAction{})
-			return m, tea.Quit
+			return m, m.pollBus()
 		}
 	}
 

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -92,7 +91,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
-		shell.NewShellTool(fileSystem, cmdExecutor, time.Duration(deps.Config.Tools().DefaultShellTimeout())*time.Second, pathResolver),
+		shell.NewShellTool(cmdExecutor, pathResolver),
 	}
 	toolRegistry := tool.NewRegistry(tools)
 

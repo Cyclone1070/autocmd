@@ -71,7 +71,7 @@ func TestLoad_NoConfigFile_ReturnsDefaults(t *testing.T) {
 func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {
 	// Config file overrides fields
 	configJSON := `{
-		"tools": {"max_file_size": 10485760, "default_shell_timeout": 1800}
+		"tools": {"max_file_size": 10485760, "max_iterations": 30}
 	}`
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
@@ -82,12 +82,12 @@ func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, int64(10485760), cfg.Tools().MaxFileSize())
-	assert.Equal(t, 1800, cfg.Tools().DefaultShellTimeout())
+	assert.Equal(t, 30, cfg.Tools().MaxIterations())
 }
 
 func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
-	// Config file only overrides default_shell_timeout - rest should be defaults
-	configJSON := `{"tools": {"default_shell_timeout": 1200}}`
+	// Config file only overrides max_iterations - rest should be defaults
+	configJSON := `{"tools": {"max_iterations": 50}}`
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})
@@ -96,7 +96,7 @@ func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
 	cfg, err := mgr.Load()
 
 	require.NoError(t, err)
-	assert.Equal(t, 1200, cfg.Tools().DefaultShellTimeout())        // Overridden
+	assert.Equal(t, 50, cfg.Tools().MaxIterations())
 	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize()) // Default
 }
 
@@ -171,7 +171,7 @@ func TestLoad_WrongJSONType_ReturnsError(t *testing.T) {
 
 func TestLoad_NegativeValues_Rejected(t *testing.T) {
 	// Negative values should be rejected by validation
-	configJSON := `{"tools": {"default_shell_timeout": -1}}`
+	configJSON := `{"tools": {"max_iterations": -1}}`
 	fs := createMockFS(map[string][]byte{
 		"/home/user/.config/iav/config.json": []byte(configJSON),
 	})

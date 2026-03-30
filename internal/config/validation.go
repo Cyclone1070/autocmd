@@ -14,9 +14,6 @@ func (c *Config) Validate() error {
 	if c.tools.maxFileSize < 1 {
 		errs = append(errs, "tools.max_file_size must be >= 1")
 	}
-	if c.tools.defaultShellTimeout < 1 {
-		errs = append(errs, "tools.default_shell_timeout must be >= 1")
-	}
 	if c.tools.maxIterations < 1 {
 		errs = append(errs, "tools.max_iterations must be >= 1")
 	}

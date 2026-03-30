@@ -33,12 +33,12 @@ func TestValidate_Tools(t *testing.T) {
 func TestValidate_MultipleErrors_ReportsAll(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.tools.maxFileSize = 0
-	cfg.tools.defaultShellTimeout = 0
+	cfg.tools.maxIterations = 0
 
 	err := cfg.Validate()
 	assert.Error(t, err)
 
 	msg := err.Error()
 	assert.Contains(t, msg, "max_file_size")
-	assert.Contains(t, msg, "default_shell_timeout")
+	assert.Contains(t, msg, "max_iterations")
 }

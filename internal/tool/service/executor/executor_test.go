@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -174,7 +173,7 @@ func TestRunWithTimeout(t *testing.T) {
 func TestRunStreaming(t *testing.T) {
 	t.Run("SimpleCommand", func(t *testing.T) {
 		exec := NewOSCommandExecutor()
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil, 5*time.Second)
+		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -198,79 +197,6 @@ func TestRunStreaming(t *testing.T) {
 		}
 		if res.ExitCode != 0 {
 			t.Errorf("expected exit code 0, got %d", res.ExitCode)
-		}
-	})
-
-	t.Run("Timeout", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("Skipping timeout test on Windows")
-		}
-		clock := NewMockClock()
-		exec := NewOSCommandExecutor()
-		exec.clock = clock
-
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
-		if err != nil {
-			t.Fatalf("unexpected error starting: %v", err)
-		}
-
-		// Drain output to prevent blocking
-		go func() {
-			buf := make([]byte, 1024)
-			for {
-				_, err := streamCmd.Output().Read(buf)
-				if err != nil {
-					break
-				}
-			}
-		}()
-
-		waitErrCh := make(chan error, 1)
-		go func() {
-			_, err := streamCmd.Wait()
-			waitErrCh <- err
-		}()
-
-		clock.Trigger(t) // Main timeout
-		clock.Trigger(t) // Graceful wait
-
-		err = <-waitErrCh
-		if err != ErrTimeout {
-			t.Errorf("expected ErrTimeout, got %v", err)
-		}
-	})
-
-	t.Run("TimeoutStartsAtCommandStart", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("Skipping timeout test on Windows")
-		}
-		clock := NewMockClock()
-		exec := NewOSCommandExecutor()
-		exec.clock = clock
-
-		// The timeout started immediately after RunStreaming
-		streamCmd, _ := exec.RunStreaming(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
-
-		// Drain output
-		go func() {
-			_, _ = io.Copy(io.Discard, streamCmd.Output())
-		}()
-
-		// Even if we delay calling Wait(), the timeout already "happened" in the background
-		// if the mock clock is triggered.
-		clock.Trigger(t) // Main timeout (started in RunStreaming)
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := streamCmd.Wait()
-			errCh <- err
-		}()
-
-		// Now Wait() should have picked up the main timeout and started the graceful wait
-		clock.Trigger(t) // Graceful wait (started in Wait())
-
-		if err := <-errCh; err != ErrTimeout {
-			t.Errorf("expected ErrTimeout, got %v", err)
 		}
 	})
 }

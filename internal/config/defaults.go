@@ -25,14 +25,12 @@ type SessionConfig struct {
 func (c SessionConfig) StorageDir() string { return c.storageDir }
 
 type ToolsConfig struct {
-	maxFileSize         int64
-	defaultShellTimeout int
-	maxIterations       int
+	maxFileSize   int64
+	maxIterations int
 }
 
-func (c ToolsConfig) MaxFileSize() int64       { return c.maxFileSize }
-func (c ToolsConfig) DefaultShellTimeout() int { return c.defaultShellTimeout }
-func (c ToolsConfig) MaxIterations() int       { return c.maxIterations }
+func (c ToolsConfig) MaxFileSize() int64 { return c.maxFileSize }
+func (c ToolsConfig) MaxIterations() int { return c.maxIterations }
 
 type ModelConfig struct {
 	ID            string `json:"id"`
@@ -48,9 +46,8 @@ type sessionDTO struct {
 }
 
 type toolsDTO struct {
-	MaxFileSize         int64 `json:"max_file_size"`
-	DefaultShellTimeout int   `json:"default_shell_timeout"`
-	MaxIterations       int   `json:"max_iterations"`
+	MaxFileSize   int64 `json:"max_file_size"`
+	MaxIterations int   `json:"max_iterations"`
 }
 
 type configDTO struct {
@@ -64,9 +61,8 @@ type configDTO struct {
 func DefaultConfig() *Config {
 	return &Config{
 		tools: ToolsConfig{
-			maxFileSize:         20 * 1024 * 1024,
-			defaultShellTimeout: 600,
-			maxIterations:       20,
+			maxFileSize:   20 * 1024 * 1024,
+			maxIterations: 20,
 		},
 		session: SessionConfig{
 			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),

@@ -109,7 +109,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	readTool := file.NewReadFileTool(fs, fs, res)
 	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
 	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
-	shellTool := shell.NewShellTool(exec, res, 1*time.Minute, fs)
+	shellTool := shell.NewShellTool(res, fs)
 	listTool := directory.NewListDirectoryTool(fs, res, nil)
 
 	// 15-line argument (simulating Go code or large config)
@@ -283,11 +283,12 @@ type mockFileInfo struct {
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Mode() os.FileMode { return 0644 }
 func (m *mockDeps) Abs(path string) (string, error) { return "/abs/" + path, nil }
+func (m *mockDeps) Root() string                  { return "/abs" }
 func (m *mockDeps) Rel(path string) (string, error) { return path, nil }
 func (m *mockDeps) Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
 	return &executor.Result{ExitCode: 0}, nil
 }
-func (m *mockDeps) RunStreaming(ctx context.Context, cmd []string, dir string, env []string, timeout time.Duration) (*executor.StreamingCmd, error) {
+func (m *mockDeps) RunStreaming(ctx context.Context, cmd []string, dir string, env []string) (*executor.StreamingCmd, error) {
 	return &executor.StreamingCmd{}, nil
 }
 func (m *mockDeps) ReadFile(path string) ([]byte, error) {

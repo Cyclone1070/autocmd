@@ -223,8 +223,8 @@ func (f *OSCommandExecutor) RunWithTimeout(ctx context.Context, command []string
 // RunStreaming executes a command with streaming output for real-time UI display.
 // It returns immediately after starting the command. The caller reads from Output
 // and calls Wait() to get the final result when done.
-// The timeout is measured from when the command starts, not when Wait() is called.
-func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string, timeout time.Duration) (*StreamingCmd, error) {
+// The process runs until it exits or ctx is cancelled; there is no duration-based timeout.
+func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, dir string, env []string) (*StreamingCmd, error) {
 	if len(command) == 0 {
 		return nil, os.ErrInvalid
 	}
@@ -246,9 +246,6 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("command %s failed to start: %w", command[0], err)
 	}
-
-	// Start timeout timer immediately after command starts
-	timeoutCh := f.clock.After(timeout)
 
 	// Combined output pipe for streaming to UI
 	pr, pw := io.Pipe()
@@ -289,7 +286,6 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 		_ = pw.Close()
 	}()
 
-	// Wait function captures the result (uses timeoutCh started at command start)
 	waitFn := func() (*Result, error) {
 		done := make(chan error, 1)
 		go func() {
@@ -304,22 +300,10 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
 			}
-			<-done // Wait for process to actually exit
+			<-done
 			execErr = ctx.Err()
-		case <-timeoutCh:
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(os.Interrupt)
-				select {
-				case <-done:
-				case <-f.clock.After(time.Duration(f.dockerGracefulShutdownMs) * time.Millisecond):
-					_ = cmd.Process.Kill()
-					<-done
-				}
-			}
-			execErr = ErrTimeout
 		}
 
-		// Wait for output collection to finish
 		wg.Wait()
 
 		collectorMu.Lock()
@@ -328,9 +312,6 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 		collectorMu.Unlock()
 
 		exitCode := f.getExitCode(execErr)
-		if errors.Is(execErr, ErrTimeout) {
-			exitCode = -1
-		}
 
 		res := &Result{
 			Stdout:    output,
@@ -339,8 +320,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command []string, 
 			Truncated: truncated,
 		}
 
-		if errors.Is(execErr, ErrTimeout) ||
-			errors.Is(execErr, context.Canceled) ||
+		if errors.Is(execErr, context.Canceled) ||
 			errors.Is(execErr, context.DeadlineExceeded) {
 			return res, execErr
 		}

@@ -231,6 +231,7 @@ func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {
 	m.picker = ui.NewPicker(ui.Config{
 		Title: "SELECT PROVIDER",
 		Items: items,
+		Theme: m.theme,
 		Actions: []ui.Action{
 			{Key: "d", Label: "delete auth"},
 		},
@@ -257,6 +258,7 @@ func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthM
 	m.picker = ui.NewPicker(ui.Config{
 		Title: fmt.Sprintf("SELECT AUTH MODE (%s)", providerID),
 		Items: items,
+		Theme: m.theme,
 	})
 }
 

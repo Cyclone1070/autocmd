@@ -122,6 +122,7 @@ func (m *model) initializePicker(data *domain.ModelListEvent) {
 	cfg := ui.Config{
 		Title: "MODELS",
 		Items: items,
+		Theme: m.theme,
 	}
 	m.picker = ui.NewPicker(cfg)
 }

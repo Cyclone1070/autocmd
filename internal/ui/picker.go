@@ -27,8 +27,11 @@ type Action struct {
 
 // Config configures the picker.
 type Config struct {
-	Title   string
-	Items   []Item
+	Title string
+	Items []Item
+	// Theme controls the visual styling of the picker.
+	// If nil, a default style that roughly matches the global theme is used.
+	Theme   *Theme
 	Actions []Action
 }
 
@@ -37,6 +40,7 @@ type Picker struct {
 	title    string
 	items    []Item
 	actions  []Action
+	theme    *Theme
 	cursor   int
 	selected *Item
 	quit     bool
@@ -54,6 +58,7 @@ func NewPicker(cfg Config) *Picker {
 		title:             cfg.Title,
 		items:             cfg.Items,
 		actions:           cfg.Actions,
+		theme:             cfg.Theme,
 		selectableIndices: indices,
 	}
 }
@@ -115,16 +120,35 @@ func (m *Picker) View() string {
 
 	var s strings.Builder
 
-	// Styles
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).MarginBottom(1)
-	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240")).Margin(1, 0, 0, 2)
+	// Resolve colors from theme, falling back to fixed palette if theme is nil.
+	var (
+		primary lipgloss.AdaptiveColor
+		muted   lipgloss.AdaptiveColor
+		active  lipgloss.AdaptiveColor
+		text    lipgloss.AdaptiveColor
+	)
+	if m.theme != nil {
+		primary = m.theme.PrimaryColor()
+		muted = m.theme.MutedColor()
+		active = m.theme.SuccessColor()
+		text = m.theme.MutedColor()
+	} else {
+		primary = lipgloss.AdaptiveColor{Light: "27", Dark: "86"}
+		muted = lipgloss.AdaptiveColor{Light: "246", Dark: "240"}
+		active = lipgloss.AdaptiveColor{Light: "34", Dark: "86"}
+		text = lipgloss.AdaptiveColor{Light: "235", Dark: "250"}
+	}
 
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Bold(true)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	fadedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	// Styles
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(primary).MarginBottom(1)
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(primary)
+	descStyle := lipgloss.NewStyle().Foreground(muted)
+	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(muted).Margin(1, 0, 0, 2)
+
+	activeStyle := lipgloss.NewStyle().Foreground(active)
+	cursorStyle := lipgloss.NewStyle().Foreground(primary).Bold(true)
+	inactiveStyle := lipgloss.NewStyle().Foreground(text)
+	fadedStyle := lipgloss.NewStyle().Foreground(muted)
 
 	helpItem := func(k, d string) string {
 		return fmt.Sprintf("%s %s", keyStyle.Render(k), descStyle.Render(d))

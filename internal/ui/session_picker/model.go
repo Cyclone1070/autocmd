@@ -189,6 +189,7 @@ func (m *model) initializePicker(data *domain.SessionListEvent) {
 	cfg := ui.Config{
 		Title: "SESSIONS",
 		Items: items,
+		Theme: m.theme,
 		Actions: []ui.Action{
 			{Key: "n", Label: "new"},
 			{Key: "r", Label: "rename"},

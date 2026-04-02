@@ -116,7 +116,7 @@ func TestFindFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, disp, execErr := inv.Execute(ctx)
+	_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
 	assert.ErrorIs(t, execErr, context.Canceled)
 	assert.NotNil(t, disp)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())

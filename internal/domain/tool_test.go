@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestToolDisplays_UnmarshalJSON(t *testing.T) {
@@ -26,6 +27,52 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 		assert.Equal(t, "some content", d.Content)
 		assert.Equal(t, "some comment", d.Comment)
 	})
+	t.Run("QuestionDisplay", func(t *testing.T) {
+		data := `{
+			"call-1": {
+				"type": "question",
+				"questions": [
+					{
+						"question": "Pick one?",
+						"options": [
+							{"label": "A", "description": "first"},
+							{"label": "B", "description": "second"}
+						],
+						"multiple": true,
+						"custom": false
+					}
+				]
+			}
+		}`
+
+		var m ToolDisplays
+		err := json.Unmarshal([]byte(data), &m)
+		require.NoError(t, err)
+
+		d, ok := m["call-1"].(QuestionDisplay)
+		require.True(t, ok)
+		assert.Equal(t, "question", d.Type())
+		assert.Len(t, d.Questions, 1)
+		assert.Equal(t, "Pick one?", d.Questions[0].Question)
+		assert.True(t, d.Questions[0].Multiple)
+		assert.False(t, d.Questions[0].Custom)
+		assert.Len(t, d.Questions[0].Options, 2)
+		assert.Equal(t, "A", d.Questions[0].Options[0].Label)
+	})
+}
+
+func TestNewQuestionDisplay(t *testing.T) {
+	d := NewQuestionDisplay([]QuestionInfo{
+		{Question: "Q?", Options: []QuestionOption{{Label: "x", Description: "y"}}},
+	})
+	assert.Equal(t, "question", d.TypeField)
+	assert.Len(t, d.Questions, 1)
+}
+
+func TestQuestionAnswerAction_GetCallID(t *testing.T) {
+	a := QuestionAnswerAction{CallID: "tc-1", Answers: [][]string{{"a"}}, Cancelled: false}
+	var c CallIDer = a
+	assert.Equal(t, "tc-1", c.GetCallID())
 }
 
 func TestToolDisplay_GetError(t *testing.T) {
@@ -49,5 +96,39 @@ func TestToolDisplay_GetError(t *testing.T) {
 		assert.Equal(t, "", td.GetError())
 		d2 := ShellDisplay{TypeField: "shell", Comment: "c", Command: "cmd", Error: "x"}
 		assert.Equal(t, "x", d2.GetError())
+	})
+	t.Run("QuestionDisplay", func(t *testing.T) {
+		d := NewQuestionDisplay(nil)
+		var td ToolDisplay = d
+		assert.Equal(t, "", td.GetError())
+		d2 := QuestionDisplay{TypeField: "question", Questions: nil, Error: "e"}
+		assert.Equal(t, "e", d2.GetError())
+	})
+}
+
+func TestToolDisplay_WithError(t *testing.T) {
+	t.Run("StringDisplay", func(t *testing.T) {
+		base := NewStringDisplay("c", "x")
+		got := base.WithError("boom").(StringDisplay)
+		assert.Equal(t, "boom", got.Error)
+		assert.Equal(t, "", base.Error, "WithError must not mutate original")
+	})
+	t.Run("DiffDisplay", func(t *testing.T) {
+		base := NewDiffDisplay("c", "t", 1, 2, "diff")
+		got := base.WithError("boom").(DiffDisplay)
+		assert.Equal(t, "boom", got.Error)
+		assert.Equal(t, "", base.Error, "WithError must not mutate original")
+	})
+	t.Run("ShellDisplay", func(t *testing.T) {
+		base := NewShellDisplay("c", "cmd", "out")
+		got := base.WithError("boom").(ShellDisplay)
+		assert.Equal(t, "boom", got.Error)
+		assert.Equal(t, "", base.Error, "WithError must not mutate original")
+	})
+	t.Run("QuestionDisplay", func(t *testing.T) {
+		base := NewQuestionDisplay(nil)
+		got := base.WithError("boom").(QuestionDisplay)
+		assert.Equal(t, "boom", got.Error)
+		assert.Equal(t, "", base.Error, "WithError must not mutate original")
 	})
 }

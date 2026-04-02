@@ -63,7 +63,6 @@ const (
 
 type toolSlot struct {
 	callID       string
-	toolName     string
 	display      domain.ToolDisplay
 	status       ui.ToolStatus
 	errorMsg     string
@@ -309,7 +308,6 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	case domain.ToolStartEvent:
 		m.tools = append(m.tools, toolSlot{
 			callID:   u.CallID,
-			toolName: u.ToolName,
 			display:  u.Display,
 			status:   ui.StatusRunning,
 		})

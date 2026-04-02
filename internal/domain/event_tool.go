@@ -5,7 +5,6 @@ package domain
 // ToolStartEvent is emitted after Prepare succeeds.
 type ToolStartEvent struct {
 	CallID   string      // Unique ID from domain.ToolCall.ID
-	ToolName string      // Tool identifier
 	Display  ToolDisplay // Rich display computed during Prepare
 }
 

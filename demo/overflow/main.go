@@ -128,7 +128,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		searchEnd = inv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "search-overflow",
-			ToolName: "search_content",
 			Display:  inv.Display(),
 		})
 	}
@@ -144,7 +143,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		findEnd = findInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "find-overflow",
-			ToolName: "find_file",
 			Display:  findInv.Display(),
 		})
 	}
@@ -163,7 +161,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		shellEnd = shellInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "shell-overflow",
-			ToolName: "shell",
 			Display:  shellInv.Display(),
 		})
 	}
@@ -192,7 +189,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		writeEnd = writeInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "write-overflow",
-			ToolName: "write_file",
 			Display:  writeInv.Display(),
 		})
 	}
@@ -217,7 +213,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		editEnd = editInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "edit-overflow",
-			ToolName: "edit_file",
 			Display:  editInv.Display(),
 		})
 	}
@@ -233,7 +228,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		listEnd = listInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "list-overflow",
-			ToolName: "list_directory",
 			Display:  listInv.Display(),
 		})
 	}
@@ -249,7 +243,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		readEnd = readInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "read-overflow",
-			ToolName: "read_file",
 			Display:  readInv.Display(),
 		})
 	}

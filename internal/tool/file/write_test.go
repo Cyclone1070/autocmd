@@ -74,7 +74,7 @@ func TestWriteFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, disp, execErr := inv.Execute(ctx)
+	_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
 
 	assert.ErrorIs(t, execErr, context.Canceled)
 	assert.NotNil(t, disp)
@@ -205,7 +205,7 @@ func executeWrite(t *testing.T, wtool *WriteFileTool, req *WriteFileRequest) (st
 	if err != nil {
 		return "", err
 	}
-	out, _, err := inv.Execute(context.Background())
+	out, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }
 

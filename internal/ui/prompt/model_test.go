@@ -269,8 +269,8 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	m := NewModel(nil, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	
 	m.tools = []toolSlot{
-		{callID: "1", toolName: "t1", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c1"}},
-		{callID: "2", toolName: "t2", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c2"}},
+		{callID: "1", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c1"}},
+		{callID: "2", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c2"}},
 	}
 	m.state = stateTooling
 	
@@ -291,8 +291,8 @@ func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
 	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
 	m.tools = []toolSlot{
-		{callID: "first", toolName: "t", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
-		{callID: "second", toolName: "t", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning, errorMsg: "stale"},
+		{callID: "first", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
+		{callID: "second", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning, errorMsg: "stale"},
 	}
 
 	res, _ := m.handleBusEvent(domain.ToolEndEvent{
@@ -319,8 +319,8 @@ func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
 	m := NewModel(bus, nil, tr, sp, theme, nil, nil, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
 	m.tools = []toolSlot{
-		{callID: "first", toolName: "t", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
-		{callID: "second", toolName: "t", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning},
+		{callID: "first", display: domain.NewStringDisplay("", "preview first"), status: ui.StatusRunning},
+		{callID: "second", display: domain.NewStringDisplay("", "preview second"), status: ui.StatusRunning},
 	}
 	failDisp := domain.NewStringDisplay("", "baked")
 	failDisp.Error = "boom"
@@ -343,8 +343,8 @@ func TestModel_HandleCancel_ToolEndEventSetsCancelledDisplay(t *testing.T) {
 	m.state = stateTooling
 	// Keep another tool running in front so the cancelled slot is not flushed from the prefix queue in this step.
 	m.tools = []toolSlot{
-		{callID: "1", toolName: "t1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "still running"}},
-		{callID: "2", toolName: "t2", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
+		{callID: "1", status: ui.StatusRunning, display: domain.StringDisplay{Content: "still running"}},
+		{callID: "2", status: ui.StatusRunning, display: domain.StringDisplay{Content: "Run something"}},
 	}
 	m.isPolling = true
 

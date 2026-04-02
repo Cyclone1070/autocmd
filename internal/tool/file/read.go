@@ -64,6 +64,8 @@ func (t *ReadFileTool) Name() string {
 	return "read_file"
 }
 
+func (t *ReadFileTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the tool's schema for the LLM using eino schema.
 func (t *ReadFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -166,14 +168,14 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	d := i.display
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: %s", err.Error()), d, errors.New("Execution failed")

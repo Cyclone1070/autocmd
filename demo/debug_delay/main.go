@@ -111,7 +111,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	dbgDisp := domain.NewStringDisplay("", "This tool call display should be sandwiched.")
-	tt.Start("tool-0", "debug", dbgDisp)
+	tt.Start("tool-0", dbgDisp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

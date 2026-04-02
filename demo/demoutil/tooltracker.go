@@ -18,7 +18,6 @@ type ToolTracker struct {
 
 type trackedTool struct {
 	callID   string
-	toolName string
 	display  domain.ToolDisplay
 }
 
@@ -29,22 +28,20 @@ func NewToolTracker(bus *eventbus.EventBus) *ToolTracker {
 	}
 }
 
-func (t *ToolTracker) Start(callID, toolName string, display domain.ToolDisplay) {
+func (t *ToolTracker) Start(callID string, display domain.ToolDisplay) {
 	if t == nil || t.bus == nil {
 		return
 	}
 
 	t.mu.Lock()
 	t.open[callID] = trackedTool{
-		callID:   callID,
-		toolName: toolName,
-		display:  display,
+		callID:  callID,
+		display: display,
 	}
 	t.mu.Unlock()
 
 	t.bus.SendUIUpdate(domain.ToolStartEvent{
 		CallID:   callID,
-		ToolName: toolName,
 		Display:  display,
 	})
 }

@@ -63,6 +63,8 @@ func (t *WriteFileTool) Name() string {
 	return "write_file"
 }
 
+func (t *WriteFileTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the tool's schema for the LLM using eino schema.
 func (t *WriteFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -165,7 +167,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	// Check if file already exists (TOCTOU protection)
@@ -178,7 +180,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), d, errors.New("Execution failed")
@@ -189,7 +191,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to create directories: %v", err), d, errors.New("Execution failed")
@@ -202,7 +204,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")

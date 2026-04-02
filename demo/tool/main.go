@@ -117,9 +117,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("### SUITE: %s\n\n", name)})
 
 		// Start all three
-		tt.Start(name+"-1", "", display1)
-		tt.Start(name+"-2", "", display2)
-		tt.Start(name+"-3", "", display3)
+		tt.Start(name+"-1", display1)
+		tt.Start(name+"-2", display2)
+		tt.Start(name+"-3", display3)
 
 		// For STRING suite, keep original order:
 		//   2 (0.5s), 3 (1.5s, error), 1 (3s).
@@ -192,9 +192,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 3. Shell Suite (with more streaming)
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "### SUITE: SHELL (Heavy Streaming)\n\n"})
-	tt.Start("SHELL-1", "shell", domain.NewShellDisplay("Slow Shell", "slow-cmd", ""))
-	tt.Start("SHELL-2", "shell", domain.NewShellDisplay("Fast Shell", "fast-cmd", ""))
-	tt.Start("SHELL-3", "shell", domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", ""))
+	tt.Start("SHELL-1", domain.NewShellDisplay("Slow Shell", "slow-cmd", ""))
+	tt.Start("SHELL-2", domain.NewShellDisplay("Fast Shell", "fast-cmd", ""))
+	tt.Start("SHELL-3", domain.NewShellDisplay("Medium Shell (Fail)", "med-cmd", ""))
 
 	// Heavy streaming
 	for i := 1; i <= 20; i++ {

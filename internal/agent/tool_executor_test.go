@@ -12,6 +12,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ptr is defined in loop_test.go in the same package.
@@ -21,10 +22,18 @@ import (
 type mockTool struct {
 	name        string
 	description string
+	concurrent  bool
+	setConcurrent bool
 	prepare     func(params string) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
+func (mt *mockTool) IsConcurrentSafe() bool {
+	if !mt.setConcurrent {
+		return true
+	}
+	return mt.concurrent
+}
 func (mt *mockTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{Name: mt.name, Desc: mt.description}
 }
@@ -44,7 +53,11 @@ type mockInvocation struct {
 
 func (m *mockInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if err := ctx.Err(); err != nil {
-		return "", m.display, err
+		disp := m.display
+		if disp.GetError() == "" {
+			disp = withToolError(disp, domain.ToolErrorCancelled)
+		}
+		return "execution cancelled", disp, err
 	}
 	if m.execute != nil {
 		return m.execute(ctx)
@@ -67,6 +80,9 @@ func withToolError(d domain.ToolDisplay, msg string) domain.ToolDisplay {
 	case domain.ShellDisplay:
 		d.Error = msg
 		return d
+	case domain.QuestionDisplay:
+		d.Error = msg
+		return d
 	default:
 		return d
 	}
@@ -84,7 +100,11 @@ func (m *mockStreamInvocation) Stream() io.Reader { return m.stream }
 func (m *mockStreamInvocation) Display() domain.ToolDisplay { return m.display }
 func (m *mockStreamInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if err := ctx.Err(); err != nil {
-		return "", m.display, err
+		disp := m.display
+		if disp.GetError() == "" {
+			disp = withToolError(disp, domain.ToolErrorCancelled)
+		}
+		return "execution cancelled", disp, err
 	}
 	if m.err != nil {
 		return m.content, withToolError(m.display, m.err.Error()), m.err
@@ -167,6 +187,41 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "tc-123", res.ToolCallID)
 	assert.Contains(t, res.Content, "Error: tool \"unknown\" does not exist")
+}
+
+// mockDisplayOnlyInvocation implements Invocation but not ExecutableInvocation (for executor guard tests).
+type mockDisplayOnlyInvocation struct{}
+
+func (mockDisplayOnlyInvocation) Display() domain.ToolDisplay {
+	return domain.NewStringDisplay("", "preview")
+}
+
+func TestExecute_NonExecutableInvocation_ReturnsMessageAndToolEnd(t *testing.T) {
+	mt := &mockTool{
+		name: "weird",
+		prepare: func(params string) (domain.Invocation, error) {
+			return mockDisplayOnlyInvocation{}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := newToolExecutor(registry)
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: "tc-ne",
+		Function: schema.FunctionCall{Name: "weird"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.Contains(t, res.Content, "unsupported invocation")
+	sd, ok := disp.(domain.StringDisplay)
+	assert.True(t, ok)
+	assert.NotEmpty(t, sd.GetError())
+
+	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
+	end, ok := (<-sender.events).(domain.ToolEndEvent)
+	assert.True(t, ok)
+	assert.NotEmpty(t, end.Display.GetError())
 }
 
 func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
@@ -255,7 +310,6 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-1", start.CallID)
-	assert.Equal(t, "test", start.ToolName)
 	assert.Equal(t, domain.NewStringDisplay("", "display output"), start.Display)
 
 	e2 := <-sender.events
@@ -284,7 +338,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	assert.NoError(t, err1)
 	assert.NotNil(t, disp1)
 	exp1 := domain.NewStringDisplay("", "Tool call failed")
-	exp1.Error = "Unknown tool"
+	exp1 = exp1.WithError("Unknown tool").(domain.StringDisplay)
 	assert.Equal(t, exp1, disp1)
 	assert.Equal(t, "tc-1", msg1.ToolCallID)
 	assert.Contains(t, msg1.Content, "does not exist")
@@ -295,7 +349,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	assert.NoError(t, err2)
 	assert.NotNil(t, disp2)
 	exp2 := domain.NewStringDisplay("", "Tool call failed")
-	exp2.Error = "Bad READ FILE request"
+	exp2 = exp2.WithError("Bad READ FILE request").(domain.StringDisplay)
 	assert.Equal(t, exp2, disp2)
 	assert.Equal(t, "tc-2", msg2.ToolCallID)
 	assert.Contains(t, msg2.Content, "failed to prepare")
@@ -552,6 +606,452 @@ func TestExecute_ContextCancelled_EmitsToolEndEventWithCancelledDisplay(t *testi
 		}
 	}
 	t.Fatalf("did not receive ToolEndEvent, last end=%+v", end)
+}
+
+func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	mt1 := &mockTool{
+		name:       "t1",
+		concurrent: true,
+		setConcurrent: true,
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
+		},
+	}
+	mt2 := &mockTool{
+		name:       "t2",
+		concurrent: true,
+		setConcurrent: true,
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
+		},
+	}
+	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}))
+
+	calls := []schema.ToolCall{
+		{ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}},
+		{ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}},
+	}
+
+	res, err := executor.executeBatch(ctx, calls, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	assert.Len(t, res.Responses, 2)
+	assert.NotNil(t, res.Responses[0])
+	assert.NotNil(t, res.Responses[1])
+	assert.Equal(t, "tc-1", res.Responses[0].ToolCallID)
+	assert.Equal(t, "execution cancelled", res.Responses[0].Content)
+	assert.Equal(t, "tc-2", res.Responses[1].ToolCallID)
+	assert.Equal(t, "execution cancelled", res.Responses[1].Content)
+
+	disp1 := res.Displays["tc-1"]
+	disp2 := res.Displays["tc-2"]
+	assert.NotNil(t, disp1)
+	assert.NotNil(t, disp2)
+	assert.Equal(t, domain.ToolErrorCancelled, disp1.GetError())
+	assert.Equal(t, domain.ToolErrorCancelled, disp2.GetError())
+}
+
+func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	executed2 := make(chan struct{})
+
+	mt1 := &mockTool{
+		name:          "t1",
+		concurrent:    false,
+		setConcurrent: true, // force non-concurrent safe barrier
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					cancel()
+					disp := domain.NewStringDisplay("", "")
+					disp.Error = domain.ToolErrorCancelled
+					return "execution cancelled", disp, ctx.Err()
+				},
+			}, nil
+		},
+	}
+
+	mt2 := &mockTool{
+		name:       "t2",
+		concurrent: true,
+		// concurrently safe would be executed in parallel with other safe tools,
+		// but executeBatch should stop after mt1's fatal error and bake cancellation.
+		setConcurrent: true,
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: domain.NewStringDisplay("", ""),
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					close(executed2)
+					disp := domain.NewStringDisplay("", "")
+					disp.Error = domain.ToolErrorCancelled
+					return "execution cancelled", disp, ctx.Err()
+				},
+			}, nil
+		},
+	}
+
+	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}))
+	calls := []schema.ToolCall{
+		{ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}},
+		{ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}},
+	}
+
+	res, err := executor.executeBatch(ctx, calls, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// mt2 should not run, but it must still have a corresponding tool response.
+	select {
+	case <-executed2:
+		t.Fatal("t2 invocation should not be executed after fatal error")
+	default:
+	}
+
+	assert.Len(t, res.Responses, 2)
+	assert.NotNil(t, res.Responses[0])
+	assert.NotNil(t, res.Responses[1])
+	assert.Equal(t, "tc-1", res.Responses[0].ToolCallID)
+	assert.Equal(t, "execution cancelled", res.Responses[0].Content)
+	assert.Equal(t, "tc-2", res.Responses[1].ToolCallID)
+	assert.Equal(t, "execution cancelled", res.Responses[1].Content)
+
+	disp1 := res.Displays["tc-1"]
+	disp2 := res.Displays["tc-2"]
+	assert.NotNil(t, disp1)
+	assert.NotNil(t, disp2)
+	assert.Equal(t, domain.ToolErrorCancelled, disp1.GetError())
+	assert.Equal(t, domain.ToolErrorCancelled, disp2.GetError())
+}
+
+func TestBakeCancelledOutcomeFromPreview_UsesCancelledOnlyForContextCancelled(t *testing.T) {
+	p := preparedCall{
+		index:          0,
+		callID:         "tc-1",
+		toolName:       "tool",
+		previewDisplay: domain.NewStringDisplay("", "preview"),
+	}
+
+	cancelled := bakeCancelledOutcomeFromPreview(p, context.Canceled)
+	assert.Equal(t, "execution cancelled", cancelled.resp.Content)
+	assert.Equal(t, domain.ToolErrorCancelled, cancelled.display.GetError())
+
+	aborted := bakeCancelledOutcomeFromPreview(p, fmt.Errorf("infra boom"))
+	assert.Equal(t, "tool failed unexpectedly while executing", aborted.resp.Content)
+	assert.Equal(t, "Infrastructure failed", aborted.display.GetError())
+}
+
+func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
+	mt := &mockTool{
+		name: "bad",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{
+				display: nil,
+				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					return "ok", domain.NewStringDisplay("", "ok"), nil
+				},
+			}, nil
+		},
+	}
+	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt}))
+
+	assert.Panics(t, func() {
+		_, _ = executor.executeBatch(context.Background(), []schema.ToolCall{
+			{ID: "tc-bad", Function: schema.FunctionCall{Name: "bad"}},
+		}, nil)
+	})
+}
+
+func TestExecuteBatch_PreservesInputOrder_WithPreflightFailure(t *testing.T) {
+	registry := newMockToolRegistry([]domain.Tool{
+		&mockTool{
+			name:       "ok",
+			concurrent: true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{content: "ok-result", display: domain.NewStringDisplay("", "ok")}, nil
+			},
+		},
+	})
+	executor := newToolExecutor(registry)
+
+	calls := []schema.ToolCall{
+		{ID: "c-1", Function: schema.FunctionCall{Name: "unknown"}},
+		{ID: "c-2", Function: schema.FunctionCall{Name: "ok"}},
+	}
+	res, err := executor.executeBatch(context.Background(), calls, nil)
+	assert.NoError(t, err)
+	assert.Len(t, res.Responses, 2)
+	assert.Equal(t, "c-1", res.Responses[0].ToolCallID)
+	assert.Contains(t, res.Responses[0].Content, "does not exist")
+	assert.Equal(t, "c-2", res.Responses[1].ToolCallID)
+	assert.Equal(t, "ok-result", res.Responses[1].Content)
+}
+
+func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
+	startedFast1 := make(chan struct{}, 1)
+	startedExclusive := make(chan struct{}, 1)
+	startedFast2 := make(chan struct{}, 1)
+	doneFast1 := make(chan struct{})
+	doneExclusive := make(chan struct{})
+
+	registry := newMockToolRegistry([]domain.Tool{
+		&mockTool{
+			name:       "fast1",
+			concurrent: true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast1"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						startedFast1 <- struct{}{}
+						<-doneFast1
+						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+					},
+				}, nil
+			},
+		},
+		&mockTool{
+			name:       "exclusive",
+			concurrent: false,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "exclusive"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						startedExclusive <- struct{}{}
+						<-doneExclusive
+						return "exclusive", domain.NewStringDisplay("", "exclusive"), nil
+					},
+				}, nil
+			},
+		},
+		&mockTool{
+			name:       "fast2",
+			concurrent: true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast2"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						startedFast2 <- struct{}{}
+						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+					},
+				}, nil
+			},
+		},
+	})
+	executor := newToolExecutor(registry)
+
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := executor.executeBatch(context.Background(), []schema.ToolCall{
+			{ID: "c1", Function: schema.FunctionCall{Name: "fast1"}},
+			{ID: "c2", Function: schema.FunctionCall{Name: "exclusive"}},
+			{ID: "c3", Function: schema.FunctionCall{Name: "fast2"}},
+		}, nil)
+		runDone <- err
+	}()
+
+	select {
+	case <-startedFast1:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("fast1 did not start")
+	}
+	select {
+	case <-startedExclusive:
+		t.Fatal("exclusive should not start before fast1 completes")
+	default:
+	}
+
+	close(doneFast1)
+	select {
+	case <-startedExclusive:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("exclusive did not start after first concurrent batch finished")
+	}
+	select {
+	case <-startedFast2:
+		t.Fatal("fast2 should not start while exclusive call is running")
+	default:
+	}
+
+	close(doneExclusive)
+	select {
+	case <-startedFast2:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("fast2 did not start after exclusive call finished")
+	}
+
+	assert.NoError(t, <-runDone)
+}
+
+func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
+	doneFast1 := make(chan struct{})
+	doneExclusive := make(chan struct{})
+	doneFast2 := make(chan struct{})
+
+	registry := newMockToolRegistry([]domain.Tool{
+		&mockTool{
+			name:          "fast1",
+			concurrent:    true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast1"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						<-doneFast1
+						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+					},
+				}, nil
+			},
+		},
+		&mockTool{
+			name:          "exclusive",
+			concurrent:    false,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "exclusive"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						<-doneExclusive
+						return "exclusive", domain.NewStringDisplay("", "exclusive"), nil
+					},
+				}, nil
+			},
+		},
+		&mockTool{
+			name:          "fast2",
+			concurrent:    true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast2"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						<-doneFast2
+						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+					},
+				}, nil
+			},
+		},
+	})
+	executor := newToolExecutor(registry)
+	sender := newMockEventSender(20)
+
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := executor.executeBatch(context.Background(), []schema.ToolCall{
+			{ID: "c1", Function: schema.FunctionCall{Name: "fast1"}},
+			{ID: "c2", Function: schema.FunctionCall{Name: "exclusive"}},
+			{ID: "c3", Function: schema.FunctionCall{Name: "fast2"}},
+		}, sender)
+		runDone <- err
+	}()
+
+	nextStart := func() domain.ToolStartEvent {
+		t.Helper()
+		for {
+			ev := <-sender.events
+			if s, ok := ev.(domain.ToolStartEvent); ok {
+				return s
+			}
+		}
+	}
+
+	// Only first segment start should be emitted before fast1 is released.
+	s1 := nextStart()
+	assert.Equal(t, "c1", s1.CallID)
+
+	select {
+	case e := <-sender.events:
+		if se, ok := e.(domain.ToolStartEvent); ok {
+			t.Fatalf("unexpected early ToolStartEvent for %s before barrier release", se.CallID)
+		}
+	default:
+	}
+
+	close(doneFast1)
+	s2 := nextStart()
+	assert.Equal(t, "c2", s2.CallID)
+
+	select {
+	case e := <-sender.events:
+		if se, ok := e.(domain.ToolStartEvent); ok {
+			t.Fatalf("unexpected early ToolStartEvent for %s before exclusive release", se.CallID)
+		}
+	default:
+	}
+
+	close(doneExclusive)
+	s3 := nextStart()
+	assert.Equal(t, "c3", s3.CallID)
+
+	close(doneFast2)
+	assert.NoError(t, <-runDone)
+}
+
+func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing.T) {
+	doneFast1 := make(chan struct{})
+	doneFast2 := make(chan struct{})
+
+	registry := newMockToolRegistry([]domain.Tool{
+		&mockTool{
+			name:          "fast1",
+			concurrent:    true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast1"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						<-doneFast1
+						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+					},
+				}, nil
+			},
+		},
+		&mockTool{
+			name:          "fast2",
+			concurrent:    true,
+			setConcurrent: true,
+			prepare: func(params string) (domain.Invocation, error) {
+				return &mockInvocation{
+					display: domain.NewStringDisplay("", "fast2"),
+					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+						<-doneFast2
+						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+					},
+				}, nil
+			},
+		},
+	})
+	executor := newToolExecutor(registry)
+	sender := newMockEventSender(20)
+
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := executor.executeBatch(context.Background(), []schema.ToolCall{
+			{ID: "c1", Function: schema.FunctionCall{Name: "fast1"}},
+			{ID: "c2", Function: schema.FunctionCall{Name: "fast2"}},
+		}, sender)
+		runDone <- err
+	}()
+
+	e1 := <-sender.events
+	s1, ok := e1.(domain.ToolStartEvent)
+	require.True(t, ok)
+	assert.Equal(t, "c1", s1.CallID)
+
+	e2 := <-sender.events
+	s2, ok := e2.(domain.ToolStartEvent)
+	require.True(t, ok)
+	assert.Equal(t, "c2", s2.CallID)
+
+	close(doneFast1)
+	close(doneFast2)
+	assert.NoError(t, <-runDone)
 }
 
 func TestExecute_PanicsWhenFinalDisplayIsNil(t *testing.T) {

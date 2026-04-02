@@ -40,6 +40,8 @@ func (t *ShellTool) Name() string {
 	return "shell"
 }
 
+func (t *ShellTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the tool's schema for the LLM using eino schema.
 func (t *ShellTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -134,7 +136,7 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDispl
 		if i.pipeWriter != nil {
 			_ = i.pipeWriter.CloseWithError(ctx.Err())
 		}
-		return "", i.cancelledDisplay(), ctx.Err()
+		return "execution cancelled", i.cancelledDisplay(), ctx.Err()
 	}
 
 	streamCmd, err := i.commandExecutor.RunStreaming(ctx, i.command, i.wd, i.env)

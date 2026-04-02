@@ -62,6 +62,8 @@ func (t *SearchContentTool) Name() string {
 	return "search_content"
 }
 
+func (t *SearchContentTool) IsConcurrentSafe() bool { return true }
+
 func (t *SearchContentTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "search_content",
@@ -150,7 +152,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	// Re-verify state
@@ -158,7 +160,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -193,7 +195,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: rg failed to start: %v", err), d, errors.New("Execution failed")

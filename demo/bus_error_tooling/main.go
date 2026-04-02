@@ -46,7 +46,6 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 		bus.SendUIUpdate(domain.ToolStartEvent{
 			CallID:   "1",
-			ToolName: "test_tool",
 			Display:  domain.StringDisplay{Content: "Running some long background task..."},
 		})
 		time.Sleep(2 * time.Second)

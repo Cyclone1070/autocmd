@@ -1,6 +1,6 @@
 package domain
 
-// Tool contract, invocations, and JSON-serializable tool displays.
+// Tool contract, invocations, JSON-serializable tool displays, and question-tool user actions.
 
 import (
 	"context"
@@ -14,13 +14,17 @@ import (
 // ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
 const ToolErrorCancelled = "Cancelled"
 
-// Invocation is a validated, prepared tool call ready for execution.
-// Returned by Tool.Prepare(), enforces prepare-before-execute sequence.
+// Invocation is a validated, prepared tool call: at minimum a display for the UI.
+// Returned by Tool.Prepare(). Concrete kinds implement ExecutableInvocation, StreamableInvocation,
+// and/or InteractiveInvocation.
 // Must be in domain so tools can implement without importing workflow.
 type Invocation interface {
-	// Display returns what to show in UI (computed during Prepare).
 	Display() ToolDisplay
+}
 
+// ExecutableInvocation runs synchronously via Execute (most tools).
+type ExecutableInvocation interface {
+	Invocation
 	// Execute runs the operation and returns LLM-facing content, the finalized display for UI/history,
 	// and err. err is non-nil when the tool invocation itself fails (e.g. cancelled context, I/O failure);
 	// semantic outcomes stay in content and display without err for cases like non-zero shell exit.
@@ -28,11 +32,18 @@ type Invocation interface {
 	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
-// StreamableInvocation is an Invocation that exposes a live stdout/stderr stream for UI
+// StreamableInvocation is an ExecutableInvocation that exposes a live stdout/stderr stream for UI
 // (e.g. shell). The stream is not part of ToolDisplay so displays stay JSON-serializable.
 type StreamableInvocation interface {
-	Invocation
+	ExecutableInvocation
 	Stream() io.Reader
+}
+
+// InteractiveInvocation is resolved after the user replies via the UI (e.g. question tool).
+// The executor must not call Execute on these; it waits for an action and calls Resolve instead.
+type InteractiveInvocation interface {
+	Invocation
+	Resolve(ctx context.Context, action Action) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
 // ToolDisplay is implemented by all display types returned from tools.
@@ -42,6 +53,7 @@ type ToolDisplay interface {
 	Type() string
 	isToolDisplay()
 	GetError() string
+	WithError(err string) ToolDisplay
 }
 
 // StringDisplay is for simple text output (most tools).
@@ -55,6 +67,10 @@ type StringDisplay struct {
 func (StringDisplay) isToolDisplay()     {}
 func (s StringDisplay) Type() string     { return s.TypeField }
 func (s StringDisplay) GetError() string { return s.Error }
+func (s StringDisplay) WithError(err string) ToolDisplay {
+	s.Error = err
+	return s
+}
 
 // NewStringDisplay creates a new StringDisplay with correct type.
 func NewStringDisplay(comment, content string) StringDisplay {
@@ -75,6 +91,10 @@ type DiffDisplay struct {
 func (DiffDisplay) isToolDisplay()     {}
 func (d DiffDisplay) Type() string     { return d.TypeField }
 func (d DiffDisplay) GetError() string { return d.Error }
+func (d DiffDisplay) WithError(err string) ToolDisplay {
+	d.Error = err
+	return d
+}
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
 func NewDiffDisplay(comment, target string, added, removed int, diff string) DiffDisplay {
@@ -100,6 +120,10 @@ type ShellDisplay struct {
 func (ShellDisplay) isToolDisplay()     {}
 func (s ShellDisplay) Type() string     { return s.TypeField }
 func (s ShellDisplay) GetError() string { return s.Error }
+func (s ShellDisplay) WithError(err string) ToolDisplay {
+	s.Error = err
+	return s
+}
 
 // NewShellDisplay creates a new ShellDisplay with correct type.
 func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
@@ -110,6 +134,53 @@ func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
 		CapturedOutput: capturedOutput,
 	}
 }
+
+// QuestionOption is one choice for a multiple-choice question (question tool).
+type QuestionOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// QuestionInfo describes one question in the question toolbox.
+// No separate header field — UI shows "Question N of M" only.
+type QuestionInfo struct {
+	Question string           `json:"question"`
+	Options  []QuestionOption `json:"options"`
+	Multiple bool             `json:"multiple,omitempty"`
+	Custom   bool             `json:"custom,omitempty"`
+}
+
+// QuestionDisplay is the tool UI payload for the question tool (preview and final baked state).
+type QuestionDisplay struct {
+	TypeField string         `json:"type"`
+	Questions []QuestionInfo `json:"questions"`
+	Error     string         `json:"error,omitempty"`
+}
+
+func (QuestionDisplay) isToolDisplay()     {}
+func (d QuestionDisplay) Type() string     { return d.TypeField }
+func (d QuestionDisplay) GetError() string { return d.Error }
+func (d QuestionDisplay) WithError(err string) ToolDisplay {
+	d.Error = err
+	return d
+}
+
+// NewQuestionDisplay returns a QuestionDisplay with type "question".
+func NewQuestionDisplay(questions []QuestionInfo) QuestionDisplay {
+	return QuestionDisplay{TypeField: "question", Questions: questions}
+}
+
+// QuestionAnswerAction is sent by the prompt UI after the user submits or cancels the question toolbox.
+type QuestionAnswerAction struct {
+	CallID    string
+	Answers   [][]string // per-question selected labels and/or custom text; order matches Questions
+	Cancelled bool
+}
+
+func (QuestionAnswerAction) isAction() {}
+
+// GetCallID implements CallIDer for action routing.
+func (a QuestionAnswerAction) GetCallID() string { return a.CallID }
 
 // ToolDisplays is a helper type for polymorphic JSON unmarshaling of ToolDisplay maps.
 type ToolDisplays map[string]ToolDisplay
@@ -149,6 +220,12 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 				return err
 			}
 			display = d
+		case "question":
+			var d QuestionDisplay
+			if err := json.Unmarshal(raw, &d); err != nil {
+				return err
+			}
+			display = d
 		default:
 			return fmt.Errorf("unknown display type: %s", peek.Type)
 		}
@@ -160,6 +237,7 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 // Tool defines the interface for individual tools.
 type Tool interface {
 	Name() string
+	IsConcurrentSafe() bool
 	Definition() *schema.ToolInfo
 	Prepare(params string) (Invocation, error)
 }

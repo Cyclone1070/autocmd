@@ -368,12 +368,14 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	mt1 := &mockTool{
 		name: "t1",
 		prepare: func(params string) (domain.Invocation, error) {
+			cancelDisp := domain.NewStringDisplay("", "")
+			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
-				display: domain.NewStringDisplay("", ""),
+				display: cancelDisp,
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					time.Sleep(50 * time.Millisecond)
 					cancel()
-					return "", domain.NewStringDisplay("", ""), ctx.Err()
+					return "execution cancelled", cancelDisp, ctx.Err()
 				},
 			}, nil
 		},
@@ -381,11 +383,13 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	mt2 := &mockTool{
 		name: "t2",
 		prepare: func(params string) (domain.Invocation, error) {
+			cancelDisp := domain.NewStringDisplay("", "")
+			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
-				display: domain.NewStringDisplay("", ""),
+				display: cancelDisp,
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
 					<-ctx.Done()
-					return "", domain.NewStringDisplay("", ""), ctx.Err()
+					return "execution cancelled", cancelDisp, ctx.Err()
 				},
 			}, nil
 		},
@@ -397,13 +401,16 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	err := l.Run(ctx, session, "run")
 	assert.ErrorIs(t, err, context.Canceled)
 
+	// Even on fatal cancellation, loop persists tool-result messages so each ToolCallID
+	// still has a matching schema.Tool response message.
 	assert.Equal(t, 5, len(session.Messages))
-	m2 := session.Messages[2]
-	m3 := session.Messages[3]
-	assert.Equal(t, "tc-1", m2.ToolCallID)
-	assert.Equal(t, "execution cancelled", m2.Content)
-	assert.Equal(t, "tc-2", m3.ToolCallID)
-	assert.Equal(t, "execution cancelled", m3.Content)
+	assert.Equal(t, schema.Tool, session.Messages[2].Role)
+	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
+	assert.Equal(t, "execution cancelled", session.Messages[2].Content)
+	assert.Equal(t, schema.Tool, session.Messages[3].Role)
+	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
+	assert.Equal(t, "execution cancelled", session.Messages[3].Content)
+	assert.Equal(t, "[Session cancelled by user]", session.Messages[4].Content)
 }
 
 func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {

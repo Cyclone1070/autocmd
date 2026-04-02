@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -73,7 +74,7 @@ func executeSearch(t *testing.T, tool *SearchContentTool, req *SearchContentRequ
 		return "", err
 	}
 
-	out, _, err := invocation.Execute(context.Background())
+	out, _, err := invocation.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }
 
@@ -86,6 +87,6 @@ func executeFind(t *testing.T, tool *FindFileTool, req *FindFileRequest) (string
 		return "", err
 	}
 
-	out, _, err := invocation.Execute(context.Background())
+	out, _, err := invocation.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }

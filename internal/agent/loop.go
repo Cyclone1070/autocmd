@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
@@ -163,43 +162,20 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			return nil
 		}
 
-		var wg sync.WaitGroup
-		var mu sync.Mutex
-		toolResponses := make([]*schema.Message, len(msg.ToolCalls))
-
-		for i, tc := range msg.ToolCalls {
-			wg.Add(1)
-			go func(idx int, call schema.ToolCall) {
-				defer wg.Done()
-
-				resp, disp, err := l.toolExecutor.execute(ctx, &call, l.events)
-
-				mu.Lock()
-				defer mu.Unlock()
-
-				if disp != nil {
-					if session.ToolDisplays == nil {
-						session.ToolDisplays = make(domain.ToolDisplays)
-					}
-					session.ToolDisplays[call.ID] = disp
-				}
-				if resp != nil {
-					toolResponses[idx] = resp
-				}
-
-				if err != nil {
-					return
-				}
-			}(i, tc)
+		toolRes, err := l.toolExecutor.executeBatch(ctx, msg.ToolCalls, l.events)
+		if session.ToolDisplays == nil {
+			session.ToolDisplays = make(domain.ToolDisplays)
 		}
-
-		wg.Wait()
-
-		// Append all responses in the correct order
-		for _, r := range toolResponses {
+		for callID, disp := range toolRes.Displays {
+			session.ToolDisplays[callID] = disp
+		}
+		for _, r := range toolRes.Responses {
 			if r != nil {
 				session.Messages = append(session.Messages, r)
 			}
+		}
+		if err != nil {
+			return err
 		}
 	}
 

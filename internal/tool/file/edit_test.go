@@ -25,7 +25,7 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 	if err != nil {
 		return err.Error(), err
 	}
-	out, _, err := inv.Execute(context.Background())
+	out, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }
 
@@ -55,7 +55,7 @@ func TestEditFile(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, disp, execErr := inv.Execute(ctx)
+		_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
 
 		assert.ErrorIs(t, execErr, context.Canceled)
 		assert.NotNil(t, disp)
@@ -75,7 +75,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.Execute(context.Background())
+		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		// Modify file externally (simulate external change)
 		modifiedContent := []byte("modified externally")
@@ -135,7 +135,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.Execute(context.Background())
+		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -178,7 +178,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.Execute(context.Background())
+		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -209,7 +209,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.Execute(context.Background())
+		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -451,7 +451,7 @@ func TestEditFile(t *testing.T) {
 		fs.createFile("/workspace/test.txt", []byte("changed externally"), 0o644)
 
 		// Execute should return error in message, nil error
-		output, _, err := inv.Execute(context.Background())
+		output, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
 		if err == nil {
 			t.Errorf("expected operation error for logging per tool.md contract")
 		}

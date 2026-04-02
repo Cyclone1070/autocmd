@@ -78,6 +78,8 @@ func (t *EditFileTool) Name() string {
 	return "edit_file"
 }
 
+func (t *EditFileTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the tool's schema for the LLM using eino schema.
 func (t *EditFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -256,7 +258,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	d := i.display
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	// Re-read file and verify checksum to prevent TOCTOU race
@@ -264,7 +266,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), d, errors.New("Execution failed")
@@ -280,7 +282,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.newContent, i.originalPerm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")

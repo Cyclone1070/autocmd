@@ -60,6 +60,8 @@ func (t *ListDirTool) Name() string {
 	return "list_directory"
 }
 
+func (t *ListDirTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the JSON schema for the tool using eino schema.
 func (t *ListDirTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -150,7 +152,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDis
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	// 1. Re-verify State (TOCTOU Safety)
@@ -158,7 +160,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDis
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -176,7 +178,7 @@ func (i *listDirInvocation) Execute(ctx context.Context) (string, domain.ToolDis
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: Failed to list directory contents: %v", err), d, errors.New("Execution failed")

@@ -58,6 +58,8 @@ func (t *FindFileTool) Name() string {
 	return "find_file"
 }
 
+func (t *FindFileTool) IsConcurrentSafe() bool { return true }
+
 // Definition returns the JSON schema for the tool.
 func (t *FindFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
@@ -148,7 +150,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "", d, ctx.Err()
+		return "execution cancelled", d, ctx.Err()
 	}
 
 	// Re-verify State
@@ -156,7 +158,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
 			d.Error = err.Error()
@@ -177,7 +179,7 @@ func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "", d, ctx.Err()
+			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: fd failed to start: %v", err), d, errors.New("Execution failed")

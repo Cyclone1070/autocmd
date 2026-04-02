@@ -175,7 +175,7 @@ func TestShellTool_Prepare_ExecutorError(t *testing.T) {
 	_ = si.Stream()
 
 	ctx := context.Background()
-	_, disp, err := inv.Execute(ctx)
+	_, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.Error(t, err)
 	assert.Contains(t, disp.GetError(), "command not found")
 }
@@ -215,7 +215,7 @@ func TestShellTool_Execute_FinalDisplay(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	llm, disp, err := inv.Execute(ctx)
+	llm, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
 	sh := disp.(domain.ShellDisplay)
 	assert.Equal(t, "hello world", sh.CapturedOutput)
@@ -243,7 +243,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.Execute(ctx)
+	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
 
 	assert.Contains(t, output, "hello world")
@@ -270,7 +270,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.Execute(ctx)
+	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, output, "(Exit code: 1)")
 }
@@ -297,7 +297,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 
 	cancel()
 
-	_, disp, err := inv.Execute(ctx)
+	_, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
@@ -322,7 +322,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	si := inv.(domain.StreamableInvocation)
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.Execute(ctx)
+	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, output, "(Output truncated)")
 }
@@ -353,7 +353,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 		close(done)
 	}()
 
-	_, _, _ = inv.Execute(ctx)
+	_, _, _ = inv.(domain.ExecutableInvocation).Execute(ctx)
 	<-done
 
 	assert.Contains(t, buf.String(), "streaming_test")
@@ -378,7 +378,7 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	disp := inv.Display().(domain.ShellDisplay)
 	assert.Empty(t, disp.CapturedOutput)
 
-	out, _, err := inv.Execute(ctx)
+	out, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "captured")

@@ -33,14 +33,34 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	return NewToolRenderer(theme, 80, NewToolOutputGater(12))
 }
 
-func TestToolRenderer_RespectsGater(t *testing.T) {
+func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
 	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
 	tr := NewToolRenderer(theme, 80, g)
-	
-	// Specification: Should use the injected gater
+
 	got := tr.RenderString(domain.NewStringDisplay("", "raw"), StatusSuccess, "", "✓")
-	assert.Contains(t, got, "raw_gated", "ToolRenderer should use the injected gater for output")
+	assert.Contains(t, got, "raw")
+	assert.NotContains(t, got, "_gated", "RenderString must not pass body through gater")
+}
+
+func TestToolRenderer_RespectsGaterOnShellOutput(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	tr := NewToolRenderer(theme, 80, g)
+
+	got := tr.RenderShell(domain.ShellDisplay{Comment: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
+	assert.Contains(t, got, "stdout_gated", "RenderShell should gate captured output")
+}
+
+func TestToolRenderer_RenderQuestionDoesNotUseGater(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	tr := NewToolRenderer(theme, 80, g)
+
+	d := qDisplaySingle()
+	s := NewQuestionUIState(d)
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assert.NotContains(t, got, "_gated", "RenderQuestion must not pass body through gater")
 }
 
 func assertGolden(t *testing.T, name string, actual string) {
@@ -211,4 +231,90 @@ func TestRenderShell_ShortMode(t *testing.T) {
 	assert.NotContains(t, output, "file1.txt")
 	assert.Contains(t, output, "List Files")
 	assert.Contains(t, output, "ls -la")
+}
+
+func TestRenderQuestion_Single(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplaySingle()
+	s := NewQuestionUIState(d)
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assertGolden(t, "RenderQuestion_Single", got)
+}
+
+func TestRenderQuestion_MultiQuestionActiveSecond(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplayMultiTwoQuestions()
+	s := NewQuestionUIState(d)
+	s.Active = 1
+	s.Per[1].Cursor = 0
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assertGolden(t, "RenderQuestion_MultiQuestion", got)
+}
+
+func TestRenderQuestion_Review(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplayMultiTwoQuestions()
+	s := NewQuestionUIState(d)
+	s.Per[0].MultiSelected[0] = true
+	s.Active = 2
+	s.ReviewCursor = 0
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assertGolden(t, "RenderQuestion_Review", got)
+}
+
+func TestRenderQuestion_ReviewAllAnswered(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplayMultiTwoQuestions()
+	s := NewQuestionUIState(d)
+	s.Per[0].MultiSelected[0] = true
+	s.Per[1].SingleSelected = 0
+	s.Active = 2
+	s.ReviewCursor = 0
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assertGolden(t, "RenderQuestion_ReviewAllAnswered", got)
+}
+
+func TestRenderQuestion_Error(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplaySingle()
+	s := NewQuestionUIState(d)
+	got := tr.RenderQuestion(d, s, StatusError, "permission denied")
+	assertGolden(t, "RenderQuestion_Error", got)
+}
+
+func TestRenderQuestion_RunningDoesNotIncludeSpinnerPrefix(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplaySingle()
+	s := NewQuestionUIState(d)
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assert.NotContains(t, got, "⣾")
+}
+
+func TestRenderQuestion_CustomRowOnlyWhenVisible(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := qDisplaySingle()
+	s := NewQuestionUIState(d)
+
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assert.NotContains(t, got, "Other")
+
+	s.Per[0].Cursor = len(d.Questions[0].Options)
+	s.Per[0].CustomInputFocused = true
+	got = tr.RenderQuestion(d, s, StatusRunning, "")
+	assert.Contains(t, got, "3.")
+	assert.Contains(t, got, "█")
+	assert.NotContains(t, got, "Other")
+}
+
+func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	d := domain.NewQuestionDisplay([]domain.QuestionInfo{{
+		Question: "Q", Options: []string{"A"}, Multiple: true,
+	}})
+	s := NewQuestionUIState(d)
+	s.Per[0].CustomBuffer = "x"
+	s.Per[0].Cursor = 1
+	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	assert.Contains(t, got, "[ ]")
+	assert.Contains(t, got, "x")
 }

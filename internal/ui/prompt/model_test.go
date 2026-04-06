@@ -398,3 +398,95 @@ func TestModel_BusClosedUnexpectedly(t *testing.T) {
 	}
 	assert.True(t, found, "Should flush the explicit error message 'bus closed unexpectedly'")
 }
+
+func TestModel_ToolStart_QuestionDisplayInitializesQuestionState(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+
+	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
+		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+	})
+	res, _ := m.handleBusEvent(domain.ToolStartEvent{CallID: "q1", Display: qd})
+	m2 := res.(*Model)
+
+	require.Len(t, m2.tools, 1)
+	assert.False(t, m2.tools[0].questionState.Submitted)
+	assert.Equal(t, 0, m2.tools[0].questionState.Active)
+}
+
+func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+
+	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
+		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+	})
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{callID: "call-q", display: qd, status: ui.StatusRunning, questionState: ui.NewQuestionUIState(qd)},
+	}
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(*Model)
+	assert.False(t, m.tools[0].questionState.Submitted, "Enter selects the option; submit is only via s")
+
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m = res.(*Model)
+
+	require.Len(t, bus.actions, 1)
+	qa, ok := bus.actions[0].(domain.QuestionAnswerAction)
+	require.True(t, ok)
+	assert.Equal(t, "call-q", qa.CallID)
+	require.Len(t, qa.Answers, 1)
+	assert.Equal(t, []string{"Yes"}, qa.Answers[0])
+	assert.True(t, m.tools[0].questionState.Submitted)
+}
+
+func TestModel_Question_EscSendsStopAction(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{{Question: "q"}})
+	m.tools = []toolSlot{
+		{callID: "call-q", display: qd, status: ui.StatusRunning, questionState: ui.NewQuestionUIState(qd)},
+	}
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(*Model)
+
+	require.Len(t, bus.actions, 1)
+	_, ok := bus.actions[0].(domain.StopAction)
+	require.True(t, ok)
+	assert.True(t, m.cancelRequested)
+}
+
+func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
+
+	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
+		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+	})
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{callID: "call-q", display: qd, status: ui.StatusRunning, questionState: ui.NewQuestionUIState(qd)},
+	}
+
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+
+	require.Len(t, bus.actions, 1)
+}

@@ -22,6 +22,7 @@ type toolRenderer interface {
 	RenderString(d domain.StringDisplay, status ui.ToolStatus, err string, prefix string) string
 	RenderDiff(d domain.DiffDisplay, status ui.ToolStatus, err string, prefix string) string
 	RenderShell(d domain.ShellDisplay, output string, status ui.ToolStatus, err string, prefix string) string
+	RenderQuestion(d domain.QuestionDisplay, state ui.QuestionUIState, status ui.ToolStatus, err string) string
 	Box(content string, width int, status ui.ToolStatus) string
 }
 
@@ -67,6 +68,8 @@ type toolSlot struct {
 	status       ui.ToolStatus
 	errorMsg     string
 	streamOutput string
+	// questionState is used when display is QuestionDisplay (interactive toolbox).
+	questionState ui.QuestionUIState
 }
 
 type Model struct {
@@ -144,11 +147,9 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlC {
-		return m.handleCancel()
-	}
-
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return m, m.handleKey(msg)
 	case tickMsg:
 		return m.handleTick()
 	case busEventMsg:
@@ -306,11 +307,15 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case domain.ToolStartEvent:
-		m.tools = append(m.tools, toolSlot{
-			callID:   u.CallID,
-			display:  u.Display,
-			status:   ui.StatusRunning,
-		})
+		slot := toolSlot{
+			callID:  u.CallID,
+			display: u.Display,
+			status:  ui.StatusRunning,
+		}
+		if qd, ok := u.Display.(domain.QuestionDisplay); ok {
+			slot.questionState = ui.NewQuestionUIState(qd)
+		}
+		m.tools = append(m.tools, slot)
 		m.state = stateTooling
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
 		return m.doFlush(flushBlocks, stateTooling)
@@ -434,6 +439,41 @@ func (m *Model) View() string {
 	return m.gater.Gate(content)
 }
 
+func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {
+	// 1. Global cancel shortcut
+	if key.Type == tea.KeyCtrlC {
+		_, cmd := m.handleCancel()
+		return cmd
+	}
+
+	// 2. Question toolbox interaction (only in tooling state)
+	if m.state != stateTooling || len(m.tools) == 0 || m.toolRenderer == nil {
+		return nil
+	}
+
+	slot := &m.tools[0]
+	qd, ok := slot.display.(domain.QuestionDisplay)
+	if !ok || slot.status != ui.StatusRunning {
+		return nil
+	}
+
+	newState, outcome := ui.HandleQuestionKey(qd, slot.questionState, key)
+	slot.questionState = newState
+	if outcome.Cancelled {
+		_, cmd := m.handleCancel()
+		return cmd
+	}
+	if outcome.Done {
+		if m.bus != nil {
+			m.bus.SendAction(domain.QuestionAnswerAction{
+				CallID:  slot.callID,
+				Answers: outcome.Answers,
+			})
+		}
+	}
+	return nil
+}
+
 func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 	if m.cancelRequested {
 		return m, nil
@@ -457,10 +497,7 @@ func (m *Model) flushCompletedToolPrefix() []string {
 }
 
 func (m *Model) renderToolBox(slot toolSlot) string {
-	boxWidth := m.width - 2
-	if boxWidth < 1 {
-		boxWidth = 1
-	}
+	boxWidth := max(m.width-2, 1)
 	prefix := m.toolRenderer.StatusPrefix(slot.status, m.spinnerProvider.Frame(m.spinnerFrame))
 
 	errorMsg := slot.errorMsg
@@ -480,6 +517,8 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 			output = d.CapturedOutput
 		}
 		rendered = m.toolRenderer.RenderShell(d, output, slot.status, errorMsg, prefix)
+	case domain.QuestionDisplay:
+		rendered = m.toolRenderer.RenderQuestion(d, slot.questionState, slot.status, errorMsg)
 	default:
 		return ""
 	}

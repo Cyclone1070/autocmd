@@ -34,12 +34,8 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 				"questions": [
 					{
 						"question": "Pick one?",
-						"options": [
-							{"label": "A", "description": "first"},
-							{"label": "B", "description": "second"}
-						],
-						"multiple": true,
-						"custom": false
+						"options": ["A", "B"],
+						"multiple": true
 					}
 				]
 			}
@@ -55,22 +51,21 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 		assert.Len(t, d.Questions, 1)
 		assert.Equal(t, "Pick one?", d.Questions[0].Question)
 		assert.True(t, d.Questions[0].Multiple)
-		assert.False(t, d.Questions[0].Custom)
 		assert.Len(t, d.Questions[0].Options, 2)
-		assert.Equal(t, "A", d.Questions[0].Options[0].Label)
+		assert.Equal(t, "A", d.Questions[0].Options[0])
 	})
 }
 
 func TestNewQuestionDisplay(t *testing.T) {
 	d := NewQuestionDisplay([]QuestionInfo{
-		{Question: "Q?", Options: []QuestionOption{{Label: "x", Description: "y"}}},
+		{Question: "Q?", Options: []string{"x"}},
 	})
 	assert.Equal(t, "question", d.TypeField)
 	assert.Len(t, d.Questions, 1)
 }
 
 func TestQuestionAnswerAction_GetCallID(t *testing.T) {
-	a := QuestionAnswerAction{CallID: "tc-1", Answers: [][]string{{"a"}}, Cancelled: false}
+	a := QuestionAnswerAction{CallID: "tc-1", Answers: [][]string{{"a"}}}
 	var c CallIDer = a
 	assert.Equal(t, "tc-1", c.GetCallID())
 }

@@ -46,16 +46,18 @@ type PromptDeps struct {
 	ToolRegistry toolRegistry
 	Agent        agentRunner
 	Bus          bus
+	// OnQuestionAnswer is called when the prompt UI submits or cancels an interactive question tool.
+	// Demos may send ToolEndEvent here; production agents should coordinate with the executor.
+	OnQuestionAnswer func(a domain.QuestionAnswerAction)
 }
 
-// RunPrompt executes the full agentic flow: session resolution, agent loop, 
-// and UI synchronization. It returns a channel that will receive the result 
+// RunPrompt executes the full agentic flow: session resolution, agent loop,
+// and UI synchronization. It returns a channel that will receive the result
 // when the agent loop completes.
 func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error {
 	done := make(chan error, 1)
 
-	var sessionID string
-	sessionID = deps.State.CurrentSessionID()
+	sessionID := deps.State.CurrentSessionID()
 
 	var sess *domain.Session
 	var err error
@@ -84,7 +86,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	}
 
 	workflowCtx, cancel := context.WithCancel(ctx)
-	
+
 	nameChan := make(chan string, 1)
 	if sess.Name == "" {
 		// Capture first message content safely for naming
@@ -108,12 +110,19 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 		close(nameChan)
 	}
 
-	// Monitor for workflow actions (e.g. StopAction)
+	// Monitor for workflow actions (e.g. StopAction, question answers)
 	go func() {
 		for act := range deps.Bus.WorkflowActions() {
-			switch act.(type) {
+			switch a := act.(type) {
 			case domain.StopAction:
 				cancel()
+			case domain.QuestionAnswerAction:
+				// TODO(question-step): temporary wiring until the executor resolves InteractiveInvocation
+				// (i.e. QuestionAnswerAction should be routed to Resolve, then the executor must emit the
+				// correct non-question ToolEndEvent).
+				if deps.OnQuestionAnswer != nil {
+					deps.OnQuestionAnswer(a)
+				}
 			}
 		}
 	}()
@@ -121,7 +130,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	go func() {
 		defer cancel()
 		err := deps.Agent.Run(workflowCtx, sess, input)
-		
+
 		// Apply name if generated
 		if name, ok := <-nameChan; ok {
 			sess.Name = name

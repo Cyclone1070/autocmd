@@ -83,18 +83,9 @@ func (t *ToolTracker) FlushOpenCancelled() {
 }
 
 func withCancelledError(d domain.ToolDisplay) domain.ToolDisplay {
-	switch x := d.(type) {
-	case domain.StringDisplay:
-		x.Error = domain.ToolErrorCancelled
-		return x
-	case domain.DiffDisplay:
-		x.Error = domain.ToolErrorCancelled
-		return x
-	case domain.ShellDisplay:
-		x.Error = domain.ToolErrorCancelled
-		return x
-	default:
-		return d
+	if _, ok := d.(domain.QuestionDisplay); ok {
+		return domain.StringDisplay{TypeField: "string", Content: "Question dismissed", Error: domain.ToolErrorCancelled}
 	}
+	return d.WithError(domain.ToolErrorCancelled)
 }
 

@@ -135,19 +135,12 @@ func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
 	}
 }
 
-// QuestionOption is one choice for a multiple-choice question (question tool).
-type QuestionOption struct {
-	Label       string `json:"label"`
-	Description string `json:"description"`
-}
-
 // QuestionInfo describes one question in the question toolbox.
-// No separate header field — UI shows "Question N of M" only.
+// Free-text answers are always offered by the UI (not part of this payload).
 type QuestionInfo struct {
-	Question string           `json:"question"`
-	Options  []QuestionOption `json:"options"`
-	Multiple bool             `json:"multiple,omitempty"`
-	Custom   bool             `json:"custom,omitempty"`
+	Question string   `json:"question"`
+	Options  []string `json:"options"`
+	Multiple bool     `json:"multiple,omitempty"`
 }
 
 // QuestionDisplay is the tool UI payload for the question tool (preview and final baked state).
@@ -174,7 +167,6 @@ func NewQuestionDisplay(questions []QuestionInfo) QuestionDisplay {
 type QuestionAnswerAction struct {
 	CallID    string
 	Answers   [][]string // per-question selected labels and/or custom text; order matches Questions
-	Cancelled bool
 }
 
 func (QuestionAnswerAction) isAction() {}

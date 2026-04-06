@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -127,7 +126,7 @@ func (t *SearchContentTool) Prepare(params string) (domain.Invocation, error) {
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("SEARCH '%s' IN %s", summary.Summarize(req.Pattern), filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("SEARCH '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
 		maxLineLength:   t.maxLineLength,
 	}, nil
 }

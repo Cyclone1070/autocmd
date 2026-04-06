@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -96,7 +95,7 @@ func (t *ShellTool) Prepare(params string) (domain.Invocation, error) {
 		wd:              wd,
 		env:             env,
 		command:        req.Command,
-		commandStr:     summary.Summarize(strings.Join(req.Command, " ")),
+		commandStr:     strings.Join(req.Command, " "),
 		comment:        req.Comment,
 	}, nil
 }

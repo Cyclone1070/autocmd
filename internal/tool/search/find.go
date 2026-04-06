@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/tool/helper/summary"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -128,7 +127,7 @@ func (t *FindFileTool) Prepare(params string) (domain.Invocation, error) {
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay(fmt.Sprintf("FIND %s", summary.Summarize(req.Pattern)), fmt.Sprintf("FIND '%s' IN %s", summary.Summarize(req.Pattern), filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("FIND %s", req.Pattern), fmt.Sprintf("FIND '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
 	}, nil
 }
 

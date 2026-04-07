@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/demo/demoutil"
+	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
@@ -65,24 +66,17 @@ func main() {
 		chatWidth,
 	)
 
+	router := actionrouter.New()
+	defer router.Close()
 	tt := demoutil.NewToolTracker(bus)
 
-	questionAnswered := make(chan struct{}, 1)
-
 	deps := &workflow.PromptDeps{
-		State: &state.State{},
-		Store: &mockStore{},
-		LLM:   &mockLLM{},
-		Agent: &mockAgent{bus: bus, tt: tt, answered: questionAnswered},
-		Bus:   bus,
-		OnQuestionAnswer: func(a domain.QuestionAnswerAction) {
-			end := domain.NewStringDisplay("", formatAnswerSummary(theme, sampleQuestionDisplay().Questions, a.Answers))
-			tt.End(a.CallID, end)
-			select {
-			case questionAnswered <- struct{}{}:
-			default:
-			}
-		},
+		State:     &state.State{},
+		Store:     &mockStore{},
+		LLM:       &mockLLM{},
+		Agent:     &mockAgent{bus: bus, tt: tt, router: router, theme: theme},
+		Bus:       bus,
+		Forwarder: router,
 	}
 
 	done := workflow.RunPrompt(context.Background(), "demo", deps)
@@ -137,9 +131,10 @@ func sampleQuestionDisplay() domain.QuestionDisplay {
 }
 
 type mockAgent struct {
-	bus      *eventbus.EventBus
-	tt       *demoutil.ToolTracker
-	answered <-chan struct{}
+	bus    *eventbus.EventBus
+	tt     *demoutil.ToolTracker
+	router *actionrouter.Router
+	theme  *ui.Theme
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
@@ -148,14 +143,20 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	time.Sleep(300 * time.Millisecond)
 
-	a.tt.Start("question-demo-1", sampleQuestionDisplay())
+	callID := "question-demo-1"
+	a.tt.Start(callID, sampleQuestionDisplay())
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-a.answered:
-		return nil
+	act, err := a.router.Wait(ctx, callID)
+	if err != nil {
+		return err
 	}
+
+	if qa, ok := act.(domain.QuestionAnswerAction); ok {
+		end := domain.NewStringDisplay("", formatAnswerSummary(a.theme, sampleQuestionDisplay().Questions, qa.Answers))
+		a.tt.End(callID, end)
+	}
+
+	return nil
 }
 
 type mockStore struct{}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
@@ -13,21 +14,20 @@ import (
 // Loop is the central orchestrator for the execution prompt.
 type Loop struct {
 	llm           domain.LLM
-	toolExecutor  *toolExecutor
+	toolExecutor  *ToolExecutor
 	events        eventSender
 	maxIterations int
 }
 
-// NewLoop creates a new Loop with its dependencies.
 func NewLoop(
 	llm domain.LLM,
-	toolRegistry toolRegistry,
+	toolExecutor *ToolExecutor,
 	maxIterations int,
 	events eventSender,
 ) *Loop {
 	return &Loop{
 		llm:           llm,
-		toolExecutor:  newToolExecutor(toolRegistry),
+		toolExecutor:  toolExecutor,
 		events:        events,
 		maxIterations: maxIterations,
 	}
@@ -112,7 +112,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 
 		// Ambiguity resolution: Ensure every unique ToolID has a stable, unique Index.
 		// Some providers (like GitHub Gemini bridge) emit colliding/missing indices for parallel tools.
-		// We use a Real-Time Memory Cop to remember which fixed slot each buggy 'original index' 
+		// We use a Real-Time Memory Cop to remember which fixed slot each buggy 'original index'
 		// currently points to as we process the stream in order.
 		idToFixedIdx := make(map[string]int)
 		origToFixedIdx := make(map[int]int)
@@ -121,7 +121,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		for _, chunk := range chunks {
 			for i := range chunk.ToolCalls {
 				tc := &chunk.ToolCalls[i]
-				
+
 				// 1. Identify the buggy original index (default 0)
 				origIdx := 0
 				if tc.Index != nil {
@@ -136,11 +136,11 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 						idToFixedIdx[tc.ID] = fixedIdx
 						nextAvailableIdx++
 					}
-					
+
 					// 3. Update the chunk and REMEMBER this mapping for this Index
 					tc.Index = &fixedIdx
 					origToFixedIdx[origIdx] = fixedIdx
-					
+
 				} else if tc.Index != nil {
 					// 4. Fragment without ID. Check the Memory Cop for the latest mapping.
 					if fixedIdx, ok := origToFixedIdx[origIdx]; ok {
@@ -166,9 +166,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		if session.ToolDisplays == nil {
 			session.ToolDisplays = make(domain.ToolDisplays)
 		}
-		for callID, disp := range toolRes.Displays {
-			session.ToolDisplays[callID] = disp
-		}
+		maps.Copy(session.ToolDisplays, toolRes.Displays)
 		for _, r := range toolRes.Responses {
 			if r != nil {
 				session.Messages = append(session.Messages, r)

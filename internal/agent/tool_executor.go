@@ -12,8 +12,9 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-type toolExecutor struct {
+type ToolExecutor struct {
 	registry toolRegistry
+	waiter   actionWaiter
 }
 
 type batchResult struct {
@@ -21,13 +22,15 @@ type batchResult struct {
 	Displays  map[string]domain.ToolDisplay
 }
 
-func newToolExecutor(registry toolRegistry) *toolExecutor {
-	return &toolExecutor{
+// NewToolExecutor creates a new ToolExecutor with its dependencies.
+func NewToolExecutor(registry toolRegistry, waiter actionWaiter) *ToolExecutor {
+	return &ToolExecutor{
 		registry: registry,
+		waiter:   waiter,
 	}
 }
 
-func (e *toolExecutor) definitions() []*schema.ToolInfo {
+func (e *ToolExecutor) definitions() []*schema.ToolInfo {
 	return e.registry.Definitions()
 }
 
@@ -79,7 +82,7 @@ func bakeCancelledOutcomeFromPreview(p preparedCall, fatalErr error) batchOutcom
 	}
 }
 
-func (e *toolExecutor) executeBatch(ctx context.Context, calls []schema.ToolCall, events eventSender) (batchResult, error) {
+func (e *ToolExecutor) executeBatch(ctx context.Context, calls []schema.ToolCall, events eventSender) (batchResult, error) {
 	outcomes := make([]batchOutcome, len(calls))
 	plans := make([]preparedCall, 0, len(calls))
 	for i, tc := range calls {
@@ -169,7 +172,7 @@ func (e *toolExecutor) executeBatch(ctx context.Context, calls []schema.ToolCall
 	return res, fatalErr
 }
 
-func (e *toolExecutor) preflightCall(index int, tc schema.ToolCall, events eventSender) (*preparedCall, batchOutcome) {
+func (e *ToolExecutor) preflightCall(index int, tc schema.ToolCall, events eventSender) (*preparedCall, batchOutcome) {
 	t, ok := e.registry.Get(tc.Function.Name)
 	if !ok {
 		resp, disp := e.unknownToolOutcome(tc, events)
@@ -196,7 +199,7 @@ func (e *toolExecutor) preflightCall(index int, tc schema.ToolCall, events event
 	}, batchOutcome{index: index, callID: tc.ID}
 }
 
-func (e *toolExecutor) unknownToolOutcome(tc schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay) {
+func (e *ToolExecutor) unknownToolOutcome(tc schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay) {
 	defs := e.definitions()
 	defsJSON, _ := json.MarshalIndent(defs, "", "  ")
 	errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
@@ -222,7 +225,7 @@ func (e *toolExecutor) unknownToolOutcome(tc schema.ToolCall, events eventSender
 	}, endDisp
 }
 
-func (e *toolExecutor) prepareFailureOutcome(t domain.Tool, tc schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {
+func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {
 	defJSON, _ := json.MarshalIndent(t.Definition(), "", "  ")
 	errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, prepErr, defJSON)
 
@@ -248,7 +251,7 @@ func (e *toolExecutor) prepareFailureOutcome(t domain.Tool, tc schema.ToolCall, 
 	}, endDisp
 }
 
-func (e *toolExecutor) executeInvocation(
+func (e *ToolExecutor) executeInvocation(
 	ctx context.Context,
 	callID string,
 	toolName string,
@@ -257,21 +260,56 @@ func (e *toolExecutor) executeInvocation(
 ) (*schema.Message, domain.ToolDisplay, error) {
 	execInv, ok := inv.(domain.ExecutableInvocation)
 	if !ok {
-		// TODO(question-step): temporary until InteractiveInvocation path is implemented in a later step.
-		errMsg := fmt.Sprintf("Error: tool %q returned an unsupported invocation (expected executable tool)", toolName)
-		endDisp := domain.NewStringDisplay("", "Tool call failed").WithError("Unsupported invocation")
+		interInv, ok := inv.(domain.InteractiveInvocation)
+		if !ok {
+			panic(fmt.Sprintf("tool %q returned unsupported invocation: %T", toolName, inv))
+		}
+
+		if e.waiter == nil {
+			panic("toolExecutor.executeInvocation: InteractiveInvocation encountered but no actionWaiter provided")
+		}
+
+		// Wait for the user to provide an answer/action
+		action, err := e.waiter.Wait(ctx, callID)
+		if err != nil {
+			// This could be ctx.Done() or a fatal router failure
+			content := "execution failed during interaction"
+			displayErr := "Interaction failed"
+			if errors.Is(err, context.Canceled) {
+				content = "execution cancelled"
+				displayErr = domain.ToolErrorCancelled
+			}
+			disp := inv.Display().WithError(displayErr)
+			if events != nil {
+				events.SendUIUpdate(domain.ToolEndEvent{
+					CallID:  callID,
+					Display: disp,
+				})
+			}
+			return &schema.Message{
+				Role:       schema.Tool,
+				ToolCallID: callID,
+				ToolName:   toolName,
+				Content:    content,
+			}, disp, err
+		}
+
+		llmContent, finalDisplay, err := interInv.Resolve(ctx, action)
+		if finalDisplay == nil {
+			panic(fmt.Sprintf("tool %q Resolve returned nil finalDisplay (callID=%s)", toolName, callID))
+		}
 		if events != nil {
 			events.SendUIUpdate(domain.ToolEndEvent{
 				CallID:  callID,
-				Display: endDisp,
+				Display: finalDisplay,
 			})
 		}
 		return &schema.Message{
 			Role:       schema.Tool,
 			ToolCallID: callID,
 			ToolName:   toolName,
-			Content:    errMsg,
-		}, endDisp, nil
+			Content:    llmContent,
+		}, finalDisplay, err
 	}
 
 	var streamWG sync.WaitGroup
@@ -344,7 +382,7 @@ func (e *toolExecutor) executeInvocation(
 	}, finalDisplay, nil
 }
 
-func (e *toolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {
+func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {
 	plan, out := e.preflightCall(0, *tc, events)
 	if plan == nil {
 		return out.resp, out.display, nil

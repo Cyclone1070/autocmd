@@ -94,6 +94,60 @@ func (m *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	return args.Error(0)
 }
 
+type mockActionForwarder struct {
+	mock.Mock
+}
+
+func (m *mockActionForwarder) Deliver(act domain.Action) {
+	m.Called(act)
+}
+
+func TestRunPrompt_ActionForwarding(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	registry := new(mockToolRegistry)
+	agent := new(mockAgent)
+	bus := eventbus.New()
+	forwarder := new(mockActionForwarder)
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        &state.State{},
+		ToolRegistry: registry,
+		Agent:        agent,
+		Bus:          bus,
+		Forwarder:    forwarder,
+	}
+
+	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
+	store.On("Save", mock.Anything).Return(nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("Name", nil)
+
+	// Keep the agent running so we can send an action
+	agentRunDone := make(chan struct{})
+	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		<-agentRunDone
+	}).Return(nil)
+
+	RunPrompt(ctx, "hello", deps)
+
+	// Send an action that should be forwarded
+	act := domain.QuestionAnswerAction{CallID: "call-1"}
+	forwarder.On("Deliver", act).Return()
+
+	bus.SendAction(act)
+
+	// Give the goroutine time to process
+	time.Sleep(50 * time.Millisecond)
+
+	forwarder.AssertExpectations(t)
+	close(agentRunDone)
+}
+
 func TestRunPrompt_GREEN(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

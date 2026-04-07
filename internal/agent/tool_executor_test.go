@@ -142,6 +142,73 @@ func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
 	return t, ok
 }
 
+type mockActionWaiter struct {
+	wait func(ctx context.Context, callID string) (domain.Action, error)
+}
+
+func (m *mockActionWaiter) Wait(ctx context.Context, callID string) (domain.Action, error) {
+	if m.wait != nil {
+		return m.wait(ctx, callID)
+	}
+	return nil, nil
+}
+
+type mockInteractiveInvocation struct {
+	display domain.ToolDisplay
+	resolve func(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error)
+}
+
+func (m *mockInteractiveInvocation) Display() domain.ToolDisplay { return m.display }
+func (m *mockInteractiveInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error) {
+	if m.resolve != nil {
+		return m.resolve(ctx, action)
+	}
+	return "ok", m.display, nil
+}
+
+func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
+	callID := "tc-int"
+	qd := domain.QuestionDisplay{TypeField: "question"}
+	action := domain.QuestionAnswerAction{CallID: callID, Answers: [][]string{{"ans"}}}
+
+	mt := &mockTool{
+		name: "ask",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInteractiveInvocation{
+				display: qd,
+				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay, error) {
+					assert.Equal(t, action, act)
+					return "User answered ans", domain.NewStringDisplay("", "Done"), nil
+				},
+			}, nil
+		},
+	}
+
+	waiter := &mockActionWaiter{
+		wait: func(ctx context.Context, cid string) (domain.Action, error) {
+			assert.Equal(t, callID, cid)
+			return action, nil
+		},
+	}
+
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	// This will fail to compile as NewToolExecutor doesn't take 'waiter' yet
+	executor := NewToolExecutor(registry, waiter) 
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID: callID,
+		Function: schema.FunctionCall{Name: "ask"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "User answered ans", res.Content)
+	assert.Equal(t, "Done", disp.(domain.StringDisplay).Content)
+
+	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
+	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
+}
+
 // Ensure mockToolRegistry implements local toolRegistry
 var _ toolRegistry = (*mockToolRegistry)(nil)
 
@@ -152,7 +219,7 @@ func TestRegister_DuplicateName(t *testing.T) {
 	mt2 := &mockTool{name: "test-tool", description: "v2"}
 
 	registry := newMockToolRegistry([]domain.Tool{mt1, mt2})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	defs := executor.definitions()
 	assert.Len(t, defs, 1)
@@ -165,7 +232,7 @@ func TestDeclarations_SortedByName(t *testing.T) {
 		&mockTool{name: "a"},
 		&mockTool{name: "m"},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	defs := executor.definitions()
 	assert.Len(t, defs, 3)
@@ -176,7 +243,7 @@ func TestDeclarations_SortedByName(t *testing.T) {
 
 func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 	res, _, err := executor.execute(context.Background(), &schema.ToolCall{
 		ID: "tc-123",
 		Function: schema.FunctionCall{
@@ -196,7 +263,7 @@ func (mockDisplayOnlyInvocation) Display() domain.ToolDisplay {
 	return domain.NewStringDisplay("", "preview")
 }
 
-func TestExecute_NonExecutableInvocation_ReturnsMessageAndToolEnd(t *testing.T) {
+func TestExecute_NonExecutableInvocation_Panics(t *testing.T) {
 	mt := &mockTool{
 		name: "weird",
 		prepare: func(params string) (domain.Invocation, error) {
@@ -204,24 +271,14 @@ func TestExecute_NonExecutableInvocation_ReturnsMessageAndToolEnd(t *testing.T) 
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
-	sender := newMockEventSender(10)
+	executor := NewToolExecutor(registry, nil)
 
-	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
-		ID: "tc-ne",
-		Function: schema.FunctionCall{Name: "weird"},
-	}, sender)
-
-	assert.NoError(t, err)
-	assert.Contains(t, res.Content, "unsupported invocation")
-	sd, ok := disp.(domain.StringDisplay)
-	assert.True(t, ok)
-	assert.NotEmpty(t, sd.GetError())
-
-	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
-	end, ok := (<-sender.events).(domain.ToolEndEvent)
-	assert.True(t, ok)
-	assert.NotEmpty(t, end.Display.GetError())
+	assert.Panics(t, func() {
+		_, _, _ = executor.execute(context.Background(), &schema.ToolCall{
+			ID:       "tc-ne",
+			Function: schema.FunctionCall{Name: "weird"},
+		}, nil)
+	})
 }
 
 func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
@@ -234,7 +291,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
 		ID: "tc-456",
@@ -256,7 +313,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(10)
 	res, _, _ := executor.execute(context.Background(), &schema.ToolCall{
@@ -294,7 +351,7 @@ func TestExecute_EmitsToolEvents(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(10)
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
@@ -329,7 +386,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 			},
 		},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 	sender := newMockEventSender(10)
 
 	// Verify lookup failure (TC-1)
@@ -367,7 +424,7 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(10)
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
@@ -412,7 +469,7 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	_, disp, err := executor.execute(context.Background(), &schema.ToolCall{
 		ID: "tc-1",
@@ -437,7 +494,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(10)
 	res, _, err := executor.execute(context.Background(), &schema.ToolCall{
@@ -478,7 +535,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	}
 
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 	sender := newMockEventSender(10)
 
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
@@ -509,7 +566,7 @@ loop:
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{&mockTool{name: "tool"}})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	results := make(chan bool, 10)
 	for i := range 10 {
@@ -536,7 +593,7 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 
 	mt := &mockTool{name: "test"}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	res, _, err := executor.execute(ctx, &schema.ToolCall{
 		ID: "tc-cancel",
@@ -572,7 +629,7 @@ func TestExecute_ContextCancelled_EmitsToolEndEventWithCancelledDisplay(t *testi
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(16)
 
@@ -628,7 +685,7 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
-	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}))
+	executor := NewToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}), nil)
 
 	calls := []schema.ToolCall{
 		{ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}},
@@ -695,7 +752,7 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 		},
 	}
 
-	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}))
+	executor := NewToolExecutor(newMockToolRegistry([]domain.Tool{mt1, mt2}), nil)
 	calls := []schema.ToolCall{
 		{ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}},
 		{ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}},
@@ -756,7 +813,7 @@ func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
 			}, nil
 		},
 	}
-	executor := newToolExecutor(newMockToolRegistry([]domain.Tool{mt}))
+	executor := NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil)
 
 	assert.Panics(t, func() {
 		_, _ = executor.executeBatch(context.Background(), []schema.ToolCall{
@@ -776,7 +833,7 @@ func TestExecuteBatch_PreservesInputOrder_WithPreflightFailure(t *testing.T) {
 			},
 		},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	calls := []schema.ToolCall{
 		{ID: "c-1", Function: schema.FunctionCall{Name: "unknown"}},
@@ -844,7 +901,7 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			},
 		},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	runDone := make(chan error, 1)
 	go func() {
@@ -938,7 +995,7 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			},
 		},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 	sender := newMockEventSender(20)
 
 	runDone := make(chan error, 1)
@@ -1027,7 +1084,7 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 			},
 		},
 	})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 	sender := newMockEventSender(20)
 
 	runDone := make(chan error, 1)
@@ -1067,7 +1124,7 @@ func TestExecute_PanicsWhenFinalDisplayIsNil(t *testing.T) {
 		},
 	}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	assert.Panics(t, func() {
 		_, _, _ = executor.execute(context.Background(), &schema.ToolCall{
@@ -1095,7 +1152,7 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 	}
 
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := newToolExecutor(registry)
+	executor := NewToolExecutor(registry, nil)
 
 	sender := newMockEventSender(100)
 

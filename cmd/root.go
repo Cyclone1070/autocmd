@@ -24,6 +24,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/iav/internal/actionrouter"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -103,7 +104,10 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	// Wiring
 	bus := eventbus.New()
 	defer bus.Close()
-	agentLoop := agent.NewLoop(llmInstance, toolRegistry, deps.Config.Tools().MaxIterations(), bus)
+	router := actionrouter.New()
+	defer router.Close()
+	executor := agent.NewToolExecutor(toolRegistry, router)
+	agentLoop := agent.NewLoop(llmInstance, executor, deps.Config.Tools().MaxIterations(), bus)
 
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
@@ -151,6 +155,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		ToolRegistry: toolRegistry,
 		Agent:        agentLoop,
 		Bus:          bus,
+		Forwarder:    router,
 	}
 
 	done := workflow.RunPrompt(ctx, input, depsWP)

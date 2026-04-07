@@ -130,7 +130,8 @@ func newMockEventSender(size int) *mockEventSender {
 
 func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
 	registry := newMockToolRegistry(tools)
-	return NewLoop(m, registry, 5, events)
+	executor := NewToolExecutor(registry, nil)
+	return NewLoop(m, executor, 5, events)
 }
 
 
@@ -245,7 +246,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	l := NewLoop(m, newMockToolRegistry([]domain.Tool{mt}), 3, nil)
+	l := NewLoop(m, NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil), 3, nil)
 
 	session := &domain.Session{}
 	err := l.Run(context.Background(), session, "go")

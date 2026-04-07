@@ -78,10 +78,9 @@ func DefaultConfig() *Config {
 		},
 		providers: ProviderConfig{
 			"google": {
-				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: 1048576},
-				{ID: "google/gemini-2.5-flash", Name: "Gemini 2.5 Flash", ContextWindow: 1048576},
+				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: 256000},
+				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: 256000},
 				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: 2097152},
-				{ID: "google/gemini-2.5-pro", Name: "Gemini 2.5 Pro", ContextWindow: 2097152},
 				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: 2097152},
 			},
 			"github": {

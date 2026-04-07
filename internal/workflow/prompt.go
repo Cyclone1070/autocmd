@@ -32,6 +32,11 @@ type agentRunner interface {
 	Run(ctx context.Context, sess *domain.Session, input string) error
 }
 
+// ActionForwarder defines the interface for delivering structured actions.
+type ActionForwarder interface {
+	Deliver(domain.Action)
+}
+
 // bus defines the interface for the event bus as used by the prompt workflow.
 type bus interface {
 	WorkflowActions() <-chan domain.Action
@@ -46,9 +51,9 @@ type PromptDeps struct {
 	ToolRegistry toolRegistry
 	Agent        agentRunner
 	Bus          bus
-	// OnQuestionAnswer is called when the prompt UI submits or cancels an interactive question tool.
-	// Demos may send ToolEndEvent here; production agents should coordinate with the executor.
-	OnQuestionAnswer func(a domain.QuestionAnswerAction)
+	// Forwarder is used to route structured tool actions (like QuestionAnswerAction)
+	// to the blocked tool executor.
+	Forwarder ActionForwarder
 }
 
 // RunPrompt executes the full agentic flow: session resolution, agent loop,
@@ -113,15 +118,12 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	// Monitor for workflow actions (e.g. StopAction, question answers)
 	go func() {
 		for act := range deps.Bus.WorkflowActions() {
-			switch a := act.(type) {
+			switch act.(type) {
 			case domain.StopAction:
 				cancel()
-			case domain.QuestionAnswerAction:
-				// TODO(question-step): temporary wiring until the executor resolves InteractiveInvocation
-				// (i.e. QuestionAnswerAction should be routed to Resolve, then the executor must emit the
-				// correct non-question ToolEndEvent).
-				if deps.OnQuestionAnswer != nil {
-					deps.OnQuestionAnswer(a)
+			default:
+				if deps.Forwarder != nil {
+					deps.Forwarder.Deliver(act)
 				}
 			}
 		}

@@ -85,11 +85,11 @@ func TestToolDisplay_GetError(t *testing.T) {
 		d2 := DiffDisplay{TypeField: "diff", Comment: "c", Target: "t", Diff: "d", Error: "bad"}
 		assert.Equal(t, "bad", d2.GetError())
 	})
-	t.Run("ShellDisplay", func(t *testing.T) {
-		d := NewShellDisplay("c", "cmd", "out")
+	t.Run("BashDisplay", func(t *testing.T) {
+		d := NewBashDisplay("c", "cmd", "out")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := ShellDisplay{TypeField: "shell", Comment: "c", Command: "cmd", Error: "x"}
+		d2 := BashDisplay{TypeField: "bash", Comment: "c", Command: "cmd", Error: "x"}
 		assert.Equal(t, "x", d2.GetError())
 	})
 	t.Run("QuestionDisplay", func(t *testing.T) {
@@ -114,9 +114,9 @@ func TestToolDisplay_WithError(t *testing.T) {
 		assert.Equal(t, "boom", got.Error)
 		assert.Equal(t, "", base.Error, "WithError must not mutate original")
 	})
-	t.Run("ShellDisplay", func(t *testing.T) {
-		base := NewShellDisplay("c", "cmd", "out")
-		got := base.WithError("boom").(ShellDisplay)
+	t.Run("BashDisplay", func(t *testing.T) {
+		base := NewBashDisplay("c", "cmd", "out")
+		got := base.WithError("boom").(BashDisplay)
 		assert.Equal(t, "boom", got.Error)
 		assert.Equal(t, "", base.Error, "WithError must not mutate original")
 	})

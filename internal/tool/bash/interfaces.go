@@ -1,4 +1,4 @@
-package shell
+package bash
 
 import (
 	"context"
@@ -11,7 +11,7 @@ type pathResolver interface {
 	Root() string
 }
 
-// commandExecutor defines the interface for executing shell commands.
+// commandExecutor defines the interface for executing bash.commands.
 // Return type is concrete from executor package per architecture guidelines:
 // "Types and errors live with their implementation package"
 type commandExecutor interface {

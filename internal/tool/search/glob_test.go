@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestFindFile_Basic(t *testing.T) {
+func TestGlob_Basic(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -30,15 +30,15 @@ func TestFindFile_Basic(t *testing.T) {
 		os.Environ(),
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
-	tool := NewFindFileTool(fs, exec, pathResolver)
-	req := &FindFileRequest{Pattern: "*.go"}
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "a.go", result)
 }
 
-func TestFindFile_NoMatches(t *testing.T) {
+func TestGlob_NoMatches(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -50,15 +50,15 @@ func TestFindFile_NoMatches(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
-	tool := NewFindFileTool(fs, exec, pathResolver)
-	req := &FindFileRequest{Pattern: "*.go"}
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "No matches found.", result)
 }
 
-func TestFindFile_Environment(t *testing.T) {
+func TestGlob_Environment(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -70,14 +70,14 @@ func TestFindFile_Environment(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
-	tool := NewFindFileTool(fs, exec, pathResolver)
-	req := &FindFileRequest{Pattern: "*.go"}
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go"}
 
 	_, _ = executeFind(t, tool, req)
 	exec.AssertExpectations(t)
 }
 
-func TestFindFile_ExecutionFailure(t *testing.T) {
+func TestGlob_ExecutionFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -90,8 +90,8 @@ func TestFindFile_ExecutionFailure(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stderr: "fatal error", ExitCode: 2}, nil)
 
-	tool := NewFindFileTool(fs, exec, pathResolver)
-	req := &FindFileRequest{Pattern: "*.go"}
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go"}
 
 	result, err := executeFind(t, tool, req)
 	assert.Error(t, err)
@@ -99,7 +99,7 @@ func TestFindFile_ExecutionFailure(t *testing.T) {
 	assert.Contains(t, result, "fatal error")
 }
 
-func TestFindFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
+func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -108,8 +108,8 @@ func TestFindFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T
 	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	tool := NewFindFileTool(fs, exec, pathResolver)
-	req := &FindFileRequest{Pattern: "*.go"}
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go"}
 	params, _ := json.Marshal(req)
 	inv, err := tool.Prepare(string(params))
 	assert.NoError(t, err)

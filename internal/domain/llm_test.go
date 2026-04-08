@@ -23,7 +23,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 					ID:   "call-1",
 					Type: "function",
 					Function: schema.FunctionCall{
-						Name:      "shell",
+						Name:      "bash",
 						Arguments: `{"command":"ls"}`,
 					},
 				},
@@ -32,14 +32,14 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 		{
 			Role:       schema.Tool,
 			ToolCallID: "call-1",
-			ToolName:   "shell",
+			ToolName:   "bash",
 			Content:    "file1.txt",
 		},
 	}
 
 	displays := ToolDisplays{
-		"call-1": ShellDisplay{
-			TypeField:      "shell",
+		"call-1": BashDisplay{
+			TypeField:      "bash",
 			Comment:        "Listing files",
 			Command:        "ls",
 			CapturedOutput: "",
@@ -80,6 +80,6 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	assert.Equal(t, "call-1", decodedMessages[2].ToolCallID)
 
 	require.Len(t, decodedDisplays, 1)
-	assert.IsType(t, ShellDisplay{}, decodedDisplays["call-1"])
-	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(ShellDisplay).Comment)
+	assert.IsType(t, BashDisplay{}, decodedDisplays["call-1"])
+	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(BashDisplay).Comment)
 }

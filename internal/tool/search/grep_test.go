@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestSearchContent_Basic(t *testing.T) {
+func TestGrep_Basic(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -30,8 +30,8 @@ func TestSearchContent_Basic(t *testing.T) {
 		os.Environ(),
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
-	req := &SearchContentRequest{Pattern: "pattern"}
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -40,7 +40,7 @@ func TestSearchContent_Basic(t *testing.T) {
 	assert.Equal(t, expected, result)
 }
 
-func TestSearchContent_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
+func TestGrep_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -49,8 +49,8 @@ func TestSearchContent_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *test
 	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
-	req := &SearchContentRequest{Pattern: "pattern"}
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern"}
 	params, _ := json.Marshal(req)
 	inv, err := tool.Prepare(string(params))
 	assert.NoError(t, err)
@@ -63,7 +63,7 @@ func TestSearchContent_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *test
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
 
-func TestSearchContent_Environment(t *testing.T) {
+func TestGrep_Environment(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -76,14 +76,14 @@ func TestSearchContent_Environment(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
-	req := &SearchContentRequest{Pattern: "pattern"}
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern"}
 
 	_, _ = executeSearch(t, tool, req)
 	exec.AssertExpectations(t)
 }
 
-func TestSearchContent_NoMatches(t *testing.T) {
+func TestGrep_NoMatches(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -95,14 +95,15 @@ func TestSearchContent_NoMatches(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
-	req := &SearchContentRequest{Pattern: "pattern"}
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "No matches found.", result)
 }
-func TestSearchContent_FileTarget_Regression(t *testing.T) {
+
+func TestGrep_FileTarget_Regression(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -124,9 +125,9 @@ func TestSearchContent_FileTarget_Regression(t *testing.T) {
 		os.Environ(),
 	).Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
+	tool := NewGrepTool(fs, exec, pathResolver)
 
-	req := &SearchContentRequest{Pattern: "pattern", Path: "temp.md"}
+	req := &GrepRequest{Pattern: "pattern", Path: "temp.md"}
 
 	_, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -134,7 +135,7 @@ func TestSearchContent_FileTarget_Regression(t *testing.T) {
 	exec.AssertExpectations(t)
 }
 
-func TestSearchContent_ExecutionFailure(t *testing.T) {
+func TestGrep_ExecutionFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -148,8 +149,8 @@ func TestSearchContent_ExecutionFailure(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
 		Return(&executor.Result{Stderr: "fatal error", ExitCode: 2}, nil)
 
-	tool := NewSearchContentTool(fs, exec, pathResolver)
-	req := &SearchContentRequest{Pattern: "pattern"}
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.Error(t, err)

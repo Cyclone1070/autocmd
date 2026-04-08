@@ -212,9 +212,9 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 		name: "bash",
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				display: domain.NewShellDisplay("Run Bash", "echo chunk", ""),
+				display: domain.NewBashDisplay("Run Bash", "echo chunk", ""),
 				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
-					return "done", domain.NewShellDisplay("Run Bash", "echo chunk", ""), nil
+					return "done", domain.NewBashDisplay("Run Bash", "echo chunk", ""), nil
 				},
 			}, nil
 		},

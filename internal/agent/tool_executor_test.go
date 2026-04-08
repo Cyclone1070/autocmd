@@ -20,11 +20,11 @@ import (
 // --- Mocks ---
 
 type mockTool struct {
-	name        string
-	description string
-	concurrent  bool
+	name          string
+	description   string
+	concurrent    bool
 	setConcurrent bool
-	prepare     func(params string) (domain.Invocation, error)
+	prepare       func(params string) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
@@ -34,9 +34,11 @@ func (mt *mockTool) IsConcurrentSafe() bool {
 	}
 	return mt.concurrent
 }
+
 func (mt *mockTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{Name: mt.name, Desc: mt.description}
 }
+
 func (mt *mockTool) Prepare(params string) (domain.Invocation, error) {
 	if mt.prepare != nil {
 		return mt.prepare(params)
@@ -77,7 +79,7 @@ func withToolError(d domain.ToolDisplay, msg string) domain.ToolDisplay {
 	case domain.DiffDisplay:
 		d.Error = msg
 		return d
-	case domain.ShellDisplay:
+	case domain.BashDisplay:
 		d.Error = msg
 		return d
 	case domain.QuestionDisplay:
@@ -96,7 +98,7 @@ type mockStreamInvocation struct {
 	err     error
 }
 
-func (m *mockStreamInvocation) Stream() io.Reader { return m.stream }
+func (m *mockStreamInvocation) Stream() io.Reader           { return m.stream }
 func (m *mockStreamInvocation) Display() domain.ToolDisplay { return m.display }
 func (m *mockStreamInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if err := ctx.Err(); err != nil {
@@ -193,11 +195,11 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	// This will fail to compile as NewToolExecutor doesn't take 'waiter' yet
-	executor := NewToolExecutor(registry, waiter) 
+	executor := NewToolExecutor(registry, waiter)
 	sender := newMockEventSender(10)
 
 	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
-		ID: callID,
+		ID:       callID,
 		Function: schema.FunctionCall{Name: "ask"},
 	}, sender)
 
@@ -412,14 +414,14 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	assert.Contains(t, msg2.Content, "failed to prepare")
 }
 
-func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
+func TestExecute_Bash_StreamsAndEnds(t *testing.T) {
 	mt := &mockTool{
-		name: "shell",
+		name: "bash",
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				content: "Command finished",
 				stream:  strings.NewReader("file1\nfile2\n"),
-				display:   domain.NewShellDisplay("ls", "ls", ""),
+				display: domain.NewBashDisplay("ls", "ls", ""),
 			}, nil
 		},
 	}
@@ -428,9 +430,9 @@ func TestExecute_Shell_StreamsAndEnds(t *testing.T) {
 
 	sender := newMockEventSender(10)
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
-		ID: "tc-shell",
+		ID: "tc-bash",
 		Function: schema.FunctionCall{
-			Name: "shell",
+			Name: "bash",
 		},
 	}, sender)
 
@@ -445,10 +447,10 @@ loop:
 		e := <-sender.events
 		switch ev := e.(type) {
 		case domain.ToolStreamEvent:
-			assert.Equal(t, "tc-shell", ev.CallID)
+			assert.Equal(t, "tc-bash", ev.CallID)
 			streamOutput.WriteString(ev.Chunk)
 		case domain.ToolEndEvent:
-			assert.Equal(t, "tc-shell", ev.CallID)
+			assert.Equal(t, "tc-bash", ev.CallID)
 			assert.Empty(t, ev.Display.GetError())
 			break loop
 		}
@@ -472,7 +474,7 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 	executor := NewToolExecutor(registry, nil)
 
 	_, disp, err := executor.execute(context.Background(), &schema.ToolCall{
-		ID: "tc-1",
+		ID:       "tc-1",
 		Function: schema.FunctionCall{Name: "test"},
 	}, nil)
 	assert.NoError(t, err)
@@ -523,11 +525,11 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	output := io.NopCloser(strings.NewReader("some output"))
 
 	mt := &mockTool{
-		name: "shell",
+		name: "bash",
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				stream:  output,
-				display: domain.NewShellDisplay("Header", "cmd", ""),
+				display: domain.NewBashDisplay("Header", "cmd", ""),
 				content: "specific error",
 				err:     fmt.Errorf("command timeout"),
 			}, nil
@@ -541,7 +543,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 	_, _, err := executor.execute(context.Background(), &schema.ToolCall{
 		ID: "call-1",
 		Function: schema.FunctionCall{
-			Name: "shell",
+			Name: "bash",
 		},
 	}, sender)
 
@@ -670,16 +672,16 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 	cancel()
 
 	mt1 := &mockTool{
-		name:       "t1",
-		concurrent: true,
+		name:          "t1",
+		concurrent:    true,
 		setConcurrent: true,
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
-		name:       "t2",
-		concurrent: true,
+		name:          "t2",
+		concurrent:    true,
 		setConcurrent: true,
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
@@ -825,8 +827,8 @@ func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
 func TestExecuteBatch_PreservesInputOrder_WithPreflightFailure(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{
 		&mockTool{
-			name:       "ok",
-			concurrent: true,
+			name:          "ok",
+			concurrent:    true,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{content: "ok-result", display: domain.NewStringDisplay("", "ok")}, nil
@@ -857,8 +859,8 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 
 	registry := newMockToolRegistry([]domain.Tool{
 		&mockTool{
-			name:       "fast1",
-			concurrent: true,
+			name:          "fast1",
+			concurrent:    true,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
@@ -872,8 +874,8 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			},
 		},
 		&mockTool{
-			name:       "exclusive",
-			concurrent: false,
+			name:          "exclusive",
+			concurrent:    false,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
@@ -887,8 +889,8 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			},
 		},
 		&mockTool{
-			name:       "fast2",
-			concurrent: true,
+			name:          "fast2",
+			concurrent:    true,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
@@ -1146,7 +1148,7 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 			return &mockStreamInvocation{
 				content: "done",
 				stream:  strings.NewReader(data),
-				display:   domain.NewShellDisplay("test", "test", ""),
+				display: domain.NewBashDisplay("test", "test", ""),
 			}, nil
 		},
 	}

@@ -1,4 +1,4 @@
-package shell
+package bash
 
 import (
 	"context"
@@ -14,38 +14,38 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// ShellTool executes commands on the local machine.
-type ShellTool struct {
+// BashTool executes commands on the local machine.
+type BashTool struct {
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 }
 
-// NewShellTool creates a new ShellTool with injected dependencies.
-func NewShellTool(commandExecutor commandExecutor, pathResolver pathResolver) *ShellTool {
+// NewBashTool creates a new BashTool with injected dependencies.
+func NewBashTool(commandExecutor commandExecutor, pathResolver pathResolver) *BashTool {
 	if commandExecutor == nil {
 		panic("commandExecutor is required")
 	}
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &ShellTool{
+	return &BashTool{
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
 	}
 }
 
 // Name returns the tool's identifier.
-func (t *ShellTool) Name() string {
-	return "shell"
+func (t *BashTool) Name() string {
+	return "bash"
 }
 
-func (t *ShellTool) IsConcurrentSafe() bool { return true }
+func (t *BashTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
-func (t *ShellTool) Definition() *schema.ToolInfo {
+func (t *BashTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
-		Name: "shell",
-		Desc: "Execute a shell command on the local machine. Runs in the workspace root using the current process environment. Use shell builtins (e.g. timeout) if you need a time limit.",
+		Name: "bash",
+		Desc: "Execute a bash command on the local machine. Runs in the workspace root using the current process environment.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"command": {
 				Type: schema.Array,
@@ -67,7 +67,7 @@ func (t *ShellTool) Definition() *schema.ToolInfo {
 // Prepare validates the request and returns an Invocation.
 // Note: we intentionally do not start the streaming process here so cancellation
 // can be driven solely by Execute's ctx.
-func (t *ShellTool) Prepare(params string) (domain.Invocation, error) {
+func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		Command []string `json:"command"`
 		Comment string   `json:"comment"`
@@ -90,47 +90,47 @@ func (t *ShellTool) Prepare(params string) (domain.Invocation, error) {
 
 	env := os.Environ()
 
-	return &shellInvocation{
+	return &bashInvocation{
 		commandExecutor: t.commandExecutor,
 		wd:              wd,
 		env:             env,
-		command:        req.Command,
-		commandStr:     strings.Join(req.Command, " "),
-		comment:        req.Comment,
+		command:         req.Command,
+		commandStr:      strings.Join(req.Command, " "),
+		comment:         req.Comment,
 	}, nil
 }
 
-type shellInvocation struct {
+type bashInvocation struct {
 	commandExecutor commandExecutor
 	wd              string
 	env             []string
-	command        []string
-	commandStr     string
-	comment        string
+	command         []string
+	commandStr      string
+	comment         string
 
 	pipeOnce   sync.Once
 	pipeReader *io.PipeReader
 	pipeWriter *io.PipeWriter
 }
 
-func (i *shellInvocation) Stream() io.Reader {
+func (i *bashInvocation) Stream() io.Reader {
 	i.pipeOnce.Do(func() {
 		i.pipeReader, i.pipeWriter = io.Pipe()
 	})
 	return i.pipeReader
 }
 
-func (i *shellInvocation) Display() domain.ToolDisplay {
-	return domain.NewShellDisplay(i.comment, i.commandStr, "")
+func (i *bashInvocation) Display() domain.ToolDisplay {
+	return domain.NewBashDisplay(i.comment, i.commandStr, "")
 }
 
-func (i *shellInvocation) cancelledDisplay() domain.ShellDisplay {
-	sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+func (i *bashInvocation) cancelledDisplay() domain.BashDisplay {
+	sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
 	sh.Error = domain.ToolErrorCancelled
 	return sh
 }
 
-func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	if ctx.Err() != nil {
 		if i.pipeWriter != nil {
 			_ = i.pipeWriter.CloseWithError(ctx.Err())
@@ -143,7 +143,7 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDispl
 		if i.pipeWriter != nil {
 			_ = i.pipeWriter.CloseWithError(err)
 		}
-		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+		sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
 		sh.Error = err.Error()
 		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
 	}
@@ -164,7 +164,7 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDispl
 			}
 			return "", i.cancelledDisplay(), err
 		}
-		sh := domain.NewShellDisplay(i.comment, i.commandStr, "")
+		sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
 		sh.Error = err.Error()
 		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
 	}
@@ -177,6 +177,6 @@ func (i *shellInvocation) Execute(ctx context.Context) (string, domain.ToolDispl
 		truncationNote = "\n(Output truncated)"
 	}
 
-	sh := domain.NewShellDisplay(i.comment, i.commandStr, output)
+	sh := domain.NewBashDisplay(i.comment, i.commandStr, output)
 	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), sh, nil
 }

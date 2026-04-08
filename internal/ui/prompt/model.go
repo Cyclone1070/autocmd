@@ -21,7 +21,7 @@ type toolRenderer interface {
 	StatusPrefix(status ui.ToolStatus, frame string) string
 	RenderString(d domain.StringDisplay, status ui.ToolStatus, err string, prefix string) string
 	RenderDiff(d domain.DiffDisplay, status ui.ToolStatus, err string, prefix string) string
-	RenderShell(d domain.ShellDisplay, output string, status ui.ToolStatus, err string, prefix string) string
+	RenderBash(d domain.BashDisplay, output string, status ui.ToolStatus, err string, prefix string) string
 	RenderQuestion(d domain.QuestionDisplay, state ui.QuestionUIState, status ui.ToolStatus, err string) string
 	Box(content string, width int, status ui.ToolStatus) string
 }
@@ -511,12 +511,12 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 		rendered = m.toolRenderer.RenderString(d, slot.status, errorMsg, prefix)
 	case domain.DiffDisplay:
 		rendered = m.toolRenderer.RenderDiff(d, slot.status, errorMsg, prefix)
-	case domain.ShellDisplay:
+	case domain.BashDisplay:
 		output := slot.streamOutput
 		if d.CapturedOutput != "" {
 			output = d.CapturedOutput
 		}
-		rendered = m.toolRenderer.RenderShell(d, output, slot.status, errorMsg, prefix)
+		rendered = m.toolRenderer.RenderBash(d, output, slot.status, errorMsg, prefix)
 	case domain.QuestionDisplay:
 		rendered = m.toolRenderer.RenderQuestion(d, slot.questionState, slot.status, errorMsg)
 	default:

@@ -20,7 +20,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/shell"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -85,10 +85,10 @@ func main() {
 		file.NewWriteFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
 		file.NewEditFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
 		file.NewReadFileTool(fileSystem, &mockChecksum{}, pathResolver),
-		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
-		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
+		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
+		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
-		shell.NewShellTool(cmdExecutor, pathResolver),
+		bash.NewBashTool(cmdExecutor, pathResolver),
 	}
 	registry := tool.NewRegistry(tools)
 	toolExecutor := agent.NewToolExecutor(registry, router)
@@ -142,10 +142,10 @@ func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, op
 		{"write_file", `{"path": "temp.md", "content": "# Temp File\nInitial content.", "comment": "Creating temp file"}`},
 		{"edit_file", `{"path": "temp.md", "operations": [{"before": "Initial content.", "after": "Updated via Edit Tool.", "expected_replacements": 1}], "comment": "Updating content"}`},
 		{"read_file", `{"path": "temp.md"}`},
-		{"search_content", `{"pattern": "Updated", "path": "."}`},
-		{"find_file", `{"pattern": "temp.md"}`},
+		{"grep", `{"pattern": "Updated", "path": "."}`},
+		{"glob", `{"pattern": "temp.md"}`},
 		{"ask_question", `{"questions": [{"question": "Did you see the real tools working?", "options": ["Yes", "Hell yeah"]}]}`},
-		{"shell", `{"command": ["rm", "temp.md"], "comment": "Cleaning up"}`},
+		{"bash", `{"command": ["rm", "temp.md"], "comment": "Cleaning up"}`},
 	}
 
 	var msg *schema.Message

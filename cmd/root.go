@@ -18,7 +18,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
-	"github.com/Cyclone1070/iav/internal/tool/shell"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
@@ -83,9 +83,9 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
 		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
-		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
-		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
-		shell.NewShellTool(cmdExecutor, pathResolver),
+		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
+		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
+		bash.NewBashTool(cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
 	}
 	toolRegistry := tool.NewRegistry(tools)
@@ -128,7 +128,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := prompt.NewThinkingRenderer(theme)
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().ShellOutputHeight()))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().BashOutputHeight()))
 	
 	uiModel := prompt.NewModel(
 		bus,

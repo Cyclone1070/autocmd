@@ -42,7 +42,7 @@ func newTestTheme() *ui.Theme {
 	return ui.NewTheme(themeCfg)
 }
 
-func TestShellHistory_UseCapturedOutput(t *testing.T) {
+func TestBashHistory_UseCapturedOutput(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 	captured := "output line 1\noutput line 2"
@@ -51,7 +51,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}},
 			},
 		},
 		{
@@ -62,8 +62,8 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	}
 
 	displays := domain.ToolDisplays{
-		"tc-1": domain.ShellDisplay{
-			TypeField:      "shell",
+		"tc-1": domain.BashDisplay{
+			TypeField:      "bash",
 			Command:        "ls",
 			CapturedOutput: captured,
 		},
@@ -78,7 +78,7 @@ func TestShellHistory_UseCapturedOutput(t *testing.T) {
 	assert.NotContains(t, rendered, "(Exit code: 0)")
 }
 
-func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
+func TestBashHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
@@ -86,7 +86,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}},
 			},
 		},
 		{
@@ -97,8 +97,8 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	}
 
 	displays := domain.ToolDisplays{
-		"tc-1": domain.ShellDisplay{
-			TypeField:      "shell",
+		"tc-1": domain.BashDisplay{
+			TypeField:      "bash",
 			Command:        "touch t.txt",
 			CapturedOutput: "",
 		},
@@ -109,7 +109,7 @@ func TestShellHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	assert.NotContains(t, rendered, "(Exit code: 0)", "History should not leak exit code for successful empty stdout commands")
 }
 
-func TestShellHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
+func TestBashHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
@@ -117,19 +117,19 @@ func TestShellHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}},
 			},
 		},
 		{
 			Role:       schema.Tool,
 			ToolCallID: "tc-1",
-			Content:    "only in tool message — must not appear in history shell box",
+			Content:    "only in tool message — must not appear in history bash.box",
 		},
 	}
 
 	displays := domain.ToolDisplays{
-		"tc-1": domain.ShellDisplay{
-			TypeField: "shell",
+		"tc-1": domain.BashDisplay{
+			TypeField: "bash",
 			Command:   "ls",
 		},
 	}
@@ -140,7 +140,7 @@ func TestShellHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 	assert.Contains(t, rendered, "ls", "command still comes from display")
 }
 
-func TestShellHistory_ErrorStatus(t *testing.T) {
+func TestBashHistory_ErrorStatus(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
 
@@ -148,7 +148,7 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}},
+				{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}},
 			},
 		},
 		{
@@ -159,8 +159,8 @@ func TestShellHistory_ErrorStatus(t *testing.T) {
 	}
 
 	displays := domain.ToolDisplays{
-		"tc-1": domain.ShellDisplay{
-			TypeField:      "shell",
+		"tc-1": domain.BashDisplay{
+			TypeField:      "bash",
 			Command:        "false",
 			CapturedOutput: "",
 			Error:          "Execution failed",
@@ -324,7 +324,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 	msgs := []*schema.Message{
 		{
 			Role: schema.Assistant,
-			ToolCalls: []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "shell"}}},
+			ToolCalls: []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}}},
 		},
 		{
 			Role:       schema.Tool,
@@ -337,7 +337,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 		},
 	}
 	displays := domain.ToolDisplays{
-		"tc-1": domain.NewShellDisplay("List directory contents", "ls", ""),
+		"tc-1": domain.NewBashDisplay("List directory contents", "ls", ""),
 	}
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
@@ -435,12 +435,12 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 		ToolCalls: []schema.ToolCall{
 			{
 				ID:       "1",
-				Function: schema.FunctionCall{Name: "shell"},
+				Function: schema.FunctionCall{Name: "bash"},
 			},
 		},
 	}
 	displays := domain.ToolDisplays{
-		"1": domain.NewShellDisplay("header", "ls", ""),
+		"1": domain.NewBashDisplay("header", "ls", ""),
 	}
 
 	var sb strings.Builder
@@ -530,11 +530,11 @@ func TestMessageHeaders(t *testing.T) {
 		messages := []*schema.Message{
 			{
 				Role:      schema.Assistant,
-				ToolCalls: []schema.ToolCall{{ID: tcID, Function: schema.FunctionCall{Name: "shell"}}},
+				ToolCalls: []schema.ToolCall{{ID: tcID, Function: schema.FunctionCall{Name: "bash"}}},
 			},
 		}
 		displays := domain.ToolDisplays{
-			tcID: domain.NewShellDisplay("header", "ls", ""),
+			tcID: domain.NewBashDisplay("header", "ls", ""),
 		}
 
 		rendered := ab.RenderMessage(messages, 0, displays, false)

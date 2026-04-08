@@ -17,7 +17,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/shell"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -103,12 +103,12 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	exec := &mockDeps{}
 	res := &mockDeps{}
 
-	searchTool := search.NewSearchContentTool(fs, exec, res)
-	findTool := search.NewFindFileTool(fs, exec, res)
+	searchTool := search.NewGrepTool(fs, exec, res)
+	findTool := search.NewGlobTool(fs, exec, res)
 	readTool := file.NewReadFileTool(fs, fs, res)
 	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
 	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
-	shellTool := shell.NewShellTool(res, fs)
+	bashTool := bash.NewBashTool(res, fs)
 
 	// 15-line argument (simulating Go code or large config)
 	lines := make([]string, 15)
@@ -147,32 +147,32 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	time.Sleep(200 * time.Millisecond)
 	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "find-overflow", Display: findEnd})
 
-	// 3. shell Overflow
-	shellArgsObj := map[string]any{
+	// 3. bash.Overflow
+	bashArgsObj := map[string]any{
 		"command": []string{"sh", "-c", "echo '" + longArg + "'"},
 		"comment": "Running a multi-line echo for overflow testing. " + longArg,
 	}
-	shellArgsData, _ := json.Marshal(shellArgsObj)
-	shellInv, _ := shellTool.Prepare(string(shellArgsData))
-	var shellEnd domain.ToolDisplay
-	if shellInv != nil {
-		shellEnd = shellInv.Display()
+	bashArgsData, _ := json.Marshal(bashArgsObj)
+	bashInv, _ := bashTool.Prepare(string(bashArgsData))
+	var bashEnd domain.ToolDisplay
+	if bashInv != nil {
+		bashEnd = bashInv.Display()
 		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "shell-overflow",
-			Display:  shellInv.Display(),
+			CallID:   "bash-overflow",
+			Display:  bashInv.Display(),
 		})
 	}
 	time.Sleep(100 * time.Millisecond)
 	a.bus.SendUIUpdate(domain.ToolStreamEvent{
-		CallID: "shell-overflow",
+		CallID: "bash-overflow",
 		Chunk:  longArg,
 	})
 	time.Sleep(200 * time.Millisecond)
-	if sd, ok := shellEnd.(domain.ShellDisplay); ok {
+	if sd, ok := bashEnd.(domain.BashDisplay); ok {
 		sd.CapturedOutput = longArg
-		shellEnd = sd
+		bashEnd = sd
 	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "shell-overflow", Display: shellEnd})
+	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "bash-overflow", Display: bashEnd})
 
 	// 4. write_file Overflow
 	writeArgsObj := map[string]string{

@@ -232,13 +232,13 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 			prefix = tooling.StatusPrefix(status, "")
 		}
 		rendered = tooling.RenderDiff(d, status, toolErr, prefix)
-	case domain.ShellDisplay:
+	case domain.BashDisplay:
 		if d.Error != "" {
 			status = ui.StatusError
 			toolErr = d.Error
 			prefix = tooling.StatusPrefix(status, "")
 		}
-		rendered = tooling.RenderShell(d, d.CapturedOutput, status, toolErr, prefix)
+		rendered = tooling.RenderBash(d, d.CapturedOutput, status, toolErr, prefix)
 	}
 
 	if rendered == "" {

@@ -15,6 +15,7 @@ import (
 type mockGater struct {
 	gateFunc func(string) string
 }
+
 func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
 
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
@@ -43,13 +44,13 @@ func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
 	assert.NotContains(t, got, "_gated", "RenderString must not pass body through gater")
 }
 
-func TestToolRenderer_RespectsGaterOnShellOutput(t *testing.T) {
+func TestToolRenderer_RespectsGaterOnBashOutput(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
 	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
 	tr := NewToolRenderer(theme, 80, g)
 
-	got := tr.RenderShell(domain.ShellDisplay{Comment: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
-	assert.Contains(t, got, "stdout_gated", "RenderShell should gate captured output")
+	got := tr.RenderBash(domain.BashDisplay{Comment: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
+	assert.Contains(t, got, "stdout_gated", "RenderBash should gate captured output")
 }
 
 func TestToolRenderer_RenderQuestionDoesNotUseGater(t *testing.T) {
@@ -68,7 +69,7 @@ func assertGolden(t *testing.T, name string, actual string) {
 	goldenFile := filepath.Join("testdata", name+".golden")
 
 	if os.Getenv("UPDATE_GOLDEN") == "true" {
-		err := os.WriteFile(goldenFile, []byte(actual), 0644)
+		err := os.WriteFile(goldenFile, []byte(actual), 0o644)
 		require.NoError(t, err, "failed to update golden file")
 		return
 	}
@@ -145,35 +146,35 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 	assertGolden(t, "RenderDiff_ThreePartLayout", got)
 }
 
-func TestRenderShell_Running_Command(t *testing.T) {
+func TestRenderBash_Running_Command(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	display := domain.ShellDisplay{
+	display := domain.BashDisplay{
 		Comment: "List Files",
 		Command: "ls -la",
 	}
-	got := tr.RenderShell(display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
-	assertGolden(t, "RenderShell_Running_Command", got)
+	got := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
+	assertGolden(t, "RenderBash_Running_Command", got)
 }
 
-func TestRenderShell_LongOutputTruncation(t *testing.T) {
+func TestRenderBash_LongOutputTruncation(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	display := domain.ShellDisplay{
+	display := domain.BashDisplay{
 		Comment: "Log",
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
-	got := tr.RenderShell(display, longOutput, StatusSuccess, "", "✓")
-	assertGolden(t, "RenderShell_Long_Output_Truncation", got)
+	got := tr.RenderBash(display, longOutput, StatusSuccess, "", "✓")
+	assertGolden(t, "RenderBash_Long_Output_Truncation", got)
 }
 
-func TestRenderShell_Error(t *testing.T) {
+func TestRenderBash_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	display := domain.ShellDisplay{
+	display := domain.BashDisplay{
 		Comment: "List Files",
 		Command: "ls -la",
 	}
-	got := tr.RenderShell(display, "", StatusError, "exit status 1", "✗")
-	assertGolden(t, "RenderShell_Error", got)
+	got := tr.RenderBash(display, "", StatusError, "exit status 1", "✗")
+	assertGolden(t, "RenderBash_Error", got)
 }
 
 func TestRenderDiff_LongDiffTruncation(t *testing.T) {
@@ -220,14 +221,14 @@ func TestRenderDiff_ShortMode(t *testing.T) {
 	assert.Contains(t, output, "Edit big.go")
 }
 
-func TestRenderShell_ShortMode(t *testing.T) {
+func TestRenderBash_ShortMode(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	tr.SetShortToolbox(true)
-	display := domain.ShellDisplay{
+	display := domain.BashDisplay{
 		Comment: "List Files",
 		Command: "ls -la",
 	}
-	output := tr.RenderShell(display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
+	output := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
 	assert.NotContains(t, output, "file1.txt")
 	assert.Contains(t, output, "List Files")
 	assert.Contains(t, output, "ls -la")

@@ -8,7 +8,7 @@ The `tool` package provides concrete tools and registry wiring used by the agent
 
 ### Owns
 - Tool registry implementation and declaration exposure.
-- Tool domains (`file`, `directory`, `search`, `shell`, `todo`).
+- Tool domains (`file`, `directory`, `search`, `bash`, `todo`).
 - Tool prepare/execute contracts at package boundaries.
 
 ### Does NOT own

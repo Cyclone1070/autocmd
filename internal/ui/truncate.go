@@ -53,7 +53,7 @@ func (g *ToolOutputGater) Gate(content string) string {
 	return indicator + "\n" + strings.Join(visible, "\n")
 }
 
-// NewToolOutputGater creates a gater optimized for tool output (shell/diff).
+// NewToolOutputGater creates a gater optimized for tool output (bash.diff).
 func NewToolOutputGater(maxLines int) *ToolOutputGater {
 	return &ToolOutputGater{maxLines: maxLines}
 }

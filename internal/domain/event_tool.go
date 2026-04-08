@@ -10,7 +10,7 @@ type ToolStartEvent struct {
 
 func (ToolStartEvent) isUIUpdate() {}
 
-// ToolStreamEvent is emitted for streaming tool output (shell commands).
+// ToolStreamEvent is emitted for streaming tool output (bash.commands).
 type ToolStreamEvent struct {
 	CallID string
 	Chunk  string

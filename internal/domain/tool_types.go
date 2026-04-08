@@ -27,13 +27,13 @@ type ExecutableInvocation interface {
 	Invocation
 	// Execute runs the operation and returns LLM-facing content, the finalized display for UI/history,
 	// and err. err is non-nil when the tool invocation itself fails (e.g. cancelled context, I/O failure);
-	// semantic outcomes stay in content and display without err for cases like non-zero shell exit.
+	// semantic outcomes stay in content and display without err for cases like non-zero bash.exit.
 	// When err is non-nil, finalDisplay must surface the failure via GetError() (executor does not patch this).
 	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
 // StreamableInvocation is an ExecutableInvocation that exposes a live stdout/stderr stream for UI
-// (e.g. shell). The stream is not part of ToolDisplay so displays stay JSON-serializable.
+// (e.g. bash.. The stream is not part of ToolDisplay so displays stay JSON-serializable.
 type StreamableInvocation interface {
 	ExecutableInvocation
 	Stream() io.Reader
@@ -108,8 +108,8 @@ func NewDiffDisplay(comment, target string, added, removed int, diff string) Dif
 	}
 }
 
-// ShellDisplay is for shell command execution with streaming output.
-type ShellDisplay struct {
+// BashDisplay is for bash command execution with streaming output.
+type BashDisplay struct {
 	TypeField      string `json:"type"`
 	Comment        string `json:"comment"`         // Description from tool (e.g. "Installing dependencies")
 	Command        string `json:"command"`         // The command being run (e.g. "npm install")
@@ -117,18 +117,18 @@ type ShellDisplay struct {
 	Error          string `json:"error,omitempty"`
 }
 
-func (ShellDisplay) isToolDisplay()     {}
-func (s ShellDisplay) Type() string     { return s.TypeField }
-func (s ShellDisplay) GetError() string { return s.Error }
-func (s ShellDisplay) WithError(err string) ToolDisplay {
+func (BashDisplay) isToolDisplay()     {}
+func (s BashDisplay) Type() string     { return s.TypeField }
+func (s BashDisplay) GetError() string { return s.Error }
+func (s BashDisplay) WithError(err string) ToolDisplay {
 	s.Error = err
 	return s
 }
 
-// NewShellDisplay creates a new ShellDisplay with correct type.
-func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
-	return ShellDisplay{
-		TypeField:      "shell",
+// NewBashDisplay creates a new BashDisplay with correct type.
+func NewBashDisplay(comment, command, capturedOutput string) BashDisplay {
+	return BashDisplay{
+		TypeField:      "bash",
 		Comment:        comment,
 		Command:        command,
 		CapturedOutput: capturedOutput,
@@ -206,8 +206,8 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 				return err
 			}
 			display = d
-		case "shell":
-			var d ShellDisplay
+		case "bash":
+			var d BashDisplay
 			if err := json.Unmarshal(raw, &d); err != nil {
 				return err
 			}

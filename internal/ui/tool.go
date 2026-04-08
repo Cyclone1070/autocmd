@@ -1,4 +1,4 @@
-// Package tool provides rendering for tool outputs (StringDisplay, DiffDisplay, ShellDisplay).
+// Package tool provides rendering for tool outputs (StringDisplay, DiffDisplay, BashDisplay).
 // Used by compose when wiring engine.Deps.ViewTool.
 
 package ui
@@ -16,7 +16,7 @@ type gater interface {
 	Gate(content string) string
 }
 
-// ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, ShellDisplay).
+// ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, BashDisplay).
 type ToolRenderer struct {
 	Theme *Theme
 	Width int
@@ -157,8 +157,8 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 	return strings.Join(lines, "\n")
 }
 
-// RenderShell renders ShellDisplay.
-func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status ToolStatus, err string, prefix string) string {
+// RenderBash renders BashDisplay.
+func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, prefix string) string {
 	header := d.Comment
 	if status == StatusError {
 		header = r.formatError("# "+header, err, true)
@@ -170,15 +170,15 @@ func (r *ToolRenderer) RenderShell(d domain.ShellDisplay, output string, status 
 	header = r.Theme.Muted("# " + header)
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
-	shellOutput := r.gater.Gate(strings.TrimRight(output, "\n"))
+	bashOutput := r.gater.Gate(strings.TrimRight(output, "\n"))
 
 	// Build parts with blank line separation
 	parts := []string{
 		header,
 		cmdLine,
 	}
-	if shellOutput != "" && !r.Theme.ShortToolbox {
-		parts = append(parts, shellOutput)
+	if bashOutput != "" && !r.Theme.ShortToolbox {
+		parts = append(parts, bashOutput)
 	}
 
 	content := strings.Join(parts, "\n\n")

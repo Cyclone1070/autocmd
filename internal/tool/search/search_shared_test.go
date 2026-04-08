@@ -65,7 +65,7 @@ func (m *toolMockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *toolMockFileInfo) IsDir() bool        { return m.isDir }
 func (m *toolMockFileInfo) Sys() any           { return nil }
 
-func executeSearch(t *testing.T, tool *SearchContentTool, req *SearchContentRequest) (string, error) {
+func executeSearch(t *testing.T, tool *GrepTool, req *GrepRequest) (string, error) {
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
@@ -78,7 +78,7 @@ func executeSearch(t *testing.T, tool *SearchContentTool, req *SearchContentRequ
 	return out, err
 }
 
-func executeFind(t *testing.T, tool *FindFileTool, req *FindFileRequest) (string, error) {
+func executeFind(t *testing.T, tool *GlobTool, req *GlobRequest) (string, error) {
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 

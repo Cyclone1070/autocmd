@@ -17,25 +17,25 @@ const (
 	maxFindResults = 100
 )
 
-// FindFileRequest represents the parameters for a FindFile operation
-type FindFileRequest struct {
+// GlobRequest represents the parameters for a glob operation
+type GlobRequest struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path"`
 }
 
-// FindFileTool handles file finding operations.
-type FindFileTool struct {
+// GlobTool handles file finding operations via glob patterns.
+type GlobTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 }
 
-// NewFindFileTool creates a new FindFileTool with injected dependencies.
-func NewFindFileTool(
+// NewGlobTool creates a new GlobTool with injected dependencies.
+func NewGlobTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
 	pathResolver pathResolver,
-) *FindFileTool {
+) *GlobTool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -45,7 +45,7 @@ func NewFindFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &FindFileTool{
+	return &GlobTool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
@@ -53,14 +53,14 @@ func NewFindFileTool(
 }
 
 // Name returns the name of the tool.
-func (t *FindFileTool) Name() string {
-	return "find_file"
+func (t *GlobTool) Name() string {
+	return "glob"
 }
 
-func (t *FindFileTool) IsConcurrentSafe() bool { return true }
+func (t *GlobTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the JSON schema for the tool.
-func (t *FindFileTool) Definition() *schema.ToolInfo {
+func (t *GlobTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
 		Desc: "Find files matching a glob pattern.",
@@ -72,15 +72,15 @@ func (t *FindFileTool) Definition() *schema.ToolInfo {
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "Path to search within. Defaults to workspace root.",
+				Desc: "Path to search within. Defaults to the current directory.",
 			},
 		}),
 	}
 }
 
 // Prepare validates input and resolves path.
-func (t *FindFileTool) Prepare(params string) (domain.Invocation, error) {
-	req := &FindFileRequest{}
+func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
+	req := &GlobRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -121,17 +121,17 @@ func (t *FindFileTool) Prepare(params string) (domain.Invocation, error) {
 		relPath = filepath.Base(absPath)
 	}
 
-	return &findFileInvocation{
+	return &globInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("FIND '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("GLOB '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
 	}, nil
 }
 
-type findFileInvocation struct {
+type globInvocation struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
@@ -140,11 +140,11 @@ type findFileInvocation struct {
 	display         domain.StringDisplay
 }
 
-func (i *findFileInvocation) Display() domain.ToolDisplay {
+func (i *globInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *findFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	d := i.display
 
 	if ctx.Err() != nil {

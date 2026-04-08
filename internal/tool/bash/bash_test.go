@@ -1,4 +1,4 @@
-package shell
+package bash
 
 import (
 	"context"
@@ -51,21 +51,21 @@ func newTestStreamingCmd(output string, result *executor.Result, waitErr error) 
 	})
 }
 
-func TestShellTool_Name(t *testing.T) {
-	tl := NewShellTool(&mockCommandExecutor{}, &mockPathResolver{})
-	assert.Equal(t, "shell", tl.Name())
+func TestBashTool_Name(t *testing.T) {
+	tl := NewBashTool(&mockCommandExecutor{}, &mockPathResolver{})
+	assert.Equal(t, "bash", tl.Name())
 }
 
-func TestShellTool_Declaration(t *testing.T) {
-	tl := NewShellTool(&mockCommandExecutor{}, &mockPathResolver{})
+func TestBashTool_Declaration(t *testing.T) {
+	tl := NewBashTool(&mockCommandExecutor{}, &mockPathResolver{})
 	info := tl.Definition()
-	assert.Equal(t, "shell", info.Name)
-	assert.Contains(t, info.Desc, "shell command")
+	assert.Equal(t, "bash", info.Name)
+	assert.Contains(t, info.Desc, "bash command")
 	assert.NotNil(t, info.ParamsOneOf)
 }
 
-func TestShellTool_Definition_OnlyCommandAndComment(t *testing.T) {
-	tl := NewShellTool(&mockCommandExecutor{}, &mockPathResolver{})
+func TestBashTool_Definition_OnlyCommandAndComment(t *testing.T) {
+	tl := NewBashTool(&mockCommandExecutor{}, &mockPathResolver{})
 	js, err := tl.Definition().ToJSONSchema()
 	require.NoError(t, err)
 	require.NotNil(t, js.Properties)
@@ -77,8 +77,8 @@ func TestShellTool_Definition_OnlyCommandAndComment(t *testing.T) {
 	assert.Equal(t, []string{"command", "comment"}, keys)
 }
 
-func TestShellTool_Prepare_Validation(t *testing.T) {
-	tl := NewShellTool(&mockCommandExecutor{}, &mockPathResolver{})
+func TestBashTool_Prepare_Validation(t *testing.T) {
+	tl := NewBashTool(&mockCommandExecutor{}, &mockPathResolver{})
 
 	tests := []struct {
 		name    string
@@ -126,11 +126,11 @@ func TestShellTool_Prepare_Validation(t *testing.T) {
 	}
 }
 
-func TestShellTool_Prepare_Success(t *testing.T) {
+func TestBashTool_Prepare_Success(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 
@@ -145,19 +145,19 @@ func TestShellTool_Prepare_Success(t *testing.T) {
 	require.NotNil(t, inv)
 
 	disp := inv.Display()
-	shellDisp := disp.(domain.ShellDisplay)
-	assert.Equal(t, "echo hello", shellDisp.Command)
-	assert.Equal(t, "say hello", shellDisp.Comment)
-	assert.Empty(t, shellDisp.CapturedOutput)
+	bashDisp := disp.(domain.BashDisplay)
+	assert.Equal(t, "echo hello", bashDisp.Command)
+	assert.Equal(t, "say hello", bashDisp.Comment)
+	assert.Empty(t, bashDisp.CapturedOutput)
 	si := inv.(domain.StreamableInvocation)
 	assert.NotNil(t, si.Stream())
 }
 
-func TestShellTool_Prepare_ExecutorError(t *testing.T) {
+func TestBashTool_Prepare_ExecutorError(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 
@@ -180,11 +180,11 @@ func TestShellTool_Prepare_ExecutorError(t *testing.T) {
 	assert.Contains(t, disp.GetError(), "command not found")
 }
 
-func TestShellTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
+func TestBashTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("")
 
@@ -195,11 +195,11 @@ func TestShellTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {
 	assert.Contains(t, err.Error(), "workspace root not set")
 }
 
-func TestShellTool_Execute_FinalDisplay(t *testing.T) {
+func TestBashTool_Execute_FinalDisplay(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("hello world", &executor.Result{Stdout: "hello world", ExitCode: 0}, nil)
@@ -218,17 +218,17 @@ func TestShellTool_Execute_FinalDisplay(t *testing.T) {
 
 	llm, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
 	require.NoError(t, err)
-	sh := disp.(domain.ShellDisplay)
+	sh := disp.(domain.BashDisplay)
 	assert.Equal(t, "hello world", sh.CapturedOutput)
 	assert.Empty(t, sh.GetError())
 	assert.Contains(t, llm, "(Exit code: 0)")
 }
 
-func TestShellTool_Execute_Success(t *testing.T) {
+func TestBashTool_Execute_Success(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("hello world", &executor.Result{Stdout: "hello world", ExitCode: 0}, nil)
@@ -252,11 +252,11 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	assert.Contains(t, output, "(Exit code: 0)")
 }
 
-func TestShellTool_Execute_NonZeroExit(t *testing.T) {
+func TestBashTool_Execute_NonZeroExit(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("error output", &executor.Result{Stdout: "error output", ExitCode: 1}, nil)
@@ -278,11 +278,11 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	assert.Contains(t, output, "(Exit code: 1)")
 }
 
-func TestShellTool_Execute_ContextCancelled(t *testing.T) {
+func TestBashTool_Execute_ContextCancelled(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("", &executor.Result{}, context.Canceled)
@@ -306,11 +306,11 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
 
-func TestShellTool_Execute_Truncation(t *testing.T) {
+func TestBashTool_Execute_Truncation(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("output", &executor.Result{Stdout: "output", ExitCode: 0, Truncated: true}, nil)
@@ -332,11 +332,11 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	assert.Contains(t, output, "(Output truncated)")
 }
 
-func TestShellTool_Display_StreamingOutput(t *testing.T) {
+func TestBashTool_Display_StreamingOutput(t *testing.T) {
 	mockPR := new(mockPathResolver)
 	mockCE := new(mockCommandExecutor)
 
-	tl := NewShellTool(mockCE, mockPR)
+	tl := NewBashTool(mockCE, mockPR)
 
 	mockPR.On("Root").Return("/workspace")
 	streamCmd := newTestStreamingCmd("streaming_test", &executor.Result{Stdout: "streaming_test", ExitCode: 0}, nil)
@@ -365,7 +365,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	assert.Contains(t, buf.String(), "streaming_test")
 }
 
-func TestShellTool_CapturedOutput(t *testing.T) {
+func TestBashTool_CapturedOutput(t *testing.T) {
 	mockExec := &mockCommandExecutor{}
 	res := &executor.Result{Stdout: "captured\n", ExitCode: 0}
 	mockExec.On("RunStreaming", mock.Anything, []string{"echo", "captured"}, mock.Anything, mock.Anything).
@@ -374,14 +374,14 @@ func TestShellTool_CapturedOutput(t *testing.T) {
 	mockPath := &mockPathResolver{}
 	mockPath.On("Root").Return(".")
 
-	tl := NewShellTool(mockExec, mockPath)
+	tl := NewBashTool(mockExec, mockPath)
 	ctx := context.Background()
 	params := `{"command": ["echo", "captured"], "comment": "test capture"}`
 
 	inv, err := tl.Prepare(params)
 	require.NoError(t, err)
 
-	disp := inv.Display().(domain.ShellDisplay)
+	disp := inv.Display().(domain.BashDisplay)
 	assert.Empty(t, disp.CapturedOutput)
 
 	out, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)

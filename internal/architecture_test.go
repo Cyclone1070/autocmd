@@ -48,7 +48,7 @@ func TestArchitecture(t *testing.T) {
 		module + "/internal/tool/directory",
 		module + "/internal/tool/file",
 		module + "/internal/tool/search",
-		module + "/internal/tool/shell",
+		module + "/internal/tool/bash",
 		module + "/internal/tool/todo",
 	}
 	for _, target := range workflowForbidden {
@@ -83,7 +83,7 @@ func TestArchitecture(t *testing.T) {
 	// 3. Service Isolation
 	services := []string{
 		"agent", "auth", "config", "fs", "provider", "session", "state",
-		"tool/directory", "tool/file", "tool/search", "tool/shell", "tool/todo",
+		"tool/directory", "tool/file", "tool/search", "tool/bash", "tool/todo",
 	}
 	for _, service := range services {
 		serviceRelPath := "internal/" + service

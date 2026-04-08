@@ -42,8 +42,8 @@ func (c *Config) Validate() error {
 	if c.ui.chatWindowWidth < 1 {
 		errs = append(errs, "ui.chat_window_width must be >= 1")
 	}
-	if c.ui.shellOutputHeight < 1 {
-		errs = append(errs, "ui.shell_output_height must be >= 1")
+	if c.ui.bashOutputHeight < 1 {
+		errs = append(errs, "ui.bash_output_height must be >= 1")
 	}
 
 	if len(errs) > 0 {

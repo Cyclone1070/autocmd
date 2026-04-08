@@ -18,15 +18,15 @@ const (
 	defaultMaxLineLength = 10000
 )
 
-// SearchContentRequest matches OpenCode's input schema.
-type SearchContentRequest struct {
+// GrepRequest matches OpenCode's input schema.
+type GrepRequest struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path"`
 	Include string `json:"include,omitempty"`
 }
 
-// SearchContentTool handles content searching operations.
-type SearchContentTool struct {
+// GrepTool handles content searching operations.
+type GrepTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
@@ -34,12 +34,12 @@ type SearchContentTool struct {
 	maxLineLength int // For testing
 }
 
-// NewSearchContentTool creates a new SearchContentTool with injected dependencies.
-func NewSearchContentTool(
+// NewGrepTool creates a new GrepTool with injected dependencies.
+func NewGrepTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
 	pathResolver pathResolver,
-) *SearchContentTool {
+) *GrepTool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -49,7 +49,7 @@ func NewSearchContentTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &SearchContentTool{
+	return &GrepTool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
@@ -57,15 +57,15 @@ func NewSearchContentTool(
 	}
 }
 
-func (t *SearchContentTool) Name() string {
-	return "search_content"
+func (t *GrepTool) Name() string {
+	return "grep"
 }
 
-func (t *SearchContentTool) IsConcurrentSafe() bool { return true }
+func (t *GrepTool) IsConcurrentSafe() bool { return true }
 
-func (t *SearchContentTool) Definition() *schema.ToolInfo {
+func (t *GrepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
-		Name: "search_content",
+		Name: "grep",
 		Desc: "Search for content matching a regex pattern in files.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
@@ -85,8 +85,8 @@ func (t *SearchContentTool) Definition() *schema.ToolInfo {
 	}
 }
 
-func (t *SearchContentTool) Prepare(params string) (domain.Invocation, error) {
-	req := &SearchContentRequest{}
+func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
+	req := &GrepRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -119,19 +119,19 @@ func (t *SearchContentTool) Prepare(params string) (domain.Invocation, error) {
 		relPath = filepath.Base(absSearchPath)
 	}
 
-	return &searchContentInvocation{
+	return &grepInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		pathResolver:    t.pathResolver,
 		absPath:         absSearchPath,
 		pattern:         req.Pattern,
 		include:         req.Include,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("SEARCH '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("GREP '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
 		maxLineLength:   t.maxLineLength,
 	}, nil
 }
 
-type searchContentInvocation struct {
+type grepInvocation struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
@@ -142,11 +142,11 @@ type searchContentInvocation struct {
 	maxLineLength   int
 }
 
-func (i *searchContentInvocation) Display() domain.ToolDisplay {
+func (i *grepInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
 	d := i.display
 
 	if ctx.Err() != nil {
@@ -206,7 +206,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 	}
 
 	// Process output
-	var matches []searchContentMatch
+	var matches []grepMatch
 	hitMaxResults := false
 	lines := strings.SplitSeq(res.Stdout, "\n")
 
@@ -244,7 +244,7 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 				lineContent = lineContent[:maxLineLength] + "...[truncated]"
 			}
 
-			matches = append(matches, searchContentMatch{
+			matches = append(matches, grepMatch{
 				File:        filepath.ToSlash(relPath),
 				LineNumber:  rgMatch.Data.LineNumber,
 				LineContent: lineContent,
@@ -257,19 +257,19 @@ func (i *searchContentInvocation) Execute(ctx context.Context) (string, domain.T
 		}
 	}
 
-	return formatSearchMatches(matches, hitMaxResults), d, nil
+	return formatGrepMatches(matches, hitMaxResults), d, nil
 }
 
-// searchContentMatch represents a single match in a file
+// grepMatch represents a single match in a file
 // Internal usage only, no longer part of public API
-type searchContentMatch struct {
+type grepMatch struct {
 	File        string
 	LineNumber  int
 	LineContent string
 }
 
-// formatSearchMatches formats matches OpenCode style
-func formatSearchMatches(matches []searchContentMatch, truncated bool) string {
+// formatGrepMatches formats matches OpenCode style
+func formatGrepMatches(matches []grepMatch, truncated bool) string {
 	if len(matches) == 0 {
 		return "No matches found."
 	}

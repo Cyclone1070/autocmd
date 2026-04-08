@@ -67,12 +67,12 @@ func getHistoryElements() []TestElement {
 			Msg: &schema.Message{
 				Role: schema.Assistant,
 				ToolCalls: []schema.ToolCall{
-					{ID: "tc-ok", Function: schema.FunctionCall{Name: "shell"}},
+					{ID: "tc-ok", Function: schema.FunctionCall{Name: "bash"}},
 				},
 			},
 			Displays: domain.ToolDisplays{
-				"tc-ok": domain.ShellDisplay{
-					TypeField:      "shell",
+				"tc-ok": domain.BashDisplay{
+					TypeField:      "bash",
 					Comment:        "Running Tests",
 					Command:        "go test ./...",
 					CapturedOutput: captured,
@@ -84,12 +84,12 @@ func getHistoryElements() []TestElement {
 			Msg: &schema.Message{
 				Role: schema.Assistant,
 				ToolCalls: []schema.ToolCall{
-					{ID: "tc-err", Function: schema.FunctionCall{Name: "shell"}},
+					{ID: "tc-err", Function: schema.FunctionCall{Name: "bash"}},
 				},
 			},
 			Displays: domain.ToolDisplays{
-				"tc-err": domain.ShellDisplay{
-					TypeField: "shell",
+				"tc-err": domain.BashDisplay{
+					TypeField: "bash",
 					Comment:   "Failing Command",
 					Command:   "false",
 				},

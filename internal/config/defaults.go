@@ -73,7 +73,7 @@ func DefaultConfig() *Config {
 			errorColor:        ColorConfig{light: "#F05D5E", dark: "#FF6666"},
 			mutedColor:        ColorConfig{light: "#D9DCCF", dark: "#888888"},
 			chatWindowWidth:   80,
-			shellOutputHeight: 12,
+			bashOutputHeight: 12,
 			shortToolbox:      false,
 		},
 		providers: ProviderConfig{

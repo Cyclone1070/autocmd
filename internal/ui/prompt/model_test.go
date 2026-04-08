@@ -407,7 +407,7 @@ func TestModel_ToolStart_QuestionDisplayInitializesQuestionState(t *testing.T) {
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
 
 	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
-		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+		{Question: "Proceed?", Options: []string{"Yes"}, MultiSelect: false},
 	})
 	res, _ := m.handleBusEvent(domain.ToolStartEvent{CallID: "q1", Display: qd})
 	m2 := res.(*Model)
@@ -425,7 +425,7 @@ func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
 
 	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
-		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+		{Question: "Proceed?", Options: []string{"Yes"}, MultiSelect: false},
 	})
 	m.state = stateTooling
 	m.tools = []toolSlot{
@@ -434,10 +434,7 @@ func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
 
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = res.(*Model)
-	assert.False(t, m.tools[0].questionState.Submitted, "Enter selects the option; submit is only via s")
-
-	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	m = res.(*Model)
+	assert.True(t, m.tools[0].questionState.Submitted, "Enter auto-submits single-select question")
 
 	require.Len(t, bus.actions, 1)
 	qa, ok := bus.actions[0].(domain.QuestionAnswerAction)
@@ -445,7 +442,6 @@ func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
 	assert.Equal(t, "call-q", qa.CallID)
 	require.Len(t, qa.Answers, 1)
 	assert.Equal(t, []string{"Yes"}, qa.Answers[0])
-	assert.True(t, m.tools[0].questionState.Submitted)
 }
 
 func TestModel_Question_EscSendsStopAction(t *testing.T) {
@@ -477,7 +473,7 @@ func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
 
 	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{
-		{Question: "Proceed?", Options: []string{"Yes"}, Multiple: false},
+		{Question: "Proceed?", Options: []string{"Yes"}, MultiSelect: false},
 	})
 	m.state = stateTooling
 	m.tools = []toolSlot{

@@ -1,7 +1,7 @@
-⣾# Aligning logic
- 
- Edit align.go
- 
- 
- -line1
- +line2
+⣾# Aligning logic                                                           
+                                                                            
+ Edit align.go                                                              
+                                                                            
+                                                                            
+ -line1                                                                     
+ +line2                                                                     

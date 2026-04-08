@@ -14,7 +14,7 @@ func qDisplaySingle() domain.QuestionDisplay {
 		{
 			Question: "Deploy where?",
 			Options:  []string{"Staging", "Prod"},
-			Multiple: false,
+			MultiSelect: false,
 		},
 	})
 }
@@ -24,12 +24,12 @@ func qDisplayMultiTwoQuestions() domain.QuestionDisplay {
 		{
 			Question: "Pick colors",
 			Options:  []string{"Red", "Blue"},
-			Multiple: true,
+			MultiSelect: true,
 		},
 		{
 			Question: "Second?",
 			Options:  []string{"Yes", "No"},
-			Multiple: false,
+			MultiSelect: false,
 		},
 	})
 }
@@ -72,7 +72,7 @@ func TestHandleQuestionKey_UpDownMovesCursor(t *testing.T) {
 
 func TestHandleQuestionKey_SpaceMatchesEnterInMultiSelect(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{{
-		Question: "Q", Options: []string{"A", "B"}, Multiple: true,
+		Question: "Q", Options: []string{"A", "B"}, MultiSelect: true,
 	}})
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeySpace})
@@ -85,8 +85,8 @@ func TestHandleQuestionKey_SpaceMatchesEnterInMultiSelect(t *testing.T) {
 
 func TestHandleQuestionKey_EnterOnAlreadySelectedSingleUnselects(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{
-		{Question: "Q1", Options: []string{"A", "B"}, Multiple: false},
-		{Question: "Q2", Options: []string{"X"}, Multiple: false},
+		{Question: "Q1", Options: []string{"A", "B"}, MultiSelect: false},
+		{Question: "Q2", Options: []string{"X"}, MultiSelect: false},
 	})
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter}) // select A, advance
@@ -102,27 +102,23 @@ func TestHandleQuestionKey_EnterOnAlreadySelectedSingleUnselects(t *testing.T) {
 	assert.False(t, s.Submitted)
 }
 
-func TestHandleQuestionKey_EnterSingleSelectUsesCursorLabel(t *testing.T) {
+func TestHandleQuestionKey_EnterSingleSelectAutoSubmits(t *testing.T) {
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyDown}) // cursor on Prod
 	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
-	assert.False(t, out.Done)
-	assert.False(t, s.Submitted)
+	assert.True(t, out.Done)
+	assert.True(t, s.Submitted)
 	assert.Equal(t, 1, s.Per[0].SingleSelected)
 	assert.Equal(t, 1, s.Per[0].Cursor)
 
-	s, out = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	assert.True(t, out.Done)
-	assert.False(t, out.Cancelled)
 	require.Len(t, out.Answers, 1)
 	assert.Equal(t, []string{"Prod"}, out.Answers[0])
-	assert.True(t, s.Submitted)
 }
 
 func TestHandleQuestionKey_EnterMultiTogglesSelections(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{{
-		Question: "Q", Options: []string{"A", "B"}, Multiple: true,
+		Question: "Q", Options: []string{"A", "B"}, MultiSelect: true,
 	}})
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
@@ -199,18 +195,15 @@ func TestHandleQuestionKey_CustomBufferTypingAndBackspace(t *testing.T) {
 	assert.Equal(t, "hi", s.Per[0].CustomBuffer)
 }
 
-func TestHandleQuestionKey_EnterCustomRowUsesBuffer(t *testing.T) {
+func TestHandleQuestionKey_EnterCustomRowUsesBufferAndAutoSubmits(t *testing.T) {
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}}) // focus custom input
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
-	assert.False(t, out.Done)
+	assert.True(t, out.Done)
 	assert.True(t, s.Per[0].CustomSelected)
 	assert.Equal(t, 2, s.Per[0].Cursor) // custom row
-
-	s, out = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	assert.True(t, out.Done)
 	assert.Equal(t, []string{"x"}, out.Answers[0])
 }
 
@@ -239,10 +232,11 @@ func TestHandleQuestionKey_CIOFocusCustomInput(t *testing.T) {
 	}
 }
 
-func TestHandleQuestionKey_SpaceInNavSingleSelectActsLikeEnter(t *testing.T) {
+func TestHandleQuestionKey_SpaceInNavSingleSelectAutoSubmits(t *testing.T) {
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
-	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeySpace})
+	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeySpace})
+	assert.True(t, out.Done)
 	assert.False(t, s.Per[0].CustomInputFocused)
 	assert.Equal(t, 0, s.Per[0].SingleSelected)
 	assert.Equal(t, 0, s.Per[0].Cursor)
@@ -263,12 +257,12 @@ func TestHandleQuestionKey_HLChangesActiveTab(t *testing.T) {
 }
 
 func TestHandleQuestionKey_SKeySubmitsFromNav(t *testing.T) {
-	d := qDisplaySingle()
+	d := qDisplayMultiTwoQuestions()
 	s := NewQuestionUIState(d)
-	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter}) // select Staging
+	s.Per[1].SingleSelected = 0 // Manually select "Yes" on second question
 	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	assert.True(t, out.Done)
-	assert.Equal(t, []string{"Staging"}, out.Answers[0])
+	assert.Equal(t, []string{"Yes"}, out.Answers[1])
 	assert.True(t, s.Submitted)
 }
 
@@ -293,12 +287,12 @@ func TestHandleQuestionKey_SSubmitsEntireFormAfterTwoQuestions(t *testing.T) {
 		{
 			Question: "Pick one",
 			Options:  []string{"A", "B"},
-			Multiple: false,
+			MultiSelect: false,
 		},
 		{
 			Question: "Pick many",
 			Options:  []string{"X", "Y"},
-			Multiple: true,
+			MultiSelect: true,
 		},
 	})
 	s := NewQuestionUIState(d)
@@ -307,10 +301,6 @@ func TestHandleQuestionKey_SSubmitsEntireFormAfterTwoQuestions(t *testing.T) {
 	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
 	assert.False(t, out.Done)
 	assert.Equal(t, 1, s.Active)
-
-	s, out = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	assert.False(t, out.Done)
-	assert.Equal(t, 2, s.Active)
 
 	s, out = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	assert.True(t, out.Done)
@@ -334,8 +324,8 @@ func TestHandleQuestionKey_EnterOnEmptyCustomInputLikeEsc(t *testing.T) {
 
 func TestHandleQuestionKey_LastSingleSelectAnswerOpensReview(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{
-		{Question: "Q1", Options: []string{"A"}, Multiple: false},
-		{Question: "Q2", Options: []string{"B"}, Multiple: false},
+		{Question: "Q1", Options: []string{"A"}, MultiSelect: false},
+		{Question: "Q2", Options: []string{"B"}, MultiSelect: false},
 	})
 	s := NewQuestionUIState(d)
 	s, _ = HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
@@ -376,7 +366,7 @@ func TestAnsweredQuestionCount(t *testing.T) {
 
 func TestHandleQuestionKey_EnterOnMultiCustomNavTogglesCustomSelected(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{{
-		Question: "Q", Options: []string{"A"}, Multiple: true,
+		Question: "Q", Options: []string{"A"}, MultiSelect: true,
 	}})
 	s := NewQuestionUIState(d)
 	s.Per[0].CustomBuffer = "custom"

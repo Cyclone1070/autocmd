@@ -115,17 +115,17 @@ func sampleQuestionDisplay() domain.QuestionDisplay {
 		{
 			Question: "Pick a color for the demo banner",
 			Options:  []string{"Blue", "Amber", "Violet", "Grass Green", "Blood Scarlet", "Nerd Purple"},
-			Multiple: false,
+			MultiSelect: false,
 		},
 		{
 			Question: "Select environments to deploy",
 			Options:  []string{"Staging", "QA", "Production"},
-			Multiple: true,
+			MultiSelect: true,
 		},
 		{
 			Question: "Choose rollout strategy",
 			Options:  []string{"Canary", "Blue/Green", "Immediate"},
-			Multiple: false,
+			MultiSelect: false,
 		},
 	})
 }

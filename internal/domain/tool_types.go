@@ -138,9 +138,9 @@ func NewShellDisplay(comment, command, capturedOutput string) ShellDisplay {
 // QuestionInfo describes one question in the question toolbox.
 // Free-text answers are always offered by the UI (not part of this payload).
 type QuestionInfo struct {
-	Question string   `json:"question"`
-	Options  []string `json:"options"`
-	Multiple bool     `json:"multiple,omitempty"`
+	Question    string   `json:"question"`
+	Options     []string `json:"options"`
+	MultiSelect bool     `json:"multiSelect,omitempty"`
 }
 
 // QuestionDisplay is the tool UI payload for the question tool (preview and final baked state).

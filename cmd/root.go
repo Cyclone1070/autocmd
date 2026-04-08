@@ -15,6 +15,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
+	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/git"
@@ -93,6 +94,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
 		shell.NewShellTool(cmdExecutor, pathResolver),
+		question.NewQuestionTool(),
 	}
 	toolRegistry := tool.NewRegistry(tools)
 

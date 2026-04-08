@@ -213,6 +213,7 @@ func TestShellTool_Execute_FinalDisplay(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	llm, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -241,6 +242,7 @@ func TestShellTool_Execute_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -268,6 +270,7 @@ func TestShellTool_Execute_NonZeroExit(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -293,6 +296,7 @@ func TestShellTool_Execute_ContextCancelled(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	cancel()
@@ -320,6 +324,7 @@ func TestShellTool_Execute_Truncation(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
 	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -345,6 +350,7 @@ func TestShellTool_Display_StreamingOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	si := inv.(domain.StreamableInvocation)
+	si.Stream() // Guarantee stable pipeWriter state before concurrency
 
 	var buf strings.Builder
 	done := make(chan struct{})

@@ -127,7 +127,7 @@ func (t *FindFileTool) Prepare(params string) (domain.Invocation, error) {
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay(fmt.Sprintf("FIND %s", req.Pattern), fmt.Sprintf("FIND '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("FIND '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
 	}, nil
 }
 

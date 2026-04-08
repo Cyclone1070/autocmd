@@ -35,7 +35,7 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 					{
 						"question": "Pick one?",
 						"options": ["A", "B"],
-						"multiple": true
+						"multiSelect": true
 					}
 				]
 			}
@@ -50,7 +50,7 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 		assert.Equal(t, "question", d.Type())
 		assert.Len(t, d.Questions, 1)
 		assert.Equal(t, "Pick one?", d.Questions[0].Question)
-		assert.True(t, d.Questions[0].Multiple)
+		assert.True(t, d.Questions[0].MultiSelect)
 		assert.Len(t, d.Questions[0].Options, 2)
 		assert.Equal(t, "A", d.Questions[0].Options[0])
 	})

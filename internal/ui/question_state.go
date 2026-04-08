@@ -71,7 +71,7 @@ func OnReview(d domain.QuestionDisplay, s QuestionUIState) bool {
 
 // QuestionHasAnswer is true if the question has a non-empty selection or custom text.
 func QuestionHasAnswer(q domain.QuestionInfo, st QuestionPerState) bool {
-	if q.Multiple {
+	if q.MultiSelect {
 		for _, on := range st.MultiSelected {
 			if on {
 				return true
@@ -155,11 +155,16 @@ func applyExitCustomLikeEsc(q domain.QuestionInfo, st *QuestionPerState) {
 }
 
 // advanceAfterSingleAnswer moves to the next question, or to the review step when finishing the last question (n > 1).
+// If there is only one question (and it's not multi-select, which is handled upstream), it auto-submits.
 func advanceAfterSingleAnswer(d domain.QuestionDisplay, s *QuestionUIState) (QuestionUIState, QuestionOutcome) {
 	last := len(d.Questions) - 1
 	if s.Active < last {
 		s.Active++
 		return *s, QuestionOutcome{}
+	}
+	if len(d.Questions) == 1 {
+		s.Submitted = true
+		return *s, buildSubmitOutcome(d, *s)
 	}
 	if len(d.Questions) > 1 && s.Active == last {
 		s.Active = len(d.Questions)
@@ -181,7 +186,7 @@ func questionPrimaryAction(d domain.QuestionDisplay, s QuestionUIState) (Questio
 			applyExitCustomLikeEsc(q, st)
 			return s, QuestionOutcome{}
 		}
-		if q.Multiple {
+		if q.MultiSelect {
 			if st.CustomInputFocused {
 				st.SingleSelected = -1
 				st.CustomSelected = true
@@ -214,7 +219,7 @@ func questionPrimaryAction(d domain.QuestionDisplay, s QuestionUIState) (Questio
 	if st.Cursor < 0 || st.Cursor >= len(q.Options) {
 		return s, QuestionOutcome{}
 	}
-	if q.Multiple {
+	if q.MultiSelect {
 		st.MultiSelected[st.Cursor] = !st.MultiSelected[st.Cursor]
 		return s, QuestionOutcome{}
 	}
@@ -449,7 +454,7 @@ func buildSubmitOutcome(d domain.QuestionDisplay, s QuestionUIState) QuestionOut
 		st := s.Per[qi]
 		optsLen := len(q.Options)
 
-		if q.Multiple {
+		if q.MultiSelect {
 			var labels []string
 			for j, on := range st.MultiSelected {
 				if j < optsLen && on {

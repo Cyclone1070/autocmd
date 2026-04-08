@@ -309,7 +309,7 @@ func TestRenderQuestion_CustomRowOnlyWhenVisible(t *testing.T) {
 func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{{
-		Question: "Q", Options: []string{"A"}, Multiple: true,
+		Question: "Q", Options: []string{"A"}, MultiSelect: true,
 	}})
 	s := NewQuestionUIState(d)
 	s.Per[0].CustomBuffer = "x"

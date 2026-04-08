@@ -361,7 +361,7 @@ func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st Quest
 		}
 		main := opt
 		selected := false
-		if q.Multiple {
+		if q.MultiSelect {
 			mark := "[ ]"
 			if i < len(st.MultiSelected) && st.MultiSelected[i] {
 				mark = "[x]"
@@ -391,7 +391,7 @@ func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st Quest
 			bullet = " "
 		}
 		var label string
-		if q.Multiple {
+		if q.MultiSelect {
 			mark := "[ ]"
 			if st.CustomSelected {
 				mark = "[x]"

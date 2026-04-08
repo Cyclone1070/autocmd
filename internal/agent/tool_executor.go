@@ -269,32 +269,11 @@ func (e *ToolExecutor) executeInvocation(
 			panic("toolExecutor.executeInvocation: InteractiveInvocation encountered but no actionWaiter provided")
 		}
 
-		// Wait for the user to provide an answer/action
-		action, err := e.waiter.Wait(ctx, callID)
-		if err != nil {
-			// This could be ctx.Done() or a fatal router failure
-			content := "execution failed during interaction"
-			displayErr := "Interaction failed"
-			if errors.Is(err, context.Canceled) {
-				content = "execution cancelled"
-				displayErr = domain.ToolErrorCancelled
-			}
-			disp := inv.Display().WithError(displayErr)
-			if events != nil {
-				events.SendUIUpdate(domain.ToolEndEvent{
-					CallID:  callID,
-					Display: disp,
-				})
-			}
-			return &schema.Message{
-				Role:       schema.Tool,
-				ToolCallID: callID,
-				ToolName:   toolName,
-				Content:    content,
-			}, disp, err
-		}
+		// Wait for the user to provide an answer/action (only returns context error handled by Resolve)
+		action, _ := e.waiter.Wait(ctx, callID)
 
-		llmContent, finalDisplay, err := interInv.Resolve(ctx, action)
+		// On success or user cancellation (ctx.Err() != nil), we ask the tool to resolve the final state.
+		llmContent, finalDisplay, resErr := interInv.Resolve(ctx, action)
 		if finalDisplay == nil {
 			panic(fmt.Sprintf("tool %q Resolve returned nil finalDisplay (callID=%s)", toolName, callID))
 		}
@@ -309,7 +288,7 @@ func (e *ToolExecutor) executeInvocation(
 			ToolCallID: callID,
 			ToolName:   toolName,
 			Content:    llmContent,
-		}, finalDisplay, err
+		}, finalDisplay, resErr
 	}
 
 	var streamWG sync.WaitGroup

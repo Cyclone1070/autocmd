@@ -6,6 +6,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQuestionTool(t *testing.T) {
@@ -39,7 +40,7 @@ func TestQuestionTool(t *testing.T) {
 		d := inv.Display()
 		qd, ok := d.(domain.QuestionDisplay)
 		assert.True(t, ok)
-		assert.True(t, qd.Questions[0].MultiSelect) // This will fail to compile initially
+		assert.True(t, qd.Questions[0].MultiSelect)
 	})
 
 	t.Run("Resolve and Format", func(t *testing.T) {
@@ -50,7 +51,7 @@ func TestQuestionTool(t *testing.T) {
 		act := domain.QuestionAnswerAction{
 			Answers: [][]string{{"Alice"}},
 		}
-		
+
 		llmContent, finalDisplay, err := ii.Resolve(context.Background(), act)
 		assert.NoError(t, err)
 		assert.Contains(t, llmContent, "Alice")
@@ -58,6 +59,38 @@ func TestQuestionTool(t *testing.T) {
 
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		assert.True(t, ok)
+		assert.Equal(t, "Questions attempted", sd.Comment)
 		assert.Contains(t, sd.Content, "Alice")
+	})
+
+	t.Run("Resolve Cancellation", func(t *testing.T) {
+		params := `{"questions": [{"question": "Color?"}, {"question": "Size?"}]}`
+		inv, _ := tool.Prepare(params)
+		ii, _ := inv.(domain.InteractiveInvocation)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		llmContent, finalDisplay, err := ii.Resolve(ctx, nil)
+		assert.Error(t, err)
+		assert.Equal(t, context.Canceled, err)
+		assert.Equal(t, "execution cancelled", llmContent)
+
+		sd, ok := finalDisplay.(domain.StringDisplay)
+		require.True(t, ok)
+		assert.Equal(t, domain.ToolErrorCancelled, sd.Error)
+		assert.Equal(t, "Questions attempted", sd.Comment)
+		assert.Equal(t, "Q: Color?\n\nQ: Size?", sd.Content)
+	})
+}
+
+func TestQuestionTool_Resolve_PanicsOnUnexpectedAction(t *testing.T) {
+	tool := NewQuestionTool()
+	params := `{"questions": [{"question": "Q"}]}`
+	inv, _ := tool.Prepare(params)
+	ii, _ := inv.(domain.InteractiveInvocation)
+
+	assert.Panics(t, func() {
+		_, _, _ = ii.Resolve(context.Background(), domain.StopAction{})
 	})
 }

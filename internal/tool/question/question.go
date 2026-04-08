@@ -80,14 +80,29 @@ func (i *QuestionInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error) {
+	if ctx.Err() != nil {
+		list := i.formatQuestionList()
+		display := domain.NewStringDisplay("Questions attempted", list)
+		display.Error = domain.ToolErrorCancelled
+		return "execution cancelled", display, ctx.Err()
+	}
+
 	qa, ok := action.(domain.QuestionAnswerAction)
 	if !ok {
-		return "", nil, fmt.Errorf("expected QuestionAnswerAction, got %T", action)
+		panic(fmt.Sprintf("QuestionInvocation.Resolve: expected QuestionAnswerAction, got %T", action))
 	}
 
 	summary := formatAnswerSummary(i.questions, qa.Answers)
 
-	return summary, domain.NewStringDisplay("", summary), nil
+	return summary, domain.NewStringDisplay("Questions attempted", summary), nil
+}
+
+func (i *QuestionInvocation) formatQuestionList() string {
+	var out []string
+	for _, q := range i.questions {
+		out = append(out, "Q: "+q.Question)
+	}
+	return strings.Join(out, "\n\n")
 }
 
 func formatAnswerSummary(questions []domain.QuestionInfo, answers [][]string) string {

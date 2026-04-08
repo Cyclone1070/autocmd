@@ -451,7 +451,7 @@ func TestModel_Question_EscSendsStopAction(t *testing.T) {
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, &mockAnimator{}, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
-	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{{Question: "q"}})
+	qd := domain.NewQuestionDisplay([]domain.QuestionInfo{{Question: "q", Options: []string{"Yes"}}})
 	m.tools = []toolSlot{
 		{callID: "call-q", display: qd, status: ui.StatusRunning, questionState: ui.NewQuestionUIState(qd)},
 	}

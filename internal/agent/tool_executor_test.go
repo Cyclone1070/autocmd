@@ -1186,3 +1186,46 @@ loop:
 	assert.Equal(t, 8192, totalReceived, "Should receive all 8KB of data")
 	assert.Equal(t, 1, eventCount, "Should receive all 8KB in a single event when buffer is 1MB")
 }
+
+func TestExecute_InteractiveInvocation_Cancelled_DelegatesToResolve(t *testing.T) {
+	callID := "tc-int-cancel"
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel the context
+
+	mt := &mockTool{
+		name: "ask",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInteractiveInvocation{
+				display: domain.QuestionDisplay{TypeField: "question"},
+				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay, error) {
+					// This test verifies that Resolve is actually called despite cancellation
+					if err := ctx.Err(); err != nil {
+						return "execution cancelled", domain.NewStringDisplay("Questions attempted", "Q: Color?").WithError(domain.ToolErrorCancelled), err
+					}
+					return "ok", domain.NewStringDisplay("", "Done"), nil
+				},
+			}, nil
+		},
+	}
+
+	// This waiter should return context.Canceled immediately due to the pre-cancelled ctx
+	waiter := &mockActionWaiter{
+		wait: func(ctx context.Context, cid string) (domain.Action, error) {
+			return nil, ctx.Err()
+		},
+	}
+
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := NewToolExecutor(registry, waiter)
+
+	res, disp, err := executor.execute(ctx, &schema.ToolCall{
+		ID:       callID,
+		Function: schema.FunctionCall{Name: "ask"},
+	}, nil)
+
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, "execution cancelled", res.Content)
+	sd, ok := disp.(domain.StringDisplay)
+	require.True(t, ok, "Expected StringDisplay from Resolve, got %T", disp)
+	assert.Equal(t, "Questions attempted", sd.Comment, "Should have used display from Resolve")
+}

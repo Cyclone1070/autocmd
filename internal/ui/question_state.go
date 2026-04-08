@@ -44,12 +44,17 @@ type QuestionOutcome struct {
 func NewQuestionUIState(d domain.QuestionDisplay) QuestionUIState {
 	per := make([]QuestionPerState, len(d.Questions))
 	for i := range d.Questions {
-		n := len(d.Questions[i].Options)
-		per[i] = QuestionPerState{
-			Cursor:        0,
-			MultiSelected: make([]bool, n),
+		q := d.Questions[i]
+		n := len(q.Options)
+		st := QuestionPerState{
+			Cursor:         0,
+			MultiSelected:  make([]bool, n),
 			SingleSelected: -1,
 		}
+		if n == 0 {
+			st.CustomInputFocused = true
+		}
+		per[i] = st
 	}
 	return QuestionUIState{Active: 0, Per: per, ReviewCursor: 0, Submitted: false}
 }

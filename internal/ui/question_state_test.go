@@ -44,6 +44,29 @@ func TestNewQuestionUIState_BuildsPerQuestionSlices(t *testing.T) {
 	assert.False(t, s.Submitted)
 }
 
+func TestNewQuestionUIState_NoOptions_AutoCustomInput(t *testing.T) {
+	d := domain.NewQuestionDisplay([]domain.QuestionInfo{
+		{Question: "Enter text:", Options: []string{}, MultiSelect: false},
+	})
+	s := NewQuestionUIState(d)
+	require.Len(t, s.Per, 1)
+	assert.True(t, s.Per[0].CustomInputFocused, "Should start in custom input mode if no options")
+	assert.False(t, s.Per[0].CustomSelected, "Should NOT be selected by default even if no other options")
+}
+
+func TestHandleQuestionKey_NoOptions_EnterOnEmptyCustomExitsFocus(t *testing.T) {
+	d := domain.NewQuestionDisplay([]domain.QuestionInfo{
+		{Question: "Enter text:", Options: []string{}, MultiSelect: false},
+	})
+	s := NewQuestionUIState(d)
+	require.True(t, s.Per[0].CustomInputFocused)
+
+	// Enter on empty custom buffer should exit focus
+	s, out := HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyEnter})
+	assert.False(t, out.Done)
+	assert.False(t, s.Per[0].CustomInputFocused, "Should exit focus if empty")
+}
+
 func TestHandleQuestionKey_LeftRightChangesActiveTab(t *testing.T) {
 	d := qDisplayMultiTwoQuestions()
 	s := NewQuestionUIState(d)

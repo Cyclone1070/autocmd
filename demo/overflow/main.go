@@ -14,7 +14,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
@@ -110,7 +109,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
 	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
 	shellTool := shell.NewShellTool(res, fs)
-	listTool := directory.NewListDirectoryTool(fs, res, nil)
 
 	// 15-line argument (simulating Go code or large config)
 	lines := make([]string, 15)
@@ -219,20 +217,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	time.Sleep(200 * time.Millisecond)
 	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "edit-overflow", Display: editEnd})
 
-	// 6. list_directory Overflow (Wrapped path)
-	listArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/dir/that/is/very/long/and/will/definitely/wrap"}
-	listArgsData, _ := json.Marshal(listArgsObj)
-	listInv, _ := listTool.Prepare(string(listArgsData))
-	var listEnd domain.ToolDisplay
-	if listInv != nil {
-		listEnd = listInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "list-overflow",
-			Display:  listInv.Display(),
-		})
-	}
 	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "list-overflow", Display: listEnd})
 
 	// 7. read_file (Full Path Verification)
 	readArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/main.go"}

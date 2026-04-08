@@ -16,7 +16,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
@@ -86,7 +85,6 @@ func main() {
 		file.NewWriteFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
 		file.NewEditFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
 		file.NewReadFileTool(fileSystem, &mockChecksum{}, pathResolver),
-		directory.NewListDirectoryTool(fileSystem, pathResolver, nil),
 		search.NewSearchContentTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewFindFileTool(fileSystem, cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
@@ -144,7 +142,6 @@ func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, op
 		{"write_file", `{"path": "temp.md", "content": "# Temp File\nInitial content.", "comment": "Creating temp file"}`},
 		{"edit_file", `{"path": "temp.md", "operations": [{"before": "Initial content.", "after": "Updated via Edit Tool.", "expected_replacements": 1}], "comment": "Updating content"}`},
 		{"read_file", `{"path": "temp.md"}`},
-		{"list_directory", `{"path": "."}`},
 		{"search_content", `{"pattern": "Updated", "path": "."}`},
 		{"find_file", `{"pattern": "temp.md"}`},
 		{"ask_question", `{"questions": [{"question": "Did you see the real tools working?", "options": ["Yes", "Hell yeah"]}]}`},

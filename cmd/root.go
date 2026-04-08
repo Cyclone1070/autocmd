@@ -13,12 +13,10 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/Cyclone1070/iav/internal/tool/directory"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/service/git"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/shell"
 	"github.com/Cyclone1070/iav/internal/eventbus"
@@ -81,13 +79,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	cmdExecutor := executor.NewOSCommandExecutor()
 	checksumMgr := hash.NewChecksumManager()
 
-	ignoreMatcher, err := git.NewIgnoreMatcher(pathResolver.Root(), fileSystem)
-	if err != nil {
-		ignoreMatcher = nil
-	}
-
 	tools := []domain.Tool{
-		directory.NewListDirectoryTool(fileSystem, pathResolver, ignoreMatcher),
 		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
 		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),

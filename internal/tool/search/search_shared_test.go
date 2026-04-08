@@ -54,14 +54,15 @@ func (m *mockPathResolver) Rel(p string) (string, error) {
 }
 
 type toolMockFileInfo struct {
-	name  string
-	isDir bool
+	name    string
+	isDir   bool
+	modTime time.Time
 }
 
 func (m *toolMockFileInfo) Name() string       { return m.name }
 func (m *toolMockFileInfo) Size() int64        { return 0 }
 func (m *toolMockFileInfo) Mode() os.FileMode  { return 0 }
-func (m *toolMockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m *toolMockFileInfo) ModTime() time.Time { return m.modTime }
 func (m *toolMockFileInfo) IsDir() bool        { return m.isDir }
 func (m *toolMockFileInfo) Sys() any           { return nil }
 

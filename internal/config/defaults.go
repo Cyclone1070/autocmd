@@ -62,19 +62,19 @@ func DefaultConfig() *Config {
 	return &Config{
 		tools: ToolsConfig{
 			maxFileSize:   20 * 1024 * 1024,
-			maxIterations: 20,
+			maxIterations: 50,
 		},
 		session: SessionConfig{
 			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
 		},
 		ui: UIConfig{
-			primaryColor:      ColorConfig{light: "#0EA5E9", dark: "#38BDF8"},
-			successColor:      ColorConfig{light: "#43BF6D", dark: "#73F59F"},
-			errorColor:        ColorConfig{light: "#F05D5E", dark: "#FF6666"},
-			mutedColor:        ColorConfig{light: "#D9DCCF", dark: "#888888"},
-			chatWindowWidth:   80,
+			primaryColor:     ColorConfig{light: "#0EA5E9", dark: "#38BDF8"},
+			successColor:     ColorConfig{light: "#43BF6D", dark: "#73F59F"},
+			errorColor:       ColorConfig{light: "#F05D5E", dark: "#FF6666"},
+			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
+			chatWindowWidth:  80,
 			bashOutputHeight: 12,
-			shortToolbox:      false,
+			shortToolbox:     false,
 		},
 		providers: ProviderConfig{
 			"google": {

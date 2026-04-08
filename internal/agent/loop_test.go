@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func ptr[T any](v T) *T { return &v }
 
 // --- Mocks ---
 
@@ -167,7 +166,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []mockChunk{
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "get_weather"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "get_weather"}}},
 			}},
 			{chunks: []mockChunk{
 				{text: "It's sunny!"},
@@ -203,7 +202,7 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []mockChunk{
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-stream", Function: schema.FunctionCall{Name: "bash"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-stream", Function: schema.FunctionCall{Name: "bash"}}},
 			}},
 		},
 	}
@@ -233,9 +232,9 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 	m := &mockLLM{
 		id: "infinite",
 		streams: []*mockStream{
-			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
-			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
-			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
+			{chunks: []mockChunk{{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-inf", Function: schema.FunctionCall{Name: "infinite"}}}}},
 		},
 	}
 
@@ -286,8 +285,8 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []mockChunk{
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
-				{toolCall: &schema.ToolCall{Index: ptr(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: new(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 			}},
 			{chunks: []mockChunk{{text: "Done."}}},
 		},
@@ -360,8 +359,8 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 		id: "test",
 		streams: []*mockStream{
 			{chunks: []mockChunk{
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
-				{toolCall: &schema.ToolCall{Index: ptr(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: new(1), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 			}},
 		},
 	}
@@ -425,8 +424,8 @@ func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
 		id: "buggy-gemini-bridge",
 		streams: []*mockStream{
 			{chunks: []mockChunk{
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 			}},
 			{chunks: []mockChunk{{text: "Done."}}},
 		},
@@ -467,12 +466,12 @@ func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
 		streams: []*mockStream{
 			{chunks: []mockChunk{
 				// Tool 1: Index 0
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
-				{toolCall: &schema.ToolCall{Index: ptr(0), Function: schema.FunctionCall{Arguments: `{"a":1}`}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), Function: schema.FunctionCall{Arguments: `{"a":1}`}}},
 				
 				// Tool 2: ALSO Index 0 (Collision starts here)
-				{toolCall: &schema.ToolCall{Index: ptr(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
-				{toolCall: &schema.ToolCall{Index: ptr(0), Function: schema.FunctionCall{Arguments: `{"b":2}`}}},
+				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				{toolCall: &schema.ToolCall{Index: new(0), Function: schema.FunctionCall{Arguments: `{"b":2}`}}},
 			}},
 			{chunks: []mockChunk{{text: "Done."}}},
 		},

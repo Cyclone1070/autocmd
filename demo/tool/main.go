@@ -184,9 +184,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 2. Diff Suite
 	if err := runSuite("DIFF",
-		domain.NewDiffDisplay("Updating file.txt", "Edit file.txt", 1, 1, "- old\n+ new"),
-		domain.NewDiffDisplay("Fixing fast.txt", "Edit fast.txt", 1, 1, "- fast\n+ gone"),
-		domain.NewDiffDisplay("Fixing med.txt", "Edit med.txt", 1, 1, "- error here\n+ failed")); err != nil {
+		domain.NewDiffDisplay("Updating \"file.txt\"", "EDIT \"file.txt\"", 1, 1, "- old\n+ new"),
+		domain.NewDiffDisplay("Fixing \"fast.txt\"", "EDIT \"fast.txt\"", 1, 1, "- fast\n+ gone"),
+		domain.NewDiffDisplay("Fixing \"med.txt\"", "EDIT \"med.txt\"", 1, 1, "- error here\n+ failed")); err != nil {
 		return err
 	}
 

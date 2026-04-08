@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/agent"
@@ -16,11 +15,13 @@ import (
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/bash"
+	"github.com/Cyclone1070/iav/internal/tool/service/hash"
+	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -77,14 +78,15 @@ func main() {
 
 	// Real Tool Setup
 	cwd, _ := os.Getwd()
-	pathResolver := &mockPathResolver{cwd: cwd}
+	pathResolver := path.NewResolver(cwd)
 	fileSystem := fs.NewOSFileSystem(1024 * 1024)
 	cmdExecutor := executor.NewOSCommandExecutor()
+	checksumManager := hash.NewChecksumManager()
 
 	tools := []domain.Tool{
-		file.NewWriteFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
-		file.NewEditFileTool(fileSystem, &mockChecksum{}, pathResolver, 1024*1024),
-		file.NewReadFileTool(fileSystem, &mockChecksum{}, pathResolver),
+		file.NewWriteFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
+		file.NewEditFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
+		file.NewReadFileTool(fileSystem, checksumManager, pathResolver),
 		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
@@ -183,28 +185,6 @@ func (l *statefulMockLLM) Bind(tools []*schema.ToolInfo) (model.ToolCallingChatM
 func (l *statefulMockLLM) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	return l, nil
 }
-
-// Mocks for dependencies
-type mockPathResolver struct{ cwd string }
-
-func (r *mockPathResolver) Abs(p string) (string, error) {
-	if filepath.IsAbs(p) {
-		return p, nil
-	}
-	return filepath.Join(r.cwd, p), nil
-}
-
-func (r *mockPathResolver) Rel(p string) (string, error) {
-	return filepath.Rel(r.cwd, p)
-}
-
-func (r *mockPathResolver) Root() string { return r.cwd }
-
-type mockChecksum struct{}
-
-func (c *mockChecksum) Compute(data []byte) string          { return "sum" }
-func (c *mockChecksum) Get(path string) (string, bool)      { return "sum", true }
-func (c *mockChecksum) Update(path string, checksum string) {}
 
 type mockStore struct{}
 

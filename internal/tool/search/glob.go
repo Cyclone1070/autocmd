@@ -101,8 +101,10 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 
 	absPath, err := t.pathResolver.Abs(searchPath)
 	if err != nil {
-		return nil, fmt.Errorf("invalid path: %w", err)
+		return nil, err
 	}
+
+	displayPath := t.pathResolver.DisplayPath(absPath)
 
 	// Fail Fast: Verify path exists and is a directory
 	info, err := t.fs.Stat(absPath)
@@ -116,10 +118,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
-	relPath, err := t.pathResolver.Rel(absPath)
-	if err != nil {
-		relPath = filepath.Base(absPath)
-	}
+	// DisplayPath is used for the TUI summary below
 
 	return &globInvocation{
 		fs:              t.fs,
@@ -127,7 +126,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 		pathResolver:    t.pathResolver,
 		absPath:         absPath,
 		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("GLOB '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("GLOB \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
 	}, nil
 }
 
@@ -199,11 +198,8 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			continue
 		}
 
-		relPath, err := i.pathResolver.Rel(line)
-		if err != nil {
-			relPath = line
-		}
-		matches = append(matches, filepath.ToSlash(relPath))
+		relPath := i.pathResolver.DisplayPath(line)
+		matches = append(matches, fmt.Sprintf("\"%s\"", filepath.ToSlash(relPath)))
 
 		if len(matches) >= maxResults {
 			hitMaxResults = true

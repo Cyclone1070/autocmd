@@ -17,8 +17,6 @@ import (
 )
 
 const (
-	defaultMaxLineLength = 10000
-
 	// Default pagination limits
 	defaultHeadLimit = 250
 	defaultOffset    = 0
@@ -58,8 +56,6 @@ type GrepTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
-
-	maxLineLength int // For testing
 }
 
 // NewGrepTool creates a new GrepTool with injected dependencies.
@@ -81,7 +77,6 @@ func NewGrepTool(
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
-		maxLineLength:   defaultMaxLineLength,
 	}
 }
 
@@ -89,70 +84,51 @@ func (t *GrepTool) Name() string {
 	return "grep"
 }
 
+func (t *GrepTool) Desc() string {
+	return "Search for patterns in files using ripgrep. Optimized for content search across multiple files."
+}
+
 func (t *GrepTool) IsConcurrentSafe() bool { return true }
 
+// Definition returns the tool's schema for the LLM using eino schema.
 func (t *GrepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "grep",
-		Desc: "Search for patterns within file contents across a directory.",
+		Desc: "Search for patterns in files using ripgrep. Optimized for content search across multiple files.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
 				Type:     schema.String,
-				Desc:     "The regular expression pattern to search for in file contents",
+				Desc:     "The regex pattern to search for (ripgrep syntax).",
 				Required: true,
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "File or directory to search in (rg PATH). Defaults to current working directory.",
+				Desc: "Directory or file to search in. Defaults to current directory.",
 			},
 			"glob": {
 				Type: schema.String,
-				Desc: "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob",
+				Desc: "File glob patterns to include (e.g., \"*.go\" or \"{*.js,*.ts}\").",
 			},
 			"output_mode": {
 				Type: schema.String,
-				Desc: fmt.Sprintf("Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"files_with_matches\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to %q.", defaultOutputMode),
-				Enum: []string{"content", "files_with_matches", "count"},
+				Enum: []string{"files_with_matches", "content", "count"},
+				Desc: "Format of the results. Defaults to files_with_matches.",
 			},
 			"head_limit": {
 				Type: schema.Integer,
-				Desc: fmt.Sprintf("Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults to %d when unspecified. Pass 0 for unlimited (use sparingly — large result sets waste context).", defaultHeadLimit),
+				Desc: "Limit the number of results returned. Default: 250.",
 			},
 			"offset": {
 				Type: schema.Integer,
-				Desc: fmt.Sprintf("Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to %d.", defaultOffset),
+				Desc: "Offset for pagination. Default: 0.",
+			},
+			"case_insensitive": {
+				Type: schema.Boolean,
+				Desc: "Search case-insensitively. Default: false.",
 			},
 			"context": {
 				Type: schema.Integer,
-				Desc: "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise.",
-			},
-			"-C": {
-				Type: schema.Integer,
-				Desc: "Alias for context.",
-			},
-			"-B": {
-				Type: schema.Integer,
-				Desc: "Number of lines to show before each match (rg -B). Requires output_mode: \"content\", ignored otherwise.",
-			},
-			"-A": {
-				Type: schema.Integer,
-				Desc: "Number of lines to show after each match (rg -A). Requires output_mode: \"content\", ignored otherwise.",
-			},
-			"-n": {
-				Type: schema.Boolean,
-				Desc: "Show line numbers in output (rg -n). Requires output_mode: \"content\", ignored otherwise. Defaults to true.",
-			},
-			"-i": {
-				Type: schema.Boolean,
-				Desc: "Case insensitive search (rg -i)",
-			},
-			"type": {
-				Type: schema.String,
-				Desc: "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than glob for standard file types.",
-			},
-			"multiline": {
-				Type: schema.Boolean,
-				Desc: "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
+				Desc: "Number of context lines to show before and after each match (rg -C).",
 			},
 		}),
 	}
@@ -178,16 +154,20 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		req.OutputMode = defaultOutputMode
 	}
 	if req.HeadLimit == nil {
-		req.HeadLimit = new(defaultHeadLimit)
+		req.HeadLimit = new(int)
+		*req.HeadLimit = defaultHeadLimit
 	}
 	if req.Offset == nil {
-		req.Offset = new(defaultOffset)
+		req.Offset = new(int)
+		*req.Offset = defaultOffset
 	}
 	if req.ShowLineNumbers == nil {
-		req.ShowLineNumbers = new(true)
+		req.ShowLineNumbers = new(bool)
+		*req.ShowLineNumbers = true
 	}
 	if req.I == nil {
-		req.I = new(false)
+		req.I = new(bool)
+		*req.I = false
 	}
 
 	searchPath := req.Path
@@ -201,7 +181,9 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, err
 	}
 
-	// Check if path exists (file or directory is fine)
+	displayPath := t.pathResolver.DisplayPath(absSearchPath)
+
+	// Check if path exists
 	_, err = t.fs.Stat(absSearchPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -210,19 +192,13 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("failed to stat %s: %w", searchPath, err)
 	}
 
-	relPath, err := t.pathResolver.Rel(absSearchPath)
-	if err != nil {
-		relPath = filepath.Base(absSearchPath)
-	}
-
 	return &grepInvocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		pathResolver:    t.pathResolver,
 		absPath:         absSearchPath,
 		req:             req,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("GREP '%s' IN %s", req.Pattern, filepath.ToSlash(relPath))),
-		maxLineLength:   t.maxLineLength,
+		display:         domain.NewStringDisplay(fmt.Sprintf("Grep scan \"%s\"", filepath.ToSlash(displayPath)), fmt.Sprintf("GREP \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
 	}, nil
 }
 
@@ -233,7 +209,6 @@ type grepInvocation struct {
 	absPath         string
 	req             *GrepRequest
 	display         domain.StringDisplay
-	maxLineLength   int
 }
 
 func (i *grepInvocation) Display() domain.ToolDisplay {
@@ -255,110 +230,15 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		if os.IsNotExist(err) {
-			d.Error = err.Error()
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, errors.New("Execution failed")
-		}
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, errors.New("Execution failed")
 	}
 
-	// Determine Output Mode
 	mode := i.req.OutputMode
-
-	// Build ripgrep command
-	cmd := []string{"rg", "--hidden", "--with-filename"}
-	for _, excl := range vcsExclusions {
-		cmd = append(cmd, fmt.Sprintf("--glob=!%s", excl))
-	}
-	cmd = append(cmd, "--max-columns", strconv.Itoa(defaultMaxColumns))
-
-	// Mode flags
-	switch mode {
-	case "files_with_matches":
-		cmd = append(cmd, "-l")
-	case "count":
-		cmd = append(cmd, "-c")
-	case "content":
-		// default behavior of rg is content
-		if *i.req.ShowLineNumbers {
-			cmd = append(cmd, "-n")
-		}
-
-		// Context
-		contextLines := 0
-		if i.req.ContextC != nil {
-			contextLines = *i.req.ContextC
-		} else if i.req.ContextLines != nil {
-			contextLines = *i.req.ContextLines
-		}
-
-		if contextLines > 0 {
-			cmd = append(cmd, "-C", fmt.Sprintf("%d", contextLines))
-		} else {
-			if i.req.ContextB != nil && *i.req.ContextB > 0 {
-				cmd = append(cmd, "-B", fmt.Sprintf("%d", *i.req.ContextB))
-			}
-			if i.req.ContextA != nil && *i.req.ContextA > 0 {
-				cmd = append(cmd, "-A", fmt.Sprintf("%d", *i.req.ContextA))
-			}
-		}
-	}
-
-	// Global Search behavior flags
-	if *i.req.I {
-		cmd = append(cmd, "-i")
-	}
-	if i.req.Multiline != nil && *i.req.Multiline {
-		cmd = append(cmd, "-U", "--multiline-dotall")
-	}
-	if i.req.Type != "" {
-		cmd = append(cmd, "--type", i.req.Type)
-	}
-	if i.req.Glob != "" {
-		// Split by spaces or commas, but ignore them inside {} braces
-		var globs []string
-		var current strings.Builder
-		braceLevel := 0
-		for _, char := range i.req.Glob {
-			switch char {
-			case '{':
-				braceLevel++
-			case '}':
-				braceLevel--
-			}
-
-			if (char == ' ' || char == ',') && braceLevel == 0 {
-				if current.Len() > 0 {
-					globs = append(globs, current.String())
-					current.Reset()
-				}
-			} else {
-				current.WriteRune(char)
-			}
-		}
-		if current.Len() > 0 {
-			globs = append(globs, current.String())
-		}
-
-		for _, g := range globs {
-			cmd = append(cmd, fmt.Sprintf("--glob=%s", strings.TrimSpace(g)))
-		}
-	}
-
-	// Pattern handling (protect patterns starting with -)
-	if strings.HasPrefix(i.req.Pattern, "-") {
-		cmd = append(cmd, "-e", i.req.Pattern)
-	} else {
-		cmd = append(cmd, "--", i.req.Pattern)
-	}
-	cmd = append(cmd, i.absPath)
-
-	// Ensure working directory is a directory
-	workDir := i.absPath
-	stat, err := i.fs.Stat(workDir)
-	if err == nil && !stat.IsDir() {
-		workDir = filepath.Dir(workDir)
+	cmd, workDir, err := i.prepareGrepCommand()
+	if err != nil {
+		d.Error = err.Error()
+		return fmt.Sprintf("Error: %v", err), d, errors.New("Execution failed")
 	}
 
 	res, err := i.commandExecutor.Run(ctx, cmd, workDir, os.Environ())
@@ -368,32 +248,102 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			return "execution cancelled", d, ctx.Err()
 		}
 		d.Error = err.Error()
-		return fmt.Sprintf("Error: rg failed to start: %v", err), d, errors.New("Execution failed")
+		return fmt.Sprintf("Error: rg failed: %v", err), d, errors.New("Execution failed")
 	}
 
-	// rg ExitCode 1 means no matches found, which is not a tool failure.
 	if res.ExitCode != 0 && res.ExitCode != 1 {
 		d.Error = fmt.Sprintf("exit code %d", res.ExitCode)
 		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), d, errors.New("Execution failed")
 	}
 
-	// Process output based on mode
 	return i.formatResults(res.Stdout, mode), d, nil
 }
 
+func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
+	mode := i.req.OutputMode
+	cmd := []string{"rg", "--hidden", "--with-filename"}
+	for _, excl := range vcsExclusions {
+		cmd = append(cmd, fmt.Sprintf("--glob=!%s", excl))
+	}
+	cmd = append(cmd, "--max-columns", strconv.Itoa(defaultMaxColumns))
+
+	switch mode {
+	case "files_with_matches":
+		cmd = append(cmd, "-l")
+	case "count":
+		cmd = append(cmd, "-c")
+	case "content":
+		if i.req.ShowLineNumbers == nil || *i.req.ShowLineNumbers {
+			cmd = append(cmd, "-n")
+		}
+		contextLines := 0
+		if i.req.ContextC != nil {
+			contextLines = *i.req.ContextC
+		} else if i.req.ContextLines != nil {
+			contextLines = *i.req.ContextLines
+		}
+		if contextLines > 0 {
+			cmd = append(cmd, "-C", strconv.Itoa(contextLines))
+		} else {
+			if i.req.ContextB != nil && *i.req.ContextB > 0 {
+				cmd = append(cmd, "-B", strconv.Itoa(*i.req.ContextB))
+			}
+			if i.req.ContextA != nil && *i.req.ContextA > 0 {
+				cmd = append(cmd, "-A", strconv.Itoa(*i.req.ContextA))
+			}
+		}
+	}
+
+	if i.req.I != nil && *i.req.I {
+		cmd = append(cmd, "-i")
+	}
+	if i.req.Multiline != nil && *i.req.Multiline {
+		cmd = append(cmd, "-U", "--multiline-dotall")
+	}
+	if i.req.Type != "" {
+		cmd = append(cmd, "--type", i.req.Type)
+	}
+	if i.req.Glob != "" {
+		globs := splitGlobs(i.req.Glob)
+		for _, g := range globs {
+			cmd = append(cmd, fmt.Sprintf("--glob=%s", g))
+		}
+	}
+
+	if strings.HasPrefix(i.req.Pattern, "-") {
+		cmd = append(cmd, "-e", i.req.Pattern)
+	} else {
+		cmd = append(cmd, "--", i.req.Pattern)
+	}
+	cmd = append(cmd, i.absPath)
+
+	workDir := i.absPath
+	stat, err := i.fs.Stat(workDir)
+	if err == nil && !stat.IsDir() {
+		workDir = filepath.Dir(workDir)
+	}
+
+	return cmd, workDir, nil
+}
+
 func (i *grepInvocation) formatResults(stdout string, mode string) string {
-	headLimit := *i.req.HeadLimit
+	headLimit := defaultHeadLimit
+	if i.req.HeadLimit != nil {
+		headLimit = *i.req.HeadLimit
+	}
 	if headLimit == 0 {
 		headLimit = maxUnlimitedResults
 	}
-	offset := *i.req.Offset
+	offset := 0
+	if i.req.Offset != nil {
+		offset = *i.req.Offset
+	}
 
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	if stdout == "" {
 		lines = []string{}
 	}
 
-	// For files_with_matches mode, we need to stat and sort by recency
 	if mode == "files_with_matches" && len(lines) > 0 {
 		type fileMatch struct {
 			path  string
@@ -401,6 +351,8 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 		}
 		var matches []fileMatch
 		for _, line := range lines {
+			// Strip quotes if any
+			line = strings.Trim(line, "\"")
 			info, err := i.fs.Stat(line)
 			mtime := time.Time{}
 			if err == nil {
@@ -408,21 +360,18 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 			}
 			matches = append(matches, fileMatch{path: line, mtime: mtime})
 		}
-		// Sort by mtime descending
 		sort.SliceStable(matches, func(i, j int) bool {
 			if !matches[i].mtime.Equal(matches[j].mtime) {
 				return matches[i].mtime.After(matches[j].mtime)
 			}
-			return matches[i].path < matches[j].path // Alphabetical tie-break
+			return matches[i].path < matches[j].path
 		})
-		// Re-populate lines
 		lines = make([]string, len(matches))
 		for idx, m := range matches {
 			lines[idx] = m.path
 		}
 	}
 
-	// If offset >= len(lines), return "No matches found" or similar
 	if offset >= len(lines) && len(lines) > 0 {
 		return "No results found in the specified range."
 	}
@@ -435,7 +384,6 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 
 	var sb strings.Builder
 	totalCount := len(lines)
-
 	end := offset + headLimit
 	wasTruncated := false
 	if end > len(lines) {
@@ -448,35 +396,33 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 	switch mode {
 	case "files_with_matches":
 		fmt.Fprintf(&sb, "Found %d files", totalCount)
-		// Only show limit/offset if truncation actually occurred (matching Claude Code behavior)
 		if wasTruncated || offset > 0 {
 			fmt.Fprintf(&sb, " limit: %d, offset: %d", headLimit, offset)
 		}
 		sb.WriteString("\n")
 		for _, line := range visibleLines {
-			rel, err := i.pathResolver.Rel(line)
-			if err != nil {
-				rel = filepath.Base(line)
-			}
-			sb.WriteString(filepath.ToSlash(rel) + "\n")
+			rel := i.pathResolver.DisplayPath(line)
+			// Ensure we use double quotes for paths
+			sb.WriteString(fmt.Sprintf("\"%s\"\n", filepath.ToSlash(rel)))
 		}
 	case "count":
 		totalOccurrences := 0
+		distinctFiles := make(map[string]bool)
 		for _, line := range visibleLines {
-			parts := strings.Split(line, ":")
-			file := parts[0]
-			rel, err := i.pathResolver.Rel(file)
-			if err != nil {
-				rel = filepath.Base(file)
+			idx := strings.LastIndex(line, ":")
+			if idx == -1 {
+				sb.WriteString(line + "\n")
+				continue
 			}
-			count := ""
-			if len(parts) > 1 {
-				count = parts[1]
-				var c int
-				fmt.Sscanf(count, "%d", &c)
-				totalOccurrences += c
-			}
-			fmt.Fprintf(&sb, "%s:%s\n", filepath.ToSlash(rel), count)
+			file := line[:idx]
+			count := line[idx+1:]
+			rel := i.pathResolver.DisplayPath(file)
+			distinctFiles[rel] = true
+			var c int
+			fmt.Sscanf(count, "%d", &c)
+			totalOccurrences += c
+			// Quote the filename
+			fmt.Fprintf(&sb, "\"%s\":%s\n", filepath.ToSlash(rel), count)
 		}
 		sb.WriteString("\nFound ")
 		if totalOccurrences == 1 {
@@ -484,37 +430,94 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 		} else {
 			fmt.Fprintf(&sb, "%d total occurrences", totalOccurrences)
 		}
-		sb.WriteString(" across ")
-		if totalCount == 1 {
-			sb.WriteString("1 file.")
-		} else {
-			fmt.Fprintf(&sb, "%d files.", totalCount)
+		
+		numFiles := len(distinctFiles)
+		if numFiles == 1 {
+			sb.WriteString(" across 1 file.")
+		} else if numFiles > 1 {
+			fmt.Fprintf(&sb, " across %d files.", numFiles)
 		}
+
 		if wasTruncated || offset > 0 {
-			fmt.Fprintf(&sb, " with pagination = limit: %d, offset: %d", headLimit, offset)
+			fmt.Fprintf(&sb, " (limit: %d, offset: %d)", headLimit, offset)
 		}
 	case "content":
+		sb.WriteString("Matches:\n")
 		for _, line := range visibleLines {
-			// Lines are typically "file:line:content"
-			parts := strings.SplitN(line, ":", 3)
-			if len(parts) < 3 {
-				// might be context line "file-line-content"
-				parts = strings.SplitN(line, "-", 3)
-			}
-			if len(parts) >= 3 {
-				rel, err := i.pathResolver.Rel(parts[0])
-				if err != nil {
-					rel = filepath.Base(parts[0])
-				}
-				fmt.Fprintf(&sb, "%s:%s:%s\n", filepath.ToSlash(rel), parts[1], parts[2])
-			} else {
+			file, lineNum, content, ok := parseGrepLine(line)
+			if !ok {
 				sb.WriteString(line + "\n")
+				continue
 			}
+			rel := i.pathResolver.DisplayPath(file)
+			// Quote the filename
+			fmt.Fprintf(&sb, "\"%s\":%s:%s\n", filepath.ToSlash(rel), lineNum, content)
 		}
 		if wasTruncated || offset > 0 {
-			fmt.Fprintf(&sb, "\n[Showing results with pagination = limit: %d, offset: %d]", headLimit, offset)
+			fmt.Fprintf(&sb, "\n(Showing %d-%d of %d matches, limit: %d, offset: %d)", offset+1, end, totalCount, headLimit, offset)
 		}
 	}
 
 	return strings.TrimSpace(sb.String())
+}
+
+func splitGlobs(globStr string) []string {
+	var globs []string
+	var current strings.Builder
+	braceLevel := 0
+	for _, char := range globStr {
+		switch char {
+		case '{':
+			braceLevel++
+		case '}':
+			braceLevel--
+		}
+		if (char == ' ' || char == ',') && braceLevel == 0 {
+			if current.Len() > 0 {
+				globs = append(globs, strings.TrimSpace(current.String()))
+				current.Reset()
+			}
+		} else {
+			current.WriteRune(char)
+		}
+	}
+	if current.Len() > 0 {
+		globs = append(globs, strings.TrimSpace(current.String()))
+	}
+	return globs
+}
+
+func parseGrepLine(line string) (file, lineNum, content string, ok bool) {
+	// First split on filename:line or filename-line
+	firstSepIdx := -1
+	// Find the FIRST colon or dash that is followed by a digit. 
+	// This helps with filenames containing colons/dashes.
+	for k := 1; k < len(line)-1; k++ {
+		if (line[k] == ':' || line[k] == '-') && (line[k+1] >= '0' && line[k+1] <= '9') {
+			firstSepIdx = k
+			break
+		}
+	}
+	
+	if firstSepIdx == -1 {
+		return "", "", "", false
+	}
+	
+	sep := line[firstSepIdx]
+	secondSepIdx := strings.IndexRune(line[firstSepIdx+1:], rune(sep))
+	if secondSepIdx == -1 {
+		return "", "", "", false
+	}
+	secondSepIdx += firstSepIdx + 1
+	
+	lineNumStr := line[firstSepIdx+1 : secondSepIdx]
+	if _, err := strconv.Atoi(lineNumStr); err != nil {
+		return "", "", "", false
+	}
+	
+	f := line[:firstSepIdx]
+	// Strip quotes if ripgrep quoted the filename (e.g. for spaces)
+	f = strings.Trim(f, "\"")
+	
+	return f, lineNumStr, line[secondSepIdx+1:], true
 }

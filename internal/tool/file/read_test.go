@@ -67,6 +67,7 @@ type mockFileInfoForRead struct {
 	isDir bool
 }
 
+
 func (m mockFileInfoForRead) Name() string       { return m.name }
 func (m mockFileInfoForRead) Size() int64        { return m.size }
 func (m mockFileInfoForRead) Mode() os.FileMode  { return 0o644 }
@@ -389,9 +390,9 @@ func TestReadFile(t *testing.T) {
 			t.Fatalf("Prepare failed: %v", err)
 		}
 		
-		// Display should show "READ subdir/test.txt", not the full absolute path
+		// Display should show "READ \"subdir/test.txt\"", not the full absolute path
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "READ subdir/test.txt", display.Content)
+		assert.Equal(t, "READ \"subdir/test.txt\"", display.Content)
 	})
 }
 

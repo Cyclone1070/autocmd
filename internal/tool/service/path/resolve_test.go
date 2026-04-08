@@ -88,63 +88,53 @@ func TestAbs(t *testing.T) {
 	}
 }
 
-func TestRel(t *testing.T) {
-	workspaceRoot := "/workspace"
+func TestDisplayPath(t *testing.T) {
+	// Need to mock homedir for tilde expansion
+	// For this test, let's assume /Users/mac is the home directory
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", "/Users/mac")
+
+	workspaceRoot := "/Users/mac/project"
 	resolver := NewResolver(workspaceRoot)
 
 	tests := []struct {
-		name      string
-		input     string
-		expected  string
-		wantError bool
+		name     string
+		input    string
+		expected string
 	}{
 		{
-			name:      "relative path within workspace",
-			input:     "src/main.go",
-			expected:  "src/main.go",
-			wantError: false,
+			name:     "subdirectory within workspace",
+			input:    "/Users/mac/project/src/main.go",
+			expected: "src/main.go", // Relative, no ./
 		},
 		{
-			name:      "absolute path within workspace",
-			input:     "/workspace/src/main.go",
-			expected:  "src/main.go",
-			wantError: false,
+			name:     "workspace root",
+			input:    "/Users/mac/project",
+			expected: "~/project", // Root should be tilde expanded absolute
 		},
 		{
-			name:      "workspace root",
-			input:     "/workspace",
-			expected:  ".",
-			wantError: false,
+			name:     "outside workspace (home)",
+			input:    "/Users/mac/other/file.txt",
+			expected: "~/other/file.txt", // Tilde expanded
 		},
 		{
-			name:      "escape attempt",
-			input:     "/etc/passwd",
-			expected:  "",
-			wantError: true,
+			name:     "outside workspace (not home)",
+			input:    "/etc/passwd",
+			expected: "/etc/passwd", // Absolute
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rel, err := resolver.Rel(tt.input)
-			if tt.wantError {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), "outside workspace") {
-					t.Fatalf("expected outside workspace error, got: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if rel != tt.expected {
-				t.Errorf("expected rel %q, got %q", tt.expected, rel)
+			got := resolver.DisplayPath(tt.input)
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
 			}
 		})
 	}
 }
+
 
 type mockFileInfo struct {
 	os.FileInfo

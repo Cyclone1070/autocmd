@@ -124,7 +124,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Here's the result of my investigation:"})
 
-	tool0Disp := domain.NewStringDisplay("", "Reading main.go")
+	tool0Disp := domain.NewStringDisplay("Read file \"main.go\"", "READ \"main.go\"")
 	tt.Start("tool-0", tool0Disp)
 	select {
 	case <-ctx.Done():

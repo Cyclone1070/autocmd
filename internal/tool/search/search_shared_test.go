@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,11 +22,26 @@ type mockFileSystem struct {
 }
 
 func (m *mockFileSystem) Stat(path string) (os.FileInfo, error) {
-	args := m.Called(path)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	args := m.Mock.Called(path)
+	if len(args) > 0 {
+		if args.Get(0) == nil {
+			return nil, args.Error(1)
+		}
+		return args.Get(0).(os.FileInfo), args.Error(1)
 	}
-	return args.Get(0).(os.FileInfo), args.Error(1)
+	// Default for tests that don't care about specific path existence
+	return &toolMockFileInfo{name: filepath.Base(path)}, nil
+}
+
+func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
+	args := m.Mock.Called(path)
+	if len(args) > 0 {
+		if args.Get(0) == nil {
+			return nil, args.Error(1)
+		}
+		return args.Get(0).([]byte), args.Error(1)
+	}
+	return []byte("dummy content"), nil
 }
 
 type mockCommandExecutor struct {
@@ -32,11 +49,15 @@ type mockCommandExecutor struct {
 }
 
 func (m *mockCommandExecutor) Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
-	args := m.Called(ctx, cmd, dir, env)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	args := m.Mock.MethodCalled("Run", ctx, cmd, dir, env)
+	if len(args) > 0 {
+		if args.Get(0) == nil {
+			return nil, args.Error(1)
+		}
+		return args.Get(0).(*executor.Result), args.Error(1)
 	}
-	return args.Get(0).(*executor.Result), args.Error(1)
+	// Default return for tests that just want to run something
+	return &executor.Result{Stdout: "", ExitCode: 0}, nil
 }
 
 type mockPathResolver struct {
@@ -44,15 +65,34 @@ type mockPathResolver struct {
 }
 
 func (m *mockPathResolver) Abs(p string) (string, error) {
-	args := m.Called(p)
-	return args.String(0), args.Error(1)
+	if p == "." || p == "" {
+		return "/workspace", nil
+	}
+	if !strings.HasPrefix(p, "/") {
+		return "/workspace/" + p, nil
+	}
+	return p, nil
 }
 
-func (m *mockPathResolver) Rel(p string) (string, error) {
-	args := m.Called(p)
-	return args.String(0), args.Error(1)
+func (m *mockPathResolver) DisplayPath(p string) string {
+	// We'll skip Called() here to avoid panics on unmocked paths, 
+	// unless we specifically want to test the resolver call.
+	// For search tests, we usually don't care about the exact call as long as it works.
+	if p == "/workspace" {
+		return "."
+	}
+	if strings.HasPrefix(p, "/workspace/") {
+		return p[len("/workspace/"):]
+	}
+	return p
 }
 
+func setupMockResolver(m *mockPathResolver) {
+	m.On("Abs", ".").Return("/workspace", nil).Maybe()
+	m.On("Abs", "").Return("/workspace", nil).Maybe()
+	m.On("Abs", "/workspace").Return("/workspace", nil).Maybe()
+	m.On("DisplayPath", "/workspace").Return(".").Maybe()
+}
 type toolMockFileInfo struct {
 	name    string
 	isDir   bool

@@ -134,18 +134,15 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("cannot write binary content to: %s", req.Path)
 	}
 
-	rel, err := t.pathResolver.Rel(abs)
-	if err != nil {
-		rel = filepath.Base(abs)
-	}
+	displayPath := t.pathResolver.DisplayPath(abs)
 
 	return &writeFileInvocation{
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
-		relPath:         rel,
+		relPath:         displayPath,
 		content:         contentBytes,
-		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE %s", filepath.ToSlash(rel))),
+		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE \"%s\"", filepath.ToSlash(displayPath))),
 	}, nil
 }
 
@@ -215,6 +212,6 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	checksum := i.checksumManager.Compute([]byte(normalized))
 	i.checksumManager.Update(i.absPath, checksum)
 
-	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
+	return fmt.Sprintf("Successfully created file: \"%s\" (%d bytes)",
 		i.relPath, len(i.content)), d, nil
 }

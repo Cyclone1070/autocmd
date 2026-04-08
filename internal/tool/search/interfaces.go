@@ -10,7 +10,7 @@ import (
 // pathResolver defines workspace path resolution operations.
 type pathResolver interface {
 	Abs(path string) (string, error)
-	Rel(path string) (string, error)
+	DisplayPath(path string) string
 }
 
 // fileSystem defines the minimal filesystem interface needed by search tools.

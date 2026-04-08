@@ -87,19 +87,26 @@ func (r *Resolver) Abs(path string) (string, error) {
 	return abs, nil
 }
 
-// Rel resolves any path to relative to the workspace root and validates it is within the boundary.
-func (r *Resolver) Rel(path string) (string, error) {
-	abs, err := r.Abs(path)
-	if err != nil {
-		return "", err
+// DisplayPath returns a path formatted for UI/LLM display.
+func (r *Resolver) DisplayPath(path string) string {
+	abs := path
+	if !filepath.IsAbs(path) {
+		abs = filepath.Join(r.workspaceRoot, path)
 	}
+	abs = filepath.Clean(abs)
 
+	// Try to get relative path
 	rel, err := filepath.Rel(r.workspaceRoot, abs)
-	if err != nil {
-		// This should theoretically not happen if Abs passed
-		return "", fmt.Errorf("path is outside workspace root: %s", path)
+	if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(rel)
 	}
 
+	// Root or outside workspace: use tilde if in home dir
+	home := os.Getenv("HOME")
+	if home != "" && (abs == home || strings.HasPrefix(abs, home+string(filepath.Separator))) {
+		return "~" + filepath.ToSlash(abs[len(home):])
+	}
 
-	return filepath.ToSlash(rel), nil
+	return filepath.ToSlash(abs)
 }
+

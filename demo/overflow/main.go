@@ -280,7 +280,7 @@ func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Mode() os.FileMode { return 0644 }
 func (m *mockDeps) Abs(path string) (string, error) { return "/abs/" + path, nil }
 func (m *mockDeps) Root() string                  { return "/abs" }
-func (m *mockDeps) Rel(path string) (string, error) { return path, nil }
+func (m *mockDeps) DisplayPath(path string) string { return path }
 func (m *mockDeps) Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
 	return &executor.Result{ExitCode: 0}, nil
 }

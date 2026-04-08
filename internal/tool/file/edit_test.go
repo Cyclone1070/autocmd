@@ -532,7 +532,7 @@ func TestEditFile(t *testing.T) {
 		}
 		
 		display := inv.Display().(domain.DiffDisplay)
-		assert.Equal(t, "EDIT subdir/test.txt", display.Target)
+		assert.Equal(t, "EDIT \"subdir/test.txt\"", display.Target)
 	})
 
 	t.Run("suppresses 'No newline at end of file' metadata", func(t *testing.T) {

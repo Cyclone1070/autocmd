@@ -81,23 +81,8 @@ func TestWriteFile_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
 
-type mockPathResolver struct {
-	workspaceRoot string
-}
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
-	if strings.Contains(p, "..") {
-		return "", fmt.Errorf("path %s is outside workspace", p)
-	}
-	if strings.HasPrefix(p, "/") {
-		return p, nil
-	}
-	return filepath.Join(m.workspaceRoot, p), nil
-}
 
-func (m *mockPathResolver) Rel(path string) (string, error) {
-	return filepath.Rel(m.workspaceRoot, path)
-}
 
 func (m *mockFileSystemForWrite) createFile(path string, content []byte, mode os.FileMode) {
 	m.files[path] = fileEntry{content: content, mode: mode}
@@ -397,6 +382,6 @@ func TestWriteFile(t *testing.T) {
 		
 		// Display should show "WRITE subdir/new.txt" normalized from subdir/new.txt
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "WRITE subdir/new.txt", display.Content)
+		assert.Equal(t, "WRITE \"subdir/new.txt\"", display.Content)
 	})
 }

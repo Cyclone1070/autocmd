@@ -15,11 +15,9 @@ import (
 func TestGlob_Basic(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", ".").Return("/workspace", nil)
-	pathResolver.On("Rel", "/workspace").Return(".", nil)
-	pathResolver.On("Rel", "/workspace/a.go").Return("a.go", nil)
+	pathResolver.On("DisplayPath", "/workspace/a.go").Return("a.go")
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
@@ -35,16 +33,14 @@ func TestGlob_Basic(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "a.go", result)
+	assert.Equal(t, "\"a.go\"", result)
 }
 
 func TestGlob_NoMatches(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", ".").Return("/workspace", nil)
-	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
@@ -61,10 +57,8 @@ func TestGlob_NoMatches(t *testing.T) {
 func TestGlob_Environment(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", ".").Return("/workspace", nil)
-	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
@@ -80,10 +74,8 @@ func TestGlob_Environment(t *testing.T) {
 func TestGlob_ExecutionFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", ".").Return("/workspace", nil)
-	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate fd failure
@@ -102,10 +94,8 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", ".").Return("/workspace", nil)
-	pathResolver.On("Rel", "/workspace").Return(".", nil)
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)

@@ -25,7 +25,7 @@ func TestGrep_Basic(t *testing.T) {
 	// Since default is files_with_matches, rg will be called with -l
 	output := "file.txt\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -114,7 +114,7 @@ func TestGrep_FileTarget_Regression(t *testing.T) {
 
 	// We expect the working directory to be the PARENT directory, not the file itself
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern", "temp.md"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "pattern", "temp.md"},
 		absDirPath,
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
@@ -165,7 +165,7 @@ func TestGrep_Parity_Formatting_FilesWithMatches(t *testing.T) {
 	output := "file1.txt\nfile2.txt\n"
 	// We expect rg -l ...
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -195,7 +195,7 @@ func TestGrep_Parity_Formatting_Count(t *testing.T) {
 	// rg output for -c (count) usually is file:count
 	output := "file1.txt:5\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -272,7 +272,7 @@ func TestGrep_Parity_Flags(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "-i", "-U", "--multiline-dotall", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "-i", "-U", "--multiline-dotall", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
@@ -300,7 +300,7 @@ func TestGrep_Parity_Flags_PrecedenceAndIgnore(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
@@ -319,7 +319,7 @@ func TestGrep_Parity_Flags_PrecedenceAndIgnore(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-C", "10", "--", "pattern"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-C", "10", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
@@ -381,7 +381,7 @@ func TestGrep_Parity_SmartGlobParsing(t *testing.T) {
 			"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
 			"--max-columns", "500", "-l",
 			"--glob", "{a, b}", "--glob", "*.js", "--glob", "*.ts",
-			"--", "pattern",
+			"pattern",
 		},
 		"/workspace",
 		mock.Anything,
@@ -572,7 +572,7 @@ func TestGrep_Parity_Count_SingleFile(t *testing.T) {
 	// rg will be called on file.txt but workDir will be 
 	output := "file.txt:3\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "--", "pattern", "file.txt"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "pattern", "file.txt"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -659,7 +659,7 @@ func TestGrep_SingleFile_PathCorruption(t *testing.T) {
 
 	// EXPECTATION: The command should include "file1.txt" as an argument!
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-n", "--", "pattern", "file1.txt"},
+		[]string{"rg", "--hidden", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-n", "pattern", "file1.txt"},
 		absDirPath,
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "file1.txt:1:some_text\n", ExitCode: 0}, nil)

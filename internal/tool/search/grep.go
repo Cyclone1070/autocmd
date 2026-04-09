@@ -84,7 +84,7 @@ func (t *GrepTool) Name() string {
 }
 
 func (t *GrepTool) Desc() string {
-	return "Search for patterns in files using ripgrep. Optimized for content search across multiple files."
+	return "A powerful search tool built on ripgrep\n\n  Usage:\n  - ALWAYS use grep for search tasks. NEVER invoke `grep` or `rg` as a bash command. The grep tool has been optimized for correct permissions and access.\n  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n  - Output modes: \"content\" shows matching lines, \"files_with_matches\" shows only file paths (default), \"count\" shows match counts\n  - Use agent tool for open-ended searches requiring multiple rounds\n  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`"
 }
 
 func (t *GrepTool) IsConcurrentSafe() bool { return true }
@@ -93,7 +93,7 @@ func (t *GrepTool) IsConcurrentSafe() bool { return true }
 func (t *GrepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "grep",
-		Desc: "Search for patterns in files using ripgrep. Optimized for content search across multiple files.",
+		Desc: "A powerful search tool built on ripgrep\n\n  Usage:\n  - ALWAYS use grep for search tasks. NEVER invoke `grep` or `rg` as a bash command. The grep tool has been optimized for correct permissions and access.\n  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n  - Output modes: \"content\" shows matching lines, \"files_with_matches\" shows only file paths (default), \"count\" shows match counts\n  - Use agent tool for open-ended searches requiring multiple rounds\n  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true` ",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
 				Type:     schema.String,
@@ -110,32 +110,8 @@ func (t *GrepTool) Definition() *schema.ToolInfo {
 			},
 			"output_mode": {
 				Type: schema.String,
-				Enum: []string{"files_with_matches", "content", "count"},
+				Enum: []string{"content", "files_with_matches", "count"},
 				Desc: "Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"files_with_matches\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"files_with_matches\".",
-			},
-			"head_limit": {
-				Type: schema.Integer,
-				Desc: "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly — large result sets waste context).",
-			},
-			"offset": {
-				Type: schema.Integer,
-				Desc: "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0.",
-			},
-			"case_insensitive": {
-				Type: schema.Boolean,
-				Desc: "Case insensitive search (rg -i)",
-			},
-			"-i": {
-				Type: schema.Boolean,
-				Desc: "Alias for case_insensitive.",
-			},
-			"context": {
-				Type: schema.Integer,
-				Desc: "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise.",
-			},
-			"-C": {
-				Type: schema.Integer,
-				Desc: "Alias for context.",
 			},
 			"-B": {
 				Type: schema.Integer,
@@ -145,17 +121,37 @@ func (t *GrepTool) Definition() *schema.ToolInfo {
 				Type: schema.Integer,
 				Desc: "Number of lines to show after each match (rg -A). Requires output_mode: \"content\", ignored otherwise.",
 			},
+			"-C": {
+				Type: schema.Integer,
+				Desc: "Alias for context.",
+			},
+			"context": {
+				Type: schema.Integer,
+				Desc: "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise.",
+			},
 			"-n": {
 				Type: schema.Boolean,
 				Desc: "Show line numbers in output (rg -n). Requires output_mode: \"content\", ignored otherwise. Defaults to true.",
 			},
-			"multiline": {
+			"-i": {
 				Type: schema.Boolean,
-				Desc: "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
+				Desc: "Case insensitive search (rg -i)",
 			},
 			"type": {
 				Type: schema.String,
 				Desc: "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types.",
+			},
+			"head_limit": {
+				Type: schema.Integer,
+				Desc: "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly — large result sets waste context).",
+			},
+			"offset": {
+				Type: schema.Integer,
+				Desc: "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0.",
+			},
+			"multiline": {
+				Type: schema.Boolean,
+				Desc: "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
 			},
 		}),
 	}
@@ -290,7 +286,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 
 func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 	mode := i.req.OutputMode
-	cmd := []string{"rg", "--hidden", "--with-filename"}
+	cmd := []string{"rg", "--hidden"}
 	for _, excl := range vcsExclusions {
 		cmd = append(cmd, "--glob", "!"+excl)
 	}
@@ -342,7 +338,7 @@ func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 	if strings.HasPrefix(i.req.Pattern, "-") {
 		cmd = append(cmd, "-e", i.req.Pattern)
 	} else {
-		cmd = append(cmd, "--", i.req.Pattern)
+		cmd = append(cmd, i.req.Pattern)
 	}
 
 	workDir := i.absPath
@@ -458,7 +454,6 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 			fmt.Fprintf(&sb, " with pagination = limit: %d, offset: %d", headLimit, offset)
 		}
 	case "content":
-		sb.WriteString("Matches:\n")
 		for _, line := range visibleLines {
 			file, lineNum, content, ok := parseGrepLine(line)
 			if !ok {

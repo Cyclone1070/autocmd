@@ -98,37 +98,65 @@ func (t *GrepTool) Definition() *schema.ToolInfo {
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
 				Type:     schema.String,
-				Desc:     "The regex pattern to search for (ripgrep syntax).",
+				Desc:     "The regular expression pattern to search for in file contents",
 				Required: true,
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "Directory or file to search in. Defaults to current directory.",
+				Desc: "File or directory to search in (rg PATH). Defaults to current working directory.",
 			},
 			"glob": {
 				Type: schema.String,
-				Desc: "File glob patterns to include (e.g., \"*.go\" or \"{*.js,*.ts}\").",
+				Desc: "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob",
 			},
 			"output_mode": {
 				Type: schema.String,
 				Enum: []string{"files_with_matches", "content", "count"},
-				Desc: "Format of the results. Defaults to files_with_matches.",
+				Desc: "Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"files_with_matches\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"files_with_matches\".",
 			},
 			"head_limit": {
 				Type: schema.Integer,
-				Desc: "Limit the number of results returned. Default: 250.",
+				Desc: "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults to 250 when unspecified. Pass 0 for unlimited (use sparingly — large result sets waste context).",
 			},
 			"offset": {
 				Type: schema.Integer,
-				Desc: "Offset for pagination. Default: 0.",
+				Desc: "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0.",
 			},
 			"case_insensitive": {
 				Type: schema.Boolean,
-				Desc: "Search case-insensitively. Default: false.",
+				Desc: "Case insensitive search (rg -i)",
+			},
+			"-i": {
+				Type: schema.Boolean,
+				Desc: "Alias for case_insensitive.",
 			},
 			"context": {
 				Type: schema.Integer,
-				Desc: "Number of context lines to show before and after each match (rg -C).",
+				Desc: "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise.",
+			},
+			"-C": {
+				Type: schema.Integer,
+				Desc: "Alias for context.",
+			},
+			"-B": {
+				Type: schema.Integer,
+				Desc: "Number of lines to show before each match (rg -B). Requires output_mode: \"content\", ignored otherwise.",
+			},
+			"-A": {
+				Type: schema.Integer,
+				Desc: "Number of lines to show after each match (rg -A). Requires output_mode: \"content\", ignored otherwise.",
+			},
+			"-n": {
+				Type: schema.Boolean,
+				Desc: "Show line numbers in output (rg -n). Requires output_mode: \"content\", ignored otherwise. Defaults to true.",
+			},
+			"multiline": {
+				Type: schema.Boolean,
+				Desc: "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
+			},
+			"type": {
+				Type: schema.String,
+				Desc: "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types.",
 			},
 		}),
 	}
@@ -198,7 +226,7 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		pathResolver:    t.pathResolver,
 		absPath:         absSearchPath,
 		req:             req,
-		display:         domain.NewStringDisplay(fmt.Sprintf("Grep scan \"%s\"", filepath.ToSlash(displayPath)), fmt.Sprintf("GREP \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("GREP \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
 	}, nil
 }
 
@@ -207,6 +235,7 @@ type grepInvocation struct {
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 	absPath         string
+	workDir         string
 	req             *GrepRequest
 	display         domain.StringDisplay
 }
@@ -240,6 +269,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		d.Error = err.Error()
 		return fmt.Sprintf("Error: %v", err), d, errors.New("Execution failed")
 	}
+	i.workDir = workDir
 
 	res, err := i.commandExecutor.Run(ctx, cmd, workDir, os.Environ())
 	if err != nil {
@@ -263,7 +293,7 @@ func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 	mode := i.req.OutputMode
 	cmd := []string{"rg", "--hidden", "--with-filename"}
 	for _, excl := range vcsExclusions {
-		cmd = append(cmd, fmt.Sprintf("--glob=!%s", excl))
+		cmd = append(cmd, "--glob", "!"+excl)
 	}
 	cmd = append(cmd, "--max-columns", strconv.Itoa(defaultMaxColumns))
 
@@ -277,10 +307,10 @@ func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 			cmd = append(cmd, "-n")
 		}
 		contextLines := 0
-		if i.req.ContextC != nil {
-			contextLines = *i.req.ContextC
-		} else if i.req.ContextLines != nil {
+		if i.req.ContextLines != nil {
 			contextLines = *i.req.ContextLines
+		} else if i.req.ContextC != nil {
+			contextLines = *i.req.ContextC
 		}
 		if contextLines > 0 {
 			cmd = append(cmd, "-C", strconv.Itoa(contextLines))
@@ -306,7 +336,7 @@ func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 	if i.req.Glob != "" {
 		globs := splitGlobs(i.req.Glob)
 		for _, g := range globs {
-			cmd = append(cmd, fmt.Sprintf("--glob=%s", g))
+			cmd = append(cmd, "--glob", g)
 		}
 	}
 
@@ -315,12 +345,12 @@ func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {
 	} else {
 		cmd = append(cmd, "--", i.req.Pattern)
 	}
-	cmd = append(cmd, i.absPath)
 
 	workDir := i.absPath
 	stat, err := i.fs.Stat(workDir)
 	if err == nil && !stat.IsDir() {
 		workDir = filepath.Dir(workDir)
+		cmd = append(cmd, filepath.Base(i.absPath))
 	}
 
 	return cmd, workDir, nil
@@ -353,7 +383,8 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 		for _, line := range lines {
 			// Strip quotes if any
 			line = strings.Trim(line, "\"")
-			info, err := i.fs.Stat(line)
+			abs := filepath.Join(i.workDir, line)
+			info, err := i.fs.Stat(abs)
 			mtime := time.Time{}
 			if err == nil {
 				mtime = info.ModTime()
@@ -383,7 +414,6 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 	}
 
 	var sb strings.Builder
-	totalCount := len(lines)
 	end := offset + headLimit
 	wasTruncated := false
 	if end > len(lines) {
@@ -395,15 +425,14 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 
 	switch mode {
 	case "files_with_matches":
-		fmt.Fprintf(&sb, "Found %d files", totalCount)
+		fmt.Fprintf(&sb, "Found %d %s", len(visibleLines), plural(len(visibleLines), "file"))
 		if wasTruncated || offset > 0 {
 			fmt.Fprintf(&sb, " limit: %d, offset: %d", headLimit, offset)
 		}
 		sb.WriteString("\n")
 		for _, line := range visibleLines {
-			rel := i.pathResolver.DisplayPath(line)
-			// Ensure we use double quotes for paths
-			sb.WriteString(fmt.Sprintf("\"%s\"\n", filepath.ToSlash(rel)))
+			rel := i.pathResolver.DisplayPath(filepath.Join(i.workDir, line))
+			sb.WriteString(filepath.ToSlash(rel) + "\n")
 		}
 	case "count":
 		totalOccurrences := 0
@@ -416,30 +445,18 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 			}
 			file := line[:idx]
 			count := line[idx+1:]
-			rel := i.pathResolver.DisplayPath(file)
+			rel := i.pathResolver.DisplayPath(filepath.Join(i.workDir, file))
 			distinctFiles[rel] = true
 			var c int
 			fmt.Sscanf(count, "%d", &c)
 			totalOccurrences += c
-			// Quote the filename
-			fmt.Fprintf(&sb, "\"%s\":%s\n", filepath.ToSlash(rel), count)
+			fmt.Fprintf(&sb, "%s:%s\n", filepath.ToSlash(rel), count)
 		}
 		sb.WriteString("\nFound ")
-		if totalOccurrences == 1 {
-			sb.WriteString("1 total occurrence")
-		} else {
-			fmt.Fprintf(&sb, "%d total occurrences", totalOccurrences)
-		}
-		
-		numFiles := len(distinctFiles)
-		if numFiles == 1 {
-			sb.WriteString(" across 1 file.")
-		} else if numFiles > 1 {
-			fmt.Fprintf(&sb, " across %d files.", numFiles)
-		}
+		fmt.Fprintf(&sb, "%d total %s across %d %s.", totalOccurrences, plural(totalOccurrences, "occurrence"), len(distinctFiles), plural(len(distinctFiles), "file"))
 
 		if wasTruncated || offset > 0 {
-			fmt.Fprintf(&sb, " (limit: %d, offset: %d)", headLimit, offset)
+			fmt.Fprintf(&sb, " with pagination = limit: %d, offset: %d", headLimit, offset)
 		}
 	case "content":
 		sb.WriteString("Matches:\n")
@@ -449,12 +466,12 @@ func (i *grepInvocation) formatResults(stdout string, mode string) string {
 				sb.WriteString(line + "\n")
 				continue
 			}
-			rel := i.pathResolver.DisplayPath(file)
-			// Quote the filename
-			fmt.Fprintf(&sb, "\"%s\":%s:%s\n", filepath.ToSlash(rel), lineNum, content)
+			rel := i.pathResolver.DisplayPath(filepath.Join(i.workDir, file))
+			fmt.Fprintf(&sb, "%s:%s:%s\n", filepath.ToSlash(rel), lineNum, content)
 		}
 		if wasTruncated || offset > 0 {
-			fmt.Fprintf(&sb, "\n(Showing %d-%d of %d matches, limit: %d, offset: %d)", offset+1, end, totalCount, headLimit, offset)
+			limitInfo := fmt.Sprintf("limit: %d, offset: %d", headLimit, offset)
+			fmt.Fprintf(&sb, "\n\n[Showing results with pagination = %s]", limitInfo)
 		}
 	}
 
@@ -488,36 +505,36 @@ func splitGlobs(globStr string) []string {
 }
 
 func parseGrepLine(line string) (file, lineNum, content string, ok bool) {
-	// First split on filename:line or filename-line
-	firstSepIdx := -1
-	// Find the FIRST colon or dash that is followed by a digit. 
-	// This helps with filenames containing colons/dashes.
-	for k := 1; k < len(line)-1; k++ {
-		if (line[k] == ':' || line[k] == '-') && (line[k+1] >= '0' && line[k+1] <= '9') {
-			firstSepIdx = k
+	// Ripgrep format: filename:line:content or filename-line-content (context)
+	// We look for the first colon or dash that is followed by a digit.
+	idx := -1
+	for i := 1; i < len(line)-1; i++ {
+		if (line[i] == ':' || line[i] == '-') && (line[i+1] >= '0' && line[i+1] <= '9') {
+			idx = i
 			break
 		}
 	}
-	
-	if firstSepIdx == -1 {
+	if idx == -1 {
 		return "", "", "", false
 	}
-	
-	sep := line[firstSepIdx]
-	secondSepIdx := strings.IndexRune(line[firstSepIdx+1:], rune(sep))
+
+	sep := line[idx]
+	file = strings.Trim(line[:idx], "\"")
+	rest := line[idx+1:]
+
+	secondSepIdx := strings.IndexByte(rest, sep)
 	if secondSepIdx == -1 {
 		return "", "", "", false
 	}
-	secondSepIdx += firstSepIdx + 1
-	
-	lineNumStr := line[firstSepIdx+1 : secondSepIdx]
-	if _, err := strconv.Atoi(lineNumStr); err != nil {
-		return "", "", "", false
+
+	lineNum = rest[:secondSepIdx]
+	content = rest[secondSepIdx+1:]
+	return file, lineNum, content, true
+}
+
+func plural(n int, singular string) string {
+	if n == 1 {
+		return singular
 	}
-	
-	f := line[:firstSepIdx]
-	// Strip quotes if ripgrep quoted the filename (e.g. for spaces)
-	f = strings.Trim(f, "\"")
-	
-	return f, lineNumStr, line[secondSepIdx+1:], true
+	return singular + "s"
 }

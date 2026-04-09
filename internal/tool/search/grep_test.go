@@ -23,9 +23,9 @@ func TestGrep_Basic(t *testing.T) {
 	fs.On("Stat", "/workspace/file.txt").Return(&toolMockFileInfo{name: "file.txt"}, nil).Maybe()
 
 	// Since default is files_with_matches, rg will be called with -l
-	output := "/workspace/file.txt\n"
+	output := "file.txt\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-l", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -36,7 +36,7 @@ func TestGrep_Basic(t *testing.T) {
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 
-	expected := "Found 1 files\n\"file.txt\""
+	expected := "Found 1 file\nfile.txt"
 	assert.Equal(t, expected, result)
 }
 
@@ -106,7 +106,7 @@ func TestGrep_FileTarget_Regression(t *testing.T) {
 	absFilePath := "/workspace/temp.md"
 	absDirPath := "/workspace"
 
-	pathResolver.On("Abs", "temp.md").Return(absFilePath, nil)
+	pathResolver.On("Abs", "/workspace/temp.md").Return(absFilePath, nil)
 	pathResolver.On("DisplayPath", absFilePath).Return("temp.md")
 
 	// File exists and is NOT a directory
@@ -114,8 +114,8 @@ func TestGrep_FileTarget_Regression(t *testing.T) {
 
 	// We expect the working directory to be the PARENT directory, not the file itself
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-l", "--", "pattern", absFilePath},
-		absDirPath, // THIS IS THE FIX: Should be dir, not file
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern", "temp.md"},
+		absDirPath,
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
@@ -163,10 +163,10 @@ func TestGrep_Parity_Formatting_FilesWithMatches(t *testing.T) {
 	fs.On("Stat", "/workspace/file2.txt").Return(&toolMockFileInfo{name: "file2.txt"}, nil).Maybe()
 
 	// rg output for -l (files_with_matches)
-	output := "/workspace/file1.txt\n/workspace/file2.txt\n"
+	output := "file1.txt\nfile2.txt\n"
 	// We expect rg -l ...
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-l", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -180,7 +180,7 @@ func TestGrep_Parity_Formatting_FilesWithMatches(t *testing.T) {
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 
-	expected := "Found 2 files\n\"file1.txt\"\n\"file2.txt\""
+	expected := "Found 2 files\nfile1.txt\nfile2.txt"
 	assert.Equal(t, expected, result)
 }
 
@@ -194,9 +194,9 @@ func TestGrep_Parity_Formatting_Count(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	// rg output for -c (count) usually is file:count
-	output := "/workspace/file1.txt:5\n"
+	output := "file1.txt:5\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-c", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -210,7 +210,7 @@ func TestGrep_Parity_Formatting_Count(t *testing.T) {
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 
-	expected := "\"file1.txt\":5\n\nFound 5 total occurrences across 1 file."
+	expected := "file1.txt:5\n\nFound 5 total occurrences across 1 file."
 	assert.Equal(t, expected, result)
 }
 
@@ -227,7 +227,7 @@ func TestGrep_Parity_Pagination(t *testing.T) {
 	fs.On("Stat", "/workspace/file2.txt").Return(&toolMockFileInfo{name: "file2.txt"}, nil).Maybe()
 
 	// rg output - we return many files, but head_limit=1
-	output := "/workspace/file1.txt\n/workspace/file2.txt\n"
+	output := "file1.txt\nfile2.txt\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -250,7 +250,7 @@ func TestGrep_Parity_Pagination(t *testing.T) {
 	// Return header: Found X files[ limit: A, offset: B].
 	// List of relative paths.
 
-	expected := "Found 2 files limit: 1, offset: 0\n\"file1.txt\""
+	expected := "Found 1 file limit: 1, offset: 0\nfile1.txt"
 	assert.Equal(t, expected, result)
 }
 
@@ -273,7 +273,7 @@ func TestGrep_Parity_Flags(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-l", "-i", "-U", "--multiline-dotall", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "-i", "-U", "--multiline-dotall", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
@@ -301,7 +301,7 @@ func TestGrep_Parity_Flags_PrecedenceAndIgnore(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-l", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-l", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
@@ -320,7 +320,7 @@ func TestGrep_Parity_Flags_PrecedenceAndIgnore(t *testing.T) {
 	}
 
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-C", "10", "--", "pattern", "/workspace"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-C", "10", "--", "pattern"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
@@ -346,7 +346,7 @@ func TestGrep_Parity_RecencySorting(t *testing.T) {
 	fs.On("Stat", "/workspace/new.txt").Return(&toolMockFileInfo{name: "new.txt", modTime: now}, nil).Maybe()
 
 	// rg returns old first, then new
-	output := "/workspace/old.txt\n/workspace/new.txt\n"
+	output := "old.txt\nnew.txt\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -357,7 +357,7 @@ func TestGrep_Parity_RecencySorting(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Expected order: NEW first then OLD (due to recency sorting)
-	expected := "Found 2 files\n\"new.txt\"\n\"old.txt\""
+	expected := "Found 2 files\nnew.txt\nold.txt"
 	assert.Equal(t, expected, result)
 }
 
@@ -379,10 +379,10 @@ func TestGrep_Parity_SmartGlobParsing(t *testing.T) {
 	exec.On("Run", mock.Anything,
 		[]string{
 			"rg", "--hidden", "--with-filename",
-			"--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl",
+			"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
 			"--max-columns", "500", "-l",
-			"--glob={a, b}", "--glob=*.js", "--glob=*.ts",
-			"--", "pattern", "/workspace",
+			"--glob", "{a, b}", "--glob", "*.js", "--glob", "*.ts",
+			"--", "pattern",
 		},
 		"/workspace",
 		mock.Anything,
@@ -407,9 +407,9 @@ func TestGrep_Parity_PatternSafety(t *testing.T) {
 	exec.On("Run", mock.Anything,
 		[]string{
 			"rg", "--hidden", "--with-filename",
-			"--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl",
+			"--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl",
 			"--max-columns", "500", "-l",
-			"-e", "-flag-pattern", "/workspace",
+			"-e", "-flag-pattern",
 		},
 		"/workspace",
 		mock.Anything,
@@ -432,7 +432,7 @@ func TestGrep_Parity_ConditionalTruncationReporting(t *testing.T) {
 	fs.On("Stat", "/workspace/file2.txt").Return(&toolMockFileInfo{name: "file2.txt"}, nil).Maybe()
 
 	// Case 1: Under limit, NO FOOTER should appear
-	output1 := "/workspace/file1.txt\n"
+	output1 := "file1.txt\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output1, ExitCode: 0}, nil).Once()
 
@@ -444,7 +444,7 @@ func TestGrep_Parity_ConditionalTruncationReporting(t *testing.T) {
 	assert.NotContains(t, result1, "limit: 10")
 
 	// Case 2: At/Over limit, FOOTER SHOULD appear
-	output2 := "/workspace/file1.txt\n/workspace/file2.txt\n"
+	output2 := "file1.txt\nfile2.txt\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output2, ExitCode: 0}, nil).Once()
 
@@ -499,7 +499,7 @@ func TestGrep_Parity_RecencySorting_TieBreak(t *testing.T) {
 	fs.On("Stat", "/workspace/b.txt").Return(&toolMockFileInfo{name: "b.txt", modTime: now}, nil).Maybe()
 
 	// rg returns b first
-	output := "/workspace/b.txt\n/workspace/a.txt\n"
+	output := "b.txt\na.txt\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -509,7 +509,7 @@ func TestGrep_Parity_RecencySorting_TieBreak(t *testing.T) {
 	result, _ := executeSearch(t, tool, req)
 
 	// Expected order: "a.txt" first (alphabetical tie-break)
-	expected := "Found 2 files\n\"a.txt\"\n\"b.txt\""
+	expected := "Found 2 files\na.txt\nb.txt"
 	assert.Equal(t, expected, result)
 }
 
@@ -520,7 +520,7 @@ func TestGrep_Parity_OffsetOverflow(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	output := "/workspace/file1.txt\n"
+	output := "file1.txt\n"
 	fs.On("Stat", "/workspace/file1.txt").Return(&toolMockFileInfo{name: "file1.txt"}, nil).Maybe()
 
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
@@ -544,7 +544,7 @@ func TestGrep_Parity_ContentMode_ContextLines(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	// Mixed match (:) and context (-) lines
-	output := "/workspace/main.go-10-before\n/workspace/\"main.go\":11:match\n/workspace/main.go-12-after\n"
+	output := "main.go-10-before\nmain.go:11:match\nmain.go-12-after\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -554,9 +554,9 @@ func TestGrep_Parity_ContentMode_ContextLines(t *testing.T) {
 	result, _ := executeSearch(t, tool, req)
 	
 	// Paths should be relativized even for context lines (line 10 and 12 use -)
-	assert.Contains(t, result, "\"main.go\":11:match")
-	assert.Contains(t, result, "\"main.go\":10:before") // We format it as : even for context in our relay
-	assert.Contains(t, result, "\"main.go\":12:after")
+	assert.Contains(t, result, "main.go:11:match")
+	assert.Contains(t, result, "main.go:10:before") // We format it as : even for context in our relay
+	assert.Contains(t, result, "main.go:12:after")
 }
 
 func TestGrep_Parity_Count_SingleFile(t *testing.T) {
@@ -564,15 +564,16 @@ func TestGrep_Parity_Count_SingleFile(t *testing.T) {
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", "file.txt").Return("/workspace/file.txt", nil)
+	pathResolver.On("Abs", "/workspace/file.txt").Return("/workspace/file.txt", nil)
 	pathResolver.On("DisplayPath", "/workspace").Return("file.txt")
 	fs.On("Stat", "/workspace/file.txt").Return(&toolMockFileInfo{name: "file.txt", isDir: false}, nil).Maybe()
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	// rg MUST return filename:count now because we force --with-filename
-	output := "/workspace/file.txt:3\n"
+	// rg will be called on file.txt but workDir will be 
+	output := "file.txt:3\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--hidden", "--with-filename", "--glob=!.git", "--glob=!.svn", "--glob=!.hg", "--glob=!.bzr", "--glob=!.jj", "--glob=!.sl", "--max-columns", "500", "-c", "--", "pattern", "/workspace/file.txt"},
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-c", "--", "pattern", "file.txt"},
 		"/workspace",
 		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
@@ -582,9 +583,8 @@ func TestGrep_Parity_Count_SingleFile(t *testing.T) {
 
 	result, _ := executeSearch(t, tool, req)
 	
-	// RED: This will currently output "3:\n\nFound 0 total occurrences..."
-	assert.Contains(t, result, "\"file.txt\":3")
-	assert.Contains(t, result, "Found 3 total occurrences")
+	assert.Contains(t, result, "file.txt:3")
+	assert.Contains(t, result, "Found 3 total occurrences across 1 file.")
 }
 
 func TestGrep_ContextLine_DashCorrupt(t *testing.T) {
@@ -593,13 +593,13 @@ func TestGrep_ContextLine_DashCorrupt(t *testing.T) {
 	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
 	// Path with a dash in it
-	pathResolver.On("Abs", "my-folder/file.txt").Return("/workspace/my-folder/file.txt", nil)
+	pathResolver.On("Abs", "/workspace/my-folder/file.txt").Return("/workspace/my-folder/file.txt", nil)
 	pathResolver.On("DisplayPath", "/workspace").Return("my-folder/file.txt")
 	fs.On("Stat", "/workspace/my-folder/file.txt").Return(&toolMockFileInfo{name: "file.txt", isDir: false}, nil).Maybe()
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	// Context output using dashes: filename-line-content
-	output := "/workspace/\"my-folder/file.txt\":10:context line here\n/workspace/\"my-folder/file.txt\":11:match line\n"
+	output := "my-folder/file.txt:10:context line here\nmy-folder/file.txt:11:match line\n"
 	exec.On("Run", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -610,8 +610,8 @@ func TestGrep_ContextLine_DashCorrupt(t *testing.T) {
 	
 	// RED: Current brittle parser will split on the FIRST dash in the filename.
 	// It would think the path is "my" and the content is "folder/file.txt-10-context..."
-	assert.Contains(t, result, "\"my-folder/file.txt\":10:context line here")
-	assert.Contains(t, result, "\"my-folder/file.txt\":11:match line")
+	assert.Contains(t, result, "my-folder/file.txt:10:context line here")
+	assert.Contains(t, result, "my-folder/file.txt:11:match line")
 }
 
 
@@ -645,4 +645,32 @@ func TestGrep_Parity_Flags_Aliases(t *testing.T) {
 	_, _ = executeSearch(t, tool, req2)
 	exec.AssertExpectations(t)
 }
+func TestGrep_SingleFile_PathCorruption(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockCommandExecutor{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
 
+	absFilePath := "/workspace/test_grep/file1.txt"
+	absDirPath := "/workspace/test_grep"
+
+	pathResolver.On("Abs", "/workspace/test_grep/file1.txt").Return(absFilePath, nil)
+	pathResolver.On("DisplayPath", absFilePath).Return("test_grep/file1.txt")
+	fs.On("Stat", absFilePath).Return(&toolMockFileInfo{name: "file1.txt", isDir: false}, nil).Maybe()
+	fs.On("Stat", "/workspace/test_grep").Return(&toolMockFileInfo{name: "test_grep", isDir: true}, nil).Maybe()
+
+	// EXPECTATION: The command should include "file1.txt" as an argument!
+	exec.On("Run", mock.Anything,
+		[]string{"rg", "--hidden", "--with-filename", "--glob", "!.git", "--glob", "!.svn", "--glob", "!.hg", "--glob", "!.bzr", "--glob", "!.jj", "--glob", "!.sl", "--max-columns", "500", "-n", "--", "pattern", "file1.txt"},
+		absDirPath,
+		mock.Anything,
+	).Return(&executor.Result{Stdout: "file1.txt:1:some_text\n", ExitCode: 0}, nil)
+
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern", Path: "test_grep/file1.txt", OutputMode: "content"}
+
+	result, err := executeSearch(t, tool, req)
+	assert.NoError(t, err)
+
+	// EXPECTATION: The path should NOT be test_grep/file1.txt/file1.txt
+	assert.Contains(t, result, "test_grep/file1.txt:1:some_text")
+}

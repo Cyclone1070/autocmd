@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	maxFindResults = 100
+	maxFindResults = 1000
 )
 
 // GlobRequest represents the parameters for a glob operation
@@ -62,16 +62,19 @@ func (t *GlobTool) IsConcurrentSafe() bool { return true }
 func (t *GlobTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
-		Desc: "Find files matching a glob pattern.",
+		Desc: `- Fast file pattern matching tool that works with any codebase size
+- Supports glob patterns like "**/*.js" or "src/**/*.ts"
+- Returns matching file paths sorted by modification time
+- Use this tool when you need to find files by name patterns`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
 				Type:     schema.String,
-				Desc:     "Glob pattern to match files.",
+				Desc:     "The glob pattern to match files against",
 				Required: true,
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "Path to search within. Defaults to the current directory.",
+				Desc: "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided.",
 			},
 		}),
 	}
@@ -169,8 +172,8 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d
 	}
 
-	// fd --glob "pattern" searchPath
-	cmd := []string{"fd", "--glob", i.pattern, i.absPath}
+	// rg --files --glob "pattern" --sort=modified --no-ignore --hidden
+	cmd := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden"}
 
 	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, os.Environ())
 	if err != nil {
@@ -179,12 +182,12 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: fd failed to start: %v", err), d
+		return fmt.Sprintf("Error: ripgrep failed to start: %v", err), d
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d
+		return fmt.Sprintf("Error: ripgrep failed with exit code %d: %s", res.ExitCode, res.Stderr), d
 	}
 
 	maxResults := maxFindResults
@@ -197,8 +200,12 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			continue
 		}
 
-		relPath := i.pathResolver.DisplayPath(line)
-		matches = append(matches, filepath.ToSlash(relPath))
+		absLine := line
+		if !filepath.IsAbs(line) {
+			absLine = filepath.Join(i.absPath, line)
+		}
+		displayPath := i.pathResolver.DisplayPath(absLine)
+		matches = append(matches, filepath.ToSlash(displayPath))
 
 		if len(matches) >= maxResults {
 			hitMaxResults = true
@@ -207,12 +214,12 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	}
 
 	if len(matches) == 0 {
-		return "No matches found.", d
+		return "No files found", d
 	}
 
 	formattedMatches := strings.Join(matches, "\n")
 	if hitMaxResults {
-		formattedMatches += "\n\n(Results truncated. Consider using a more specific pattern.)"
+		formattedMatches += "\n(Results are truncated. Consider using a more specific path or pattern.)"
 	}
 
 	return formattedMatches, d

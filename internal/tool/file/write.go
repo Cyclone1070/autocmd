@@ -16,6 +16,7 @@ import (
 // fileWriter defines the minimal filesystem operations needed for writing files.
 type fileWriter interface {
 	Stat(path string) (os.FileInfo, error)
+	ReadFile(path string) ([]byte, error)
 	WriteFileAtomic(path string, content []byte, perm os.FileMode) error
 	EnsureDirs(path string) error
 }
@@ -24,6 +25,7 @@ type fileWriter interface {
 type checksumUpdater interface {
 	Compute(data []byte) string
 	Update(path string, checksum string)
+	Get(path string) (string, bool)
 }
 
 // WriteFileTool handles file writing operations.
@@ -68,21 +70,21 @@ func (t *WriteFileTool) IsConcurrentSafe() bool { return true }
 func (t *WriteFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "write_file",
-		Desc: "Create a new file with the specified content. File must not already exist.",
+		Desc: "Write a file to the local filesystem.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path": {
+			"file_path": {
 				Type:     schema.String,
-				Desc:     "Path to file",
+				Desc:     "The path to the file to write (absolute or relative to the workspace root).",
 				Required: true,
 			},
 			"content": {
 				Type:     schema.String,
-				Desc:     "File content",
+				Desc:     "The content to write to the file",
 				Required: true,
 			},
 			"comment": {
 				Type:     schema.String,
-				Desc:     "A brief comment (under 80 characters) describing why the file is being created for display in the UI. Mandatory.",
+				Desc:     "A brief explanation of why the file is being written or updated. Mandatory.",
 				Required: true,
 			},
 		}),
@@ -91,9 +93,9 @@ func (t *WriteFileTool) Definition() *schema.ToolInfo {
 
 // WriteFileRequest is the input for WriteFileTool.
 type WriteFileRequest struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-	Comment string `json:"comment"`
+	FilePath string `json:"file_path"`
+	Content  string `json:"content"`
+	Comment  string `json:"comment"`
 }
 
 func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
@@ -102,11 +104,8 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
-	if req.Path == "" {
-		return nil, fmt.Errorf("path is required")
-	}
-	if req.Comment == "" {
-		return nil, fmt.Errorf("comment is required")
+	if req.FilePath == "" {
+		return nil, fmt.Errorf("file_path is required")
 	}
 	/* Empty content allowed */
 	if int64(len(req.Content)) > t.maxFileSize {
@@ -114,23 +113,41 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 			len(req.Content), t.maxFileSize)
 	}
 
-	abs, err := t.pathResolver.Abs(req.Path)
+	abs, err := t.pathResolver.Abs(req.FilePath)
 	if err != nil {
 		return nil, err
 	}
 
 	// Fail-fast checks: existence and binary content
-	_, err = t.fileOps.Stat(abs)
-	if err == nil {
-		return nil, fmt.Errorf("file already exists: %s", req.Path)
+	info, err := t.fileOps.Stat(abs)
+	exists := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to stat %s: %w", req.FilePath, err)
 	}
-	if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("failed to stat %s: %w", req.Path, err)
+
+	if exists {
+		if info.IsDir() {
+			return nil, fmt.Errorf("path is a directory, not a file: %s", req.FilePath)
+		}
+		// Read-before-write staleness check
+		cachedChecksum, ok := t.checksumManager.Get(abs)
+		if !ok {
+			return nil, fmt.Errorf("File has not been read yet. Read it first before writing to it.")
+		}
+
+		data, err := t.fileOps.ReadFile(abs)
+		if err == nil {
+			normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+			currentChecksum := t.checksumManager.Compute([]byte(normalized))
+			if currentChecksum != cachedChecksum {
+				return nil, fmt.Errorf("File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.")
+			}
+		}
 	}
 
 	contentBytes := []byte(req.Content)
 	if content.IsBinaryContent(contentBytes) {
-		return nil, fmt.Errorf("cannot write binary content to: %s", req.Path)
+		return nil, fmt.Errorf("cannot write binary content to: %s", req.FilePath)
 	}
 
 	displayPath := t.pathResolver.DisplayPath(abs)
@@ -139,7 +156,9 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
+		relFile:         req.FilePath,
 		relPath:         displayPath,
+		exists:          exists,
 		content:         contentBytes,
 		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE \"%s\"", filepath.ToSlash(displayPath))),
 	}, nil
@@ -149,7 +168,9 @@ type writeFileInvocation struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
 	absPath         string
+	relFile         string
 	relPath         string
+	exists          bool
 	content         []byte
 	display         domain.StringDisplay
 }
@@ -166,37 +187,13 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 		return domain.ToolErrorCancelled, d
 	}
 
-	// Check if file already exists (TOCTOU protection)
-	_, err := i.fileOps.Stat(i.absPath)
-	if err == nil {
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d
-	}
-	if !os.IsNotExist(err) {
-		if ctx.Err() != nil {
-			d.Error = domain.ToolErrorCancelled
-			return domain.ToolErrorCancelled, d
-		}
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to access file: %v", err), d
-	}
-
-	// Ensure parent directories exist
-	parentDir := filepath.Dir(i.absPath)
-	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
-		if ctx.Err() != nil {
-			d.Error = domain.ToolErrorCancelled
-			return domain.ToolErrorCancelled, d
-		}
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to create parent directories: %v", err), d
-	}
-
-	// Note: Binary check already done in Prepare
+	// Normalise line endings to LF before write
+	normalizedContent := strings.ReplaceAll(string(i.content), "\r\n", "\n")
+	contentToWrite := []byte(normalizedContent)
 
 	// Write file atomically
 	perm := os.FileMode(0o644)
-	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
+	if err := i.fileOps.WriteFileAtomic(i.absPath, contentToWrite, perm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
@@ -206,10 +203,11 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	}
 
 	// Update checksum cache
-	normalized := strings.ReplaceAll(string(i.content), "\r\n", "\n")
-	checksum := i.checksumManager.Compute([]byte(normalized))
+	checksum := i.checksumManager.Compute(contentToWrite)
 	i.checksumManager.Update(i.absPath, checksum)
 
-	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
-		i.relPath, len(i.content)), d
+	if i.exists {
+		return fmt.Sprintf("The file %s has been updated successfully.", i.relFile), d
+	}
+	return fmt.Sprintf("File created successfully at: %s", i.relFile), d
 }

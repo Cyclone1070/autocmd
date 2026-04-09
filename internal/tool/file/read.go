@@ -69,20 +69,20 @@ func (t *ReadFileTool) IsConcurrentSafe() bool { return true }
 func (t *ReadFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "read_file",
-		Desc: "Read file contents with optional pagination. Use offset/limit to read large files in chunks.",
+		Desc: "Read a file from the local filesystem.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"path": {
+			"file_path": {
 				Type:     schema.String,
-				Desc:     "Path to file",
+				Desc:     "The path to the file to read (absolute or relative to the workspace root).",
 				Required: true,
 			},
 			"offset": {
 				Type: schema.Integer,
-				Desc: "Start line index (0-indexed)",
+				Desc: "The line number to start reading from. Only provide if the file is too large to read at once",
 			},
 			"limit": {
 				Type: schema.Integer,
-				Desc: "Max lines to return",
+				Desc: "The number of lines to read. Only provide if the file is too large to read at once.",
 			},
 		}),
 	}
@@ -90,9 +90,9 @@ func (t *ReadFileTool) Definition() *schema.ToolInfo {
 
 // ReadFileRequest is the input for ReadFileTool.
 type ReadFileRequest struct {
-	Path   string `json:"path"`
-	Offset int    `json:"offset,omitempty"`
-	Limit  int    `json:"limit,omitempty"`
+	FilePath string `json:"file_path"`
+	Offset   int    `json:"offset,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
 }
 
 // Prepare validates the request and returns an Invocation.
@@ -102,8 +102,8 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
 
-	if req.Path == "" {
-		return nil, fmt.Errorf("path is required")
+	if req.FilePath == "" {
+		return nil, fmt.Errorf("file_path is required")
 	}
 	if req.Offset < 0 {
 		req.Offset = 0
@@ -112,7 +112,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 		req.Limit = defaultReadFileLimit
 	}
 
-	abs, err := t.pathResolver.Abs(req.Path)
+	abs, err := t.pathResolver.Abs(req.FilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 		absPath:         abs,
 		offset:          req.Offset,
 		limit:           req.Limit,
-		display:         domain.NewStringDisplay(fmt.Sprintf("Read file \"%s\"", filepath.ToSlash(displayPath)), fmt.Sprintf("READ \"%s\"", filepath.ToSlash(displayPath))),
+		display:         domain.NewStringDisplay("", fmt.Sprintf("READ \"%s\"", filepath.ToSlash(displayPath))),
 	}, nil
 }
 
@@ -188,6 +188,14 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 }
 
 func formatFileContent(lines []string, startLine, endLine, totalLines int) string {
+	if totalLines == 0 {
+		return "<system-reminder>Warning: the file exists but the contents are empty.</system-reminder>"
+	}
+
+	if startLine > totalLines {
+		return fmt.Sprintf("<system-reminder>Warning: the file exists but is shorter than the provided offset (%d). The file has %d lines.</system-reminder>", startLine, totalLines)
+	}
+
 	if len(lines) == 0 {
 		return fmt.Sprintf("<file>\n\n(End of file - total %d lines)\n</file>", totalLines)
 	}
@@ -195,7 +203,7 @@ func formatFileContent(lines []string, startLine, endLine, totalLines int) strin
 	var sb strings.Builder
 	sb.WriteString("<file>\n")
 	for i, line := range lines {
-		fmt.Fprintf(&sb, "%05d| %s\n", startLine+i, line)
+		fmt.Fprintf(&sb, "%6d: %s\n", startLine+i, line)
 	}
 
 	if endLine < totalLines {

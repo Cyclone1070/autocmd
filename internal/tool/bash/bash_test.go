@@ -176,8 +176,8 @@ func TestBashTool_Prepare_ExecutorError(t *testing.T) {
 
 	ctx := context.Background()
 	_, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.Error(t, err)
-	assert.Contains(t, disp.GetError(), "command not found")
+	require.NoError(t, err)
+	assert.Equal(t, domain.ToolErrorFailed, disp.GetError())
 }
 
 func TestBashTool_Prepare_EmptyWorkspaceRoot(t *testing.T) {

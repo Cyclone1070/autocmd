@@ -317,35 +317,6 @@ func (e *ToolExecutor) executeInvocation(
 	if finalDisplay == nil {
 		panic(fmt.Sprintf("tool %q Execute returned nil finalDisplay (callID=%s)", toolName, callID))
 	}
-	if err != nil {
-		if ctx.Err() != nil {
-			if events != nil {
-				events.SendUIUpdate(domain.ToolEndEvent{
-					CallID:  callID,
-					Display: finalDisplay,
-				})
-			}
-			return &schema.Message{
-				Role:       schema.Tool,
-				ToolCallID: callID,
-				ToolName:   toolName,
-				Content:    llmContent,
-			}, finalDisplay, ctx.Err()
-		}
-		if events != nil {
-			events.SendUIUpdate(domain.ToolEndEvent{
-				CallID:  callID,
-				Display: finalDisplay,
-			})
-		}
-		return &schema.Message{
-			Role:       schema.Tool,
-			ToolCallID: callID,
-			ToolName:   toolName,
-			Content:    llmContent,
-		}, finalDisplay, nil
-	}
-
 	streamWG.Wait()
 	if events != nil {
 		events.SendUIUpdate(domain.ToolEndEvent{
@@ -353,12 +324,13 @@ func (e *ToolExecutor) executeInvocation(
 			Display: finalDisplay,
 		})
 	}
+
 	return &schema.Message{
 		Role:       schema.Tool,
 		ToolCallID: callID,
 		ToolName:   toolName,
 		Content:    llmContent,
-	}, finalDisplay, nil
+	}, finalDisplay, err
 }
 
 func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {

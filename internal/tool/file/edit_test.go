@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // executeEdit calls Prepare then Execute, returning the LLM output string.
@@ -452,12 +453,7 @@ func TestEditFile(t *testing.T) {
 
 		// Execute should return error in message, nil error
 		output, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		if err == nil {
-			t.Errorf("expected operation error for logging per tool.md contract")
-		}
-		if err.Error() != "Execution failed" {
-			t.Errorf("expected 'Execution failed' error, got: %v", err)
-		}
+		require.NoError(t, err)
 		assertContains(t, output, "file changed since edit was prepared")
 	})
 

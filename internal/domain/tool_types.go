@@ -14,6 +14,9 @@ import (
 // ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
 const ToolErrorCancelled = "Cancelled"
 
+// ToolErrorFailed is the generic ToolDisplay.Error for any non-cancellation failures.
+const ToolErrorFailed = "execution failed"
+
 // Invocation is a validated, prepared tool call: at minimum a display for the UI.
 // Returned by Tool.Prepare(). Concrete kinds implement ExecutableInvocation, StreamableInvocation,
 // and/or InteractiveInvocation.
@@ -26,9 +29,9 @@ type Invocation interface {
 type ExecutableInvocation interface {
 	Invocation
 	// Execute runs the operation and returns LLM-facing content, the finalized display for UI/history,
-	// and err. err is non-nil when the tool invocation itself fails (e.g. cancelled context, I/O failure);
-	// semantic outcomes stay in content and display without err for cases like non-zero bash.exit.
-	// When err is non-nil, finalDisplay must surface the failure via GetError() (executor does not patch this).
+	// and err. err is non-nil ONLY when the tool invocation itself is interrupted by context cancellation.
+	// Technical failures (e.g. command errors, I/O failures) and semantic outcomes stay in content
+	// and display without returning an err.
 	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
@@ -43,6 +46,8 @@ type StreamableInvocation interface {
 // The executor must not call Execute on these; it waits for an action and calls Resolve instead.
 type InteractiveInvocation interface {
 	Invocation
+	// Resolve is called after the user provides an action. It returns the finalized content and display.
+	// Like Execute, it only returns a non-nil error if the context is cancelled.
 	Resolve(ctx context.Context, action Action) (llmContent string, finalDisplay ToolDisplay, err error)
 }
 
@@ -165,8 +170,8 @@ func NewQuestionDisplay(questions []QuestionInfo) QuestionDisplay {
 
 // QuestionAnswerAction is sent by the prompt UI after the user submits or cancels the question toolbox.
 type QuestionAnswerAction struct {
-	CallID    string
-	Answers   [][]string // per-question selected labels and/or custom text; order matches Questions
+	CallID  string
+	Answers [][]string // per-question selected labels and/or custom text; order matches Questions
 }
 
 func (QuestionAnswerAction) isAction() {}

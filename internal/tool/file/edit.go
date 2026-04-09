@@ -3,7 +3,6 @@ package file
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -265,14 +264,14 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: failed to read file %s: %v", i.relPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to re-read file for verification: %v", err), d, nil
 	}
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
 	currentChecksum := i.checksumManager.Compute([]byte(normalized))
 	if currentChecksum != i.expectedChecksum {
-		d.Error = "file changed since edit was prepared"
-		return fmt.Sprintf("Error: file changed since edit was prepared: %s", i.relPath), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: edit conflict: file changed since edit was prepared: %s", i.relPath), d, nil
 	}
 
 	// Write the modified content atomically using pre-computed content
@@ -281,8 +280,8 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to write modified content: %v", err), d, nil
 	}
 
 	// Update checksum cache with normalized content

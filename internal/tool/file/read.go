@@ -3,7 +3,6 @@ package file
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -168,8 +167,8 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: %s", err.Error()), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to read file: %v", err), d, nil
 	}
 
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")

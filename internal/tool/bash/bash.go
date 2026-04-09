@@ -125,9 +125,9 @@ func (i *bashInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *bashInvocation) cancelledDisplay() domain.BashDisplay {
-	sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
-	sh.Error = domain.ToolErrorCancelled
-	return sh
+	d := domain.NewBashDisplay(i.comment, i.commandStr, "")
+	d.Error = domain.ToolErrorCancelled
+	return d
 }
 
 func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
@@ -140,12 +140,9 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 
 	streamCmd, err := i.commandExecutor.RunStreaming(ctx, i.command, i.wd, i.env)
 	if err != nil {
-		if i.pipeWriter != nil {
-			_ = i.pipeWriter.CloseWithError(err)
-		}
-		sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
-		sh.Error = err.Error()
-		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
+		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to start command: %v", err), d, nil
 	}
 
 	// Pump streamed stdout/stderr to the pipe so the UI can consume chunks.
@@ -159,14 +156,11 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	result, err := streamCmd.Wait()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			if i.pipeWriter != nil {
-				_ = i.pipeWriter.CloseWithError(err)
-			}
 			return "", i.cancelledDisplay(), err
 		}
-		sh := domain.NewBashDisplay(i.comment, i.commandStr, "")
-		sh.Error = err.Error()
-		return fmt.Sprintf("Error: %v", err), sh, errors.New("Execution failed")
+		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: command wait failed: %v", err), d, nil
 	}
 
 	output := result.Stdout
@@ -177,6 +171,6 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		truncationNote = "\n(Output truncated)"
 	}
 
-	sh := domain.NewBashDisplay(i.comment, i.commandStr, output)
-	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), sh, nil
+	d := domain.NewBashDisplay(i.comment, i.commandStr, output)
+	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), d, nil
 }

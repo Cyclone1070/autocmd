@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -159,15 +158,15 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			return "execution cancelled", d, ctx.Err()
 		}
 		if os.IsNotExist(err) {
-			d.Error = err.Error()
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, errors.New("Execution failed")
+			d.Error = domain.ToolErrorFailed
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, nil
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, nil
 	}
 	if !info.IsDir() {
-		d.Error = "path is not a directory"
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d, nil
 	}
 
 	// fd --glob "pattern" searchPath
@@ -179,13 +178,13 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: fd failed to start: %v", err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: fd failed to start: %v", err), d, nil
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		d.Error = fmt.Sprintf("exit code %d", res.ExitCode)
-		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d, nil
 	}
 
 	maxResults := maxFindResults

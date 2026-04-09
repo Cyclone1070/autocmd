@@ -13,6 +13,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Local mocks for write tests
@@ -333,13 +334,8 @@ func TestWriteFile(t *testing.T) {
 
 		req := &WriteFileRequest{Path: "nested/deep/file.txt", Content: "content", Comment: "test comment"}
 		result, err := executeWrite(t, writeTool, req)
-		if err == nil {
-			t.Errorf("expected operation error for logging per tool.md contract")
-		}
-		if err.Error() != "Execution failed" {
-			t.Errorf("expected 'Execution failed' error, got: %v", err)
-		}
-		if !strings.Contains(result, "failed to create directories") {
+		require.NoError(t, err)
+		if !strings.Contains(result, "failed to create parent directories") {
 			t.Errorf("expected error message about directories, got: %s", result)
 		}
 	})

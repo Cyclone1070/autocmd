@@ -367,10 +367,7 @@ func TestReadFile(t *testing.T) {
 		delete(fs.files, "/workspace/test.txt")
 
 		output, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		if err == nil {
-			t.Fatal("expected Execute to fail")
-		}
-		assert.Equal(t, "Execution failed", err.Error())
+		require.NoError(t, err)
 		assertContains(t, output, "Error:")
 	})
 

@@ -3,7 +3,6 @@ package search
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -259,15 +258,15 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, nil
 	}
 
 	mode := i.req.OutputMode
 	cmd, workDir, err := i.prepareGrepCommand()
 	if err != nil {
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: %v", err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: %v", err), d, nil
 	}
 	i.workDir = workDir
 
@@ -277,13 +276,13 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: rg failed: %v", err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: rg failed: %v", err), d, nil
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
-		d.Error = fmt.Sprintf("exit code %d", res.ExitCode)
-		return fmt.Sprintf("Error: rg failed with exit code %d: %s", res.ExitCode, res.Stderr), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: ripgrep failed with exit code %d\n%s", res.ExitCode, res.Stderr), d, nil
 	}
 
 	return i.formatResults(res.Stdout, mode), d, nil

@@ -86,8 +86,7 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	req := &GlobRequest{Pattern: "*.go"}
 
 	result, err := executeFind(t, tool, req)
-	assert.Error(t, err)
-	assert.Equal(t, "Execution failed", err.Error())
+	assert.NoError(t, err)
 	assert.Contains(t, result, "fatal error")
 }
 

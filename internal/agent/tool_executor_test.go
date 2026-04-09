@@ -464,9 +464,9 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 		name: "test",
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
-				content: "oops",
-				display: domain.NewStringDisplay("", "preview"),
-				err:     fmt.Errorf("infra failure"),
+				content: "infra failure",
+				display: domain.NewStringDisplay("", "preview").WithError(domain.ToolErrorFailed),
+				err:     nil,
 			}, nil
 		},
 	}
@@ -478,10 +478,10 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 		Function: schema.FunctionCall{Name: "test"},
 	}, nil)
 	assert.NoError(t, err)
-	assert.Equal(t, "infra failure", disp.GetError())
+	assert.Equal(t, domain.ToolErrorFailed, disp.GetError())
 	sd, ok := disp.(domain.StringDisplay)
 	assert.True(t, ok)
-	assert.Equal(t, "infra failure", sd.Error)
+	assert.Equal(t, domain.ToolErrorFailed, sd.Error)
 }
 
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
@@ -490,8 +490,8 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Detailed error in content",
-				display: domain.NewStringDisplay("", ""),
-				err:     fmt.Errorf("infra failure"),
+				display: domain.NewStringDisplay("", "").WithError(domain.ToolErrorFailed),
+				err:     nil,
 			}, nil
 		},
 	}
@@ -517,7 +517,7 @@ func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	end, ok := e2.(domain.ToolEndEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-fail", end.CallID)
-	assert.Equal(t, "infra failure", end.Display.GetError())
+	assert.Equal(t, domain.ToolErrorFailed, end.Display.GetError())
 }
 
 func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
@@ -529,9 +529,9 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				stream:  output,
-				display: domain.NewBashDisplay("Header", "cmd", ""),
+				display: domain.NewBashDisplay("Header", "cmd", "").WithError(domain.ToolErrorFailed),
 				content: "specific error",
-				err:     fmt.Errorf("command timeout"),
+				err:     nil,
 			}, nil
 		},
 	}
@@ -563,7 +563,7 @@ loop:
 	}
 
 	assert.Equal(t, 1, len(endEvents), "Must receive exactly ONE completion event (avoid race override). Got: %v", endEvents)
-	assert.Equal(t, "command timeout", endEvents[0].Display.GetError(), "Completion event must retain the execution error status")
+	assert.Equal(t, domain.ToolErrorFailed, endEvents[0].Display.GetError(), "Completion event must retain the execution error status")
 }
 
 func TestExecute_ConcurrentCalls_NoRace(t *testing.T) {

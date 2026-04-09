@@ -3,7 +3,6 @@ package file
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -170,17 +169,16 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	// Check if file already exists (TOCTOU protection)
 	_, err := i.fileOps.Stat(i.absPath)
 	if err == nil {
-		e := fmt.Errorf("file already exists: %s", i.relPath)
-		d.Error = e.Error()
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d, e
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d, nil
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: failed to stat %s: %v", i.relPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to access file: %v", err), d, nil
 	}
 
 	// Ensure parent directories exist
@@ -190,8 +188,8 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: failed to create directories: %v", err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to create parent directories: %v", err), d, nil
 	}
 
 	// Note: Binary check already done in Prepare
@@ -203,8 +201,8 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 			d.Error = domain.ToolErrorCancelled
 			return "execution cancelled", d, ctx.Err()
 		}
-		d.Error = err.Error()
-		return fmt.Sprintf("Error: failed to write file %s: %v", i.relPath, err), d, errors.New("Execution failed")
+		d.Error = domain.ToolErrorFailed
+		return fmt.Sprintf("Error: failed to write file: %v", err), d, nil
 	}
 
 	// Update checksum cache

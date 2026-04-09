@@ -145,8 +145,7 @@ func TestGrep_ExecutionFailure(t *testing.T) {
 	req := &GrepRequest{Pattern: "pattern"}
 
 	result, err := executeSearch(t, tool, req)
-	assert.Error(t, err)
-	assert.Equal(t, "Execution failed", err.Error())
+	assert.NoError(t, err)
 	assert.Contains(t, result, "fatal error")
 }
 

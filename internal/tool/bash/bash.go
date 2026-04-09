@@ -130,19 +130,19 @@ func (i *bashInvocation) cancelledDisplay() domain.BashDisplay {
 	return d
 }
 
-func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	if ctx.Err() != nil {
 		if i.pipeWriter != nil {
 			_ = i.pipeWriter.CloseWithError(ctx.Err())
 		}
-		return "execution cancelled", i.cancelledDisplay(), ctx.Err()
+		return domain.ToolErrorCancelled, i.cancelledDisplay()
 	}
 
 	streamCmd, err := i.commandExecutor.RunStreaming(ctx, i.command, i.wd, i.env)
 	if err != nil {
 		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to start command: %v", err), d, nil
+		return fmt.Sprintf("Error: failed to start command: %v", err), d
 	}
 
 	// Pump streamed stdout/stderr to the pipe so the UI can consume chunks.
@@ -156,11 +156,11 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	result, err := streamCmd.Wait()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", i.cancelledDisplay(), err
+			return domain.ToolErrorCancelled, i.cancelledDisplay()
 		}
 		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: command wait failed: %v", err), d, nil
+		return fmt.Sprintf("Error: command wait failed: %v", err), d
 	}
 
 	output := result.Stdout
@@ -172,5 +172,5 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	}
 
 	d := domain.NewBashDisplay(i.comment, i.commandStr, output)
-	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), d, nil
+	return fmt.Sprintf("%s\n\n(Exit code: %d)%s", output, exitCode, truncationNote), d
 }

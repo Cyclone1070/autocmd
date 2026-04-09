@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -34,172 +33,210 @@ func (e *ToolExecutor) definitions() []*schema.ToolInfo {
 	return e.registry.Definitions()
 }
 
-type batchOutcome struct {
-	index   int
-	callID  string
-	resp    *schema.Message
-	display domain.ToolDisplay
-}
-
-type preparedCall struct {
-	index          int
-	callID         string
-	toolName       string
-	inv            domain.Invocation
-	previewDisplay domain.ToolDisplay
-	concurrentSafe bool
-}
-
-func emitToolStart(events eventSender, callID string, previewDisplay domain.ToolDisplay) {
-	if events == nil {
-		return
-	}
-	events.SendUIUpdate(domain.ToolStartEvent{
-		CallID:  callID,
-		Display: previewDisplay,
-	})
-}
-
-func bakeCancelledOutcomeFromPreview(p preparedCall, fatalErr error) batchOutcome {
-	content := "tool failed unexpectedly while executing"
-	displayErr := "Infrastructure failed"
-	if errors.Is(fatalErr, context.Canceled) {
-		content = "execution cancelled"
-		displayErr = domain.ToolErrorCancelled
-	}
-	display := p.previewDisplay.WithError(displayErr)
-	msg := &schema.Message{
-		Role:       schema.Tool,
-		ToolCallID: p.callID,
-		ToolName:   p.toolName,
-		Content:    content,
-	}
-	return batchOutcome{
-		index:   p.index,
-		callID:  p.callID,
-		resp:    msg,
-		display: display,
-	}
-}
-
 func (e *ToolExecutor) executeBatch(ctx context.Context, calls []schema.ToolCall, events eventSender) (batchResult, error) {
-	outcomes := make([]batchOutcome, len(calls))
-	plans := make([]preparedCall, 0, len(calls))
-	for i, tc := range calls {
-		plan, out := e.preflightCall(i, tc, events)
-		outcomes[i] = out
-		if plan != nil {
-			plans = append(plans, *plan)
-		}
-	}
+	responses := make([]*schema.Message, len(calls))
+	displays := make(map[string]domain.ToolDisplay)
 
-	var fatalErr error
-	for idx := 0; idx < len(plans); {
-		if !plans[idx].concurrentSafe {
-			emitToolStart(events, plans[idx].callID, plans[idx].previewDisplay)
-			resp, disp, err := e.executeInvocation(ctx, plans[idx].callID, plans[idx].toolName, plans[idx].inv, events)
-			outcomes[plans[idx].index] = batchOutcome{
-				index:   plans[idx].index,
-				callID:  plans[idx].callID,
-				resp:    resp,
-				display: disp,
+	for i := 0; i < len(calls); {
+		tc := calls[i]
+		tool, _ := e.registry.Get(tc.Function.Name)
+
+		// 1. Barrier check (unknown or non-concurrent-safe tools)
+		if tool == nil || !tool.IsConcurrentSafe() {
+			inv, msg, disp := e.prepareTool(ctx, &tc, events)
+			// No inv means execution stops here
+			if inv == nil {
+				responses[i] = msg
+				displays[tc.ID] = disp
+			} else {
+				resp, finalDisp := e.executeTool(ctx, &tc, inv, events)
+				responses[i] = resp
+				displays[tc.ID] = finalDisp
 			}
-			if err != nil {
-				fatalErr = err
-				break
-			}
-			idx++
+			i++
 			continue
 		}
 
-		start := idx
-		for idx < len(plans) && plans[idx].concurrentSafe {
-			idx++
+		// 2. Greedy batching for concurrent-safe tools
+		start := i
+		for i < len(calls) {
+			tNext, _ := e.registry.Get(calls[i].Function.Name)
+			if tNext == nil || !tNext.IsConcurrentSafe() {
+				break
+			}
+			i++
 		}
-		segment := plans[start:idx]
-		for _, p := range segment {
-			emitToolStart(events, p.callID, p.previewDisplay)
+		segment := calls[start:i]
+
+		// Prepare all in segment sequentially to ensure StartEvents are in input order
+		preparedInvs := make([]domain.Invocation, len(segment))
+		failureOutcomes := make([]*struct {
+			resp *schema.Message
+			disp domain.ToolDisplay
+		}, len(segment))
+
+		for j := range segment {
+			inv, msg, disp := e.prepareTool(ctx, &segment[j], events)
+			if inv == nil {
+				failureOutcomes[j] = &struct {
+					resp *schema.Message
+					disp domain.ToolDisplay
+				}{msg, disp}
+			} else {
+				preparedInvs[j] = inv
+			}
 		}
 
 		var mu sync.Mutex
 		var wg sync.WaitGroup
-		var firstErr error
-		for _, p := range segment {
+		for j, tcBatch := range segment {
+			if failureOutcomes[j] != nil {
+				responses[start+j] = failureOutcomes[j].resp
+				if failureOutcomes[j].disp != nil {
+					displays[tcBatch.ID] = failureOutcomes[j].disp
+				}
+				continue
+			}
+
 			wg.Add(1)
-			go func(p preparedCall) {
+			go func(idx int, tcb schema.ToolCall, inv domain.Invocation) {
 				defer wg.Done()
-				resp, disp, err := e.executeInvocation(ctx, p.callID, p.toolName, p.inv, events)
+				resp, disp := e.executeTool(ctx, &tcb, inv, events)
 				mu.Lock()
 				defer mu.Unlock()
-				if err != nil && firstErr == nil {
-					firstErr = err
+				responses[start+idx] = resp
+				if disp != nil {
+					displays[tcb.ID] = disp
 				}
-				outcomes[p.index] = batchOutcome{
-					index:   p.index,
-					callID:  p.callID,
-					resp:    resp,
-					display: disp,
-				}
-			}(p)
+			}(j, tcBatch, preparedInvs[j])
 		}
 		wg.Wait()
-		if firstErr != nil {
-			fatalErr = firstErr
-			break
-		}
 	}
 
-	// Fatal errors (infra/cancellation) must still produce tool-result messages for
-	// all calls that were preflighted successfully but never got executed.
-	if fatalErr != nil {
-		for _, p := range plans {
-			if outcomes[p.index].resp == nil {
-				outcomes[p.index] = bakeCancelledOutcomeFromPreview(p, fatalErr)
-			}
-		}
-	}
-
-	res := batchResult{
-		Responses: make([]*schema.Message, len(outcomes)),
-		Displays:  make(map[string]domain.ToolDisplay, len(outcomes)),
-	}
-	for i, out := range outcomes {
-		res.Responses[i] = out.resp
-		if out.display != nil && out.callID != "" {
-			res.Displays[out.callID] = out.display
-		}
-	}
-	return res, fatalErr
+	return batchResult{
+		Responses: responses,
+		Displays:  displays,
+	}, ctx.Err()
 }
 
-func (e *ToolExecutor) preflightCall(index int, tc schema.ToolCall, events eventSender) (*preparedCall, batchOutcome) {
-	t, ok := e.registry.Get(tc.Function.Name)
-	if !ok {
-		resp, disp := e.unknownToolOutcome(tc, events)
-		return nil, batchOutcome{index: index, callID: tc.ID, resp: resp, display: disp}
+func emitToolStart(events eventSender, callID string, display domain.ToolDisplay) {
+	if events != nil && display != nil {
+		events.SendUIUpdate(domain.ToolStartEvent{
+			CallID:  callID,
+			Display: display,
+		})
+	}
+}
+
+func (e *ToolExecutor) prepareTool(ctx context.Context, tc *schema.ToolCall, events eventSender) (domain.Invocation, *schema.Message, domain.ToolDisplay) {
+	toolName := tc.Function.Name
+	callID := tc.ID
+
+	if ctx.Err() != nil {
+		return nil, &schema.Message{
+			Role:       schema.Tool,
+			ToolCallID: tc.ID,
+			ToolName:   tc.Function.Name,
+			Content:    domain.ToolErrorCancelled,
+		}, nil
 	}
 
-	inv, err := t.Prepare(tc.Function.Arguments)
-	if err != nil {
-		resp, disp := e.prepareFailureOutcome(t, tc, err, events)
-		return nil, batchOutcome{index: index, callID: tc.ID, resp: resp, display: disp}
+	tool, ok := e.registry.Get(toolName)
+	if !ok {
+		msg, disp := e.unknownToolOutcome(tc, events)
+		return nil, msg, disp
 	}
+
+	inv, err := tool.Prepare(tc.Function.Arguments)
+	if err != nil {
+		msg, disp := e.prepareFailureOutcome(tool, tc, err, events)
+		return nil, msg, disp
+	}
+
 	previewDisplay := inv.Display()
 	if previewDisplay == nil {
-		panic(fmt.Sprintf("tool %q Prepare returned invocation with nil display (callID=%s)", tc.Function.Name, tc.ID))
+		panic(fmt.Sprintf("tool %q Prepare returned invocation with nil display (callID=%s)", toolName, callID))
 	}
 
-	return &preparedCall{
-		index:          index,
-		callID:         tc.ID,
-		toolName:       tc.Function.Name,
-		inv:            inv,
-		previewDisplay: previewDisplay,
-		concurrentSafe: t.IsConcurrentSafe(),
-	}, batchOutcome{index: index, callID: tc.ID}
+	emitToolStart(events, callID, previewDisplay)
+	return inv, nil, nil
 }
 
-func (e *ToolExecutor) unknownToolOutcome(tc schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay) {
+func (e *ToolExecutor) executeTool(ctx context.Context, tc *schema.ToolCall, inv domain.Invocation, events eventSender) (*schema.Message, domain.ToolDisplay) {
+	toolName := tc.Function.Name
+	callID := tc.ID
+
+	// Identification & Execution
+	var llmContent string
+	var finalDisplay domain.ToolDisplay
+
+	if interInv, ok := inv.(domain.InteractiveInvocation); ok {
+		// Wait for action (interactive path)
+		if e.waiter == nil {
+			panic("toolExecutor.executeTool: InteractiveInvocation encountered but no actionWaiter provided")
+		}
+
+		action, _ := e.waiter.Wait(ctx, callID)
+
+		// On success or user cancellation (ctx.Err() != nil), we ask the tool to resolve the final state.
+		llmContent, finalDisplay = interInv.Resolve(ctx, action)
+	} else if execInv, ok := inv.(domain.ExecutableInvocation); ok {
+		// Standard synchronous execution
+		var si domain.StreamableInvocation
+		if s, sOk := inv.(domain.StreamableInvocation); sOk {
+			si = s
+		}
+
+		// Handle streaming UI output if applicable
+		var streamWG sync.WaitGroup
+		if si != nil && events != nil {
+			stream := si.Stream()
+			if stream != nil {
+				streamWG.Go(func() {
+					buf := make([]byte, 1024*1024)
+					for {
+						n, readErr := stream.Read(buf)
+						if n > 0 {
+							events.SendUIUpdate(domain.ToolStreamEvent{
+								CallID: callID,
+								Chunk:  string(buf[:n]),
+							})
+						}
+						if readErr != nil {
+							break
+						}
+					}
+				})
+			}
+		}
+
+		llmContent, finalDisplay = execInv.Execute(ctx)
+		streamWG.Wait()
+	} else {
+		panic(fmt.Sprintf("tool %q invocation implements neither Executable nor Interactive", toolName))
+	}
+
+	if finalDisplay == nil {
+		panic(fmt.Sprintf("tool %q returned nil finalDisplay (callID=%s)", toolName, callID))
+	}
+
+	// Final events and response
+	if events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{
+			CallID:  callID,
+			Display: finalDisplay,
+		})
+	}
+
+	return &schema.Message{
+		Role:       schema.Tool,
+		ToolCallID: callID,
+		ToolName:   toolName,
+		Content:    llmContent,
+	}, finalDisplay
+}
+
+func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay) {
 	defs := e.definitions()
 	defsJSON, _ := json.MarshalIndent(defs, "", "  ")
 	errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
@@ -225,7 +262,7 @@ func (e *ToolExecutor) unknownToolOutcome(tc schema.ToolCall, events eventSender
 	}, endDisp
 }
 
-func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {
+func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {
 	defJSON, _ := json.MarshalIndent(t.Definition(), "", "  ")
 	errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, prepErr, defJSON)
 
@@ -249,95 +286,4 @@ func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc schema.ToolCall, 
 		ToolName:   tc.Function.Name,
 		Content:    errMsg,
 	}, endDisp
-}
-
-func (e *ToolExecutor) executeInvocation(
-	ctx context.Context,
-	callID string,
-	toolName string,
-	inv domain.Invocation,
-	events eventSender,
-) (*schema.Message, domain.ToolDisplay, error) {
-	execInv, ok := inv.(domain.ExecutableInvocation)
-	if !ok {
-		interInv, ok := inv.(domain.InteractiveInvocation)
-		if !ok {
-			panic(fmt.Sprintf("tool %q returned unsupported invocation: %T", toolName, inv))
-		}
-
-		if e.waiter == nil {
-			panic("toolExecutor.executeInvocation: InteractiveInvocation encountered but no actionWaiter provided")
-		}
-
-		// Wait for the user to provide an answer/action (only returns context error handled by Resolve)
-		action, _ := e.waiter.Wait(ctx, callID)
-
-		// On success or user cancellation (ctx.Err() != nil), we ask the tool to resolve the final state.
-		llmContent, finalDisplay, resErr := interInv.Resolve(ctx, action)
-		if finalDisplay == nil {
-			panic(fmt.Sprintf("tool %q Resolve returned nil finalDisplay (callID=%s)", toolName, callID))
-		}
-		if events != nil {
-			events.SendUIUpdate(domain.ToolEndEvent{
-				CallID:  callID,
-				Display: finalDisplay,
-			})
-		}
-		return &schema.Message{
-			Role:       schema.Tool,
-			ToolCallID: callID,
-			ToolName:   toolName,
-			Content:    llmContent,
-		}, finalDisplay, resErr
-	}
-
-	var streamWG sync.WaitGroup
-	if si, ok := inv.(domain.StreamableInvocation); ok && events != nil {
-		stream := si.Stream()
-		if stream != nil {
-			streamWG.Go(func() {
-				buf := make([]byte, 1024*1024)
-				for {
-					n, err := stream.Read(buf)
-					if n > 0 {
-						events.SendUIUpdate(domain.ToolStreamEvent{
-							CallID: callID,
-							Chunk:  string(buf[:n]),
-						})
-					}
-					if err != nil {
-						break
-					}
-				}
-			})
-		}
-	}
-
-	llmContent, finalDisplay, err := execInv.Execute(ctx)
-	if finalDisplay == nil {
-		panic(fmt.Sprintf("tool %q Execute returned nil finalDisplay (callID=%s)", toolName, callID))
-	}
-	streamWG.Wait()
-	if events != nil {
-		events.SendUIUpdate(domain.ToolEndEvent{
-			CallID:  callID,
-			Display: finalDisplay,
-		})
-	}
-
-	return &schema.Message{
-		Role:       schema.Tool,
-		ToolCallID: callID,
-		ToolName:   toolName,
-		Content:    llmContent,
-	}, finalDisplay, err
-}
-
-func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {
-	plan, out := e.preflightCall(0, *tc, events)
-	if plan == nil {
-		return out.resp, out.display, nil
-	}
-	emitToolStart(events, plan.callID, plan.previewDisplay)
-	return e.executeInvocation(ctx, tc.ID, tc.Function.Name, plan.inv, events)
 }

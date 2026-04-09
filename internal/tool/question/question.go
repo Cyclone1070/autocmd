@@ -79,12 +79,12 @@ func (i *QuestionInvocation) Display() domain.ToolDisplay {
 	return domain.NewQuestionDisplay(i.questions)
 }
 
-func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error) {
+func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
 	if ctx.Err() != nil {
 		list := i.formatQuestionList()
 		display := domain.NewStringDisplay("Questions attempted", list)
 		display.Error = domain.ToolErrorCancelled
-		return "execution cancelled", display, ctx.Err()
+		return domain.ToolErrorCancelled, display
 	}
 
 	qa, ok := action.(domain.QuestionAnswerAction)
@@ -94,7 +94,7 @@ func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) 
 
 	summary := formatAnswerSummary(i.questions, qa.Answers)
 
-	return summary, domain.NewStringDisplay("Questions attempted", summary), nil
+	return summary, domain.NewStringDisplay("Questions attempted", summary)
 }
 
 func (i *QuestionInvocation) formatQuestionList() string {

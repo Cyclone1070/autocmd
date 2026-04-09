@@ -142,12 +142,12 @@ func (i *globInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "execution cancelled", d, ctx.Err()
+		return domain.ToolErrorCancelled, d
 	}
 
 	// Re-verify State
@@ -155,18 +155,18 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		if os.IsNotExist(err) {
 			d.Error = domain.ToolErrorFailed
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d, nil
+			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, nil
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d
 	}
 	if !info.IsDir() {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d, nil
+		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d
 	}
 
 	// fd --glob "pattern" searchPath
@@ -176,15 +176,15 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: fd failed to start: %v", err), d, nil
+		return fmt.Sprintf("Error: fd failed to start: %v", err), d
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d, nil
+		return fmt.Sprintf("Error: fd failed with exit code %d: %s", res.ExitCode, res.Stderr), d
 	}
 
 	maxResults := maxFindResults
@@ -207,7 +207,7 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	}
 
 	if len(matches) == 0 {
-		return "No matches found.", d, nil
+		return "No matches found.", d
 	}
 
 	formattedMatches := strings.Join(matches, "\n")
@@ -215,5 +215,5 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		formattedMatches += "\n\n(Results truncated. Consider using a more specific pattern.)"
 	}
 
-	return formattedMatches, d, nil
+	return formattedMatches, d
 }

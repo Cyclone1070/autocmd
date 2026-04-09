@@ -212,8 +212,8 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewBashDisplay("Run Bash", "echo chunk", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
-					return "done", domain.NewBashDisplay("Run Bash", "echo chunk", ""), nil
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					return "done", domain.NewBashDisplay("Run Bash", "echo chunk", "")
 				},
 			}, nil
 		},
@@ -301,10 +301,10 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					close(t1Started)
 					<-canFinish
-					return "R1", domain.NewStringDisplay("", ""), nil
+					return "R1", domain.NewStringDisplay("", "")
 				},
 			}, nil
 		},
@@ -314,10 +314,10 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					close(t2Started)
 					<-canFinish
-					return "R2", domain.NewStringDisplay("", ""), nil
+					return "R2", domain.NewStringDisplay("", "")
 				},
 			}, nil
 		},
@@ -372,10 +372,10 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
 				display: cancelDisp,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					time.Sleep(50 * time.Millisecond)
 					cancel()
-					return "execution cancelled", cancelDisp, ctx.Err()
+					return domain.ToolErrorCancelled, cancelDisp
 				},
 			}, nil
 		},
@@ -387,9 +387,9 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
 				display: cancelDisp,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					<-ctx.Done()
-					return "execution cancelled", cancelDisp, ctx.Err()
+					return domain.ToolErrorCancelled, cancelDisp
 				},
 			}, nil
 		},
@@ -406,10 +406,10 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	assert.Equal(t, 5, len(session.Messages))
 	assert.Equal(t, schema.Tool, session.Messages[2].Role)
 	assert.Equal(t, "tc-1", session.Messages[2].ToolCallID)
-	assert.Equal(t, "execution cancelled", session.Messages[2].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, session.Messages[2].Content)
 	assert.Equal(t, schema.Tool, session.Messages[3].Role)
 	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
-	assert.Equal(t, "execution cancelled", session.Messages[3].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, session.Messages[3].Content)
 	assert.Equal(t, "[Session cancelled by user]", session.Messages[4].Content)
 }
 

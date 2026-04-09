@@ -12,7 +12,7 @@ import (
 )
 
 // ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
-const ToolErrorCancelled = "Cancelled"
+const ToolErrorCancelled = "execution cancelled"
 
 // ToolErrorFailed is the generic ToolDisplay.Error for any non-cancellation failures.
 const ToolErrorFailed = "execution failed"
@@ -28,11 +28,10 @@ type Invocation interface {
 // ExecutableInvocation runs synchronously via Execute (most tools).
 type ExecutableInvocation interface {
 	Invocation
-	// Execute runs the operation and returns LLM-facing content, the finalized display for UI/history,
-	// and err. err is non-nil ONLY when the tool invocation itself is interrupted by context cancellation.
-	// Technical failures (e.g. command errors, I/O failures) and semantic outcomes stay in content
-	// and display without returning an err.
-	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay, err error)
+	// Execute runs the operation and returns LLM-facing content and the finalized display for UI/history.
+	// It no longer returns an error; cancellation and technical outcomes are checked via ctx.Err()
+	// and reported inside the LLM content/display.
+	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay)
 }
 
 // StreamableInvocation is an ExecutableInvocation that exposes a live stdout/stderr stream for UI
@@ -47,8 +46,7 @@ type StreamableInvocation interface {
 type InteractiveInvocation interface {
 	Invocation
 	// Resolve is called after the user provides an action. It returns the finalized content and display.
-	// Like Execute, it only returns a non-nil error if the context is cancelled.
-	Resolve(ctx context.Context, action Action) (llmContent string, finalDisplay ToolDisplay, err error)
+	Resolve(ctx context.Context, action Action) (llmContent string, finalDisplay ToolDisplay)
 }
 
 // ToolDisplay is implemented by all display types returned from tools.

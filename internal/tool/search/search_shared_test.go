@@ -115,8 +115,8 @@ func executeSearch(t *testing.T, tool *GrepTool, req *GrepRequest) (string, erro
 		return "", err
 	}
 
-	out, _, err := invocation.(domain.ExecutableInvocation).Execute(context.Background())
-	return out, err
+	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
+	return out, nil
 }
 
 func executeFind(t *testing.T, tool *GlobTool, req *GlobRequest) (string, error) {
@@ -128,6 +128,6 @@ func executeFind(t *testing.T, tool *GlobTool, req *GlobRequest) (string, error)
 		return "", err
 	}
 
-	out, _, err := invocation.(domain.ExecutableInvocation).Execute(context.Background())
-	return out, err
+	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
+	return out, nil
 }

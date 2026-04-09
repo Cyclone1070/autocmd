@@ -105,8 +105,8 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
-	assert.ErrorIs(t, execErr, context.Canceled)
+	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.ErrorIs(t, ctx.Err(), context.Canceled)
 	assert.NotNil(t, disp)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }

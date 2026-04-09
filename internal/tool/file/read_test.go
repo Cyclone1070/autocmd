@@ -110,7 +110,7 @@ func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (strin
 	if err != nil {
 		return "", err
 	}
-	out, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
+	out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }
 
@@ -132,9 +132,9 @@ func TestReadFile(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
+		_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 
-		require.ErrorIs(t, execErr, context.Canceled)
+		require.ErrorIs(t, ctx.Err(), context.Canceled)
 		require.NotNil(t, disp)
 		assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 	})
@@ -366,7 +366,7 @@ func TestReadFile(t *testing.T) {
 		// Delete file after prepare to cause Execute failure
 		delete(fs.files, "/workspace/test.txt")
 
-		output, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		output, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
 		require.NoError(t, err)
 		assertContains(t, output, "Error:")
 	})

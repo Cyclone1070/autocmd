@@ -243,12 +243,12 @@ func (i *grepInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "execution cancelled", d, ctx.Err()
+		return domain.ToolErrorCancelled, d
 	}
 
 	// Re-verify state
@@ -256,17 +256,17 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d, nil
+		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d
 	}
 
 	mode := i.req.OutputMode
 	cmd, workDir, err := i.prepareGrepCommand()
 	if err != nil {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: %v", err), d, nil
+		return fmt.Sprintf("Error: %v", err), d
 	}
 	i.workDir = workDir
 
@@ -274,18 +274,18 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: rg failed: %v", err), d, nil
+		return fmt.Sprintf("Error: rg failed: %v", err), d
 	}
 
 	if res.ExitCode != 0 && res.ExitCode != 1 {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: ripgrep failed with exit code %d\n%s", res.ExitCode, res.Stderr), d, nil
+		return fmt.Sprintf("Error: ripgrep failed with exit code %d\n%s", res.ExitCode, res.Stderr), d
 	}
 
-	return i.formatResults(res.Stdout, mode), d, nil
+	return i.formatResults(res.Stdout, mode), d
 }
 
 func (i *grepInvocation) prepareGrepCommand() ([]string, string, error) {

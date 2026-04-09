@@ -50,24 +50,24 @@ type mockInvocation struct {
 	content string
 	err     error
 	display domain.ToolDisplay
-	execute func(ctx context.Context) (string, domain.ToolDisplay, error)
+	execute func(ctx context.Context) (string, domain.ToolDisplay)
 }
 
-func (m *mockInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (m *mockInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	if err := ctx.Err(); err != nil {
 		disp := m.display
 		if disp.GetError() == "" {
 			disp = withToolError(disp, domain.ToolErrorCancelled)
 		}
-		return "execution cancelled", disp, err
+		return domain.ToolErrorCancelled, disp
 	}
 	if m.execute != nil {
 		return m.execute(ctx)
 	}
 	if m.err != nil {
-		return m.content, withToolError(m.display, m.err.Error()), m.err
+		return m.content, withToolError(m.display, m.err.Error())
 	}
-	return m.content, m.display, nil
+	return m.content, m.display
 }
 func (m *mockInvocation) Display() domain.ToolDisplay { return m.display }
 
@@ -100,18 +100,18 @@ type mockStreamInvocation struct {
 
 func (m *mockStreamInvocation) Stream() io.Reader           { return m.stream }
 func (m *mockStreamInvocation) Display() domain.ToolDisplay { return m.display }
-func (m *mockStreamInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (m *mockStreamInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	if err := ctx.Err(); err != nil {
 		disp := m.display
 		if disp.GetError() == "" {
 			disp = withToolError(disp, domain.ToolErrorCancelled)
 		}
-		return "execution cancelled", disp, err
+		return domain.ToolErrorCancelled, disp
 	}
 	if m.err != nil {
-		return m.content, withToolError(m.display, m.err.Error()), m.err
+		return m.content, withToolError(m.display, m.err.Error())
 	}
-	return m.content, m.display, nil
+	return m.content, m.display
 }
 
 type mockToolRegistry struct {
@@ -157,15 +157,15 @@ func (m *mockActionWaiter) Wait(ctx context.Context, callID string) (domain.Acti
 
 type mockInteractiveInvocation struct {
 	display domain.ToolDisplay
-	resolve func(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error)
+	resolve func(ctx context.Context, action domain.Action) (string, domain.ToolDisplay)
 }
 
 func (m *mockInteractiveInvocation) Display() domain.ToolDisplay { return m.display }
-func (m *mockInteractiveInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay, error) {
+func (m *mockInteractiveInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
 	if m.resolve != nil {
 		return m.resolve(ctx, action)
 	}
-	return "ok", m.display, nil
+	return "ok", m.display
 }
 
 func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
@@ -178,9 +178,9 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInteractiveInvocation{
 				display: qd,
-				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay, error) {
+				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay) {
 					assert.Equal(t, action, act)
-					return "User answered ans", domain.NewStringDisplay("", "Done"), nil
+					return "User answered ans", domain.NewStringDisplay("", "Done")
 				},
 			}, nil
 		},
@@ -608,64 +608,9 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	assert.Equal(t, schema.Tool, res.Role)
 	assert.Equal(t, "tc-cancel", res.ToolCallID)
 	assert.Nil(t, res.Extra)
-	assert.Equal(t, "execution cancelled", res.Content)
+	assert.Equal(t, domain.ToolErrorCancelled, res.Content)
 }
 
-func TestExecute_ContextCancelled_EmitsToolEndEventWithCancelledDisplay(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	cancelDisp := domain.NewStringDisplay("", "preview")
-	cancelDisp.Error = domain.ToolErrorCancelled
-
-	mt := &mockTool{
-		name: "test",
-		prepare: func(params string) (domain.Invocation, error) {
-			return &mockInvocation{
-				display: cancelDisp,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
-					// Simulate tool properly finalizing its display on cancellation.
-					return "", cancelDisp, context.Canceled
-				},
-			}, nil
-		},
-	}
-	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := NewToolExecutor(registry, nil)
-
-	sender := newMockEventSender(16)
-
-	_, _, err := executor.execute(ctx, &schema.ToolCall{
-		ID: "tc-cancel",
-		Function: schema.FunctionCall{
-			Name:      "test",
-			Arguments: "{}",
-		},
-	}, sender)
-	assert.ErrorIs(t, err, context.Canceled)
-
-	// We expect a ToolStartEvent then a ToolEndEvent, and the end display must show Cancelled.
-	var sawStart bool
-	var end domain.ToolEndEvent
-	for i := 0; i < 4; i++ {
-		select {
-		case ev := <-sender.events:
-			switch x := ev.(type) {
-			case domain.ToolStartEvent:
-				sawStart = true
-			case domain.ToolEndEvent:
-				end = x
-				assert.Equal(t, domain.ToolErrorCancelled, x.Display.GetError())
-				assert.Equal(t, "tc-cancel", x.CallID)
-				assert.True(t, sawStart, "must emit ToolStartEvent before ToolEndEvent")
-				return
-			}
-		case <-time.After(250 * time.Millisecond):
-			t.Fatal("timed out waiting for ToolEndEvent")
-		}
-	}
-	t.Fatalf("did not receive ToolEndEvent, last end=%+v", end)
-}
 
 func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -701,17 +646,12 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 	assert.NotNil(t, res.Responses[0])
 	assert.NotNil(t, res.Responses[1])
 	assert.Equal(t, "tc-1", res.Responses[0].ToolCallID)
-	assert.Equal(t, "execution cancelled", res.Responses[0].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, res.Responses[0].Content)
 	assert.Equal(t, "tc-2", res.Responses[1].ToolCallID)
-	assert.Equal(t, "execution cancelled", res.Responses[1].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, res.Responses[1].Content)
 
-	disp1 := res.Displays["tc-1"]
-	disp2 := res.Displays["tc-2"]
-	assert.NotNil(t, disp1)
-	assert.NotNil(t, disp2)
-	assert.Equal(t, domain.ToolErrorCancelled, disp1.GetError())
-	assert.Equal(t, domain.ToolErrorCancelled, disp2.GetError())
-}
+	assert.Nil(t, res.Displays["tc-1"])
+	assert.Nil(t, res.Displays["tc-2"])}
 
 func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -725,11 +665,11 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					cancel()
 					disp := domain.NewStringDisplay("", "")
 					disp.Error = domain.ToolErrorCancelled
-					return "execution cancelled", disp, ctx.Err()
+					return domain.ToolErrorCancelled, disp
 				},
 			}, nil
 		},
@@ -744,11 +684,11 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 					close(executed2)
 					disp := domain.NewStringDisplay("", "")
 					disp.Error = domain.ToolErrorCancelled
-					return "execution cancelled", disp, ctx.Err()
+					return domain.ToolErrorCancelled, disp
 				},
 			}, nil
 		},
@@ -774,33 +714,12 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 	assert.NotNil(t, res.Responses[0])
 	assert.NotNil(t, res.Responses[1])
 	assert.Equal(t, "tc-1", res.Responses[0].ToolCallID)
-	assert.Equal(t, "execution cancelled", res.Responses[0].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, res.Responses[0].Content)
 	assert.Equal(t, "tc-2", res.Responses[1].ToolCallID)
-	assert.Equal(t, "execution cancelled", res.Responses[1].Content)
+	assert.Equal(t, domain.ToolErrorCancelled, res.Responses[1].Content)
 
-	disp1 := res.Displays["tc-1"]
-	disp2 := res.Displays["tc-2"]
-	assert.NotNil(t, disp1)
-	assert.NotNil(t, disp2)
-	assert.Equal(t, domain.ToolErrorCancelled, disp1.GetError())
-	assert.Equal(t, domain.ToolErrorCancelled, disp2.GetError())
-}
-
-func TestBakeCancelledOutcomeFromPreview_UsesCancelledOnlyForContextCancelled(t *testing.T) {
-	p := preparedCall{
-		index:          0,
-		callID:         "tc-1",
-		toolName:       "tool",
-		previewDisplay: domain.NewStringDisplay("", "preview"),
-	}
-
-	cancelled := bakeCancelledOutcomeFromPreview(p, context.Canceled)
-	assert.Equal(t, "execution cancelled", cancelled.resp.Content)
-	assert.Equal(t, domain.ToolErrorCancelled, cancelled.display.GetError())
-
-	aborted := bakeCancelledOutcomeFromPreview(p, fmt.Errorf("infra boom"))
-	assert.Equal(t, "tool failed unexpectedly while executing", aborted.resp.Content)
-	assert.Equal(t, "Infrastructure failed", aborted.display.GetError())
+	assert.NotNil(t, res.Displays["tc-1"])
+	assert.Nil(t, res.Displays["tc-2"])
 }
 
 func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
@@ -809,8 +728,8 @@ func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: nil,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
-					return "ok", domain.NewStringDisplay("", "ok"), nil
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					return "ok", domain.NewStringDisplay("", "ok")
 				},
 			}, nil
 		},
@@ -865,10 +784,10 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast1"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						startedFast1 <- struct{}{}
 						<-doneFast1
-						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+						return "fast1", domain.NewStringDisplay("", "fast1")
 					},
 				}, nil
 			},
@@ -880,10 +799,10 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "exclusive"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						startedExclusive <- struct{}{}
 						<-doneExclusive
-						return "exclusive", domain.NewStringDisplay("", "exclusive"), nil
+						return "exclusive", domain.NewStringDisplay("", "exclusive")
 					},
 				}, nil
 			},
@@ -895,9 +814,9 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast2"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						startedFast2 <- struct{}{}
-						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+						return "fast2", domain.NewStringDisplay("", "fast2")
 					},
 				}, nil
 			},
@@ -961,9 +880,9 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast1"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						<-doneFast1
-						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+						return "fast1", domain.NewStringDisplay("", "fast1")
 					},
 				}, nil
 			},
@@ -975,9 +894,9 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "exclusive"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						<-doneExclusive
-						return "exclusive", domain.NewStringDisplay("", "exclusive"), nil
+						return "exclusive", domain.NewStringDisplay("", "exclusive")
 					},
 				}, nil
 			},
@@ -989,9 +908,9 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast2"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						<-doneFast2
-						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+						return "fast2", domain.NewStringDisplay("", "fast2")
 					},
 				}, nil
 			},
@@ -1064,9 +983,9 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast1"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						<-doneFast1
-						return "fast1", domain.NewStringDisplay("", "fast1"), nil
+						return "fast1", domain.NewStringDisplay("", "fast1")
 					},
 				}, nil
 			},
@@ -1078,9 +997,9 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast2"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
+					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						<-doneFast2
-						return "fast2", domain.NewStringDisplay("", "fast2"), nil
+						return "fast2", domain.NewStringDisplay("", "fast2")
 					},
 				}, nil
 			},
@@ -1119,8 +1038,8 @@ func TestExecute_PanicsWhenFinalDisplayIsNil(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", "preview"),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay, error) {
-					return "", nil, context.Canceled
+				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					return "", nil
 				},
 			}, nil
 		},
@@ -1189,45 +1108,36 @@ loop:
 	assert.Equal(t, 1, eventCount, "Should receive all 8KB in a single event when buffer is 1MB")
 }
 
-func TestExecute_InteractiveInvocation_Cancelled_DelegatesToResolve(t *testing.T) {
-	callID := "tc-int-cancel"
+func TestExecute_ContextCancelled_DuringPrepare_Silent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // pre-cancel the context
+	cancel()
 
-	mt := &mockTool{
-		name: "ask",
-		prepare: func(params string) (domain.Invocation, error) {
-			return &mockInteractiveInvocation{
-				display: domain.QuestionDisplay{TypeField: "question"},
-				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay, error) {
-					// This test verifies that Resolve is actually called despite cancellation
-					if err := ctx.Err(); err != nil {
-						return "execution cancelled", domain.NewStringDisplay("Questions attempted", "Q: Color?").WithError(domain.ToolErrorCancelled), err
-					}
-					return "ok", domain.NewStringDisplay("", "Done"), nil
-				},
-			}, nil
-		},
-	}
-
-	// This waiter should return context.Canceled immediately due to the pre-cancelled ctx
-	waiter := &mockActionWaiter{
-		wait: func(ctx context.Context, cid string) (domain.Action, error) {
-			return nil, ctx.Err()
-		},
-	}
-
+	mt := &mockTool{name: "test"}
 	registry := newMockToolRegistry([]domain.Tool{mt})
-	executor := NewToolExecutor(registry, waiter)
+	executor := NewToolExecutor(registry, nil)
+	sender := newMockEventSender(10)
 
 	res, disp, err := executor.execute(ctx, &schema.ToolCall{
-		ID:       callID,
-		Function: schema.FunctionCall{Name: "ask"},
-	}, nil)
+		ID: "tc-1",
+		Function: schema.FunctionCall{Name: "test"},
+	}, sender)
 
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, "execution cancelled", res.Content)
-	sd, ok := disp.(domain.StringDisplay)
-	require.True(t, ok, "Expected StringDisplay from Resolve, got %T", disp)
-	assert.Equal(t, "Questions attempted", sd.Comment, "Should have used display from Resolve")
+	assert.Equal(t, domain.ToolErrorCancelled, res.Content)
+	assert.Nil(t, disp)
+	select {
+	case e := <-sender.events:
+		t.Fatalf("Expected no events for cancelled prepare, got %T", e)
+	case <-time.After(50 * time.Millisecond):
+		// Success: no events
+	}
+}
+
+func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay, error) {
+	inv, msg, disp := e.prepareTool(ctx, tc, events)
+	if inv == nil {
+		return msg, disp, ctx.Err()
+	}
+	resp, finalDisp := e.executeTool(ctx, tc, inv, events)
+	return resp, finalDisp, ctx.Err()
 }

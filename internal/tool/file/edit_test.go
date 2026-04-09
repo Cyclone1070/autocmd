@@ -10,7 +10,6 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // executeEdit calls Prepare then Execute, returning the LLM output string.
@@ -26,7 +25,7 @@ func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (strin
 	if err != nil {
 		return err.Error(), err
 	}
-	out, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
+	out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, err
 }
 
@@ -56,9 +55,9 @@ func TestEditFile(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, disp, execErr := inv.(domain.ExecutableInvocation).Execute(ctx)
+		_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 
-		assert.ErrorIs(t, execErr, context.Canceled)
+		assert.ErrorIs(t, ctx.Err(), context.Canceled)
 		assert.NotNil(t, disp)
 		assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 	})
@@ -76,7 +75,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		// Modify file externally (simulate external change)
 		modifiedContent := []byte("modified externally")
@@ -136,7 +135,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -179,7 +178,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -210,7 +209,7 @@ func TestEditFile(t *testing.T) {
 		readReq := &ReadFileRequest{Path: "test.txt"}
 		params, _ := json.Marshal(readReq)
 		inv, _ := readTool.Prepare(string(params))
-		_, _, _ = inv.(domain.ExecutableInvocation).Execute(context.Background())
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
 
 		ops := []EditOperation{
 			{
@@ -452,8 +451,8 @@ func TestEditFile(t *testing.T) {
 		fs.createFile("/workspace/test.txt", []byte("changed externally"), 0o644)
 
 		// Execute should return error in message, nil error
-		output, _, err := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		require.NoError(t, err)
+		output, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		assert.NoError(t, context.Background().Err())
 		assertContains(t, output, "file changed since edit was prepared")
 	})
 

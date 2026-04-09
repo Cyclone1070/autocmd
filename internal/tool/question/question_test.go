@@ -52,8 +52,7 @@ func TestQuestionTool(t *testing.T) {
 			Answers: [][]string{{"Alice"}},
 		}
 
-		llmContent, finalDisplay, err := ii.Resolve(context.Background(), act)
-		assert.NoError(t, err)
+		llmContent, finalDisplay := ii.Resolve(context.Background(), act)
 		assert.Contains(t, llmContent, "Alice")
 		assert.Contains(t, llmContent, "Q: Pick name?\nA: Alice")
 
@@ -71,10 +70,10 @@ func TestQuestionTool(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		llmContent, finalDisplay, err := ii.Resolve(ctx, nil)
-		assert.Error(t, err)
-		assert.Equal(t, context.Canceled, err)
-		assert.Equal(t, "execution cancelled", llmContent)
+		llmContent, finalDisplay := ii.Resolve(ctx, nil)
+		assert.Error(t, ctx.Err())
+		assert.Equal(t, context.Canceled, ctx.Err())
+		assert.Equal(t, domain.ToolErrorCancelled, llmContent)
 
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		require.True(t, ok)
@@ -91,6 +90,6 @@ func TestQuestionTool_Resolve_PanicsOnUnexpectedAction(t *testing.T) {
 	ii, _ := inv.(domain.InteractiveInvocation)
 
 	assert.Panics(t, func() {
-		_, _, _ = ii.Resolve(context.Background(), domain.StopAction{})
+		ii.Resolve(context.Background(), domain.StopAction{})
 	})
 }

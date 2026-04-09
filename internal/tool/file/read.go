@@ -154,21 +154,21 @@ func (i *readFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "execution cancelled", d, ctx.Err()
+		return domain.ToolErrorCancelled, d
 	}
 
 	data, err := i.fileOps.ReadFile(i.absPath)
 	if err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to read file: %v", err), d, nil
+		return fmt.Sprintf("Error: failed to read file: %v", err), d
 	}
 
 	normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
@@ -184,7 +184,7 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 		endLine = startLine - 1
 	}
 
-	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d, nil
+	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d
 }
 
 func formatFileContent(lines []string, startLine, endLine, totalLines int) string {

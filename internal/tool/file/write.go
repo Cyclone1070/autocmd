@@ -158,27 +158,27 @@ func (i *writeFileInvocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay, error) {
+func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
-		return "execution cancelled", d, ctx.Err()
+		return domain.ToolErrorCancelled, d
 	}
 
 	// Check if file already exists (TOCTOU protection)
 	_, err := i.fileOps.Stat(i.absPath)
 	if err == nil {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d, nil
+		return fmt.Sprintf("Error: file already exists: %s", i.relPath), d
 	}
 	if !os.IsNotExist(err) {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to access file: %v", err), d, nil
+		return fmt.Sprintf("Error: failed to access file: %v", err), d
 	}
 
 	// Ensure parent directories exist
@@ -186,10 +186,10 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if err := i.fileOps.EnsureDirs(parentDir); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to create parent directories: %v", err), d, nil
+		return fmt.Sprintf("Error: failed to create parent directories: %v", err), d
 	}
 
 	// Note: Binary check already done in Prepare
@@ -199,10 +199,10 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if err := i.fileOps.WriteFileAtomic(i.absPath, i.content, perm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
-			return "execution cancelled", d, ctx.Err()
+			return domain.ToolErrorCancelled, d
 		}
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: failed to write file: %v", err), d, nil
+		return fmt.Sprintf("Error: failed to write file: %v", err), d
 	}
 
 	// Update checksum cache
@@ -211,5 +211,5 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	i.checksumManager.Update(i.absPath, checksum)
 
 	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
-		i.relPath, len(i.content)), d, nil
+		i.relPath, len(i.content)), d
 }

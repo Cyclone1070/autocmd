@@ -175,8 +175,8 @@ func TestBashTool_Prepare_ExecutorError(t *testing.T) {
 	_ = si.Stream()
 
 	ctx := context.Background()
-	_, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 	assert.Equal(t, domain.ToolErrorFailed, disp.GetError())
 }
 
@@ -216,8 +216,8 @@ func TestBashTool_Execute_FinalDisplay(t *testing.T) {
 	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	llm, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 	sh := disp.(domain.BashDisplay)
 	assert.Equal(t, "hello world", sh.CapturedOutput)
 	assert.Empty(t, sh.GetError())
@@ -245,8 +245,8 @@ func TestBashTool_Execute_Success(t *testing.T) {
 	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	output, _ := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 
 	assert.Contains(t, output, "hello world")
 	assert.Contains(t, output, "(Exit code: 0)")
@@ -273,8 +273,8 @@ func TestBashTool_Execute_NonZeroExit(t *testing.T) {
 	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	output, _ := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 	assert.Contains(t, output, "(Exit code: 1)")
 }
 
@@ -301,8 +301,8 @@ func TestBashTool_Execute_ContextCancelled(t *testing.T) {
 
 	cancel()
 
-	_, disp, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	assert.ErrorIs(t, err, context.Canceled)
+	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.ErrorIs(t, ctx.Err(), context.Canceled)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
 }
 
@@ -327,8 +327,8 @@ func TestBashTool_Execute_Truncation(t *testing.T) {
 	si.Stream()
 	go func() { _, _ = io.Copy(io.Discard, si.Stream()) }()
 
-	output, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	output, _ := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 	assert.Contains(t, output, "(Output truncated)")
 }
 
@@ -359,7 +359,7 @@ func TestBashTool_Display_StreamingOutput(t *testing.T) {
 		close(done)
 	}()
 
-	_, _, _ = inv.(domain.ExecutableInvocation).Execute(ctx)
+	_, _ = inv.(domain.ExecutableInvocation).Execute(ctx)
 	<-done
 
 	assert.Contains(t, buf.String(), "streaming_test")
@@ -384,8 +384,8 @@ func TestBashTool_CapturedOutput(t *testing.T) {
 	disp := inv.Display().(domain.BashDisplay)
 	assert.Empty(t, disp.CapturedOutput)
 
-	out, _, err := inv.(domain.ExecutableInvocation).Execute(ctx)
-	require.NoError(t, err)
+	out, _ := inv.(domain.ExecutableInvocation).Execute(ctx)
+	assert.NoError(t, ctx.Err())
 
 	assert.Contains(t, out, "captured")
 	assert.Contains(t, out, "(Exit code: 0)")

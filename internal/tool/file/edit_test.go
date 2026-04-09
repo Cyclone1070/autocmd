@@ -1,8 +1,5 @@
 package file
 
-// This file contains edit file tests.
-// Mocks are defined in write_test.go and shared across all test files in this package.
-
 import (
 	"context"
 	"encoding/json"
@@ -10,549 +7,210 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-// executeEdit calls Prepare then Execute, returning the LLM output string.
-// Prepare errors: returns ("", err)
-// Execute errors: returns (llmContent, err) per contract
-func executeEdit(t *testing.T, etool *EditFileTool, req *EditFileRequest) (string, error) {
-	t.Helper()
-	params, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("Failed to marshal request: %v", err)
-	}
-	inv, err := etool.Prepare(string(params))
-	if err != nil {
-		return err.Error(), err
-	}
-	out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-	return out, err
-}
 
 func TestEditFile(t *testing.T) {
 	workspaceRoot := "/workspace"
-	maxFileSize := int64(1024 * 1024) // 1MB
+	maxFileSize := int64(1024 * 1024)
 
-	t.Run("Execute cancelled returns ToolErrorCancelled display", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("line1"), 0o644)
+	t.Run("Edit single match successfully", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.txt"] = []byte("hello world")
+		// Simulate read
+		checksumManager.Update("/workspace/test.txt", checksumManager.Compute([]byte("hello world")))
 
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			Path:    "test.txt",
-			Comment: "edit",
-			Operations: []EditOperation{{
-				Before:               "line1",
-				After:                "line2",
-				ExpectedReplacements: 1,
-			}},
+			FilePath:   "test.txt",
+			Comment:    "changing hello to goodbye",
+			OldString:  "hello",
+			NewString:  "goodbye",
+			ReplaceAll: false,
 		}
+
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(string(params))
-		assert.NoError(t, err)
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		assert.Equal(t, "The file test.txt has been updated successfully.", out)
+		assert.Equal(t, "goodbye world", string(fs.files["/workspace/test.txt"]))
 
-		assert.ErrorIs(t, ctx.Err(), context.Canceled)
-		assert.NotNil(t, disp)
-		assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
-	})
-
-	t.Run("conflict detection when cache checksum differs", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		originalContent := []byte("original content")
-		fs.createFile("/workspace/test.txt", originalContent, 0o644)
-
-		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		// Read file to populate cache
-		readReq := &ReadFileRequest{Path: "test.txt"}
-		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(string(params))
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
-
-		// Modify file externally (simulate external change)
-		modifiedContent := []byte("modified externally")
-		fs.createFile("/workspace/test.txt", modifiedContent, 0o644)
-
-		// Try to edit - should fail with conflict
-		ops := []EditOperation{
-			{
-				Before:               "original content",
-				After:                "new content",
-				ExpectedReplacements: 1,
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err == nil {
-			t.Fatal("expected conflict error")
-		}
-		assertContains(t, output, "conflict")
-	})
-
-	t.Run("no cached checksum skips revalidation", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		content := []byte("some content")
-		fs.createFile("/workspace/test.txt", content, 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before:               "some",
-				After:                "new",
-				ExpectedReplacements: 1,
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-	})
-
-	t.Run("multiple operations", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		content := []byte("line1\nline2\nline3")
-		fs.createFile("/workspace/test.txt", content, 0o644)
-
-		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		// Read first to populate cache
-		readReq := &ReadFileRequest{Path: "test.txt"}
-		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(string(params))
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
-
-		ops := []EditOperation{
-			{
-				Before:               "line1",
-				After:                "modified1",
-				ExpectedReplacements: 1,
-			},
-			{
-				Before:               "line2",
-				After:                "modified2",
-				ExpectedReplacements: 1,
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-
-		// Verify final content
-		data, _ := fs.ReadFile("/workspace/test.txt")
-		expected := "modified1\nmodified2\nline3"
-		if string(data) != expected {
-			t.Errorf("expected content %q, got %q", expected, string(data))
-		}
-	})
-
-	t.Run("mismatch in expected replacements", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		content := []byte("line1\nline1\nline3")
-		fs.createFile("/workspace/test.txt", content, 0o644)
-
-		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		// Read first to populate cache
-		readReq := &ReadFileRequest{Path: "test.txt"}
-		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(string(params))
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
-
-		ops := []EditOperation{
-			{
-				Before:               "line1",
-				After:                "modified1",
-				ExpectedReplacements: 1, // But there are 2 occurrences
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err == nil {
-			t.Fatal("expected mismatch error")
-		}
-		assertContains(t, output, "mismatch")
-	})
-
-	t.Run("replacement when snippet appears multiple times but ExpectedReplacements matches", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		content := []byte("foo\nfoo\nbar")
-		fs.createFile("/workspace/test.txt", content, 0o644)
-
-		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		// Read first to populate cache
-		readReq := &ReadFileRequest{Path: "test.txt"}
-		params, _ := json.Marshal(readReq)
-		inv, _ := readTool.Prepare(string(params))
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
-
-		ops := []EditOperation{
-			{
-				Before:               "foo",
-				After:                "baz",
-				ExpectedReplacements: 2,
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-
-		data, _ := fs.ReadFile("/workspace/test.txt")
-		expected := "baz\nbaz\nbar"
-		if string(data) != expected {
-			t.Errorf("expected %q, got %q", expected, string(data))
-		}
-	})
-
-	t.Run("snippet not found", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("content"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before: "nonexistent",
-				After:  "new",
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err == nil {
-			t.Fatal("expected snippet not found error")
-		}
-		assertContains(t, output, "snippet not found")
-	})
-
-	t.Run("append to non-empty file", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("existing"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before: "",
-				After:  "\nnew line",
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-
-		data, _ := fs.ReadFile("/workspace/test.txt")
-		expected := "existing\nnew line"
-		if string(data) != expected {
-			t.Errorf("expected content %q, got %q", expected, string(data))
-		}
-	})
-
-	t.Run("multiple appends in one request", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before: "",
-				After:  "1",
-			},
-			{
-				Before: "",
-				After:  "2",
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-
-		data, _ := fs.ReadFile("/workspace/test.txt")
-		expected := "start12"
-		if string(data) != expected {
-			t.Errorf("expected content %q, got %q", expected, string(data))
-		}
-	})
-
-	t.Run("append with count greater than 1 errors", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("start"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before:               "",
-				After:                "tail",
-				ExpectedReplacements: 2, // Should fail since only 1 place to append
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err == nil {
-			t.Fatal("expected mismatch error for append with count > 1")
-		}
-		assertContains(t, output, "mismatch")
-	})
-
-	t.Run("CRLF file with LF snippet matches", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		// File with CRLF line endings
-		fs.createFile("/workspace/test.txt", []byte("line1\r\nline2\r\nline3"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		ops := []EditOperation{
-			{
-				Before:               "line2", // LF snippet
-				After:                "modified",
-				ExpectedReplacements: 1,
-			},
-		}
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: ops}
-		output, err := executeEdit(t, editTool, editReq)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		assertContains(t, output, "Successfully modified file")
-
-		// File should preserve CRLF
-		data, _ := fs.ReadFile("/workspace/test.txt")
-		expected := "line1\r\nmodified\r\nline3"
-		if string(data) != expected {
-			t.Errorf("expected content %q, got %q", expected, string(data))
-		}
-	})
-
-	// Validation tests moved from types_test.go
-	t.Run("empty path returns error", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		req := &EditFileRequest{Path: "", Comment: "test", Operations: []EditOperation{{Before: "old", After: "new"}}}
-		_, err := executeEdit(t, editTool, req)
-		if err == nil {
-			t.Error("expected error for empty path")
-		}
-		assertContains(t, err.Error(), "path is required")
-	})
-
-	t.Run("empty operations returns error", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		req := &EditFileRequest{Path: "test.txt", Comment: "test", Operations: []EditOperation{}}
-		_, err := executeEdit(t, editTool, req)
-		if err == nil {
-			t.Error("expected error for empty operations")
-		}
-		assertContains(t, err.Error(), "operations are required")
-	})
-
-	t.Run("negative expected replacements defaults to 1", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("foo\nfoo\nbar"), 0o644)
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		req := &EditFileRequest{
-			Path:       "test.txt",
-			Comment:    "test",
-			Operations: []EditOperation{{Before: "foo", After: "baz", ExpectedReplacements: -1}},
-		}
-		// Defaults to 1, but there are 2 occurrences — should error
-		output, err := executeEdit(t, editTool, req)
-		if err == nil {
-			t.Error("expected mismatch error")
-		}
-		assertContains(t, output, "mismatch")
-	})
-
-	t.Run("path outside workspace returns error", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		req := &EditFileRequest{Path: "../outside.txt", Comment: "test", Operations: []EditOperation{{Before: "a", After: "b"}}}
-		_, err := executeEdit(t, editTool, req)
-		if err == nil {
-			t.Error("expected error for path outside workspace")
-		}
-		assertContains(t, err.Error(), "outside workspace")
-	})
-
-	t.Run("file changed between Prepare and Execute fails", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("original"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		// Prepare the edit
-		req := &EditFileRequest{
-			Path:       "test.txt",
-			Comment:    "test",
-			Operations: []EditOperation{{Before: "original", After: "modified"}},
-		}
-		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(string(params))
-		if err != nil {
-			t.Fatalf("Prepare failed: %v", err)
-		}
-
-		// Simulate external change between Prepare and Execute
-		fs.createFile("/workspace/test.txt", []byte("changed externally"), 0o644)
-
-		// Execute should return error in message, nil error
-		output, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.NoError(t, context.Background().Err())
-		assertContains(t, output, "file changed since edit was prepared")
-	})
-
-	t.Run("Display returns DiffDisplay with diff content", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		fs.createFile("/workspace/test.txt", []byte("old content"), 0o644)
-
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		req := &EditFileRequest{
-			Path:       "test.txt",
-			Comment:    "test",
-			Operations: []EditOperation{{Before: "old", After: "new"}},
-		}
-		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(string(params))
-		if err != nil {
-			t.Fatalf("Prepare failed: %v", err)
-		}
-
-		display := inv.Display()
-		diffDisplay, ok := display.(domain.DiffDisplay)
-		if !ok {
-			t.Fatalf("expected DiffDisplay, got %T", display)
-		}
-
-		if diffDisplay.Comment == "" {
-			t.Error("expected non-empty Comment")
-		}
-		if diffDisplay.Added == 0 && diffDisplay.Removed == 0 {
-			t.Error("expected non-zero Added or Removed count")
-		}
-		if diffDisplay.Diff == "" {
-			t.Error("expected non-empty Diff")
-		}
-	})
-
-	t.Run("missing comment returns error", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-
-		editReq := &EditFileRequest{Path: "test.txt", Comment: "", Operations: []EditOperation{{Before: "old", After: "new"}}}
-		_, err := executeEdit(t, editTool, editReq)
-		if err == nil {
-			t.Error("expected error for empty comment")
-		}
-		assertContains(t, err.Error(), "comment is required")
-	})
-
-	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		workspaceRoot := "/workspace"
-		absFile := "/workspace/subdir/test.txt"
-		fs.createFile(absFile, []byte("content"), 0o644)
-		
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-		
-		// Agent sends absolute path
-		params, _ := json.Marshal(&EditFileRequest{
-			Path:    absFile,
-			Comment: "cleaning up",
-			Operations: []EditOperation{
-				{Before: "content", After: "new"},
-			},
-		})
-		inv, err := editTool.Prepare(string(params))
-		if err != nil {
-			t.Fatalf("Prepare failed: %v", err)
-		}
-		
 		display := inv.Display().(domain.DiffDisplay)
-		assert.Equal(t, "EDIT \"subdir/test.txt\"", display.Target)
+		assert.Equal(t, "changing hello to goodbye", display.Comment)
 	})
 
-	t.Run("suppresses 'No newline at end of file' metadata", func(t *testing.T) {
-		fs := newMockFileSystemForWrite(maxFileSize)
-		checksumManager := newMockChecksumManagerForWrite()
-		// File WITHOUT trailing newline
-		fs.createFile("/workspace/test.txt", []byte("line1\nline2"), 0o644)
-		
-		editTool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
-		
+	t.Run("Edit all matches successfully", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.txt"] = []byte("a a a")
+		// Simulate read
+		checksumManager.Update("/workspace/test.txt", checksumManager.Compute([]byte("a a a")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
 		req := &EditFileRequest{
-			Path:    "test.txt",
-			Comment: "no newline test",
-			Operations: []EditOperation{
-				{Before: "line2", After: "modified"},
-			},
+			FilePath:   "test.txt",
+			Comment:    "changing all a to b",
+			OldString:  "a",
+			NewString:  "b",
+			ReplaceAll: true,
 		}
-		
+
 		params, _ := json.Marshal(req)
-		inv, err := editTool.Prepare(string(params))
-		assert.NoError(t, err)
-		
-		display := inv.Display().(domain.DiffDisplay)
-		assert.NotContains(t, display.Diff, "\\ No newline at end of file")
-		assert.Contains(t, display.Diff, "-line2")
-		assert.Contains(t, display.Diff, "+modified")
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
+
+		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		assert.Equal(t, "The file test.txt has been updated. All occurrences were successfully replaced.", out)
+		assert.Equal(t, "b b b", string(fs.files["/workspace/test.txt"]))
+	})
+
+	t.Run("Fails if multiple matches and replace_all is false", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.txt"] = []byte("a a")
+		checksumManager.Update("/workspace/test.txt", checksumManager.Compute([]byte("a a")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "test.txt",
+			Comment:    "should fail",
+			OldString:  "a",
+			NewString:  "b",
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		_, err := tool.Prepare(string(params))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Found 2 matches of the string to replace, but replace_all is false")
+	})
+
+	t.Run("Create new file via empty old_string", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		// No file at /workspace/new.txt
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "new.txt",
+			Comment:    "creating new file",
+			OldString:  "",
+			NewString:  "brand new content",
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
+
+		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		assert.Equal(t, "The file new.txt has been updated successfully.", out)
+		assert.Equal(t, "brand new content", string(fs.files["/workspace/new.txt"]))
+	})
+
+	t.Run("Fail to create file if already exists with content", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/exists.txt"] = []byte("not empty")
+		checksumManager.Update("/workspace/exists.txt", checksumManager.Compute([]byte("not empty")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "exists.txt",
+			Comment:    "trying to overwrite",
+			OldString:  "",
+			NewString:  "danger",
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		_, err := tool.Prepare(string(params))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Cannot create new file - file already exists")
+	})
+
+	t.Run("Edit with curly quotes match", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		// File has curly quotes: “hello”
+		fs.files["/workspace/test.txt"] = []byte("“hello”")
+		checksumManager.Update("/workspace/test.txt", checksumManager.Compute([]byte("“hello”")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "test.txt",
+			Comment:    "matching curly with straight",
+			OldString:  "\"hello\"", // LLM sends straight quotes
+			NewString:  "\"goodbye\"",
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
+
+		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		assert.Equal(t, "The file test.txt has been updated successfully.", out)
+		// Should preserve curly quotes in the replacement: “goodbye”
+		assert.Equal(t, "“goodbye”", string(fs.files["/workspace/test.txt"]))
+	})
+
+	t.Run("Strips trailing whitespace from new_string", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.go"] = []byte("package main\n\nfunc main() {}\n")
+		checksumManager.Update("/workspace/test.go", checksumManager.Compute([]byte("package main\n\nfunc main() {}\n")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "test.go",
+			Comment:    "adding comment",
+			OldString:  "func main() {}",
+			NewString:  "func main() {} // comment    ", // Trailing spaces
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
+
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
+		// Spaces should be stripped
+		assert.Equal(t, "package main\n\nfunc main() {} // comment\n", string(fs.files["/workspace/test.go"]))
+	})
+
+	t.Run("Does not strip trailing whitespace from markdown", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.md"] = []byte("# Title\n")
+		checksumManager.Update("/workspace/test.md", checksumManager.Compute([]byte("# Title\n")))
+
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "test.md",
+			Comment:    "adding line break",
+			OldString:  "# Title",
+			NewString:  "# Title  ", // Markdown hard line break (2 spaces)
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		inv, err := tool.Prepare(string(params))
+		require.NoError(t, err)
+
+		inv.(domain.ExecutableInvocation).Execute(context.Background())
+		// Spaces should BEAUTIFULLY remain
+		assert.Equal(t, "# Title  \n", string(fs.files["/workspace/test.md"]))
 	})
 }

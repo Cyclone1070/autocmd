@@ -198,7 +198,7 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		}
 
 		relPath := i.pathResolver.DisplayPath(line)
-		matches = append(matches, fmt.Sprintf("\"%s\"", filepath.ToSlash(relPath)))
+		matches = append(matches, filepath.ToSlash(relPath))
 
 		if len(matches) >= maxResults {
 			hitMaxResults = true

@@ -210,6 +210,6 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	checksum := i.checksumManager.Compute([]byte(normalized))
 	i.checksumManager.Update(i.absPath, checksum)
 
-	return fmt.Sprintf("Successfully created file: \"%s\" (%d bytes)",
+	return fmt.Sprintf("Successfully created file: %s (%d bytes)",
 		i.relPath, len(i.content)), d, nil
 }

@@ -33,7 +33,7 @@ func TestGlob_Basic(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "\"a.go\"", result)
+	assert.Equal(t, "a.go", result)
 }
 
 func TestGlob_NoMatches(t *testing.T) {

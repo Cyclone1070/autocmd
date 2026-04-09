@@ -289,7 +289,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	newChecksum := i.checksumManager.Compute([]byte(newNormalized))
 	i.checksumManager.Update(i.absPath, newChecksum)
 
-	return fmt.Sprintf("Successfully modified file: \"%s\"", i.relPath), d, nil
+	return fmt.Sprintf("Successfully modified file: %s", i.relPath), d, nil
 }
 
 func computeUnifiedDiff(oldContent, newContent string) (diff string, added, removed int) {

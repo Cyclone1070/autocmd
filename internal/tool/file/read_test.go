@@ -155,7 +155,7 @@ func TestReadFile(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		assertContains(t, output, "     1: test content")
+		assertContains(t, output, "1\ttest content")
 		assertContains(t, output, "(End of file - total 1 lines)")
 
 		// Verify cache was updated
@@ -184,8 +184,8 @@ func TestReadFile(t *testing.T) {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		assertContains(t, output, "     2: line2")
-		assertContains(t, output, "     3: line3")
+		assertContains(t, output, "2\tline2")
+		assertContains(t, output, "3\tline3")
 		assertContains(t, output, "(File has more lines. Use offset=3 to read more)")
 	})
 
@@ -286,7 +286,7 @@ func TestReadFile(t *testing.T) {
 		}
 
 		// Should start from line 1 (offset clamped to 0)
-		assertContains(t, output, "     1: line1")
+		assertContains(t, output, "1\tline1")
 	})
 
 	t.Run("zero limit defaults to constant", func(t *testing.T) {
@@ -304,9 +304,9 @@ func TestReadFile(t *testing.T) {
 		}
 
 		// Should show all lines as they are within the default limit (2000)
-		assertContains(t, output, "     1: line1")
-		assertContains(t, output, "     2: line2")
-		assertContains(t, output, "     3: line3")
+		assertContains(t, output, "1\tline1")
+		assertContains(t, output, "2\tline2")
+		assertContains(t, output, "3\tline3")
 		assertContains(t, output, "(End of file - total 3 lines)")
 	})
 
@@ -325,8 +325,8 @@ func TestReadFile(t *testing.T) {
 		}
 
 		// Should show both lines
-		assertContains(t, output, "     1: line1")
-		assertContains(t, output, "     2: line2")
+		assertContains(t, output, "1\tline1")
+		assertContains(t, output, "2\tline2")
 		assertContains(t, output, "(End of file - total 2 lines)")
 	})
 
@@ -347,8 +347,8 @@ func TestReadFile(t *testing.T) {
 		if strings.Contains(output, "\r") {
 			t.Errorf("output still contains \\r: %q", output)
 		}
-		assertContains(t, output, "     1: line1")
-		assertContains(t, output, "     2: line2")
+		assertContains(t, output, "1\tline1")
+		assertContains(t, output, "2\tline2")
 	})
 
 	t.Run("read failure after prepare", func(t *testing.T) {

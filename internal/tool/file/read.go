@@ -203,7 +203,7 @@ func formatFileContent(lines []string, startLine, endLine, totalLines int) strin
 	var sb strings.Builder
 	sb.WriteString("<file>\n")
 	for i, line := range lines {
-		fmt.Fprintf(&sb, "%6d: %s\n", startLine+i, line)
+		fmt.Fprintf(&sb, "%d\t%s\n", startLine+i, line)
 	}
 
 	if endLine < totalLines {

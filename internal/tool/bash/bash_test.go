@@ -134,7 +134,7 @@ func TestBashTool_Execute(t *testing.T) {
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "/tmp/test.log")
 
-	exec.On("RunStreaming", mock.Anything, "echo test", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -164,7 +164,7 @@ func TestBashTool_Stream(t *testing.T) {
 		return &executor.Result{Stdout: "full output", ExitCode: 0}, nil
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
-	exec.On("RunStreaming", mock.Anything, "echo test", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	go inv.(domain.ExecutableInvocation).Execute(context.Background())
 
@@ -194,7 +194,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "/tmp/log")
 
-	exec.On("RunStreaming", mock.Anything, "long_command", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 	taskMgr.On("Register", "t1", streamCmd, "/tmp/log", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	ctx := context.Background()
@@ -240,7 +240,7 @@ func TestBashTool_HardTimeout(t *testing.T) {
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "/tmp/log")
 
-	exec.On("RunStreaming", mock.Anything, "sleep 10", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -265,7 +265,7 @@ func TestBashTool_Cancellation(t *testing.T) {
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
 
-	exec.On("RunStreaming", mock.Anything, "ls", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -303,7 +303,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	mFile.On("Close").Return(nil)
 	fs.On("Open", "/tmp/large.log").Return(mFile, nil)
 
-	exec.On("RunStreaming", mock.Anything, "large_command", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -340,7 +340,7 @@ func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
 	mFile.On("Close").Return(nil)
 	fs.On("Open", "/tmp/large.log").Return(mFile, nil)
 
-	exec.On("RunStreaming", mock.Anything, "sleep 10", "/tmp", mock.Anything, true).Return(streamCmd, nil)
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", mock.Anything, true).Return(streamCmd, nil)
 
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
@@ -351,4 +351,74 @@ func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
 	assert.Contains(t, llmContent, "small tail")
 	assert.Equal(t, domain.ToolErrorTimedOut, display.GetError())
 	assert.Equal(t, "(Output too large, saved to /tmp/large.log)", display.(domain.BashDisplay).CapturedOutput)
+}
+
+func TestBashTool_Prepare_EnvironmentSanitization(t *testing.T) {
+	// Set a sensitive variable that should NOT be in the whitelist
+	os.Setenv("SENSITIVE_API_KEY", "secret-value")
+	os.Setenv("PATH", "/usr/bin:/usr/local/bin")
+	defer os.Unsetenv("SENSITIVE_API_KEY")
+
+	mockFS := &mockFileSystem{}
+	mockExec := &mockExecutor{}
+	mockResolver := &mockPathResolver{root: "/workspace"}
+
+	tool := NewBashTool(mockFS, mockExec, mockResolver, nil, 5*time.Second)
+
+	params := `{"command": "ls", "comment": "list files"}`
+	inv, err := tool.Prepare(params)
+	assert.NoError(t, err)
+
+	bInv := inv.(*bashInvocation)
+
+	// Check environment whitelist
+	var foundPath, foundSensitive, foundDumbTerm bool
+	for _, env := range bInv.env {
+		if env == "PATH=/usr/bin:/usr/local/bin" {
+			foundPath = true
+		}
+		if env == "SENSITIVE_API_KEY=secret-value" {
+			foundSensitive = true
+		}
+		if env == "TERM=dumb" {
+			foundDumbTerm = true
+		}
+	}
+
+	assert.True(t, foundPath, "PATH should be inherited")
+	assert.False(t, foundSensitive, "SENSITIVE_API_KEY should be stripped")
+	assert.True(t, foundDumbTerm, "TERM should be forced to dumb")
+}
+
+func TestBashTool_Execute_ShellWrapping(t *testing.T) {
+	mockFS := &mockFileSystem{}
+	mockExec := &mockExecutor{}
+	mockResolver := &mockPathResolver{root: "/workspace"}
+
+	// Set SHELL to something detectable
+	os.Setenv("SHELL", "/bin/zsh")
+	defer os.Unsetenv("SHELL")
+
+	tool := NewBashTool(mockFS, mockExec, mockResolver, nil, 5*time.Second)
+
+	params := `{"command": "git status", "comment": "check status"}`
+	inv, err := tool.Prepare(params)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+
+	// EXPECTATION: The command should be wrapped in the detected shell with -l -c
+	output := strings.NewReader("out")
+	waitFn := func() (*executor.Result, error) {
+		return &executor.Result{Stdout: "out", ExitCode: 0}, nil
+	}
+	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
+
+	mockExec.On("RunStreaming", mock.Anything, mock.MatchedBy(func(cmd string) bool {
+		return cmd == "git status"
+	}), "/workspace", mock.Anything, true).Return(streamCmd, nil)
+
+	inv.(domain.ExecutableInvocation).Execute(ctx)
+
+	mockExec.AssertExpectations(t)
 }

@@ -11,11 +11,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/helper/follow"
-	"github.com/google/shlex"
 )
 
 const (
@@ -25,6 +25,26 @@ const (
 	DefaultBinarySampleSize    = 8000             // 8KB sample for binary detection
 	DefaultBufferSize          = 4096             // 4KB standard buffer
 )
+
+type signalKiller interface {
+	Kill(pid int, sig syscall.Signal) error
+}
+
+type osSignalKiller struct{}
+
+func (s *osSignalKiller) Kill(pid int, sig syscall.Signal) error {
+	return syscall.Kill(pid, sig)
+}
+
+type commandFactory interface {
+	Command(ctx context.Context, name string, args ...string) *exec.Cmd
+}
+
+type osCommandFactory struct{}
+
+func (f *osCommandFactory) Command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, name, args...)
+}
 
 // Result represents the outcome of a command execution.
 type Result struct {
@@ -88,6 +108,8 @@ type OSCommandExecutor struct {
 
 	SmartDrainThreshold int64
 	DefaultTimeout      time.Duration
+	killer              signalKiller
+	commander           commandFactory
 }
 
 func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
@@ -96,6 +118,8 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 		maxOutputSize:       defaultMaxOutputSize,
 		SmartDrainThreshold: DefaultSmartDrainThreshold,
 		DefaultTimeout:      DefaultTimeout,
+		killer:              &osSignalKiller{},
+		commander:           &osCommandFactory{},
 	}
 }
 
@@ -108,20 +132,7 @@ func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string,
 }
 
 func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, dir string, env []string, enableLogging bool) (sc *StreamingCmd, err error) {
-	if command == "" {
-		return nil, fmt.Errorf("command cannot be empty")
-	}
-
-	args, err := shlex.Split(command)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse command: %w", err)
-	}
-
-	if len(args) == 0 {
-		return nil, fmt.Errorf("command resulted in no arguments")
-	}
-
-	// Fallback timeout
+	// Fallback timeout if no deadline is set in context
 	var cancel context.CancelFunc
 	if _, ok := ctx.Deadline(); !ok {
 		ctx, cancel = context.WithTimeout(ctx, f.DefaultTimeout)
@@ -132,9 +143,22 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 		}()
 	}
 
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	// On Unix-like systems, we execute via the detected shell with -l -c 
+	// to ensure environment parity (profiles, aliases) and POSIX features.
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+	cmd := f.commander.Command(ctx, shell, "-l", "-c", command)
 	cmd.Dir = dir
 	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+	cmd.Cancel = func() error {
+		// Negative PID kills the process group in Unix
+		return f.killer.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -146,7 +170,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("command %s failed to start: %w", args[0], err)
+		return nil, fmt.Errorf("command failed to start: %w", err)
 	}
 
 	var logFile io.WriteCloser

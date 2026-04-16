@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -120,13 +121,16 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	}
 	desc := req.Comment
 
+	// Use a sanitized environment whitelist
+	env := sanitizeEnv()
+
 	return &bashInvocation{
 		fs:                t.fs,
 		commandExecutor:   t.commandExecutor,
 		taskManager:       t.taskManager,
 		wd:                wd,
-		env:               os.Environ(),
-		command:           req.Command,
+		env:               env,
+		command:           req.Command, // RAW command here
 		commandStr:        req.Command,
 		comment:           desc,
 		foregroundTimeout: t.foregroundTimeout,
@@ -134,6 +138,30 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		runInBackground:   req.RunInBackground,
 		proxy:             newProxyReader(),
 	}, nil
+}
+
+func sanitizeEnv() []string {
+	whitelist := []string{"PATH", "HOME", "USER", "LANG", "SHELL", "TERM"}
+	var env []string
+	for _, key := range whitelist {
+		if val, ok := os.LookupEnv(key); ok {
+			env = append(env, fmt.Sprintf("%s=%s", key, val))
+		}
+	}
+	// Ensure we have a basic PATH if none was inherited
+	hasPath := false
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			hasPath = true
+			break
+		}
+	}
+	if !hasPath {
+		env = append(env, "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin")
+	}
+	// Force TERM to dumb to ensure tools behave like they are in a basic text terminal
+	env = append(env, "TERM=dumb")
+	return env
 }
 
 type bashInvocation struct {

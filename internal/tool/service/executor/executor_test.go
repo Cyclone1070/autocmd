@@ -5,10 +5,13 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
 	"errors"
+	"reflect"
+	"syscall"
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -50,6 +53,35 @@ func (m *mockFileSystem) Open(path string) (domain.File, error) {
 		return &mockFile{Reader: bytes.NewReader(buf.Bytes()), size: int64(buf.Len())}, nil
 	}
 	return nil, os.ErrNotExist
+}
+
+type mockSignalKiller struct {
+	killedPid int
+	killedSig syscall.Signal
+}
+
+func (m *mockSignalKiller) Kill(pid int, sig syscall.Signal) error {
+	m.killedPid = pid
+	m.killedSig = sig
+	// Actually kill the process (negating back to positive if needed) 
+	// so the test command terminates and Wait() returns.
+	target := pid
+	if target < 0 {
+		target = -target
+	}
+	return syscall.Kill(target, sig)
+}
+
+type mockCommandFactory struct {
+	gotName string
+	gotArgs []string
+}
+
+func (m *mockCommandFactory) Command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	m.gotName = name
+	m.gotArgs = args
+	// We still return a real Cmd so Start/Wait don't panic, but we don't care about its execution
+	return exec.CommandContext(ctx, "true") 
 }
 
 type mockFile struct {
@@ -180,5 +212,51 @@ func TestStreamingCmd_ID(t *testing.T) {
 	
 	if !strings.Contains(sc.LogPath(), id) {
 		t.Errorf("Expected LogPath %q to contain ID %q", sc.LogPath(), id)
+	}
+}
+
+func TestOSCommandExecutor_ProcessGroupKill(t *testing.T) {
+	fs := &mockFileSystem{}
+	killer := &mockSignalKiller{}
+	exec := NewOSCommandExecutor(fs)
+	exec.killer = killer
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start a long running command
+	sc, err := exec.RunStreaming(ctx, "sleep 100", "", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Trigger cancellation
+	cancel()
+	sc.Wait()
+
+	// Verify that the killer was called with the NEGATIVE PID (group kill)
+	if killer.killedPid >= 0 {
+		t.Errorf("Expected to kill process group (negative PID), but got %d", killer.killedPid)
+	}
+}
+
+func TestOSCommandExecutor_ShellResolution(t *testing.T) {
+	os.Setenv("SHELL", "/bin/custom_shell")
+	defer os.Unsetenv("SHELL")
+
+	fs := &mockFileSystem{}
+	commander := &mockCommandFactory{}
+	exec := NewOSCommandExecutor(fs)
+	exec.commander = commander
+
+	ctx := context.Background()
+	_, _ = exec.RunStreaming(ctx, "my_command", "", nil, false)
+
+	if commander.gotName != "/bin/custom_shell" {
+		t.Errorf("Expected shell /bin/custom_shell, got %q", commander.gotName)
+	}
+
+	expectedArgs := []string{"-l", "-c", "my_command"}
+	if !reflect.DeepEqual(commander.gotArgs, expectedArgs) {
+		t.Errorf("Expected args %v, got %v", expectedArgs, commander.gotArgs)
 	}
 }

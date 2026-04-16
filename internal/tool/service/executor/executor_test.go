@@ -118,7 +118,7 @@ func TestOSCommandExecutor_StringCommand(t *testing.T) {
 	exec := NewOSCommandExecutor(&mockFileSystem{})
 	
 	// Test that it can parse and run a simple string command
-	res, err := exec.Run(context.Background(), "echo 'hello world'", "", nil, false)
+	res, err := exec.Run(context.Background(), "echo 'hello world'", "", false)
 	if err != nil {
 		t.Fatalf("Failed to run string command: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestOSCommandExecutor_QuotedArgs(t *testing.T) {
 	exec := NewOSCommandExecutor(&mockFileSystem{})
 	
 	// Test complex quoting
-	res, err := exec.Run(context.Background(), "printf '%s %s' 'arg one' \"arg two\"", "", nil, false)
+	res, err := exec.Run(context.Background(), "printf '%s %s' 'arg one' \"arg two\"", "", false)
 	if err != nil {
 		t.Fatalf("Failed to run quoted command: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestOSCommandExecutor_InternalLogPath(t *testing.T) {
 
 	t.Run("Logging enabled builds path internally", func(t *testing.T) {
 		fs.createdPaths = nil
-		_, err := exec.Run(ctx, "echo 'hello'", "", nil, true)
+		_, err := exec.Run(ctx, "echo 'hello'", "", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -180,7 +180,7 @@ func TestOSCommandExecutor_FallbackTimeout(t *testing.T) {
 	
 	// Run a command that sleeps longer than the timeout
 	start := time.Now()
-	res, err := exec.Run(ctx, "sleep 10", "", nil, false)
+	res, err := exec.Run(ctx, "sleep 10", "", false)
 	duration := time.Since(start)
 	
 	if err == nil {
@@ -199,7 +199,7 @@ func TestStreamingCmd_ID(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := NewOSCommandExecutor(fs)
 	
-	sc, err := exec.RunStreaming(context.Background(), "echo test", "", nil, true)
+	sc, err := exec.RunStreaming(context.Background(), "echo test", "", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestOSCommandExecutor_ProcessGroupKill(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Start a long running command
-	sc, err := exec.RunStreaming(ctx, "sleep 100", "", nil, false)
+	sc, err := exec.RunStreaming(ctx, "sleep 100", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,14 +249,43 @@ func TestOSCommandExecutor_ShellResolution(t *testing.T) {
 	exec.commander = commander
 
 	ctx := context.Background()
-	_, _ = exec.RunStreaming(ctx, "my_command", "", nil, false)
+	_, _ = exec.RunStreaming(ctx, "my_command", "", false)
 
 	if commander.gotName != "/bin/custom_shell" {
 		t.Errorf("Expected shell /bin/custom_shell, got %q", commander.gotName)
 	}
 
-	expectedArgs := []string{"-l", "-c", "my_command"}
+	prefix := "export TERM=dumb; "
+	expectedArgs := []string{"-l", "-c", prefix + "my_command"}
 	if !reflect.DeepEqual(commander.gotArgs, expectedArgs) {
 		t.Errorf("Expected args %v, got %v", expectedArgs, commander.gotArgs)
+	}
+}
+
+func TestOSCommandExecutor_EnvironmentSanitization(t *testing.T) {
+	// Setup a dirty environment
+	os.Setenv("SECRET_KEY", "highly_sensitive_data")
+	os.Setenv("PATH", "/usr/bin:/bin")
+	defer os.Unsetenv("SECRET_KEY")
+	defer os.Unsetenv("PATH")
+
+	fs := &mockFileSystem{}
+	exec := NewOSCommandExecutor(fs)
+	
+	// Run a command that prints ENV
+	// We use strings.Contains because POSIX env output format is VAR=VAL
+	res, err := exec.Run(context.Background(), "env", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Verify Whitelist: SECRET_KEY should NOT be present
+	if strings.Contains(res.Stdout, "SECRET_KEY") {
+		t.Errorf("Security Leak: SECRET_KEY was found in process output!")
+	}
+
+	// 2. Verify TERM: Should be dumb
+	if !strings.Contains(res.Stdout, "TERM=dumb") {
+		t.Errorf("TERM was not set to dumb, got output: %q", res.Stdout)
 	}
 }

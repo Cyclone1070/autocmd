@@ -41,8 +41,7 @@ func TestGlob_Basic(t *testing.T) {
 			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, ".")
 		}),
 		"/workspace",
-		mock.Anything,
-		mock.Anything,
+		true,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
@@ -61,7 +60,7 @@ func TestGlob_NoMatches(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
@@ -81,7 +80,7 @@ func TestGlob_Offloaded(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate offloaded output
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
 			Stdout: "tail-output", 
 			ExitCode: 0, 
@@ -112,7 +111,7 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate fd failure
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{Stdout: "fatal error", ExitCode: 2}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)

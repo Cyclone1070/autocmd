@@ -19,7 +19,7 @@ func TestGrep_RawRelative(t *testing.T) {
 
 	// Ripgrep is run from root and returns relative paths directly.
 	output := "internal/file.txt:1:match\n"
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
@@ -39,7 +39,7 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
 			Stdout:   "", 
 			ExitCode: 0, 
@@ -71,7 +71,7 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
@@ -89,7 +89,7 @@ func TestGrep_MalformedStats(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
 			Stdout:   "", 
 			ExitCode: 0, 

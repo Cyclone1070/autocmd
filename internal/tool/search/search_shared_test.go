@@ -85,8 +85,8 @@ type mockCommandExecutor struct {
 	mock.Mock
 }
 
-func (m *mockCommandExecutor) Run(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.Result, error) {
-	args := m.Mock.MethodCalled("Run", ctx, cmd, dir, env, enableLogging)
+func (m *mockCommandExecutor) Run(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.Result, error) {
+	args := m.Mock.MethodCalled("Run", ctx, cmd, dir, enableLogging)
 	if len(args) > 0 {
 		if args.Get(0) == nil {
 			return nil, args.Error(1)
@@ -97,8 +97,8 @@ func (m *mockCommandExecutor) Run(ctx context.Context, cmd string, dir string, e
 	return &executor.Result{Stdout: "", ExitCode: 0}, nil
 }
 
-func (m *mockCommandExecutor) RunStreaming(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.StreamingCmd, error) {
-	args := m.Mock.MethodCalled("RunStreaming", ctx, cmd, dir, env, enableLogging)
+func (m *mockCommandExecutor) RunStreaming(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.StreamingCmd, error) {
+	args := m.Mock.MethodCalled("RunStreaming", ctx, cmd, dir, enableLogging)
 	if len(args) > 0 {
 		if args.Get(0) == nil {
 			return nil, args.Error(1)

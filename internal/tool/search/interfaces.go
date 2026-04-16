@@ -25,5 +25,5 @@ type fileSystem interface {
 
 // commandExecutor defines the interface for executing search commands.
 type commandExecutor interface {
-	Run(ctx context.Context, command string, dir string, env []string, enableLogging bool) (*executor.Result, error)
+	Run(ctx context.Context, command string, dir string, enableLogging bool) (*executor.Result, error)
 }

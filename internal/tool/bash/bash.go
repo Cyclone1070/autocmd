@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +18,7 @@ import (
 )
 
 type commandExecutor interface {
-	RunStreaming(ctx context.Context, command string, dir string, env []string, enableLogging bool) (*executor.StreamingCmd, error)
+	RunStreaming(ctx context.Context, command string, dir string, enableLogging bool) (*executor.StreamingCmd, error)
 }
 
 type pathResolver interface {
@@ -115,24 +116,23 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("failed to parse bash parameters: %v", err)
 	}
 
+	// Validate command against block list
+	if err := validateCommand(req.Command); err != nil {
+		return nil, err
+	}
+
 	wd := t.pathResolver.Root()
 	if req.Comment == "" {
 		return nil, fmt.Errorf("comment is required")
 	}
-	desc := req.Comment
-
-	// Use a sanitized environment whitelist
-	env := sanitizeEnv()
-
 	return &bashInvocation{
 		fs:                t.fs,
 		commandExecutor:   t.commandExecutor,
 		taskManager:       t.taskManager,
 		wd:                wd,
-		env:               env,
-		command:           req.Command, // RAW command here
+		command:           req.Command,
 		commandStr:        req.Command,
-		comment:           desc,
+		comment:           req.Comment,
 		foregroundTimeout: t.foregroundTimeout,
 		timeoutMS:         req.Timeout,
 		runInBackground:   req.RunInBackground,
@@ -140,28 +140,58 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-func sanitizeEnv() []string {
-	whitelist := []string{"PATH", "HOME", "USER", "LANG", "SHELL", "TERM"}
-	var env []string
-	for _, key := range whitelist {
-		if val, ok := os.LookupEnv(key); ok {
-			env = append(env, fmt.Sprintf("%s=%s", key, val))
+var forbiddenCommands = map[string]bool{
+	"vim":    true,
+	"vi":     true,
+	"nvim":   true,
+	"emacs":  true,
+	"nano":   true,
+	"pico":   true,
+	"ed":     true,
+	"less":   true,
+	"more":   true,
+	"most":   true,
+	"top":    true,
+	"htop":   true,
+	"ssh":    true,
+	"scp":    true,
+	"telnet": true,
+	"ftp":    true,
+	"screen": true,
+	"tmux":   true,
+	"watch":  true,
+}
+
+var operatorRegex = regexp.MustCompile(`^(&&|\|\||[&|;])$`)
+var paddingRegex = regexp.MustCompile(`(&&|\|\||[&|;])`)
+
+func validateCommand(cmd string) error {
+	// Inject spaces around operators to handle attached commands like &&vim
+	padded := paddingRegex.ReplaceAllString(cmd, " $1 ")
+	fields := strings.Fields(padded)
+	if len(fields) == 0 {
+		return nil
+	}
+
+	nextIsBaseCommand := true
+	for _, token := range fields {
+		if nextIsBaseCommand {
+			// Extract basename to handle /usr/bin/vim
+			base := filepath.Base(token)
+			if forbiddenCommands[base] {
+				return fmt.Errorf("command %q is interactive or forbidden for security reasons", base)
+			}
+			nextIsBaseCommand = false
+			continue
+		}
+
+		// If this token is an operator, the next one will be a base command
+		if operatorRegex.MatchString(token) {
+			nextIsBaseCommand = true
 		}
 	}
-	// Ensure we have a basic PATH if none was inherited
-	hasPath := false
-	for _, e := range env {
-		if strings.HasPrefix(e, "PATH=") {
-			hasPath = true
-			break
-		}
-	}
-	if !hasPath {
-		env = append(env, "PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin")
-	}
-	// Force TERM to dumb to ensure tools behave like they are in a basic text terminal
-	env = append(env, "TERM=dumb")
-	return env
+
+	return nil
 }
 
 type bashInvocation struct {
@@ -169,7 +199,6 @@ type bashInvocation struct {
 	commandExecutor   commandExecutor
 	taskManager       backgroundRegistrar
 	wd                string
-	env               []string
 	command           string
 	commandStr        string
 	comment           string
@@ -208,7 +237,7 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		}
 	}()
 
-	streamCmd, err := i.commandExecutor.RunStreaming(bgCtx, i.command, i.wd, i.env, true)
+	streamCmd, err := i.commandExecutor.RunStreaming(bgCtx, i.command, i.wd, true)
 	if err != nil {
 		i.proxy.Close()
 		d := domain.NewBashDisplay(i.comment, i.commandStr, "")

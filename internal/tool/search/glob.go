@@ -166,7 +166,7 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	ctx, cancel := context.WithTimeout(ctx, DefaultGlobTimeout)
 	defer cancel()
 
-	res, err := i.tool.commandExecutor.Run(ctx, cmdStr, workDir, os.Environ(), true)
+	res, err := i.tool.commandExecutor.Run(ctx, cmdStr, workDir, true)
 	timedOut := false
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

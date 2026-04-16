@@ -282,10 +282,10 @@ func (m *mockFileInfo) Mode() os.FileMode { return 0644 }
 func (m *mockDeps) Abs(path string) (string, error) { return "/abs/" + path, nil }
 func (m *mockDeps) Root() string                  { return "/abs" }
 func (m *mockDeps) DisplayPath(path string) string { return path }
-func (m *mockDeps) Run(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.Result, error) {
+func (m *mockDeps) Run(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.Result, error) {
 	return &executor.Result{ExitCode: 0}, nil
 }
-func (m *mockDeps) RunStreaming(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.StreamingCmd, error) {
+func (m *mockDeps) RunStreaming(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.StreamingCmd, error) {
 	return &executor.StreamingCmd{}, nil
 }
 func (m *mockDeps) Open(path string) (domain.File, error) { return nil, nil }
@@ -301,8 +301,6 @@ func (m *mockDeps) ReadFile(path string) ([]byte, error) {
 func (m *mockDeps) Compute(data []byte) string           { return "hash" }
 func (m *mockDeps) Get(path string) (string, bool)       { return "hash", true }
 func (m *mockDeps) Update(path, checksum string)         {}
-func (m *mockDeps) ReadEnv(path string) ([]string, error) { return nil, nil }
-func (m *mockDeps) WriteEnv(path string, env []string) error { return nil }
 func (m *mockDeps) WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
 	return nil
 }

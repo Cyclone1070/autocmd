@@ -239,7 +239,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	ctx, cancel := context.WithTimeout(ctx, DefaultGrepTimeout)
 	defer cancel()
 
-	res, err := i.commandExecutor.Run(ctx, cmdStr, workDir, os.Environ(), true)
+	res, err := i.commandExecutor.Run(ctx, cmdStr, workDir, true)
 	timedOut := false
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {

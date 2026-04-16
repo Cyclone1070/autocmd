@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -123,15 +124,15 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 	}
 }
 
-func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, env []string, enableLogging bool) (*Result, error) {
-	s, err := f.RunStreaming(ctx, command, dir, env, enableLogging)
+func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, enableLogging bool) (*Result, error) {
+	s, err := f.RunStreaming(ctx, command, dir, enableLogging)
 	if err != nil {
 		return nil, err
 	}
 	return s.Wait()
 }
 
-func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, dir string, env []string, enableLogging bool) (sc *StreamingCmd, err error) {
+func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, dir string, enableLogging bool) (sc *StreamingCmd, err error) {
 	// Fallback timeout if no deadline is set in context
 	var cancel context.CancelFunc
 	if _, ok := ctx.Deadline(); !ok {
@@ -143,15 +144,27 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 		}()
 	}
 
+	// Always sanitize environment for security using the secure base
+	envMap := sanitizeEnv()
+	sanitizedEnv := envMapToSlice(envMap)
+
 	// On Unix-like systems, we execute via the detected shell with -l -c 
 	// to ensure environment parity (profiles, aliases) and POSIX features.
-	shell := os.Getenv("SHELL")
+	shell := envMap["SHELL"]
 	if shell == "" {
-		shell = "/bin/bash"
+		shell = os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/bash"
+		}
 	}
-	cmd := f.commander.Command(ctx, shell, "-l", "-c", command)
+
+	// Build a sanitization prefix that runs INSIDE the shell after profiles are sourced.
+	// This ensures our policies (like TERM) survive the login shell's initialization.
+	sanitizationPrefix := "export TERM=dumb; "
+	
+	cmd := f.commander.Command(ctx, shell, "-l", "-c", sanitizationPrefix+command)
 	cmd.Dir = dir
-	cmd.Env = env
+	cmd.Env = sanitizedEnv
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
@@ -305,4 +318,41 @@ func randomShortID(length int) string {
 		panic(fmt.Sprintf("failed to generate random ID: %v", err))
 	}
 	return hex.EncodeToString(bytes)
+}
+
+var envWhitelist = map[string]bool{
+	"PATH":  true,
+	"HOME":  true,
+	"USER":  true,
+	"LANG":  true,
+	"SHELL": true,
+	"TERM":  true,
+}
+
+func sanitizeEnv() map[string]string {
+	env := os.Environ()
+
+	// Use a map for deduplication and easy override
+	envMap := make(map[string]string)
+	for _, e := range env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			if envWhitelist[parts[0]] {
+				envMap[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	// Always force TERM=dumb for clean AI-parseable output
+	envMap["TERM"] = "dumb"
+
+	return envMap
+}
+
+func envMapToSlice(envMap map[string]string) []string {
+	var env []string
+	for k, v := range envMap {
+		env = append(env, k+"="+v)
+	}
+	return env
 }

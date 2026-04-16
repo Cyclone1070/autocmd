@@ -11,17 +11,17 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 )
 
-// App holds the core dependencies for the CLI commands.
+// Deps holds the core dependencies for the CLI commands.
 type Deps struct {
-	Config       *config.Config
-	State        *state.State
-	StateManager *state.Manager
-	SessionStore *session.Store
-	AuthManager  *auth.Manager
-	OAuthManager *auth.OAuthManager
-	LLMRegistry  *provider.LLMRegistry
+	Config           *config.Config
+	State            *state.State
+	StateManager     *state.Manager
+	SessionStore     *session.Store
+	AuthManager      *auth.Manager
+	OAuthManager     *auth.OAuthManager
+	LLMRegistry      *provider.LLMRegistry
 	ProviderRegistry *provider.ProviderRegistry
-	BootstrapFS  fs.FileSystem
+	BootstrapFS      fs.FileSystem
 }
 
 // Wire initializes the standard application dependency stack.
@@ -54,14 +54,14 @@ func Wire() (*Deps, error) {
 	}
 
 	return &Deps{
-		Config:       cfg,
-		State:        appState,
-		StateManager: stateMgr,
-		SessionStore: sessionStore,
-		AuthManager:  authMgr,
-		OAuthManager: auth.NewOAuthManager(nil),
-		LLMRegistry:  llmRegistry,
+		Config:           cfg,
+		State:            appState,
+		StateManager:     stateMgr,
+		SessionStore:     sessionStore,
+		AuthManager:      authMgr,
+		OAuthManager:     auth.NewOAuthManager(nil),
+		LLMRegistry:      llmRegistry,
 		ProviderRegistry: providerRegistry,
-		BootstrapFS:  bootstrapFS,
+		BootstrapFS:      bootstrapFS,
 	}, nil
 }

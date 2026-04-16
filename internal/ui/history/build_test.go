@@ -576,3 +576,21 @@ func (m *mockRenderer) Render(s string) string {
 	// Real Glamour renderer adds a leading newline
 	return "\n" + s + "[rendered]"
 }
+func TestHistory_TaskNotification_RendersAsToolBox(t *testing.T) {
+	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
+	
+	messages := []*schema.Message{
+		{
+			Role:    schema.User,
+			Content: "<task-notification>done</task-notification>",
+			Extra:   map[string]any{"iav/is_notification": true},
+		},
+	}
+	
+	rendered := stripANSI(b.BuildSession(&domain.Session{Messages: messages}))
+	
+	// Should render as "Tool Box" despite the XML content
+	assert.Contains(t, rendered, "Tool Box")
+	assert.NotContains(t, rendered, "<task-notification>")
+}

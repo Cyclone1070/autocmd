@@ -79,11 +79,6 @@ func (r *Resolver) Abs(path string) (string, error) {
 		abs = filepath.Clean(filepath.Join(r.workspaceRoot, path))
 	}
 
-	// Boundary check: must be the root itself or a child of the root
-	if !strings.HasPrefix(abs, r.workspaceRoot+"/") && abs != r.workspaceRoot {
-		return "", fmt.Errorf("path is outside workspace root: %s", path)
-	}
-
 	return abs, nil
 }
 

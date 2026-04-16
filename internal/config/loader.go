@@ -58,8 +58,9 @@ func NewManager(fs FileSystem) *Manager {
 func newConfig(dto configDTO) (*Config, error) {
 	cfg := &Config{
 		tools: ToolsConfig{
-			maxFileSize:   dto.Tools.MaxFileSize,
-			maxIterations: dto.Tools.MaxIterations,
+			maxFileSize:           dto.Tools.MaxFileSize,
+			maxIterations:         dto.Tools.MaxIterations,
+			bashForegroundTimeout: dto.Tools.BashForegroundTimeout,
 		},
 		session: SessionConfig{
 			storageDir: dto.Session.StorageDir,
@@ -101,8 +102,9 @@ func (m *Manager) Load() (*Config, error) {
 	defaults := DefaultConfig()
 	dto := configDTO{
 		Tools: toolsDTO{
-			MaxFileSize:   defaults.tools.maxFileSize,
-			MaxIterations: defaults.tools.maxIterations,
+			MaxFileSize:           defaults.tools.maxFileSize,
+			MaxIterations:         defaults.tools.maxIterations,
+			BashForegroundTimeout: defaults.tools.bashForegroundTimeout,
 		},
 		Session: sessionDTO{
 			StorageDir: defaults.session.storageDir,

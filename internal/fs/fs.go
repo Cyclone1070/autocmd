@@ -10,7 +10,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
-// FileSystem defines the filesystem operations needed by the application.
 type FileSystem interface {
 	ReadFile(path string) ([]byte, error)
 	WriteFile(path string, data []byte, perm os.FileMode) error
@@ -20,7 +19,10 @@ type FileSystem interface {
 	UserHomeDir() (string, error)
 	ListDir(path string) ([]os.DirEntry, error)
 	Remove(path string) error
+	RemoveAll(path string) error
 	Stat(path string) (os.FileInfo, error)
+	CreateAtomic(path string) (io.WriteCloser, error)
+	Open(path string) (domain.File, error)
 }
 
 // OSFileSystem implements filesystem operations using the local OS filesystem primitives.
@@ -145,7 +147,22 @@ func (fs *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) er
 	return os.WriteFile(name, data, perm)
 }
 
-// Remove deletes a file.
+// CreateAtomic creates a new file, failing if it already exists (O_EXCL).
+func (fs *OSFileSystem) CreateAtomic(name string) (io.WriteCloser, error) {
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+}
+
+// Remove deletes a file or empty directory.
 func (fs *OSFileSystem) Remove(path string) error {
 	return os.Remove(path)
+}
+
+// RemoveAll deletes a path and any children it contains.
+func (fs *OSFileSystem) RemoveAll(path string) error {
+	return os.RemoveAll(path)
+}
+
+// Open opens a file for reading.
+func (fs *OSFileSystem) Open(path string) (domain.File, error) {
+	return os.Open(path)
 }

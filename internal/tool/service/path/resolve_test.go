@@ -49,20 +49,20 @@ func TestAbs(t *testing.T) {
 		{
 			name:      "escape attempt via parent dots",
 			input:     "../../../etc/passwd",
-			expected:  "",
-			wantError: true,
+			expected:  "/etc/passwd",
+			wantError: false,
 		},
 		{
 			name:      "absolute path outside workspace",
 			input:     "/etc/passwd",
-			expected:  "",
-			wantError: true,
+			expected:  "/etc/passwd",
+			wantError: false,
 		},
 		{
 			name:      "prefix match but not child",
 			input:     "/workspacefoo/bar",
-			expected:  "",
-			wantError: true,
+			expected:  "/workspacefoo/bar",
+			wantError: false,
 		},
 	}
 

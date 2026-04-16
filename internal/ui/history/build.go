@@ -167,7 +167,9 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 	contPrefix := style.Render(" " + userGutterPipe)
 
 	content := msg.Content
-	if h.Renderer != nil {
+	if msg.Extra["iav/is_notification"] == true {
+		content = "Tool Box"
+	} else if h.Renderer != nil {
 		content = h.Renderer.Render(msg.Content)
 	}
 	writeFramedWithGutter(sb, roleLine, contPrefix, content)

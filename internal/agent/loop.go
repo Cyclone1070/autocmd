@@ -16,6 +16,7 @@ type Loop struct {
 	llm           domain.LLM
 	toolExecutor  *ToolExecutor
 	events        eventSender
+	notifier      taskNotifier
 	maxIterations int
 }
 
@@ -24,11 +25,13 @@ func NewLoop(
 	toolExecutor *ToolExecutor,
 	maxIterations int,
 	events eventSender,
+	notifier taskNotifier,
 ) *Loop {
 	return &Loop{
 		llm:           llm,
 		toolExecutor:  toolExecutor,
 		events:        events,
+		notifier:      notifier,
 		maxIterations: maxIterations,
 	}
 }
@@ -38,6 +41,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 	if session == nil {
 		return fmt.Errorf("session is required")
 	}
+
 
 	session.Messages = append(session.Messages, &schema.Message{
 		Role:    schema.User,
@@ -61,6 +65,17 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 	}()
 
 	for range l.maxIterations {
+		// 1. Drain background notifications before ANY other work in this turn
+		if l.notifier != nil {
+			for _, xml := range l.notifier.Drain() {
+				session.Messages = append(session.Messages, &schema.Message{
+					Role:    schema.User,
+					Content: xml,
+					Extra:   map[string]any{"iav/is_notification": true},
+				})
+			}
+		}
+
 		if err := ctx.Err(); err != nil {
 			return err
 		}

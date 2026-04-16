@@ -1,0 +1,74 @@
+package bash
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/schema"
+)
+
+type taskLister interface {
+	List() []TaskInfo
+}
+
+type TaskListTool struct {
+	manager taskLister
+}
+
+func NewTaskListTool(manager taskLister) *TaskListTool {
+	return &TaskListTool{
+		manager: manager,
+	}
+}
+
+func (t *TaskListTool) Name() string {
+	return "task_list"
+}
+
+func (t *TaskListTool) IsConcurrentSafe() bool { return true }
+
+func (t *TaskListTool) Definition() *schema.ToolInfo {
+	return &schema.ToolInfo{
+		Name:        "task_list",
+		Desc:        "List all active background bash tasks.",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
+	}
+}
+
+func (t *TaskListTool) Prepare(params string) (domain.Invocation, error) {
+	return &taskListInvocation{
+		manager: t.manager,
+		display: domain.NewStringDisplay("", "LIST active background bash tasks"),
+	}, nil
+}
+
+type taskListInvocation struct {
+	manager taskLister
+	display domain.StringDisplay
+}
+
+func (i *taskListInvocation) Display() domain.ToolDisplay {
+	return i.display
+}
+
+func (i *taskListInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+	if ctx.Err() != nil {
+		i.display.Error = domain.ToolErrorCancelled
+		return domain.ToolErrorCancelled, i.display
+	}
+
+	tasks := i.manager.List()
+	if len(tasks) == 0 {
+		return "no active background tasks", i.display
+	}
+
+	var sbLLM strings.Builder
+	sbLLM.WriteString("active background bash tasks:\n")
+	for _, t := range tasks {
+		fmt.Fprintf(&sbLLM, "- ID: %s\n  Description: %s\n  Command: %s\n", t.ID, t.Description, t.Command)
+	}
+
+	return sbLLM.String(), i.display
+}

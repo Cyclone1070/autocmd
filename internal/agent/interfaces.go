@@ -22,3 +22,8 @@ type actionWaiter interface {
 type eventSender interface {
 	SendUIUpdate(domain.UIUpdate)
 }
+
+type taskNotifier interface {
+	// Drain returns all pre-formatted XML notifications for tasks completed since the last call.
+	Drain() []string
+}

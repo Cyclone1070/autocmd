@@ -1,231 +1,184 @@
 package executor
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"errors"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-func TestRun(t *testing.T) {
-	exec := NewOSCommandExecutor()
-
-	t.Run("SimpleCommand", func(t *testing.T) {
-		res, err := exec.Run(context.Background(), []string{"echo", "hello"}, "", nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.TrimSpace(res.Stdout) != "hello" {
-			t.Errorf("expected stdout 'hello', got %q", res.Stdout)
-		}
-		if res.ExitCode != 0 {
-			t.Errorf("expected exit code 0, got %d", res.ExitCode)
-		}
-	})
-
-	t.Run("EmptyCommand", func(t *testing.T) {
-		_, err := exec.Run(context.Background(), []string{}, "", nil)
-		if err != os.ErrInvalid {
-			t.Errorf("expected os.ErrInvalid, got %v", err)
-		}
-	})
-
-	t.Run("NonZeroExit", func(t *testing.T) {
-		cmd := []string{"false"}
-		if runtime.GOOS == "windows" {
-			cmd = []string{"cmd", "/c", "exit 1"}
-		}
-		res, err := exec.Run(context.Background(), cmd, "", nil)
-		if err != nil {
-			t.Errorf("unexpected error for non-zero exit: %v", err)
-		}
-		if res.ExitCode != 1 {
-			t.Errorf("expected exit code 1, got %d", res.ExitCode)
-		}
-	})
-
-	t.Run("Stderr", func(t *testing.T) {
-		// Use a script that writes to stderr
-		cmd := []string{"sh", "-c", "echo error >&2"}
-		if runtime.GOOS == "windows" {
-			cmd = []string{"cmd", "/c", "echo error 1>&2"}
-		}
-		res, err := exec.Run(context.Background(), cmd, "", nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if strings.TrimSpace(res.Stderr) != "error" {
-			t.Errorf("expected stderr 'error', got %q", res.Stderr)
-		}
-	})
-
-	t.Run("LargeOutput", func(t *testing.T) {
-		exec := NewOSCommandExecutor()
-		exec.maxOutputSize = 10
-
-		res, err := exec.Run(context.Background(), []string{"echo", "123456789012345"}, "", nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !res.Truncated {
-			t.Error("expected output to be truncated")
-		}
-		if len(res.Stdout) > 10 {
-			t.Errorf("expected stdout length <= 10, got %d", len(res.Stdout))
-		}
-	})
+type mockFileSystem struct {
+	files        map[string]*bytes.Buffer
+	removedFiles []string
+	createdPaths []string
 }
 
-type MockClock struct {
-	afterCh chan chan time.Time
+func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
+	return nil
 }
 
-func NewMockClock() *MockClock {
-	return &MockClock{
-		afterCh: make(chan chan time.Time, 10),
+func (m *mockFileSystem) CreateAtomic(path string) (io.WriteCloser, error) {
+	m.createdPaths = append(m.createdPaths, path)
+	if m.files == nil {
+		m.files = make(map[string]*bytes.Buffer)
+	}
+	buf := &bytes.Buffer{}
+	m.files[path] = buf
+	return &mockWriteCloser{Buffer: buf}, nil
+}
+
+func (m *mockFileSystem) Remove(path string) error {
+	m.removedFiles = append(m.removedFiles, path)
+	delete(m.files, path)
+	return nil
+}
+
+func (m *mockFileSystem) Stat(path string) (os.FileInfo, error) {
+	if _, ok := m.files[path]; ok {
+		return &mockFileInfo{size: int64(m.files[path].Len())}, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func (m *mockFileSystem) Open(path string) (domain.File, error) {
+	if buf, ok := m.files[path]; ok {
+		return &mockFile{Reader: bytes.NewReader(buf.Bytes()), size: int64(buf.Len())}, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+type mockFile struct {
+	*bytes.Reader
+	size int64
+}
+
+func (m *mockFile) Close() error { return nil }
+func (m *mockFile) Stat() (os.FileInfo, error) {
+	return &mockFileInfo{size: m.size}, nil
+}
+
+type mockFileInfo struct {
+	os.FileInfo
+	size int64
+}
+
+func (m *mockFileInfo) Size() int64 { return m.size }
+func (m *mockFileInfo) IsDir() bool { return false }
+func (m *mockFileInfo) Name() string { return "mock" }
+func (m *mockFileInfo) Mode() os.FileMode { return 0 }
+func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
+func (m *mockFileInfo) Sys() interface{} { return nil }
+
+type mockWriteCloser struct {
+	*bytes.Buffer
+}
+
+func (m *mockWriteCloser) Close() error {
+	return nil
+}
+
+func TestOSCommandExecutor_StringCommand(t *testing.T) {
+	exec := NewOSCommandExecutor(&mockFileSystem{})
+	
+	// Test that it can parse and run a simple string command
+	res, err := exec.Run(context.Background(), "echo 'hello world'", "", nil, false)
+	if err != nil {
+		t.Fatalf("Failed to run string command: %v", err)
+	}
+
+	if !strings.Contains(res.Stdout, "hello world") {
+		t.Errorf("Expected 'hello world', got %q", res.Stdout)
 	}
 }
 
-func (m *MockClock) After(d time.Duration) <-chan time.Time {
-	ch := make(chan time.Time, 1)
-	m.afterCh <- ch
-	return ch
-}
+func TestOSCommandExecutor_QuotedArgs(t *testing.T) {
+	exec := NewOSCommandExecutor(&mockFileSystem{})
+	
+	// Test complex quoting
+	res, err := exec.Run(context.Background(), "printf '%s %s' 'arg one' \"arg two\"", "", nil, false)
+	if err != nil {
+		t.Fatalf("Failed to run quoted command: %v", err)
+	}
 
-func (m *MockClock) Trigger(t *testing.T) {
-	t.Helper()
-	select {
-	case ch := <-m.afterCh:
-		ch <- time.Now()
-	case <-time.After(1 * time.Second):
-		t.Fatal("MockClock.Trigger timed out waiting for an After call")
+	if res.Stdout != "arg one arg two" {
+		t.Errorf("Expected 'arg one arg two', got %q", res.Stdout)
 	}
 }
 
-func TestRunWithTimeout(t *testing.T) {
-	t.Run("CompletesBeforeTimeout", func(t *testing.T) {
-		exec := NewOSCommandExecutor()
-		res, err := exec.RunWithTimeout(context.Background(), []string{"echo", "hi"}, "", nil, 1*time.Second)
+func TestOSCommandExecutor_InternalLogPath(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := NewOSCommandExecutor(fs)
+	sessionID := "test-session-123"
+	ctx := domain.WithSessionID(context.Background(), sessionID)
+
+	t.Run("Logging enabled builds path internally", func(t *testing.T) {
+		fs.createdPaths = nil
+		_, err := exec.Run(ctx, "echo 'hello'", "", nil, true)
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatal(err)
 		}
-		if strings.TrimSpace(res.Stdout) != "hi" {
-			t.Errorf("expected stdout 'hi', got %q", res.Stdout)
+
+		// Verify that a path was created containing the session ID and following the expected pattern
+		found := false
+		for _, p := range fs.createdPaths {
+			if strings.Contains(p, "sessions") && strings.Contains(p, sessionID) && strings.HasSuffix(p, ".output.log") {
+				found = true
+				break
+			}
 		}
-	})
-
-	t.Run("TimeoutKillsProcess", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("Skipping timeout test on Windows")
-		}
-		clock := NewMockClock()
-		exec := NewOSCommandExecutor()
-		exec.clock = clock
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := exec.RunWithTimeout(context.Background(), []string{"sleep", "10"}, "", nil, 1*time.Hour)
-			errCh <- err
-		}()
-
-		// Trigger the main timeout
-		clock.Trigger(t)
-		// Trigger the graceful shutdown timeout (SIGKILL wait)
-		clock.Trigger(t)
-
-		err := <-errCh
-		if err != ErrTimeout {
-			t.Errorf("expected ErrTimeout, got %v", err)
-		}
-	})
-
-	t.Run("OutputCollectedOnTimeout", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("Skipping timeout test on Windows")
-		}
-		clock := NewMockClock()
-		exec := NewOSCommandExecutor()
-		exec.clock = clock
-
-		resCh := make(chan *Result, 1)
-		go func() {
-			// Write something then sleep. We use a script to ensure some output is flushed.
-			cmd := []string{"sh", "-c", "printf starting; sleep 10"}
-			res, _ := exec.RunWithTimeout(context.Background(), cmd, "", nil, 1*time.Hour)
-			resCh <- res
-		}()
-
-		// Give time for sh to start and printf to run
-		time.Sleep(100 * time.Millisecond)
-
-		clock.Trigger(t) // Main timeout
-		clock.Trigger(t) // Graceful wait
-
-		res := <-resCh
-		if strings.TrimSpace(res.Stdout) != "starting" {
-			t.Errorf("expected stdout 'starting', got %q", res.Stdout)
+		if !found {
+			t.Errorf("Expected a log path containing 'sessions' and %q, but got none of: %v", sessionID, fs.createdPaths)
 		}
 	})
 }
-
-func TestRunStreaming(t *testing.T) {
-	t.Run("SimpleCommand", func(t *testing.T) {
-		exec := NewOSCommandExecutor()
-		streamCmd, err := exec.RunStreaming(context.Background(), []string{"echo", "hello"}, "", nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		// Read streaming output
-		buf := make([]byte, 1024)
-		n, _ := streamCmd.Output().Read(buf)
-		streamOutput := string(buf[:n])
-
-		// Wait for result
-		res, err := streamCmd.Wait()
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !strings.Contains(streamOutput, "hello") {
-			t.Errorf("expected stream to contain 'hello', got %q", streamOutput)
-		}
-		if !strings.Contains(res.Stdout, "hello") {
-			t.Errorf("expected stdout to contain 'hello', got %q", res.Stdout)
-		}
-		if res.ExitCode != 0 {
-			t.Errorf("expected exit code 0, got %d", res.ExitCode)
-		}
-	})
+func TestOSCommandExecutor_FallbackTimeout(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := NewOSCommandExecutor(fs)
+	
+	// Set a very short fallback timeout
+	exec.DefaultTimeout = 100 * time.Millisecond
+	
+	// Use context without deadline
+	ctx := context.Background()
+	
+	// Run a command that sleeps longer than the timeout
+	start := time.Now()
+	res, err := exec.Run(ctx, "sleep 10", "", nil, false)
+	duration := time.Since(start)
+	
+	if err == nil {
+		t.Fatalf("Expected timeout error, got nil. Result: %+v, Duration: %v", res, duration)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected context.DeadlineExceeded, got %v", err)
+	}
+	// Verify it timed out roughly at 100ms
+	if duration > 500*time.Millisecond {
+		t.Errorf("Command took too long to fail: %v", duration)
+	}
 }
 
-func TestCollector(t *testing.T) {
-	t.Run("UnderLimit", func(t *testing.T) {
-		c := newCollector(10, 5)
-		n, err := c.Write([]byte("abc"))
-		if err != nil || n != 3 {
-			t.Errorf("unexpected write result: %v, %d", err, n)
-		}
-		if c.String() != "abc" || c.Truncated() {
-			t.Errorf("unexpected collector state: %q, %v", c.String(), c.Truncated())
-		}
-	})
+func TestStreamingCmd_ID(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := NewOSCommandExecutor(fs)
+	
+	sc, err := exec.RunStreaming(context.Background(), "echo test", "", nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sc.Wait()
 
-	t.Run("OverLimit", func(t *testing.T) {
-		c := newCollector(5, 5)
-		_, _ = c.Write([]byte("abcdef"))
-		if c.String() != "abcde" || !c.Truncated() {
-			t.Errorf("unexpected collector state: %q, %v", c.String(), c.Truncated())
-		}
-	})
-
-	t.Run("BinaryDetection", func(t *testing.T) {
-		c := newCollector(10, 5)
-		_, _ = c.Write([]byte{'a', 0, 'b'})
-		if c.String() != "[Binary Content]" || !c.Truncated() {
-			t.Errorf("unexpected collector state: %q, %v", c.String(), c.Truncated())
-		}
-	})
+	id := sc.ID()
+	if id == "" {
+		t.Error("Expected non-empty ID from StreamingCmd")
+	}
+	
+	if !strings.Contains(sc.LogPath(), id) {
+		t.Errorf("Expected LogPath %q to contain ID %q", sc.LogPath(), id)
+	}
 }

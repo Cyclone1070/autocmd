@@ -3,17 +3,20 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
 )
 
 const (
-	maxFindResults = 1000
+	DefaultGlobTimeout = 20 * time.Second
 )
 
 // GlobRequest represents the parameters for a glob operation
@@ -123,22 +126,18 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 	// DisplayPath is used for the TUI summary below
 
 	return &globInvocation{
-		fs:              t.fs,
-		commandExecutor: t.commandExecutor,
-		pathResolver:    t.pathResolver,
-		absPath:         absPath,
-		pattern:         req.Pattern,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("GLOB \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
+		tool:    t,
+		absPath: absPath,
+		pattern: req.Pattern,
+		display: domain.NewStringDisplay("", fmt.Sprintf("GLOB \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
 	}, nil
 }
 
 type globInvocation struct {
-	fs              fileSystem
-	commandExecutor commandExecutor
-	pathResolver    pathResolver
-	absPath         string
-	pattern         string
-	display         domain.StringDisplay
+	tool    *GlobTool
+	pattern string
+	absPath string
+	display domain.StringDisplay
 }
 
 func (i *globInvocation) Display() domain.ToolDisplay {
@@ -153,74 +152,79 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		return domain.ToolErrorCancelled, d
 	}
 
-	// Re-verify State
-	info, err := i.fs.Stat(i.absPath)
+	// Search target should be relative to workspace root for clean relative output
+	relPath, err := filepath.Rel(i.tool.pathResolver.Root(), i.absPath)
+	if err != nil || strings.HasPrefix(relPath, "..") {
+		relPath = i.absPath
+	}
+	workDir := i.tool.pathResolver.Root()
+
+	// rg --files --glob "pattern" --sort=modified --no-ignore --hidden <target>
+	args := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden", relPath}
+	cmdStr := joinArgs(args)
+
+	ctx, cancel := context.WithTimeout(ctx, DefaultGlobTimeout)
+	defer cancel()
+
+	res, err := i.tool.commandExecutor.Run(ctx, cmdStr, workDir, os.Environ(), true)
+	timedOut := false
 	if err != nil {
-		if ctx.Err() != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			timedOut = true
+		} else if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
-		}
-		if os.IsNotExist(err) {
+		} else {
 			d.Error = domain.ToolErrorFailed
-			return fmt.Sprintf("Error: Path %s no longer exists.", i.absPath), d
+			return fmt.Sprintf("Error: ripgrep failed to start: %v", err), d
 		}
+	}
+
+	output := res.Stdout
+	if res.LogPath != "" {
+		count, _ := i.countLines(res.LogPath)
+		output = fmt.Sprintf("Output too large (%d files found). Full output saved to %s. Use `read_file` tool to read full output.", count, res.LogPath)
+	}
+
+	if res.ExitCode != 0 && res.ExitCode != 1 && !timedOut {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: Failed to access %s: %v", i.absPath, err), d
-	}
-	if !info.IsDir() {
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: Path %s is no longer a directory.", i.absPath), d
-	}
-
-	// rg --files --glob "pattern" --sort=modified --no-ignore --hidden
-	cmd := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden"}
-
-	res, err := i.commandExecutor.Run(ctx, cmd, i.absPath, os.Environ())
-	if err != nil {
-		if ctx.Err() != nil {
-			d.Error = domain.ToolErrorCancelled
-			return domain.ToolErrorCancelled, d
-		}
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: ripgrep failed to start: %v", err), d
-	}
-
-	if res.ExitCode != 0 && res.ExitCode != 1 {
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: ripgrep failed with exit code %d: %s", res.ExitCode, res.Stderr), d
-	}
-
-	maxResults := maxFindResults
-	var matches []string
-	hitMaxResults := false
-	lines := strings.SplitSeq(res.Stdout, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		absLine := line
-		if !filepath.IsAbs(line) {
-			absLine = filepath.Join(i.absPath, line)
-		}
-		displayPath := i.pathResolver.DisplayPath(absLine)
-		matches = append(matches, filepath.ToSlash(displayPath))
-
-		if len(matches) >= maxResults {
-			hitMaxResults = true
-			break
-		}
-	}
-
-	if len(matches) == 0 {
+		output = fmt.Sprintf("Error: ripgrep failed with exit code %d\n%s", res.ExitCode, output)
+	} else if output == "" && (res.ExitCode == 0 || res.ExitCode == 1) && !timedOut {
 		return "No files found", d
 	}
 
-	formattedMatches := strings.Join(matches, "\n")
-	if hitMaxResults {
-		formattedMatches += "\n(Results are truncated. Consider using a more specific path or pattern.)"
+	if timedOut {
+		d.Error = domain.ToolErrorTimedOut
+		output = fmt.Sprintf("%s\n\n<execution_status>\n  <exit_code>%d</exit_code>\n  <timedout>true</timedout>\n</execution_status>", output, res.ExitCode)
 	}
 
-	return formattedMatches, d
+	return strings.TrimSpace(output), d
+}
+
+func (i *globInvocation) countLines(path string) (int, error) {
+	f, err := i.tool.fs.Open(path)
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	count := 0
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			for idx := range n {
+				if buf[idx] == '\n' {
+					count++
+				}
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return count, err
+		}
+	}
+	return count, nil
 }

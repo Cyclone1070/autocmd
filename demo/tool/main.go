@@ -8,18 +8,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/Cyclone1070/iav/demo/demoutil"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/demo/demoutil"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
-	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/workflow"
-	"github.com/cloudwego/eino/components/model"
-	"github.com/cloudwego/eino/schema"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 	"golang.org/x/term"
 )
 
@@ -206,10 +206,10 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast output line %d - working quickly...\n", i)})
 			}
 			if i <= 20 {
-				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time...\n", i)})
+				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time................................................................................................\n", i)})
 			}
 			if i <= 18 {
-				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...\n", i)})
+				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...n", i)})
 			}
 		}
 	}
@@ -246,17 +246,16 @@ func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target str
 
 type mockLLM struct{}
 
-func (l *mockLLM) ID() string          { return "mock" }
-func (l *mockLLM) DisplayName() string { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int  { return 1000 }
+func (l *mockLLM) ID() string                        { return "mock" }
+func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
+func (l *mockLLM) ContextWindow() int                { return 1000 }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }
 
-
 type mockRegistry struct{}
 
-func (r *mockRegistry) Definitions() []*schema.ToolInfo  { return nil }
+func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
 func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

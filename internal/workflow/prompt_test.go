@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -179,7 +181,10 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").Return("New Session", nil)
 
 	// 3. Agent Loop expectations
-	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
+	agent.On("Run", mock.MatchedBy(func(ctx context.Context) bool {
+		id, ok := domain.GetSessionID(ctx)
+		return ok && id == "new-id"
+	}), mock.Anything, "hello").Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
 	err := <-done
@@ -335,4 +340,43 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("Test timed out - possible deadlock in deterministic synchronization")
 	}
+}
+
+func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	registry := new(mockToolRegistry)
+	agent := new(mockAgent)
+	bus := eventbus.New()
+
+	appState := &state.State{}
+	appState.SetCurrentSessionID("non-existent-id")
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        appState,
+		ToolRegistry: registry,
+		Agent:        agent,
+		Bus:          bus,
+	}
+
+	// Mocking the "not found" error - wrapped as it is in the real store
+	store.On("Get", "non-existent-id").Return((*domain.Session)(nil), fmt.Errorf("read session info: %w", os.ErrNotExist))
+	
+	// Fallback expectations
+	store.On("Create").Return(&domain.Session{ID: "new-id"}, nil)
+	store.On("Save", mock.Anything).Return(nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
+	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
+
+	done := RunPrompt(ctx, "hello", deps)
+	err := <-done
+
+	assert.NoError(t, err)
+	assert.Equal(t, "new-id", appState.CurrentSessionID(), "Should have fallen back to a new session ID")
+	store.AssertExpectations(t)
 }

@@ -17,6 +17,9 @@ const ToolErrorCancelled = "execution cancelled"
 // ToolErrorFailed is the generic ToolDisplay.Error for any non-cancellation failures.
 const ToolErrorFailed = "execution failed"
 
+// ToolErrorTimedOut is ToolDisplay.Error when Execute returns because the operation took too long.
+const ToolErrorTimedOut = "execution timed out"
+
 // Invocation is a validated, prepared tool call: at minimum a display for the UI.
 // Returned by Tool.Prepare(). Concrete kinds implement ExecutableInvocation, StreamableInvocation,
 // and/or InteractiveInvocation.
@@ -236,3 +239,4 @@ type Tool interface {
 	Definition() *schema.ToolInfo
 	Prepare(params string) (Invocation, error)
 }
+

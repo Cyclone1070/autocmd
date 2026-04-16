@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -108,7 +109,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	readTool := file.NewReadFileTool(fs, fs, res)
 	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
 	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
-	bashTool := bash.NewBashTool(res, fs)
+	bashTool := bash.NewBashTool(fs, exec, res, bash.NewTaskManager(fs), 10*time.Second)
 
 	// 15-line argument (simulating Go code or large config)
 	lines := make([]string, 15)
@@ -281,12 +282,15 @@ func (m *mockFileInfo) Mode() os.FileMode { return 0644 }
 func (m *mockDeps) Abs(path string) (string, error) { return "/abs/" + path, nil }
 func (m *mockDeps) Root() string                  { return "/abs" }
 func (m *mockDeps) DisplayPath(path string) string { return path }
-func (m *mockDeps) Run(ctx context.Context, cmd []string, dir string, env []string) (*executor.Result, error) {
+func (m *mockDeps) Run(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.Result, error) {
 	return &executor.Result{ExitCode: 0}, nil
 }
-func (m *mockDeps) RunStreaming(ctx context.Context, cmd []string, dir string, env []string) (*executor.StreamingCmd, error) {
+func (m *mockDeps) RunStreaming(ctx context.Context, cmd string, dir string, env []string, enableLogging bool) (*executor.StreamingCmd, error) {
 	return &executor.StreamingCmd{}, nil
 }
+func (m *mockDeps) Open(path string) (domain.File, error) { return nil, nil }
+func (m *mockDeps) CreateAtomic(path string) (io.WriteCloser, error) { return nil, nil }
+func (m *mockDeps) Remove(path string) error { return nil }
 func (m *mockDeps) ReadFile(path string) ([]byte, error) {
 	lines := make([]string, 15)
 	for i := 0; i < 15; i++ {

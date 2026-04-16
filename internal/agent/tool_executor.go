@@ -153,6 +153,7 @@ func (e *ToolExecutor) prepareTool(ctx context.Context, tc *schema.ToolCall, eve
 		return nil, msg, disp
 	}
 
+
 	previewDisplay := inv.Display()
 	if previewDisplay == nil {
 		panic(fmt.Sprintf("tool %q Prepare returned invocation with nil display (callID=%s)", toolName, callID))

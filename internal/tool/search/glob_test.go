@@ -3,8 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"os"
+	"io"
 	"strings"
 	"testing"
 
@@ -38,9 +37,12 @@ func TestGlob_Basic(t *testing.T) {
 
 	output := "a.go\n"
 	exec.On("Run", mock.Anything,
-		[]string{"rg", "--files", "--glob", "*.go", "--sort=modified", "--no-ignore", "--hidden"},
+		mock.MatchedBy(func(s string) bool {
+			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, ".")
+		}),
 		"/workspace",
-		os.Environ(),
+		mock.Anything,
+		mock.Anything,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
@@ -59,7 +61,7 @@ func TestGlob_NoMatches(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
@@ -70,7 +72,7 @@ func TestGlob_NoMatches(t *testing.T) {
 	assert.Equal(t, "No files found", result)
 }
 
-func TestGlob_Truncation(t *testing.T) {
+func TestGlob_Offloaded(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
@@ -78,22 +80,28 @@ func TestGlob_Truncation(t *testing.T) {
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	var output strings.Builder
-	for i := 0; i < 110; i++ {
-		output.WriteString(fmt.Sprintf("file%d.go\n", i))
-	}
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
-		Return(&executor.Result{Stdout: output.String(), ExitCode: 0}, nil)
+	// Simulate offloaded output
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+		Return(&executor.Result{
+			Stdout: "tail-output", 
+			ExitCode: 0, 
+			LogPath: "/tmp/offloaded.log",
+		}, nil)
+
+	// Mock file for analyzer
+	mf := &mockFile{}
+	mf.On("Read", mock.Anything).Return(0, io.EOF)
+	mf.On("Close").Return(nil)
+	fs.On("Open", "/tmp/offloaded.log").Return(mf, nil)
+	fs.On("Stat", "/tmp/offloaded.log").Return(&toolMockFileInfo{name: "offloaded.log"}, nil).Maybe()
 
 	tool := NewGlobTool(fs, exec, pathResolver)
 	req := &GlobRequest{Pattern: "*.go"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-
-	lines := strings.Split(result, "\n")
-	assert.Len(t, lines, 101) // 100 files + 1 truncation message
-	assert.Equal(t, "(Results are truncated. Consider using a more specific path or pattern.)", lines[100])
+	assert.Contains(t, result, "Output too large")
+	assert.Contains(t, result, "read_file")
 }
 
 func TestGlob_ExecutionFailure(t *testing.T) {
@@ -104,8 +112,8 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate fd failure
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", os.Environ()).
-		Return(&executor.Result{Stderr: "fatal error", ExitCode: 2}, nil)
+	exec.On("Run", mock.Anything, mock.Anything, "/workspace", mock.Anything, mock.Anything).
+		Return(&executor.Result{Stdout: "fatal error", ExitCode: 2}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
 	req := &GlobRequest{Pattern: "*.go"}
@@ -114,6 +122,7 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, result, "fatal error")
 }
+
 
 func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs := &mockFileSystem{}

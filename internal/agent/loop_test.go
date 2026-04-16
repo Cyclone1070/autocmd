@@ -130,7 +130,56 @@ func newMockEventSender(size int) *mockEventSender {
 func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
 	registry := newMockToolRegistry(tools)
 	executor := NewToolExecutor(registry, nil)
-	return NewLoop(m, executor, 5, events)
+	return NewLoop(m, executor, 5, events, &mockTaskNotifier{})
+}
+
+type mockTaskNotifier struct {
+	notifications []string
+}
+
+func (m *mockTaskNotifier) Drain() []string {
+	n := m.notifications
+	m.notifications = nil
+	return n
+}
+
+func TestRun_TaskNotificationInjection(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []mockChunk{{text: "I see the task finished."}}},
+		},
+	}
+
+	notifier := &mockTaskNotifier{
+		notifications: []string{"<task-notification>done</task-notification>"},
+	}
+
+	session := &domain.Session{
+		Messages: []*schema.Message{
+			{Role: schema.User, Content: "Wait for it"},
+		},
+	}
+	
+	registry := newMockToolRegistry(nil)
+	executor := NewToolExecutor(registry, nil)
+	// This will fail to compile as NewLoop only takes 4 args
+	l := NewLoop(m, executor, 5, nil, notifier) 
+	
+	err := l.Run(ctx, session, "Next")
+	assert.NoError(t, err)
+
+	// Check messages:
+	// 0: [User] Wait for it
+	// 1: [User] Next (Appended by Run)
+	// 2: [User] <task-notification> (Injected from Drain)
+	// 3: [Assistant] I see...
+	assert.Equal(t, 4, len(session.Messages))
+	notifMsg := session.Messages[2]
+	assert.Equal(t, schema.User, notifMsg.Role)
+	assert.Equal(t, "<task-notification>done</task-notification>", notifMsg.Content)
+	assert.Equal(t, true, notifMsg.Extra["iav/is_notification"])
 }
 
 
@@ -245,7 +294,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	l := NewLoop(m, NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil), 3, nil)
+	l := NewLoop(m, NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil), 3, nil, &mockTaskNotifier{})
 
 	session := &domain.Session{}
 	err := l.Run(context.Background(), session, "go")

@@ -74,3 +74,9 @@ func (c *collector) String() string {
 func (c *collector) Truncated() bool {
 	return c.truncated
 }
+
+func (c *collector) Reset() {
+	c.buffer.Reset()
+	c.bytesChecked = 0
+	c.isBinary = false
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/agent"
@@ -80,9 +81,10 @@ func main() {
 	cwd, _ := os.Getwd()
 	pathResolver := path.NewResolver(cwd)
 	fileSystem := fs.NewOSFileSystem(1024 * 1024)
-	cmdExecutor := executor.NewOSCommandExecutor()
+	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
 	checksumManager := hash.NewChecksumManager()
 
+	taskMgr := bash.NewTaskManager(fileSystem)
 	tools := []domain.Tool{
 		file.NewWriteFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
 		file.NewEditFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
@@ -90,14 +92,17 @@ func main() {
 		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
-		bash.NewBashTool(cmdExecutor, pathResolver),
+		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr, 10*time.Second),
+		bash.NewSleepTool(taskMgr),
+		bash.NewTaskListTool(taskMgr),
+		bash.NewTaskStopTool(taskMgr),
 	}
 	registry := tool.NewRegistry(tools)
 	toolExecutor := agent.NewToolExecutor(registry, router)
 
 	// NEW: Use the real agent.Loop with a stateful MockLLM
 	mockLLM := &statefulMockLLM{}
-	agentLoop := agent.NewLoop(mockLLM, toolExecutor, 20, bus)
+	agentLoop := agent.NewLoop(mockLLM, toolExecutor, 20, bus, taskMgr)
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

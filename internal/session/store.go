@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -22,6 +21,7 @@ type fileSystem interface {
 	ReadFile(path string) ([]byte, error)
 	ListDir(path string) ([]os.DirEntry, error)
 	Remove(path string) error
+	RemoveAll(path string) error
 }
 
 // sessionInfoDTO is used for the .json file (metadata only).
@@ -61,8 +61,9 @@ func (st *Store) Create() (*domain.Session, error) {
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
 	now := time.Now()
+	id := uuid.New().String()
 	s := &domain.Session{
-		ID:       uuid.New().String(),
+		ID:       id,
 		Name:     "",
 		Created:  now,
 		Updated:  now,
@@ -76,8 +77,10 @@ func (st *Store) Create() (*domain.Session, error) {
 
 // Get loads a session from disk by ID (loads both info and messages).
 func (st *Store) Get(id string) (*domain.Session, error) {
+	sessionDir := filepath.Join(st.storageDir, id)
+
 	// Read info file
-	infoPath := filepath.Join(st.storageDir, id+".json")
+	infoPath := filepath.Join(sessionDir, "metadata.json")
 	infoData, err := st.fs.ReadFile(infoPath)
 	if err != nil {
 		return nil, fmt.Errorf("read session info: %w", err)
@@ -89,7 +92,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 	}
 
 	// Read messages file
-	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
+	messagesPath := filepath.Join(sessionDir, "messages.json")
 	var messages []*schema.Message
 	var displays domain.ToolDisplays
 	messagesData, err := st.fs.ReadFile(messagesPath)
@@ -120,12 +123,16 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 
 // Save persists a session to disk (both info and messages files).
 func (st *Store) Save(s *domain.Session) error {
+	sessionDir := filepath.Join(st.storageDir, s.ID)
+	if err := st.fs.EnsureDirs(sessionDir); err != nil {
+		return fmt.Errorf("create session dir: %w", err)
+	}
+
 	// Update the updated timestamp
 	s.Updated = time.Now()
 
-	// ... (rest of Save method stays identical because types are compatible with JSON)
 	// Write info file
-	infoPath := filepath.Join(st.storageDir, s.ID+".json")
+	infoPath := filepath.Join(sessionDir, "metadata.json")
 	infoDTO := sessionInfoDTO{
 		ID:           s.ID,
 		Name:         s.Name,
@@ -142,7 +149,7 @@ func (st *Store) Save(s *domain.Session) error {
 	}
 
 	// Write messages file
-	messagesPath := filepath.Join(st.storageDir, s.ID+".messages.json")
+	messagesPath := filepath.Join(sessionDir, "messages.json")
 	messagesDTO := sessionMessagesDTO{
 		Messages: s.Messages,
 		Displays: s.ToolDisplays,
@@ -172,17 +179,13 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 	var summaries []domain.SessionSummary
 
 	for _, entry := range entries {
-		// Only look at .json files (not .messages.json)
-		if entry.IsDir() {
+		if !entry.IsDir() {
 			continue
 		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".messages.json") {
-			continue
-		}
+		sessionID := entry.Name()
 
 		// Read only the info file
-		infoPath := filepath.Join(st.storageDir, name)
+		infoPath := filepath.Join(st.storageDir, sessionID, "metadata.json")
 		infoData, err := st.fs.ReadFile(infoPath)
 		if err != nil {
 			continue // skip corrupted
@@ -236,16 +239,11 @@ func (st *Store) Rename(id, name string) error {
 	return st.Save(s)
 }
 
-// Delete removes a session from disk by ID (both info and messages files).
+// Delete removes a session from disk by ID (entire session directory).
 func (st *Store) Delete(id string) error {
-	infoPath := filepath.Join(st.storageDir, id+".json")
-	messagesPath := filepath.Join(st.storageDir, id+".messages.json")
+	sessionDir := filepath.Join(st.storageDir, id)
 
-	// Remove both files, ignore "not exist" errors
-	if err := st.fs.Remove(infoPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if err := st.fs.Remove(messagesPath); err != nil && !os.IsNotExist(err) {
+	if err := st.fs.RemoveAll(sessionDir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil

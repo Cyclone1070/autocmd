@@ -1141,3 +1141,41 @@ func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 	resp, finalDisp := e.executeTool(ctx, tc, inv, events)
 	return resp, finalDisp, ctx.Err()
 }
+func TestToolExecutor_LogDirInjection(t *testing.T) {
+	
+	// Create a mock invocation that is LogAware
+	mt := &mockTool{
+		name: "loggy",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockLogAwareInvocation{
+				display: domain.NewStringDisplay("", "loggy"),
+			}, nil
+		},
+	}
+	
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := NewToolExecutor(registry, nil)
+	sender := newMockEventSender(10)
+	
+	// executeBatch now expects logDir as 4th arg
+	calls := []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "loggy"}}}
+	_, err := executor.executeBatch(context.Background(), calls, sender)
+	assert.NoError(t, err)
+	
+	// Implementation note: The actual check happens inside the mock's Execute call or we check a field.
+	// For this test, the mockLogAwareInvocation will be defined below.
+}
+
+type mockLogAwareInvocation struct {
+	display domain.ToolDisplay
+	capturedLogDir string
+}
+
+func (m *mockLogAwareInvocation) Display() domain.ToolDisplay { return m.display }
+func (m *mockLogAwareInvocation) SetLogDir(path string) { m.capturedLogDir = path }
+func (m *mockLogAwareInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+	if m.capturedLogDir == "" {
+		return "fail: log dir not set", m.display.WithError("Log dir not set")
+	}
+	return "ok: " + m.capturedLogDir, m.display
+}

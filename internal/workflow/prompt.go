@@ -2,7 +2,9 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"os"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
@@ -79,10 +81,22 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	} else {
 		sess, err = deps.Store.Get(sessionID)
 		if err != nil {
-			done <- err
-			return done
-		}
-		if deps.State.CurrentSessionID() != sess.ID {
+			if errors.Is(err, os.ErrNotExist) {
+				slog.Warn("current session not found, creating new one", "session_id", sessionID)
+				sess, err = deps.Store.Create()
+				if err != nil {
+					done <- err
+					return done
+				}
+				deps.State.SetCurrentSessionID(sess.ID)
+				if err := deps.State.Save(); err != nil {
+					slog.Warn("failed to save state", "error", err)
+				}
+			} else {
+				done <- err
+				return done
+			}
+		} else if deps.State.CurrentSessionID() != sess.ID {
 			deps.State.SetCurrentSessionID(sess.ID)
 			if err := deps.State.Save(); err != nil {
 				slog.Warn("failed to save state", "error", err)
@@ -91,6 +105,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	}
 
 	workflowCtx, cancel := context.WithCancel(ctx)
+	workflowCtx = domain.WithSessionID(workflowCtx, sess.ID)
 
 	nameChan := make(chan string, 1)
 	if sess.Name == "" {

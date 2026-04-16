@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -76,8 +77,11 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	}
 
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
-	cmdExecutor := executor.NewOSCommandExecutor()
+	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
 	checksumMgr := hash.NewChecksumManager()
+
+	taskMgr := bash.NewTaskManager(fileSystem)
+	turnTimeout := time.Duration(deps.Config.Tools().BashForegroundTimeout()) * time.Second
 
 	tools := []domain.Tool{
 		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
@@ -85,7 +89,10 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
-		bash.NewBashTool(cmdExecutor, pathResolver),
+		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr, turnTimeout),
+		bash.NewSleepTool(taskMgr),
+		bash.NewTaskListTool(taskMgr),
+		bash.NewTaskStopTool(taskMgr),
 		question.NewQuestionTool(),
 	}
 	toolRegistry := tool.NewRegistry(tools)
@@ -100,8 +107,8 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	defer bus.Close()
 	router := actionrouter.New()
 	defer router.Close()
-	executor := agent.NewToolExecutor(toolRegistry, router)
-	agentLoop := agent.NewLoop(llmInstance, executor, deps.Config.Tools().MaxIterations(), bus)
+	agentExecutor := agent.NewToolExecutor(toolRegistry, router)
+	agentLoop := agent.NewLoop(llmInstance, agentExecutor, deps.Config.Tools().MaxIterations(), bus, taskMgr)
 
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),

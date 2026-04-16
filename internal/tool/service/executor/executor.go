@@ -65,6 +65,9 @@ type StreamingCmd struct {
 	wait    func() (*Result, error)
 	logPath string
 	id      string
+
+	mu             sync.Mutex
+	lastActivityAt time.Time
 }
 
 func NewStreamingCmd(id string, output io.Reader, wait func() (*Result, error), logPath string) *StreamingCmd {
@@ -93,6 +96,18 @@ func (s *StreamingCmd) Wait() (*Result, error) {
 		s.result, s.err = s.wait()
 	})
 	return s.result, s.err
+}
+
+func (s *StreamingCmd) LastActivityAt() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastActivityAt
+}
+
+func (s *StreamingCmd) UpdateActivity() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastActivityAt = time.Now()
 }
 
 type fileSystem interface {
@@ -222,6 +237,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	}
 
 	follower := follow.NewFollower(f.fs, logPath)
+	sc = NewStreamingCmd(finalID, follower, nil, logPath)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -237,6 +253,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 					_, _ = logFile.Write(chunk)
 					follower.Poke()
 				}
+				sc.UpdateActivity()
 			}
 			if err != nil {
 				break
@@ -291,12 +308,8 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 		return res, nil
 	}
 
-	return &StreamingCmd{
-		id:      finalID,
-		output:  follower,
-		wait:    waitFn,
-		logPath: logPath,
-	}, nil
+	sc.wait = waitFn
+	return sc, nil
 }
 
 func (f *OSCommandExecutor) getExitCode(err error) int {

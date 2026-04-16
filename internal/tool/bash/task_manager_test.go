@@ -58,6 +58,31 @@ func TestTaskManager_RegisterAndDrain(t *testing.T) {
 	assert.Contains(t, notif, "<command>test command</command>")
 }
 
+func TestTaskManager_ActivityTracking(t *testing.T) {
+	tm := NewTaskManager(nil)
+	
+	// Create a command that won't finish immediately
+	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
+		time.Sleep(100 * time.Millisecond)
+		return &executor.Result{ExitCode: 0}, nil
+	}, "")
+
+	// Manual update to activity
+	cmd.UpdateActivity()
+
+	_ = tm.Register("t1", cmd, "/tmp/t1.log", func() {}, "test", "command")
+
+	tasks := tm.List()
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(tasks))
+	}
+
+	// Since we just updated it, SecondsSinceActivity should be 0 or 1
+	if tasks[0].SecondsSinceActivity < 0 || tasks[0].SecondsSinceActivity > 2 {
+		t.Errorf("Unexpected SecondsSinceActivity: %d", tasks[0].SecondsSinceActivity)
+	}
+}
+
 func TestTaskManager_NotifyChan(t *testing.T) {
 	tm := NewTaskManager(nil)
 	

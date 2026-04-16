@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
@@ -12,9 +13,10 @@ import (
 
 // TaskInfo contains public information about a background task.
 type TaskInfo struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Command     string `json:"command"`
+	ID                   string `json:"id"`
+	Description          string `json:"description"`
+	Command              string `json:"command"`
+	SecondsSinceActivity int    `json:"seconds_since_activity"`
 }
 
 // TaskManager manages background processes promoted from BashTool.
@@ -176,10 +178,17 @@ func (m *TaskManager) List() []TaskInfo {
 
 	var tasks []TaskInfo
 	for id, t := range m.tasks {
+		lastActivity := t.cmd.LastActivityAt()
+		secondsSince := -1
+		if !lastActivity.IsZero() {
+			secondsSince = int(time.Since(lastActivity).Seconds())
+		}
+
 		tasks = append(tasks, TaskInfo{
-			ID:          id,
-			Description: t.description,
-			Command:     t.command,
+			ID:                   id,
+			Description:          t.description,
+			Command:              t.command,
+			SecondsSinceActivity: secondsSince,
 		})
 	}
 	return tasks

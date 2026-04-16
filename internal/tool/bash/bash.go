@@ -162,8 +162,10 @@ var forbiddenCommands = map[string]bool{
 	"watch":  true,
 }
 
-var operatorRegex = regexp.MustCompile(`^(&&|\|\||[&|;])$`)
-var paddingRegex = regexp.MustCompile(`(&&|\|\||[&|;])`)
+var (
+	operatorRegex = regexp.MustCompile(`^(&&|\|\||[&|;])$`)
+	paddingRegex  = regexp.MustCompile(`(&&|\|\||[&|;])`)
+)
 
 func validateCommand(cmd string) error {
 	// Inject spaces around operators to handle attached commands like &&vim
@@ -222,11 +224,6 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(i.timeoutMS)*time.Millisecond)
 		defer cancel()
 	}
-
-	// We create a cancellable context for the process that can live beyond Execute if promoted to background.
-	// But if it's NOT in background, we still want to clean up if Execute returns.
-	// Actually, the commandExecutor.RunStreaming uses the ctx passed to it.
-	// If we want it to run in background, we need a separate context or ensure the ctx isn't cancelled.
 
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	// Ensure we cancel it if we don't end up in background or if things fail.

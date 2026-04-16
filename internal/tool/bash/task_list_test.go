@@ -28,6 +28,7 @@ func TestTaskListTool_Execute(t *testing.T) {
 	
 	assert.Contains(t, llm, "active background bash tasks:") // lowercase
 	assert.Contains(t, llm, "t-list-1"); assert.Contains(t, llm, "list files"); assert.Contains(t, llm, "ls -R")
+	assert.Contains(t, llm, "Status: running")
 	assert.Equal(t, "", disp.(domain.StringDisplay).Comment)
 	assert.Equal(t, "LIST active background bash tasks", disp.(domain.StringDisplay).Content)
 }

@@ -142,6 +142,29 @@ func TestOSCommandExecutor_QuotedArgs(t *testing.T) {
 	}
 }
 
+func TestStreamingCmd_ActivityTracking(t *testing.T) {
+	reader := bytes.NewReader([]byte("some data"))
+	waitFn := func() (*Result, error) {
+		return &Result{ExitCode: 0}, nil
+	}
+
+	cmd := NewStreamingCmd("test-id", reader, waitFn, "test.log")
+
+	// Initially activity should be zero
+	if !cmd.LastActivityAt().IsZero() {
+		t.Errorf("Expected initial LastActivityAt to be zero, got %v", cmd.LastActivityAt())
+	}
+
+	// Manual update
+	now := time.Now()
+	cmd.UpdateActivity()
+	
+	activityAt := cmd.LastActivityAt()
+	if activityAt.Before(now) {
+		t.Errorf("Expected LastActivityAt to be at or after %v, got %v", now, activityAt)
+	}
+}
+
 func TestOSCommandExecutor_InternalLogPath(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := NewOSCommandExecutor(fs)

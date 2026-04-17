@@ -10,6 +10,7 @@ import (
 // Resolver provides path resolution within a workspace boundary.
 type Resolver struct {
 	workspaceRoot string
+	homeDir       string
 }
 
 // NewResolver creates a new path resolver for the given workspace.
@@ -17,8 +18,10 @@ func NewResolver(workspaceRoot string) *Resolver {
 	if workspaceRoot == "" {
 		panic("workspaceRoot is required")
 	}
+	home, _ := os.UserHomeDir()
 	return &Resolver{
 		workspaceRoot: workspaceRoot,
+		homeDir:       home,
 	}
 }
 
@@ -65,43 +68,42 @@ func CanonicaliseRoot(fs FileSystem, root string) (string, error) {
 	return resolved, nil
 }
 
-// Abs resolves any path to absolute and validates it is within the workspace boundary.
-// It cleans the path and ensures it does not escape the workspace root.
+// Abs ensures a path is absolute and returns its cleaned version.
+// It returns an error if the path is relative.
 func (r *Resolver) Abs(path string) (string, error) {
 	if r.workspaceRoot == "" {
 		return "", fmt.Errorf("workspace root not set")
 	}
 
-	var abs string
-	if filepath.IsAbs(path) {
-		abs = filepath.Clean(path)
-	} else {
-		abs = filepath.Clean(filepath.Join(r.workspaceRoot, path))
-	}
-
-	return abs, nil
-}
-
-// DisplayPath returns a path formatted for UI/LLM display.
-func (r *Resolver) DisplayPath(path string) string {
-	abs := path
 	if !filepath.IsAbs(path) {
-		abs = filepath.Join(r.workspaceRoot, path)
-	}
-	abs = filepath.Clean(abs)
-
-	// Try to get relative path
-	rel, err := filepath.Rel(r.workspaceRoot, abs)
-	if err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(rel)
+		return "", fmt.Errorf("absolute path required, but got: %q. Please provide full path from root (starts with /)", path)
 	}
 
-	// Root or outside workspace: use tilde if in home dir
-	home := os.Getenv("HOME")
-	if home != "" && (abs == home || strings.HasPrefix(abs, home+string(filepath.Separator))) {
-		return "~" + filepath.ToSlash(abs[len(home):])
-	}
-
-	return filepath.ToSlash(abs)
+	return filepath.Clean(path), nil
 }
 
+// DisplayPath formats an absolute path for display purposes.
+// It prioritizes collapsing the home directory to ~, matching the UI design choice.
+func (r *Resolver) DisplayPath(path string) string {
+	// 1. Try home-relative (collapsing home to ~)
+	if r.homeDir != "" {
+		if path == r.homeDir {
+			return "~"
+		}
+		if strings.HasPrefix(path, r.homeDir+string(os.PathSeparator)) {
+			return "~" + path[len(r.homeDir):]
+		}
+	}
+
+	// 2. Try workspace-relative (only if outside home, or if home dir detection failed)
+	rel, err := filepath.Rel(r.workspaceRoot, path)
+	if err == nil && !strings.HasPrefix(rel, "..") {
+		if rel == "." {
+			return "."
+		}
+		return rel
+	}
+
+	// 3. Fallback to absolute
+	return path
+}

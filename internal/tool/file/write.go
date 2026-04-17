@@ -73,6 +73,7 @@ func (t *WriteFileTool) Definition() *schema.ToolInfo {
 		Desc: `Write a file to the local filesystem.
 
 Usage:
+- The file_path MUST be an absolute path.
 - This tool will overwrite the existing file if there is one at the provided path.
 - If this is an existing file, you MUST use the "read_file" tool first to read the file's contents. This tool will fail if you did not read the file first.
 - Prefer the "edit_file" tool for modifying existing files — it only sends the diff. Only use this tool to create new files or for complete rewrites.
@@ -81,7 +82,7 @@ Usage:
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The path to the file to write.",
+				Desc:     "The absolute path to the file to write.",
 				Required: true,
 			},
 			"content": {
@@ -163,8 +164,6 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
-		relFile:         req.FilePath,
-		relPath:         displayPath,
 		exists:          exists,
 		content:         contentBytes,
 		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE \"%s\"", filepath.ToSlash(displayPath))),
@@ -175,8 +174,6 @@ type writeFileInvocation struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
 	absPath         string
-	relFile         string
-	relPath         string
 	exists          bool
 	content         []byte
 	display         domain.StringDisplay
@@ -214,7 +211,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	i.checksumManager.Update(i.absPath, checksum)
 
 	if i.exists {
-		return fmt.Sprintf("The file %s has been updated successfully.", i.relFile), d
+		return fmt.Sprintf("The file %s has been updated successfully.", i.absPath), d
 	}
-	return fmt.Sprintf("File created successfully at: %s", i.relFile), d
+	return fmt.Sprintf("File created successfully at: %s", i.absPath), d
 }

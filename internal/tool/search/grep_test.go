@@ -17,13 +17,13 @@ func TestGrep_RawRelative(t *testing.T) {
 	// Mock existence of the search target
 	fs.On("Stat", "/workspace/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
 
-	// Ripgrep is run from root and returns relative paths directly.
-	output := "internal/file.txt:1:match\n"
+	// Ripgrep is run with absolute path and returns absolute paths.
+	output := "/workspace/internal/file.txt:1:match\n"
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "internal"}
+	req := &GrepRequest{Pattern: "pattern", Path: "/workspace/internal"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -55,7 +55,7 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 	fs.On("Open", "/tmp/offloaded.log").Return(mf, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern"}
+	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -75,7 +75,7 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 		Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern"}
+	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -109,11 +109,24 @@ func TestGrep_MalformedStats(t *testing.T) {
 	fs.On("Open", "/tmp/malformed.log").Return(mf, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern"}
+	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 
 	// Expected behavior when Sscanf/Atoi fails: default to 0 rather than crashing
 	assert.Contains(t, result, "Output too large (0 matches across 0 files)")
+}
+
+func TestGrep_RejectsRelativePath(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockCommandExecutor{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+
+	tool := NewGrepTool(fs, exec, pathResolver)
+	req := &GrepRequest{Pattern: "pattern", Path: "relative/path"}
+
+	_, err := executeSearch(t, tool, req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "absolute path required")
 }

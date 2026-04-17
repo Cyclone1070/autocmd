@@ -3,9 +3,9 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -113,25 +113,13 @@ type mockPathResolver struct {
 }
 
 func (m *mockPathResolver) Abs(p string) (string, error) {
-	if p == "." || p == "" {
-		return "/workspace", nil
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}
-	if !strings.HasPrefix(p, "/") {
-		return "/workspace/" + p, nil
-	}
-	return p, nil
+	return filepath.Clean(p), nil
 }
 
 func (m *mockPathResolver) DisplayPath(p string) string {
-	// We'll skip Called() here to avoid panics on unmocked paths, 
-	// unless we specifically want to test the resolver call.
-	// For search tests, we usually don't care about the exact call as long as it works.
-	if p == "/workspace" {
-		return "."
-	}
-	if strings.HasPrefix(p, "/workspace/") {
-		return p[len("/workspace/"):]
-	}
 	return p
 }
 
@@ -140,11 +128,9 @@ func (m *mockPathResolver) Root() string {
 }
 
 func setupMockResolver(m *mockPathResolver) {
-	m.On("Abs", ".").Return("/workspace", nil).Maybe()
-	m.On("Abs", "").Return("/workspace", nil).Maybe()
 	m.On("Abs", "/workspace").Return("/workspace", nil).Maybe()
-	m.On("DisplayPath", "/workspace").Return(".").Maybe()
 }
+
 type toolMockFileInfo struct {
 	name    string
 	isDir   bool

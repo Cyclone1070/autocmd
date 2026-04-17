@@ -20,8 +20,6 @@ func TestGlob_Definition(t *testing.T) {
 	assert.Equal(t, "glob", def.Name)
 	assert.Contains(t, def.Desc, "Fast file pattern matching")
 	assert.Contains(t, def.Desc, "Supports glob patterns")
-
-	// params := def.ParamsOneOf.Params // can't access unexported field
 }
 
 func TestGlob_Basic(t *testing.T) {
@@ -31,25 +29,24 @@ func TestGlob_Basic(t *testing.T) {
 	setupMockResolver(pathResolver)
 
 	pathResolver.On("Abs", "/workspace").Return("/workspace", nil).Maybe()
-	pathResolver.On("DisplayPath", "/workspace/a.go").Return("a.go")
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	output := "a.go\n"
+	output := "/workspace/a.go\n"
 	exec.On("Run", mock.Anything,
 		mock.MatchedBy(func(s string) bool {
-			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, ".")
+			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, "/workspace")
 		}),
 		"/workspace",
 		true,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go"}
+	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "a.go", result)
+	assert.Equal(t, "/workspace/a.go", result)
 }
 
 func TestGlob_NoMatches(t *testing.T) {
@@ -64,7 +61,7 @@ func TestGlob_NoMatches(t *testing.T) {
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go"}
+	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -95,7 +92,7 @@ func TestGlob_Offloaded(t *testing.T) {
 	fs.On("Stat", "/tmp/offloaded.log").Return(&toolMockFileInfo{name: "offloaded.log"}, nil).Maybe()
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go"}
+	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -115,7 +112,7 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 		Return(&executor.Result{Stdout: "fatal error", ExitCode: 2}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go"}
+	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -131,7 +128,7 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go"}
+	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
 	params, _ := json.Marshal(req)
 	inv, err := tool.Prepare(string(params))
 	assert.NoError(t, err)
@@ -142,4 +139,17 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	assert.ErrorIs(t, ctx.Err(), context.Canceled)
 	assert.NotNil(t, disp)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
+}
+
+func TestGlob_RejectsRelativePath(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockCommandExecutor{}
+	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+
+	tool := NewGlobTool(fs, exec, pathResolver)
+	req := &GlobRequest{Pattern: "*.go", Path: "relative/path"}
+
+	_, err := executeFind(t, tool, req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "absolute path required")
 }

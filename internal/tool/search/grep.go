@@ -82,10 +82,6 @@ func (t *GrepTool) Name() string {
 	return "grep"
 }
 
-func (t *GrepTool) Desc() string {
-	return "A powerful search tool built on ripgrep\n\n  Usage:\n  - ALWAYS use grep for search tasks. NEVER invoke `grep` or `rg` as a bash command. The grep tool has been optimized for correct permissions and access.\n  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n  - Output modes: \"content\" shows matching lines, \"files_with_matches\" shows only file paths (default), \"count\" shows match counts\n  - Use agent tool for open-ended searches requiring multiple rounds\n  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`"
-}
-
 func (t *GrepTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
@@ -95,6 +91,7 @@ func (t *GrepTool) Definition() *schema.ToolInfo {
 		Desc: `A powerful search tool built on ripgrep.
 
 Usage:
+- The path parameter MUST be an absolute path.
 - ALWAYS use this tool for search tasks. NEVER invoke "grep" or "rg" as a bash command. This tool has been optimized for correct permissions and access.
 - Supports full regex syntax (e.g., "log.*Error", "function\s+\w+").
 - Filter files with the "glob" parameter (e.g., "*.js", "**/*.tsx") or "type" parameter (e.g., "js", "py", "rust").
@@ -112,7 +109,7 @@ Usage:
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "File or directory to search in (rg PATH). Defaults to current working directory.",
+				Desc: fmt.Sprintf("Absolute path to file or directory to search in (rg PATH). Defaults to workspace root (currently \"%s\").", t.pathResolver.Root()),
 			},
 			"glob": {
 				Type: schema.String,
@@ -189,8 +186,7 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 
 	searchPath := req.Path
 	if searchPath == "" {
-		req.Path = "."
-		searchPath = "."
+		searchPath = t.pathResolver.Root()
 	}
 
 	absSearchPath, err := t.pathResolver.Abs(searchPath)
@@ -198,16 +194,16 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, err
 	}
 
-	displayPath := t.pathResolver.DisplayPath(absSearchPath)
-
 	// Check if path exists
 	_, err = t.fs.Stat(absSearchPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("path does not exist: %s", searchPath)
+			return nil, fmt.Errorf("path does not exist: %s", absSearchPath)
 		}
-		return nil, fmt.Errorf("failed to stat %s: %w", searchPath, err)
+		return nil, fmt.Errorf("failed to stat %s: %w", absSearchPath, err)
 	}
+
+	displayPath := t.pathResolver.DisplayPath(absSearchPath)
 
 	return &grepInvocation{
 		fs:              t.fs,
@@ -343,15 +339,8 @@ func (i *grepInvocation) prepareGrepCommand() (string, error) {
 		args = append(args, i.req.Pattern)
 	}
 
-	// Search target should be relative to workspace root for clean relative output
-	root := i.pathResolver.Root()
-	relPath, err := filepath.Rel(root, i.absPath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
-		// Fallback to absolute if Rel fails or is outside root (though path policy should prevent outside)
-		relPath = i.absPath
-	}
-
-	args = append(args, relPath)
+	// Always use absolute path for rg to get absolute path output
+	args = append(args, i.absPath)
 
 	return joinArgs(args), nil
 }

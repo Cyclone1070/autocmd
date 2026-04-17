@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -16,24 +15,14 @@ type mockPathResolver struct {
 }
 
 func (m *mockPathResolver) Abs(p string) (string, error) {
-	if strings.Contains(p, "..") {
-		return "", fmt.Errorf("path %s is outside workspace", p)
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}
-	if filepath.IsAbs(p) {
-		return p, nil
-	}
-	return filepath.Join(m.workspaceRoot, p), nil
+	return filepath.Clean(p), nil
 }
 
 func (m *mockPathResolver) DisplayPath(p string) string {
-	rel, err := filepath.Rel(m.workspaceRoot, p)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(p)
-	}
-	if rel == "." {
-		return filepath.ToSlash(p)
-	}
-	return filepath.ToSlash(rel)
+	return p
 }
 
 func (m *mockPathResolver) Root() string {

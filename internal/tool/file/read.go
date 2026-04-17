@@ -72,7 +72,7 @@ func (t *ReadFileTool) Definition() *schema.ToolInfo {
 		Desc: `Read a file from the local filesystem.
 
 Usage:
-- The file_path parameter must be an absolute path or relative to the workspace root.
+- The file_path parameter MUST be an absolute path.
 - Results are returned using "cat -n" format, with line numbers starting at 1.
 - By default, it reads up to 2000 lines starting from the beginning of the file.
 - When you already know which part of the file you need, only read that part by specifying offset and limit. This is important for larger files.
@@ -81,7 +81,7 @@ Usage:
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The path to the file to read.",
+				Desc:     "The absolute path to the file to read.",
 				Required: true,
 			},
 			"offset": {

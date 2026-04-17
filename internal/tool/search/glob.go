@@ -68,8 +68,9 @@ func (t *GlobTool) Definition() *schema.ToolInfo {
 		Desc: `Fast file pattern matching tool that works with any codebase size.
 
 Usage:
+- The path parameter MUST be an absolute path.
 - Supports glob patterns like "**/*.js" or "src/**/*.ts".
-- Returns matching file paths sorted by modification time.
+- Returns matching absolute file paths sorted by modification time.
 - Use this tool when you need to find files by name patterns.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {
@@ -79,7 +80,7 @@ Usage:
 			},
 			"path": {
 				Type: schema.String,
-				Desc: "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided.",
+				Desc: fmt.Sprintf("The absolute directory path to search in. If not specified, the workspace root (currently \"%s\") will be used.", t.pathResolver.Root()),
 			},
 		}),
 	}
@@ -103,15 +104,13 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 
 	searchPath := req.Path
 	if searchPath == "" {
-		searchPath = "."
+		searchPath = t.pathResolver.Root()
 	}
 
 	absPath, err := t.pathResolver.Abs(searchPath)
 	if err != nil {
 		return nil, err
 	}
-
-	displayPath := t.pathResolver.DisplayPath(absPath)
 
 	// Fail Fast: Verify path exists and is a directory
 	info, err := t.fs.Stat(absPath)
@@ -125,7 +124,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
-	// DisplayPath is used for the TUI summary below
+	displayPath := t.pathResolver.DisplayPath(absPath)
 
 	return &globInvocation{
 		tool:    t,
@@ -154,15 +153,10 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		return domain.ToolErrorCancelled, d
 	}
 
-	// Search target should be relative to workspace root for clean relative output
-	relPath, err := filepath.Rel(i.tool.pathResolver.Root(), i.absPath)
-	if err != nil || strings.HasPrefix(relPath, "..") {
-		relPath = i.absPath
-	}
 	workDir := i.tool.pathResolver.Root()
 
-	// rg --files --glob "pattern" --sort=modified --no-ignore --hidden <target>
-	args := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden", relPath}
+	// Use absolute path for rg to get absolute path output
+	args := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden", i.absPath}
 	cmdStr := joinArgs(args)
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultGlobTimeout)

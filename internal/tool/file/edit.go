@@ -81,6 +81,7 @@ func (t *EditFileTool) Definition() *schema.ToolInfo {
 		Desc: `Performs exact string replacements in files.
 
 Usage:
+- The file_path MUST be an absolute path.
 - You must use the "read_file" tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
 - When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + tab. Everything after that is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
@@ -90,7 +91,7 @@ Usage:
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The path to the file to edit (absolute or relative to the workspace root).",
+				Desc:     "The absolute path to the file to edit.",
 				Required: true,
 			},
 			"comment": {
@@ -144,17 +145,17 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			if req.OldString != "" {
-				return nil, fmt.Errorf("file does not exist: %s", req.FilePath)
+				return nil, fmt.Errorf("file does not exist: %s", abs)
 			}
 			// File doesn't exist and OldString is empty: new file creation
 			rawContent = ""
 		} else {
-			return nil, fmt.Errorf("failed to stat %s: %w", req.FilePath, err)
+			return nil, fmt.Errorf("failed to stat %s: %w", abs, err)
 		}
 	} else {
 		data, err := t.fileOps.ReadFile(abs)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read file %s: %w", req.FilePath, err)
+			return nil, fmt.Errorf("failed to read file %s: %w", abs, err)
 		}
 		rawContent = string(data)
 
@@ -172,7 +173,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 	currentChecksum = t.checksumManager.Compute([]byte(oldContent))
 	priorChecksum, checksumOk := t.checksumManager.Get(abs)
 	if checksumOk && priorChecksum != currentChecksum {
-		return nil, fmt.Errorf("edit conflict: file changed since last read: %s", req.FilePath)
+		return nil, fmt.Errorf("edit conflict: file changed since last read: %s", abs)
 	}
 
 	// Apply replacement
@@ -181,21 +182,18 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	// Strip trailing whitespace from new text unless it is a markdown file
 	// to avoid accidental dirty edits from the LLM.
-	isMarkdown := strings.HasSuffix(req.FilePath, ".md") || strings.HasSuffix(req.FilePath, ".mdx")
+	isMarkdown := strings.HasSuffix(abs, ".md") || strings.HasSuffix(abs, ".mdx")
 	if !isMarkdown {
 		after = stripTrailingWhitespace(after)
 	}
 
 	var content string
-	var matches int
-	var actualOldString string
-
 	if before == "" {
 		// If OldString is empty, we replace the entire content (which must be empty per check above)
 		content = after
-		matches = 1
-		actualOldString = ""
 	} else {
+		var matches int
+		var actualOldString string
 		// Try exact match first
 		if strings.Contains(oldContent, before) {
 			actualOldString = before
@@ -206,9 +204,6 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 			found := strings.Contains(normedOld, normedBefore)
 			if found {
 				// We found a match in normalized space, now extract the actual string from the original content
-				// Since curly quotes and straight quotes are all 1 character in Go's string indeces?
-				// No, Go strings are UTF-8. index returns byte index.
-				// We need to work with runes.
 				runes := []rune(oldContent)
 				normedRunes := []rune(normedOld)
 				normedBeforeRunes := []rune(normedBefore)
@@ -269,23 +264,22 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	// Check size limit
 	if int64(len(newContentBytes)) > t.maxFileSize {
-		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", req.FilePath, len(newContentBytes), t.maxFileSize)
+		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", abs, len(newContentBytes), t.maxFileSize)
 	}
 
 	diff, added, removed := computeUnifiedDiff(oldContent, content)
-
-	displayPath := t.pathResolver.DisplayPath(abs)
 
 	perm := os.FileMode(0o644)
 	if info != nil {
 		perm = info.Mode()
 	}
 
+	displayPath := t.pathResolver.DisplayPath(abs)
+
 	return &editFileInvocation{
 		fileOps:          t.fileOps,
 		checksumManager:  t.checksumManager,
 		absPath:          abs,
-		relPath:          req.FilePath,
 		newContent:       newContentBytes,
 		originalPerm:     perm,
 		expectedChecksum: currentChecksum,
@@ -304,7 +298,6 @@ type editFileInvocation struct {
 	fileOps          fileEditor
 	checksumManager  checksumManager
 	absPath          string
-	relPath          string
 	newContent       []byte
 	originalPerm     os.FileMode
 	expectedChecksum string
@@ -345,7 +338,7 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	currentChecksum := i.checksumManager.Compute([]byte(normalized))
 	if currentChecksum != i.expectedChecksum {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: edit conflict: file changed since edit was prepared: %s", i.relPath), d
+		return fmt.Sprintf("Error: edit conflict: file changed since edit was prepared: %s", i.absPath), d
 	}
 
 	// Write the modified content atomically using pre-computed content
@@ -364,9 +357,9 @@ func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	i.checksumManager.Update(i.absPath, newChecksum)
 
 	if i.replaceAll {
-		return fmt.Sprintf("The file %s has been updated. All occurrences were successfully replaced.", i.relPath), d
+		return fmt.Sprintf("The file %s has been updated. All occurrences were successfully replaced.", i.absPath), d
 	}
-	return fmt.Sprintf("The file %s has been updated successfully.", i.relPath), d
+	return fmt.Sprintf("The file %s has been updated successfully.", i.absPath), d
 }
 
 func normalizeQuotes(s string) string {
@@ -379,7 +372,6 @@ func normalizeQuotes(s string) string {
 
 func stripTrailingWhitespace(s string) string {
 	var lines []string
-	// Handle both CRLF and LF by working with \n and ignoring \r
 	for line := range strings.SplitSeq(s, "\n") {
 		trimmed := strings.TrimRight(line, " \t\r")
 		lines = append(lines, trimmed)
@@ -388,7 +380,6 @@ func stripTrailingWhitespace(s string) string {
 }
 
 func preserveQuoteStyle(oldStr, actualOldStr, newStr string) string {
-	// If they're identical, no normalization occurred
 	if oldStr == actualOldStr {
 		return newStr
 	}
@@ -416,7 +407,6 @@ func isOpeningContext(runes []rune, index int) bool {
 		return true
 	}
 	prev := runes[index-1]
-	// Standard opening contexts: space, tab, newline, or typical openers
 	return prev == ' ' || prev == '\t' || prev == '\n' || prev == '\r' || prev == '(' || prev == '[' || prev == '{' || prev == '—' || prev == '–'
 }
 
@@ -442,8 +432,6 @@ func applyCurlySingleQuotes(s string) string {
 	var result []rune
 	for i, r := range runes {
 		if r == '\'' {
-			// Don't convert apostrophes in contractions (e.g., "don't")
-			// Heuristic: letter on both sides -> closing curly quote (apostrophe)
 			if i > 0 && i < len(runes)-1 {
 				prev := runes[i-1]
 				next := runes[i+1]
@@ -468,10 +456,8 @@ func applyCurlySingleQuotes(s string) string {
 }
 
 func computeUnifiedDiff(oldContent, newContent string) (diff string, added, removed int) {
-	// Use empty labels since we strip the headers anyway
 	rawDiff := udiff.Unified("", "", oldContent, newContent)
 
-	// Strip the --- and +++ header lines, keep only hunks
 	var lines []string
 	for line := range strings.SplitSeq(rawDiff, "\n") {
 		if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "\\") {

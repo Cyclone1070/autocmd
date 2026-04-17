@@ -16,6 +16,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/cloudwego/eino/schema"
 )
+
 const (
 	defaultWaitDuration = 10 * time.Second
 )
@@ -37,10 +38,10 @@ type fileSystem interface {
 }
 
 type BashTool struct {
-	fs                fileSystem
-	commandExecutor   commandExecutor
-	pathResolver      pathResolver
-	taskManager       backgroundRegistrar
+	fs              fileSystem
+	commandExecutor commandExecutor
+	pathResolver    pathResolver
+	taskManager     backgroundRegistrar
 }
 
 // NewBashTool creates a new BashTool with injected dependencies.
@@ -55,10 +56,10 @@ func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pa
 		panic("pathResolver is required")
 	}
 	return &BashTool{
-		fs:                fs,
-		commandExecutor:   commandExecutor,
-		pathResolver:      pathResolver,
-		taskManager:       taskManager,
+		fs:              fs,
+		commandExecutor: commandExecutor,
+		pathResolver:    pathResolver,
+		taskManager:     taskManager,
 	}
 }
 
@@ -73,7 +74,7 @@ func (t *BashTool) Definition() *schema.ToolInfo {
 		Name: "bash",
 		Desc: `Execute a bash command on the local machine.
 
-The working directory persists between commands, but shell state does not. The shell environment is initialized from your profile.
+The working directory is always the workspace root (currently ` + fmt.Sprintf("\"%s\"", t.pathResolver.Root()) + `) for every command. Shell state does not persist between calls.
 
 # Instructions
 - If your command will create new directories or files, first use this tool to run "ls" to verify the parent directory exists and is the correct location.
@@ -151,15 +152,15 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("comment is required")
 	}
 	return &bashInvocation{
-		fs:                t.fs,
-		commandExecutor:   t.commandExecutor,
-		taskManager:       t.taskManager,
-		wd:                wd,
-		command:           req.Command,
-		comment:           req.Comment,
-		timeoutMS:         req.Timeout,
-		runInBackground:   req.RunInBackground,
-		proxy:             newProxyReader(),
+		fs:              t.fs,
+		commandExecutor: t.commandExecutor,
+		taskManager:     t.taskManager,
+		wd:              wd,
+		command:         req.Command,
+		comment:         req.Comment,
+		timeoutMS:       req.Timeout,
+		runInBackground: req.RunInBackground,
+		proxy:           newProxyReader(),
 	}, nil
 }
 
@@ -220,15 +221,15 @@ func validateCommand(cmd string) error {
 }
 
 type bashInvocation struct {
-	fs                fileSystem
-	commandExecutor   commandExecutor
-	taskManager       backgroundRegistrar
-	wd                string
-	command           string
-	comment           string
-	timeoutMS         int
-	runInBackground   bool
-	proxy             *proxyReader
+	fs              fileSystem
+	commandExecutor commandExecutor
+	taskManager     backgroundRegistrar
+	wd              string
+	command         string
+	comment         string
+	timeoutMS       int
+	runInBackground bool
+	proxy           *proxyReader
 }
 
 func (i *bashInvocation) Display() domain.ToolDisplay {

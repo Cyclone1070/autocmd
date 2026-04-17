@@ -24,7 +24,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.txt",
+			FilePath:   "/workspace/test.txt",
 			Comment:    "changing hello to goodbye",
 			OldString:  "hello",
 			NewString:  "goodbye",
@@ -36,7 +36,7 @@ func TestEditFile(t *testing.T) {
 		require.NoError(t, err)
 
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.Equal(t, "The file test.txt has been updated successfully.", out)
+		assert.Equal(t, "The file /workspace/test.txt has been updated successfully.", out)
 		assert.Equal(t, "goodbye world", string(fs.files["/workspace/test.txt"]))
 
 		display := inv.Display().(domain.DiffDisplay)
@@ -53,7 +53,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.txt",
+			FilePath:   "/workspace/test.txt",
 			Comment:    "changing all a to b",
 			OldString:  "a",
 			NewString:  "b",
@@ -65,7 +65,7 @@ func TestEditFile(t *testing.T) {
 		require.NoError(t, err)
 
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.Equal(t, "The file test.txt has been updated. All occurrences were successfully replaced.", out)
+		assert.Equal(t, "The file /workspace/test.txt has been updated. All occurrences were successfully replaced.", out)
 		assert.Equal(t, "b b b", string(fs.files["/workspace/test.txt"]))
 	})
 
@@ -78,7 +78,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.txt",
+			FilePath:   "/workspace/test.txt",
 			Comment:    "should fail",
 			OldString:  "a",
 			NewString:  "b",
@@ -99,7 +99,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "new.txt",
+			FilePath:   "/workspace/new.txt",
 			Comment:    "creating new file",
 			OldString:  "",
 			NewString:  "brand new content",
@@ -111,7 +111,7 @@ func TestEditFile(t *testing.T) {
 		require.NoError(t, err)
 
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.Equal(t, "The file new.txt has been updated successfully.", out)
+		assert.Equal(t, "The file /workspace/new.txt has been updated successfully.", out)
 		assert.Equal(t, "brand new content", string(fs.files["/workspace/new.txt"]))
 	})
 
@@ -124,7 +124,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "exists.txt",
+			FilePath:   "/workspace/exists.txt",
 			Comment:    "trying to overwrite",
 			OldString:  "",
 			NewString:  "danger",
@@ -147,7 +147,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.txt",
+			FilePath:   "/workspace/test.txt",
 			Comment:    "matching curly with straight",
 			OldString:  "\"hello\"", // LLM sends straight quotes
 			NewString:  "\"goodbye\"",
@@ -159,7 +159,7 @@ func TestEditFile(t *testing.T) {
 		require.NoError(t, err)
 
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.Equal(t, "The file test.txt has been updated successfully.", out)
+		assert.Equal(t, "The file /workspace/test.txt has been updated successfully.", out)
 		// Should preserve curly quotes in the replacement: “goodbye”
 		assert.Equal(t, "“goodbye”", string(fs.files["/workspace/test.txt"]))
 	})
@@ -173,7 +173,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.go",
+			FilePath:   "/workspace/test.go",
 			Comment:    "adding comment",
 			OldString:  "func main() {}",
 			NewString:  "func main() {} // comment    ", // Trailing spaces
@@ -198,7 +198,7 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.md",
+			FilePath:   "/workspace/test.md",
 			Comment:    "adding line break",
 			OldString:  "# Title",
 			NewString:  "# Title  ", // Markdown hard line break (2 spaces)
@@ -212,5 +212,24 @@ func TestEditFile(t *testing.T) {
 		inv.(domain.ExecutableInvocation).Execute(context.Background())
 		// Spaces should BEAUTIFULLY remain
 		assert.Equal(t, "# Title  \n", string(fs.files["/workspace/test.md"]))
+	})
+
+	t.Run("Rejects relative path", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &EditFileRequest{
+			FilePath:   "test.txt",
+			Comment:    "should fail",
+			OldString:  "hello",
+			NewString:  "goodbye",
+			ReplaceAll: false,
+		}
+
+		params, _ := json.Marshal(req)
+		_, err := tool.Prepare(string(params))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "absolute path required")
 	})
 }

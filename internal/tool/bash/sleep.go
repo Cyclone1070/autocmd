@@ -33,7 +33,7 @@ func (t *SleepTool) IsConcurrentSafe() bool { return true }
 func (t *SleepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "sleep",
-		Desc: "Wait for a specified duration or until a background bash task completes.",
+		Desc: "Wait for a specified duration or until a background bash task completes. Use this tool before finishing your turn if you have background tasks (like builds or tests) that must finish before you stop talking.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"duration_ms": {
 				Type:     schema.Integer,

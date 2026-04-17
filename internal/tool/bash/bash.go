@@ -71,7 +71,7 @@ func (t *BashTool) IsConcurrentSafe() bool { return true }
 func (t *BashTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "bash",
-		Desc: "Execute a bash command on the local machine.",
+		Desc: "Execute a bash command on the local machine. IMPORTANT: Background tasks are tied to your current response turn. They will be terminated as soon as you stop talking and return control to the user. If you need a task (like a build or test) to complete before you finish, you MUST use the 'sleep' tool to wait for it.",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"command": {
 				Type:     schema.String,
@@ -99,7 +99,7 @@ For commands that are harder to parse at a glance (piped commands, obscure flags
 			},
 			"run_in_background": {
 				Type: schema.Boolean,
-				Desc: "Set to true to run this command in the background.",
+				Desc: "Set to true to run this command in the background. Note: The task will still be killed when you finish your response unless you use 'sleep' to wait.",
 			},
 		}),
 	}

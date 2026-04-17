@@ -219,24 +219,25 @@ func (i *bashInvocation) Stream() io.Reader {
 }
 
 func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+	var taskCtx context.Context
+	var taskCancel context.CancelFunc
+
 	if i.timeoutMS > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(i.timeoutMS)*time.Millisecond)
-		defer cancel()
+		taskCtx, taskCancel = context.WithTimeout(ctx, time.Duration(i.timeoutMS)*time.Millisecond)
+	} else {
+		taskCtx, taskCancel = context.WithCancel(ctx)
 	}
 
-	bgCtx, bgCancel := context.WithCancel(context.Background())
-	// Ensure we cancel it if we don't end up in background or if things fail.
 	promoted := false
 	defer func() {
 		if !promoted {
-			bgCancel()
+			taskCancel()
 		}
+		i.proxy.Close()
 	}()
 
-	streamCmd, err := i.commandExecutor.RunStreaming(bgCtx, i.command, i.wd, true)
+	streamCmd, err := i.commandExecutor.RunStreaming(taskCtx, i.command, i.wd, true)
 	if err != nil {
-		i.proxy.Close()
 		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
 		d.Error = domain.ToolErrorFailed
 		return fmt.Sprintf("failed to run command: %v", err), d
@@ -248,7 +249,7 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if i.runInBackground {
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), bgCancel, i.comment, i.commandStr); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.commandStr); err == nil {
 				promoted = true
 				d := domain.NewBashDisplay(i.comment, i.commandStr, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
@@ -271,20 +272,15 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	case <-time.After(i.foregroundTimeout):
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), bgCancel, i.comment, i.commandStr); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.commandStr); err == nil {
 				promoted = true
 				d := domain.NewBashDisplay(i.comment, i.commandStr, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
 			}
 		}
 		<-done
-	case <-ctx.Done():
-		// Outer context (timeout or manual interruption) cancelled.
-		// If we haven't promoted to background, bgCancel will be called by defer.
-		<-done
 	}
 
-	i.proxy.Close()
 	d := domain.NewBashDisplay(i.comment, i.commandStr, "")
 
 	llmOutput := res.Stdout
@@ -343,9 +339,10 @@ func (i *bashInvocation) readTail(path string, size int64) string {
 
 type proxyReader struct {
 	r     io.Reader
+	mu    sync.Mutex
 	ch    chan io.Reader
-	once  sync.Once
 	close chan struct{}
+	once  sync.Once
 }
 
 func newProxyReader() *proxyReader {
@@ -357,6 +354,14 @@ func newProxyReader() *proxyReader {
 
 func (p *proxyReader) Set(r io.Reader) {
 	select {
+	case <-p.close:
+		// Already closed, terminate the incoming reader immediately
+		if closer, ok := r.(io.Closer); ok {
+			_ = closer.Close()
+		}
+		if stopper, ok := r.(interface{ Stop() }); ok {
+			stopper.Stop()
+		}
 	case p.ch <- r:
 	default:
 	}
@@ -365,17 +370,47 @@ func (p *proxyReader) Set(r io.Reader) {
 func (p *proxyReader) Close() {
 	p.once.Do(func() {
 		close(p.close)
+		p.mu.Lock()
+		r := p.r
+		p.mu.Unlock()
+		if r != nil {
+			if closer, ok := r.(io.Closer); ok {
+				_ = closer.Close()
+			}
+			if stopper, ok := r.(interface{ Stop() }); ok {
+				stopper.Stop()
+			}
+		}
 	})
 }
 
 func (p *proxyReader) Read(b []byte) (int, error) {
-	if p.r == nil {
+	p.mu.Lock()
+	r := p.r
+	p.mu.Unlock()
+
+	if r == nil {
 		select {
-		case r := <-p.ch:
-			p.r = r
+		case newR := <-p.ch:
+			// We got a reader, but Close() may have already fired.
+			// Check if close was signalled while we were waiting.
+			select {
+			case <-p.close:
+				// Close() already ran but couldn't Stop() because p.r was nil.
+				// We must stop the reader ourselves.
+				if stopper, ok := newR.(interface{ Stop() }); ok {
+					stopper.Stop()
+				}
+				return 0, io.EOF
+			default:
+			}
+			p.mu.Lock()
+			p.r = newR
+			r = newR
+			p.mu.Unlock()
 		case <-p.close:
 			return 0, io.EOF
 		}
 	}
-	return p.r.Read(b)
+	return r.Read(b)
 }

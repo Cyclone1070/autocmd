@@ -16,6 +16,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/cloudwego/eino/schema"
 )
+const (
+	defaultWaitDuration = 10 * time.Second
+)
 
 type commandExecutor interface {
 	RunStreaming(ctx context.Context, command string, dir string, enableLogging bool) (*executor.StreamingCmd, error)
@@ -33,17 +36,15 @@ type fileSystem interface {
 	CreateAtomic(path string) (io.WriteCloser, error)
 }
 
-// BashTool executes commands on the local machine.
 type BashTool struct {
 	fs                fileSystem
 	commandExecutor   commandExecutor
 	pathResolver      pathResolver
 	taskManager       backgroundRegistrar
-	foregroundTimeout time.Duration
 }
 
 // NewBashTool creates a new BashTool with injected dependencies.
-func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pathResolver, taskManager backgroundRegistrar, foregroundTimeout time.Duration) *BashTool {
+func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pathResolver, taskManager backgroundRegistrar) *BashTool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -58,7 +59,6 @@ func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pa
 		commandExecutor:   commandExecutor,
 		pathResolver:      pathResolver,
 		taskManager:       taskManager,
-		foregroundTimeout: foregroundTimeout,
 	}
 }
 
@@ -71,7 +71,42 @@ func (t *BashTool) IsConcurrentSafe() bool { return true }
 func (t *BashTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "bash",
-		Desc: "Execute a bash command on the local machine. IMPORTANT: Background tasks are tied to your current response turn. They will be terminated as soon as you stop talking and return control to the user. If you need a task (like a build or test) to complete before you finish, you MUST use the 'sleep' tool to wait for it.",
+		Desc: `Execute a bash command on the local machine.
+
+The working directory persists between commands, but shell state does not. The shell environment is initialized from your profile.
+
+# Instructions
+- If your command will create new directories or files, first use this tool to run "ls" to verify the parent directory exists and is the correct location.
+- Always quote file paths that contain spaces with double quotes in your command (e.g., cd "path with spaces/file.txt").
+- You may specify an optional timeout in milliseconds (default ` + fmt.Sprintf("%dms", defaultWaitDuration.Milliseconds()) + `). Commands exceeding this limit will be automatically moved to the background and you will receive a task ID.
+- Use "run_in_background" to run a command in the background immediately without waiting.
+- IMPORTANT: Background tasks (including those promoted on timeout) are tied to your current response turn. They will be terminated as soon as you stop talking and return control to the user. If you need a task (like a build or test) to complete before you finish, you MUST use the 'sleep' tool to wait for it.
+
+## Parallel Execution
+- If commands are independent and can run in parallel, make multiple bash tool calls in a single message for optimal performance.
+- If commands depend on each other and must run sequentially, use a single bash call with "&&" to chain them together.
+- Use ";" only when you need to run commands sequentially but don't care if earlier commands fail.
+
+## Git Operations
+- Only create commits when requested by the user. If unclear, ask first.
+- Git Safety Protocol:
+  * NEVER update the git config.
+  * NEVER run destructive git commands (push --force, reset --hard, checkout ., restore ., clean -f, branch -D) unless the user explicitly requests these actions.
+  * NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it.
+  * Always create NEW commits rather than amending, unless explicitly requested.
+  * When staging files, prefer adding specific files by name rather than using "git add -A" or "git add .".
+- In order to ensure good formatting, ALWAYS pass the commit message via a HEREDOC:
+git commit -m "$(cat <<'EOF'
+Commit message here.
+EOF
+)"
+
+## Common Operations
+- File search: Use the "glob" tool (NOT find or ls).
+- Content search: Use the "grep" tool (NOT grep or rg).
+- Read files: Use the "file_read" tool (NOT cat/head/tail).
+- Edit files: Use the "file_edit" tool (NOT sed/awk).
+- Write files: Use the "file_write" tool (NOT echo >/cat <<EOF).`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"command": {
 				Type:     schema.String,
@@ -79,27 +114,17 @@ func (t *BashTool) Definition() *schema.ToolInfo {
 				Required: true,
 			},
 			"comment": {
-				Type: schema.String,
-				Desc: `Clear, concise description of what this command does in active voice. Never use words like "complex" or "risk" in the description - just describe what it does.
-
-For simple commands (git, npm, standard CLI tools), keep it brief (5-10 words):
-- ls → "List files in current directory"
-- git status → "Show working tree status"
-- npm install → "Install package dependencies"
-
-For commands that are harder to parse at a glance (piped commands, obscure flags, etc.), add enough context to clarify what it does:
-- find . -name "*.tmp" -exec rm {} \; → "Find and delete all .tmp files recursively"
-- git reset --hard origin/main → "Discard all local changes and match remote main"
-- curl -s url | jq '.data[]' → "Fetch JSON from URL and extract data array elements"`,
+				Type:     schema.String,
+				Desc:     "Clear, concise description of what this command does in active voice.",
 				Required: true,
 			},
 			"timeout": {
 				Type: schema.Integer,
-				Desc: "Optional timeout in milliseconds",
+				Desc: fmt.Sprintf("Optional timeout in milliseconds (default %dms). Commands exceeding this will be automatically backgrounded.", defaultWaitDuration.Milliseconds()),
 			},
 			"run_in_background": {
 				Type: schema.Boolean,
-				Desc: "Set to true to run this command in the background. Note: The task will still be killed when you finish your response unless you use 'sleep' to wait.",
+				Desc: "Set to true to run this command in the background. Note: The task will be killed when you finish your response unless you use 'sleep' to wait.",
 			},
 		}),
 	}
@@ -131,9 +156,7 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		taskManager:       t.taskManager,
 		wd:                wd,
 		command:           req.Command,
-		commandStr:        req.Command,
 		comment:           req.Comment,
-		foregroundTimeout: t.foregroundTimeout,
 		timeoutMS:         req.Timeout,
 		runInBackground:   req.RunInBackground,
 		proxy:             newProxyReader(),
@@ -202,16 +225,14 @@ type bashInvocation struct {
 	taskManager       backgroundRegistrar
 	wd                string
 	command           string
-	commandStr        string
 	comment           string
-	foregroundTimeout time.Duration
 	timeoutMS         int
 	runInBackground   bool
 	proxy             *proxyReader
 }
 
 func (i *bashInvocation) Display() domain.ToolDisplay {
-	return domain.NewBashDisplay(i.comment, i.commandStr, "")
+	return domain.NewBashDisplay(i.comment, i.command, "")
 }
 
 func (i *bashInvocation) Stream() io.Reader {
@@ -219,14 +240,9 @@ func (i *bashInvocation) Stream() io.Reader {
 }
 
 func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
-	var taskCtx context.Context
-	var taskCancel context.CancelFunc
-
-	if i.timeoutMS > 0 {
-		taskCtx, taskCancel = context.WithTimeout(ctx, time.Duration(i.timeoutMS)*time.Millisecond)
-	} else {
-		taskCtx, taskCancel = context.WithCancel(ctx)
-	}
+	// We pass the OG context down so executor has SessionID and responds to App exit,
+	// but we don't wrap it with timeout so the process survives backgrounding.
+	taskCtx, taskCancel := context.WithCancel(ctx)
 
 	promoted := false
 	defer func() {
@@ -236,9 +252,15 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		i.proxy.Close()
 	}()
 
+	// Map LLM timeout to waitDuration (default 10s)
+	waitDuration := defaultWaitDuration
+	if i.timeoutMS > 0 {
+		waitDuration = time.Duration(i.timeoutMS) * time.Millisecond
+	}
+
 	streamCmd, err := i.commandExecutor.RunStreaming(taskCtx, i.command, i.wd, true)
 	if err != nil {
-		d := domain.NewBashDisplay(i.comment, i.commandStr, "")
+		d := domain.NewBashDisplay(i.comment, i.command, "")
 		d.Error = domain.ToolErrorFailed
 		return fmt.Sprintf("failed to run command: %v", err), d
 	}
@@ -249,9 +271,9 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if i.runInBackground {
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.commandStr); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.command); err == nil {
 				promoted = true
-				d := domain.NewBashDisplay(i.comment, i.commandStr, "(command running in background)")
+				d := domain.NewBashDisplay(i.comment, i.command, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
 			}
 		}
@@ -269,19 +291,19 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	select {
 	case <-done:
 		// Done case handled below
-	case <-time.After(i.foregroundTimeout):
+	case <-time.After(waitDuration):
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.commandStr); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.command); err == nil {
 				promoted = true
-				d := domain.NewBashDisplay(i.comment, i.commandStr, "(command running in background)")
+				d := domain.NewBashDisplay(i.comment, i.command, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
 			}
 		}
 		<-done
 	}
 
-	d := domain.NewBashDisplay(i.comment, i.commandStr, "")
+	d := domain.NewBashDisplay(i.comment, i.command, "")
 
 	llmOutput := res.Stdout
 	uiOutput := res.Stdout

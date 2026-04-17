@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"errors"
 	"reflect"
 	"syscall"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/stretchr/testify/assert"
 )
 
 type mockFileSystem struct {
@@ -191,32 +192,6 @@ func TestOSCommandExecutor_InternalLogPath(t *testing.T) {
 		}
 	})
 }
-func TestOSCommandExecutor_FallbackTimeout(t *testing.T) {
-	fs := &mockFileSystem{}
-	exec := NewOSCommandExecutor(fs)
-	
-	// Set a very short fallback timeout
-	exec.DefaultTimeout = 100 * time.Millisecond
-	
-	// Use context without deadline
-	ctx := context.Background()
-	
-	// Run a command that sleeps longer than the timeout
-	start := time.Now()
-	res, err := exec.Run(ctx, "sleep 10", "", false)
-	duration := time.Since(start)
-	
-	if err == nil {
-		t.Fatalf("Expected timeout error, got nil. Result: %+v, Duration: %v", res, duration)
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Expected context.DeadlineExceeded, got %v", err)
-	}
-	// Verify it timed out roughly at 100ms
-	if duration > 500*time.Millisecond {
-		t.Errorf("Command took too long to fail: %v", duration)
-	}
-}
 
 func TestStreamingCmd_ID(t *testing.T) {
 	fs := &mockFileSystem{}
@@ -311,4 +286,35 @@ func TestOSCommandExecutor_EnvironmentSanitization(t *testing.T) {
 	if !strings.Contains(res.Stdout, "TERM=dumb") {
 		t.Errorf("TERM was not set to dumb, got output: %q", res.Stdout)
 	}
+}
+
+func TestOSCommandExecutor_OutputSizeWatchdog(t *testing.T) {
+	// Use real OS file system
+	osFS := fs.NewOSFileSystem(-1)
+	exec := NewOSCommandExecutor(osFS)
+	exec.maxOutputSize = 100 // 100 bytes
+
+	ctx := context.Background()
+	// Produces infinite output
+	_, err := exec.Run(ctx, "yes", ".", true)
+
+	assert.Error(t, err)
+	// On most systems, SIGKILL results in "signal: killed"
+	assert.Contains(t, err.Error(), "killed")
+}
+
+func TestOSCommandExecutor_NoFallbackTimeout(t *testing.T) {
+	// Verify that we can run for longer than 30m if no deadline is set
+	// We'll just test for 1s to prove there is no short-circuit.
+	osFS := fs.NewOSFileSystem(-1)
+	exec := NewOSCommandExecutor(osFS)
+	
+	ctx := context.Background()
+	start := time.Now()
+	// Command that sleeps for 1.5s
+	_, err := exec.Run(ctx, "sleep 1.5", ".", true)
+	duration := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, duration, 1*time.Second)
 }

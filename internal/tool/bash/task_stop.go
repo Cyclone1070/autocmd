@@ -32,11 +32,16 @@ func (t *TaskStopTool) IsConcurrentSafe() bool { return true }
 func (t *TaskStopTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "task_stop",
-		Desc: "Stop a background bash task by its ID.",
+		Desc: `Terminates a running background task by its ID.
+
+Usage:
+- Stops a running background task by its ID.
+- Returns a success or failure status.
+- Use this tool when you need to terminate a long-running task that is no longer needed or is consuming too many resources.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"task_id": {
 				Type:     schema.String,
-				Desc:     "The unique ID of the task to stop.",
+				Desc:     "Task identifier identifying the task to stop.",
 				Required: true,
 			},
 		}),

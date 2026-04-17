@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,8 +19,7 @@ import (
 )
 
 const (
-	defaultMaxOutputSize       = 10 * 1024 * 1024 // 10MB
-	DefaultTimeout             = 30 * time.Minute // 30 minutes
+	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
 	DefaultSmartDrainThreshold = 16 * 1024        // 16KB
 	DefaultBinarySampleSize    = 8000             // 8KB sample for binary detection
 	DefaultBufferSize          = 4096             // 4KB standard buffer
@@ -133,7 +131,6 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 		fs:                  fs,
 		maxOutputSize:       defaultMaxOutputSize,
 		SmartDrainThreshold: DefaultSmartDrainThreshold,
-		DefaultTimeout:      DefaultTimeout,
 		killer:              &osSignalKiller{},
 		commander:           &osCommandFactory{},
 	}
@@ -148,16 +145,9 @@ func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string,
 }
 
 func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, dir string, enableLogging bool) (sc *StreamingCmd, err error) {
-	// Fallback timeout if no deadline is set in context
+	// Fallback timeout if no deadline is set in context (None by default now)
 	var cancel context.CancelFunc
-	if _, ok := ctx.Deadline(); !ok {
-		ctx, cancel = context.WithTimeout(ctx, f.DefaultTimeout)
-		defer func() {
-			if err != nil {
-				cancel()
-			}
-		}()
-	}
+	// We no longer enforce a default 30m timeout here to allow indefinite background tasks
 
 	// Always sanitize environment for security using the secure base
 	envMap := sanitizeEnv()
@@ -237,32 +227,9 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	}
 
 	follower := follow.NewFollower(f.fs, logPath)
-	sc = NewStreamingCmd(finalID, follower, nil, logPath)
-
+	
 	var wg sync.WaitGroup
 	wg.Add(2)
-
-	copyStream := func(src io.Reader) {
-		defer wg.Done()
-		buf := make([]byte, 4096)
-		for {
-			n, err := src.Read(buf)
-			if n > 0 {
-				chunk := buf[:n]
-				if logFile != nil {
-					_, _ = logFile.Write(chunk)
-					follower.Poke()
-				}
-				sc.UpdateActivity()
-			}
-			if err != nil {
-				break
-			}
-		}
-	}
-
-	go copyStream(stdoutPipe)
-	go copyStream(stderrPipe)
 
 	waitFn := func() (*Result, error) {
 		if cancel != nil {
@@ -281,8 +248,6 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 
 		if logPath != "" {
 			info, err := f.fs.Stat(logPath)
-			// Small output is always returned as Stdout.
-			// If session logging is disabled, large output is also returned as Stdout (and then deleted).
 			shouldReturnStdout := !enableLogging || (err == nil && info.Size() < f.SmartDrainThreshold)
 
 			if shouldReturnStdout {
@@ -293,7 +258,6 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 					_ = f.fs.Remove(logPath)
 				}
 			} else {
-				// Large output with session logging enabled: keep file, blank stdout
 				res.LogPath = logPath
 				res.Stdout = ""
 			}
@@ -302,13 +266,46 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
-		if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
-			return res, execErr
-		}
-		return res, nil
+		return res, execErr
 	}
 
-	sc.wait = waitFn
+	sc = NewStreamingCmd(finalID, follower, waitFn, logPath)
+
+	var bytesWritten int64
+	var bytesMu sync.Mutex
+	copyStream := func(src io.Reader) {
+		defer wg.Done()
+		buf := make([]byte, 4096)
+		for {
+			n, err := src.Read(buf)
+			if n > 0 {
+				chunk := buf[:n]
+				
+				// Watchdog check
+				bytesMu.Lock()
+				bytesWritten += int64(len(chunk))
+				if bytesWritten > f.maxOutputSize {
+					bytesMu.Unlock()
+					_ = f.killer.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+					return
+				}
+				bytesMu.Unlock()
+
+				if logFile != nil {
+					_, _ = logFile.Write(chunk)
+					follower.Poke()
+				}
+				sc.UpdateActivity()
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	go copyStream(stdoutPipe)
+	go copyStream(stderrPipe)
+
 	return sc, nil
 }
 

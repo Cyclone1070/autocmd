@@ -33,7 +33,17 @@ func (t *SleepTool) IsConcurrentSafe() bool { return true }
 func (t *SleepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "sleep",
-		Desc: "Wait for a specified duration or until a background bash task completes. Use this tool before finishing your turn if you have background tasks (like builds or tests) that must finish before you stop talking.",
+		Desc: `Wait for a specified duration or until a background bash task completes.
+
+Usage:
+- Use this when you have nothing to do, or when you're waiting for something.
+- Use this tool before finishing your turn if you have background tasks (like builds or tests) that must finish before you stop talking.
+- You can call this concurrently with other tools — it won't interfere with them.
+- Prefer this over "Bash(sleep ...)" — it doesn't hold a shell process.
+- Do not sleep between commands that can run immediately — just run them.
+- If your command is long running and you would like to be notified when it finishes — use "bash" with "run_in_background" instead. No sleep needed.
+- Do not retry failing commands in a sleep loop — diagnose the root cause.
+- If you must poll an external process, use a check command (e.g. "git status" or "ls") rather than sleeping first.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"duration_ms": {
 				Type:     schema.Integer,

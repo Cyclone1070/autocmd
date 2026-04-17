@@ -32,8 +32,20 @@ func (t *TaskListTool) IsConcurrentSafe() bool { return true }
 
 func (t *TaskListTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
-		Name:        "task_list",
-		Desc:        "List all active background bash tasks.",
+		Name: "task_list",
+		Desc: `List all active background bash tasks.
+
+## When to Use This Tool
+- To see what background tasks are currently running.
+- To check overall progress on long-running commands.
+- To find task IDs for use with the task_stop tool.
+
+## Output
+Returns a summary of each task:
+- **ID**: Task identifier (use with task_stop).
+- **Description**: Brief description of the task provided when it was started.
+- **Command**: The actual bash command being executed.
+- **Status**: Whether the task is still running or potentially stalled.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
 	}
 }

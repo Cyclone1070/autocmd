@@ -94,7 +94,7 @@ func TestBashTool_Prepare_BlockedCommand(t *testing.T) {
 	mockFS := &mockFileSystem{}
 	mockExec := &mockExecutor{}
 	mockResolver := &mockPathResolver{root: "/workspace"}
-	tool := NewBashTool(mockFS, mockExec, mockResolver, nil, 5*time.Second)
+	tool := NewBashTool(mockFS, mockExec, mockResolver, nil)
 
 	forbidden := []string{
 		"vim",
@@ -147,7 +147,7 @@ func TestBashTool_Execute(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 100*time.Millisecond)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "echo test", "comment": "test command"}`
 	inv, err := tool.Prepare(params)
@@ -175,7 +175,7 @@ func TestBashTool_Stream(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 100*time.Millisecond)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "echo test", "comment": "test stream"}`
 	inv, _ := tool.Prepare(params)
@@ -186,7 +186,9 @@ func TestBashTool_Stream(t *testing.T) {
 
 	// Start execution in background
 	output := strings.NewReader("real time output")
+	waitDone := make(chan struct{})
 	waitFn := func() (*executor.Result, error) {
+		<-waitDone // Wait until we explicitly signal we are done reading
 		return &executor.Result{Stdout: "full output", ExitCode: 0}, nil
 	}
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
@@ -199,6 +201,43 @@ func TestBashTool_Stream(t *testing.T) {
 	n, err := reader.Read(buf)
 	assert.NoError(t, err)
 	assert.Equal(t, "real time output", string(buf[:n]))
+
+	close(waitDone) // Now allow Execute to finish
+}
+
+func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
+	t.Run("promotes to background on timeout without killing the process", func(t *testing.T) {
+		mockFS := &mockFileSystem{}
+		mockExec := &mockExecutor{}
+		mockTM := &mockTaskManager{}
+		mockResolver := &mockPathResolver{root: "/workspace"}
+
+		tool := NewBashTool(mockFS, mockExec, mockResolver, mockTM)
+
+		inv, _ := tool.Prepare(`{"command": "long_running", "comment": "test", "timeout": 100}`)
+
+		mockExec.On("RunStreaming", mock.Anything, "long_running", "/workspace", true).Return(
+			executor.NewStreamingCmd("task1", strings.NewReader("some output"), func() (*executor.Result, error) {
+				time.Sleep(200 * time.Millisecond) // Longer than 100ms timeout
+				return &executor.Result{Stdout: "done", ExitCode: 0}, nil
+			}, "/tmp/task1.log"),
+			nil,
+		)
+
+		mockTM.On("Register", "task1", mock.Anything, "/tmp/task1.log", mock.Anything, "test", "long_running").Return(nil)
+
+		start := time.Now()
+		resp, display := inv.(*bashInvocation).Execute(context.Background())
+		duration := time.Since(start)
+
+		assert.Contains(t, resp, "the command is running in the background")
+		bd := display.(domain.BashDisplay)
+		assert.Equal(t, "(command running in background)", bd.CapturedOutput)
+		assert.Less(t, duration, 150*time.Millisecond)
+		
+		mockExec.AssertExpectations(t)
+		mockTM.AssertExpectations(t)
+	})
 }
 
 type testStubTaskManager struct {
@@ -216,7 +255,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	taskMgr := &testStubTaskManager{}
 	
 	// Tool with 0 foreground timeout
-	tool := NewBashTool(fs, exec, resolver, taskMgr, 0)
+	tool := NewBashTool(fs, exec, resolver, taskMgr)
 
 	params := `{"command": "long_command", "comment": "test backgrounding"}`
 	inv, _ := tool.Prepare(params)
@@ -242,7 +281,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 }
 
 func TestBashTool_IsConcurrentSafe(t *testing.T) {
-	tool := NewBashTool(&mockFileSystem{}, &mockExecutor{}, &mockPathResolver{}, nil, 0)
+	tool := NewBashTool(&mockFileSystem{}, &mockExecutor{}, &mockPathResolver{}, nil)
 	assert.True(t, tool.IsConcurrentSafe())
 }
 
@@ -250,7 +289,7 @@ func TestBashTool_Prepare_EmptyComment(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 0)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "ls"}`
 	_, err := tool.Prepare(params)
@@ -263,7 +302,7 @@ func TestBashTool_HardTimeout(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	
 	// foreground timeout 1s, but we'll trigger a hard timeout via context or timeoutMS earlier (e.g. 100ms)
-	tool := NewBashTool(fs, exec, resolver, nil, 1*time.Second)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "sleep 10", "comment": "testing hard timeout", "timeout": 100}`
 	inv, _ := tool.Prepare(params)
@@ -288,7 +327,7 @@ func TestBashTool_Cancellation(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 1*time.Second)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "ls", "comment": "testing cancellation"}`
 	inv, _ := tool.Prepare(params)
@@ -314,7 +353,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 1*time.Second)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "large_command", "comment": "testing large output"}`
 	inv, _ := tool.Prepare(params)
@@ -351,7 +390,7 @@ func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	tool := NewBashTool(fs, exec, resolver, nil, 1*time.Second)
+	tool := NewBashTool(fs, exec, resolver, nil)
 
 	params := `{"command": "sleep 10", "comment": "testing timeout + large", "timeout": 100}`
 	inv, _ := tool.Prepare(params)

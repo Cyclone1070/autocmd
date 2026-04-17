@@ -27,12 +27,10 @@ func (c SessionConfig) StorageDir() string { return c.storageDir }
 type ToolsConfig struct {
 	maxFileSize     int64
 	maxIterations         int
-	bashForegroundTimeout int // in seconds
 }
 
 func (c ToolsConfig) MaxFileSize() int64 { return c.maxFileSize }
 func (c ToolsConfig) MaxIterations() int { return c.maxIterations }
-func (c ToolsConfig) BashForegroundTimeout() int { return c.bashForegroundTimeout }
 
 type ModelConfig struct {
 	ID            string `json:"id"`
@@ -50,7 +48,6 @@ type sessionDTO struct {
 type toolsDTO struct {
 	MaxFileSize           int64 `json:"max_file_size"`
 	MaxIterations         int   `json:"max_iterations"`
-	BashForegroundTimeout int   `json:"bash_foreground_timeout"`
 }
 
 type configDTO struct {
@@ -66,7 +63,6 @@ func DefaultConfig() *Config {
 		tools: ToolsConfig{
 			maxFileSize:           20 * 1024 * 1024,
 			maxIterations:         50,
-			bashForegroundTimeout: 10,
 		},
 		session: SessionConfig{
 			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),

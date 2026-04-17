@@ -70,11 +70,18 @@ func (t *WriteFileTool) IsConcurrentSafe() bool { return true }
 func (t *WriteFileTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "write_file",
-		Desc: "Write a file to the local filesystem.",
+		Desc: `Write a file to the local filesystem.
+
+Usage:
+- This tool will overwrite the existing file if there is one at the provided path.
+- If this is an existing file, you MUST use the "read_file" tool first to read the file's contents. This tool will fail if you did not read the file first.
+- Prefer the "edit_file" tool for modifying existing files — it only sends the diff. Only use this tool to create new files or for complete rewrites.
+- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.
+- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The path to the file to write (absolute or relative to the workspace root).",
+				Desc:     "The path to the file to write.",
 				Required: true,
 			},
 			"content": {

@@ -25,7 +25,18 @@ func (t *QuestionTool) IsConcurrentSafe() bool { return false }
 func (t *QuestionTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
-		Desc: "Ask the user one or more interactive questions to clarify intent or collect information. Only use this if you truly need user input to proceed.",
+		Desc: `Asks the user one or more interactive questions to gather information, clarify ambiguity, understand preferences, make decisions or offer them choices.
+
+Use this tool when you need to ask the user questions during execution. This allows you to:
+1. Gather user preferences or requirements.
+2. Clarify ambiguous instructions.
+3. Get decisions on implementation choices as you work.
+4. Offer choices to the user about what direction to take.
+
+Usage notes:
+- Users will always be able to provide custom text input even if options are provided.
+- Use multiSelect: true to allow multiple answers to be selected for a question.
+- If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"questions": {
 				Type: schema.Array,

@@ -157,6 +157,13 @@ func (m *TaskManager) NotifyChan() <-chan struct{} {
 	return m.notifyChan
 }
 
+// HasPending returns true if there are pending notifications in the queue.
+func (m *TaskManager) HasPending() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.doneQueue) > 0
+}
+
 // Stop terminates a background task by ID.
 func (m *TaskManager) Stop(id string) error {
 	m.mu.Lock()

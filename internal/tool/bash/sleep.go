@@ -12,6 +12,7 @@ import (
 
 type completionNotifier interface {
 	NotifyChan() <-chan struct{}
+	HasPending() bool
 }
 
 type SleepTool struct {
@@ -85,6 +86,12 @@ func (i *sleepInvocation) Display() domain.ToolDisplay {
 }
 
 func (i *sleepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+	if i.notifier.HasPending() {
+		llm := "sleep interrupted: background bash process finished"
+		i.display.Content = "SLEEP interrupted: background bash process finished"
+		return llm, i.display
+	}
+
 	duration := time.Duration(i.durationMS) * time.Millisecond
 
 	select {

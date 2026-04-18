@@ -103,7 +103,7 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 
 func (t *Theme) Box(content string, width int, status ToolStatus) string {
 	borderColor := t.colorForStatus(status)
-	return "\n" + t.box.BorderForeground(borderColor).Width(width).Render(content)
+	return "\n\n" + t.box.BorderForeground(borderColor).Width(width).Render(content)
 }
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {

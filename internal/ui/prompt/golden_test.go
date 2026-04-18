@@ -202,7 +202,10 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 
 	var trace strings.Builder
 	for _, s := range signals {
-		trace.WriteString(s)
+		lines := strings.Split(s, "\n")
+		for _, l := range lines {
+			trace.WriteString(l + "\n")
+		}
 	}
 	trace.WriteString(m.View())
 

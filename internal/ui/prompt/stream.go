@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/ui"
@@ -297,18 +298,55 @@ func (s *Stream) extractLastBlockSource(content string) string {
 // renderDelta renders newContent with correct spacing relative to lastBlock.
 func (s *Stream) renderDelta(newContent string) string {
 	if s.lastBlock == "" {
-		return s.renderer.Render(newContent)
+		return NormalizeBlock(s.renderer.Render(newContent))
 	}
 
 	full := s.lastBlock + newContent
 	fullANSI := s.renderer.Render(full)
 
 	if strings.HasPrefix(fullANSI, s.lastBlockANSI) {
-		return fullANSI[len(s.lastBlockANSI):]
+		delta := fullANSI[len(s.lastBlockANSI):]
+		return NormalizeBlock(delta)
 	}
 
 	// Fallback to fresh render if context-aware delta fails (Issue 6)
-	return s.renderer.Render(newContent)
+	return NormalizeBlock(s.renderer.Render(newContent))
+}
+
+// NormalizeBlock ensures a block has exactly one leading newline and no trailing newlines.
+// It also trims any visually empty lines (ANSI/whitespace only) from the start and end.
+func NormalizeBlock(s string) string {
+	trimmed := trimVisuallyEmpty(s)
+	return "\n" + trimmed
+}
+
+// trimVisuallyEmpty removes leading and trailing lines that contain only
+// ANSI escape sequences or whitespace.
+func trimVisuallyEmpty(s string) string {
+	lines := strings.Split(s, "\n")
+
+	start := 0
+	for start < len(lines) && isVisuallyEmpty(lines[start]) {
+		start++
+	}
+
+	end := len(lines)
+	for end > start && isVisuallyEmpty(lines[end-1]) {
+		end--
+	}
+
+	if start >= end {
+		return ""
+	}
+
+	return strings.Join(lines[start:end], "\n")
+}
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func isVisuallyEmpty(line string) bool {
+	stripped := ansiRe.ReplaceAllString(line, "")
+	return strings.TrimSpace(stripped) == ""
 }
 
 // splitTrailingNewlines separates the trailing newlines from a string.

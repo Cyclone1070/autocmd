@@ -393,23 +393,16 @@ func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
 	m.state = stateFlushing
 	m.nextState = next
 
-	var cmds []tea.Cmd
-	for _, b := range blocks {
-		if b != "" && m.flushFn != nil {
-			cmds = append(cmds, m.flushFn(b))
-		}
+	fullContent := m.joinAndNormalize(blocks)
+	if fullContent != "" && m.flushFn != nil {
+		return m, tea.Sequence(m.flushFn(fullContent), func() tea.Msg { return flushDoneMsg{} })
 	}
 
-	if len(cmds) == 0 {
-		m.state = next
-		if m.state == stateDone {
-			return m, tea.Quit
-		}
-		return m.withPollIfNeeded()
+	m.state = next
+	if m.state == stateDone {
+		return m, tea.Quit
 	}
-
-	cmds = append(cmds, func() tea.Msg { return flushDoneMsg{} })
-	return m, tea.Sequence(cmds...)
+	return m.withPollIfNeeded()
 }
 
 func (m *Model) nextTick() tea.Cmd {
@@ -530,7 +523,11 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 }
 
 func (m *Model) renderToolsView() string {
-	return strings.Join(m.renderAllTools(), "\n")
+	return m.joinAndNormalize(m.renderAllTools())
+}
+
+func (m *Model) joinAndNormalize(blocks []string) string {
+	return NormalizeBlock(strings.Join(blocks, ""))
 }
 
 func (m *Model) renderAllTools() []string {

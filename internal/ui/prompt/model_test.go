@@ -214,7 +214,8 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	// Transition to streaming
 	m.handleBusEvent(domain.TextEvent{Text: "hi"})
 	
-	assert.Contains(t, flushed, "thinking_rendered", "Thinking result should be flushed on transition")
+	require.NotEmpty(t, flushed)
+	assert.Contains(t, flushed[0], "thinking_rendered", "Thinking result should be flushed on transition")
 }
 
 func TestModel_ViewportTruncation(t *testing.T) {
@@ -386,17 +387,19 @@ func TestModel_BusClosedUnexpectedly(t *testing.T) {
 	m.Update(busClosedMsg{})
 
 	// Assert: Should detect closed channel, mark tools as error, and transition to flushing/done
-	assert.Contains(t, flushed, "thinking_rendered")
-	
-	found := false
+	require.NotEmpty(t, flushed)
+	foundThinking := false
+	foundError := false
 	for _, f := range flushed {
-		// Use a case-insensitive check or specific styled check
+		if strings.Contains(f, "thinking_rendered") {
+			foundThinking = true
+		}
 		if strings.Contains(strings.ToLower(f), "bus closed unexpectedly") {
-			found = true
-			break
+			foundError = true
 		}
 	}
-	assert.True(t, found, "Should flush the explicit error message 'bus closed unexpectedly'")
+	assert.True(t, foundThinking, "Should flush the thinking result")
+	assert.True(t, foundError, "Should flush the explicit error message 'bus closed unexpectedly'")
 }
 
 func TestModel_ToolStart_QuestionDisplayInitializesQuestionState(t *testing.T) {
@@ -485,4 +488,65 @@ func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 
 	require.Len(t, bus.actions, 1)
+}
+
+func TestModel_FlushSpacingRegression(t *testing.T) {
+	var terminalOutput strings.Builder
+	// mockPrintf mimics tea.Printf's internal behavior: split on \n, each line gets \n
+	mockPrintf := func(s string) tea.Cmd {
+		lines := strings.Split(s, "\n")
+		for _, l := range lines {
+			terminalOutput.WriteString(l + "\n")
+		}
+		return nil
+	}
+
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	renderer := ui.NewGlamourRenderer(80, true)
+	stream := NewStream(renderer)
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, stream, &mockAnimator{}, ui.NewNoOpGater(), 80, WithFlush(mockPrintf))
+
+	// Case 1: Avoid sticking between Thinking/Box and Para
+	// Simulate Box ending turning into a flush
+	m.doFlush([]string{"\n┌─── BOX ───┐\n└─── DONE ───┘"}, stateIdle)
+	// Simulate Para delta starting with \n
+	m.doFlush([]string{"\nPARA"}, stateIdle)
+
+	output := terminalOutput.String()
+	t.Logf("Output Case 1:\n%q", output)
+	
+	// We want exactly 1 blank line between them.
+	// Current buggy behavior (blind strip) results in 0 blank lines (stuck).
+	assert.Contains(t, output, "\n└─── DONE ───┘\n\nPARA\n", "Box and Para should have a blank line between them")
+
+	terminalOutput.Reset()
+
+	// Case 2: Avoid double-spacing with ANSI gap lines (Headers)
+	// Simulate Para ending
+	m.doFlush([]string{"PARA"}, stateIdle)
+	// Simulate Header delta with ANSI gap line: "\x1b[0m  \x1b[0m\n## HEADER"
+	// Note: We use \x1b[0m as a common "reset" that glamour puts in gaps.
+	m.doFlush([]string{"\x1b[0m  \x1b[0m\n## HEADER"}, stateIdle)
+
+	output = terminalOutput.String()
+	t.Logf("Output Case 2:\n%q", output)
+
+	// We want exactly 1 blank line between them.
+	// Current behavior (if not trimming ANSI gap) results in 2 blank lines.
+	// Expected terminal: "PARA\n" (prev) + "\n" (from prepended \n) + "## HEADER\n" (from tea.Printf)
+	// Wait, if it's "PARA\n\n## HEADER\n" that's 1 blank line.
+	assert.NotContains(t, output, "\nPARA\n\n\n", "Should not have double blank lines before header")
+	assert.Contains(t, output, "\nPARA\n\n## HEADER\n", "Should have exactly one blank line before header")
+
+	terminalOutput.Reset()
+
+	// Case 3: Multiple newlines should collapse to a single blank line
+	m.doFlush([]string{"PARA"}, stateIdle)
+	m.doFlush([]string{"\n\n\nCONTENT"}, stateIdle)
+	output = terminalOutput.String()
+	// Total terminal: \nPARA\n (flush 1) + \n (from prepended \n) + CONTENT\n (flush 2)
+	assert.Contains(t, output, "\nPARA\n\nCONTENT\n", "Triple newlines should collapse to a single blank line")
+	assert.NotContains(t, output, "\n\n\n", "Should not have triple newlines")
 }

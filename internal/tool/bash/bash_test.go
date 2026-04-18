@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -209,7 +210,10 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 	t.Run("promotes to background on timeout without killing the process", func(t *testing.T) {
 		mockFS := &mockFileSystem{}
 		mockExec := &mockExecutor{}
-		mockTM := &mockTaskManager{}
+		mockTM := &syncTM{
+			done:           make(chan struct{}),
+			registeredCmds: make(map[string]*executor.StreamingCmd),
+		}
 		mockResolver := &mockPathResolver{root: "/workspace"}
 
 		tool := NewBashTool(mockFS, mockExec, mockResolver, mockTM)
@@ -218,13 +222,13 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 
 		mockExec.On("RunStreaming", mock.Anything, "long_running", "/workspace", true).Return(
 			executor.NewStreamingCmd("task1", strings.NewReader("some output"), func() (*executor.Result, error) {
-				time.Sleep(200 * time.Millisecond) // Longer than 100ms timeout
+				time.Sleep(150 * time.Millisecond) // Longer than 100ms timeout
 				return &executor.Result{Stdout: "done", ExitCode: 0}, nil
 			}, "/tmp/task1.log"),
 			nil,
 		)
 
-		mockTM.On("Register", "task1", mock.Anything, "/tmp/task1.log", mock.Anything, "test", "long_running").Return(nil)
+		// No mock expectation for Register here, handled by manual mock
 
 		start := time.Now()
 		resp, display := inv.(*bashInvocation).Execute(context.Background())
@@ -235,9 +239,33 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 		assert.Equal(t, "(command running in background)", bd.CapturedOutput)
 		assert.Less(t, duration, 150*time.Millisecond)
 		
+		<-mockTM.done // Ensure background goroutine finishes Wait() and sync.Once Unlock
 		mockExec.AssertExpectations(t)
-		mockTM.AssertExpectations(t)
+		mockTM.mockTaskManager.AssertExpectations(t)
+
+		mockTM.mu.Lock()
+		assert.Contains(t, mockTM.registeredCmds, "task1")
+		mockTM.mu.Unlock()
 	})
+}
+
+type syncTM struct {
+	mockTaskManager
+	done           chan struct{}
+	registeredCmds map[string]*executor.StreamingCmd
+	mu             sync.Mutex
+}
+
+func (m *syncTM) Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string) error {
+	m.mu.Lock()
+	m.registeredCmds[id] = cmd
+	m.mu.Unlock()
+
+	go func() {
+		_, _ = cmd.Wait()
+		close(m.done)
+	}()
+	return nil
 }
 
 type testStubTaskManager struct {
@@ -277,7 +305,9 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	assert.Contains(t, llmContent, "<background_task_id>")
 	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(command running in background)")
 	
+	exec.AssertExpectations(t)
 	close(waitCh) // Cleanup
+	time.Sleep(10 * time.Millisecond) // Give the goroutine a moment to finish
 }
 
 func TestBashTool_IsConcurrentSafe(t *testing.T) {

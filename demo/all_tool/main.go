@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/agent"
@@ -92,7 +91,7 @@ func main() {
 		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
 		question.NewQuestionTool(),
-		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr, 10*time.Second),
+		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr),
 		bash.NewSleepTool(taskMgr),
 		bash.NewTaskListTool(taskMgr),
 		bash.NewTaskStopTool(taskMgr),

@@ -109,7 +109,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	readTool := file.NewReadFileTool(fs, fs, res)
 	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
 	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
-	bashTool := bash.NewBashTool(fs, exec, res, bash.NewTaskManager(fs), 10*time.Second)
+	bashTool := bash.NewBashTool(fs, exec, res, bash.NewTaskManager(fs))
 
 	// 15-line argument (simulating Go code or large config)
 	lines := make([]string, 15)

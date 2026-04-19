@@ -527,7 +527,7 @@ func (m *Model) renderToolsView() string {
 }
 
 func (m *Model) joinAndNormalize(blocks []string) string {
-	return NormalizeBlock(strings.Join(blocks, ""))
+	return ui.NormalizeBlock(strings.Join(blocks, ""))
 }
 
 func (m *Model) renderAllTools() []string {

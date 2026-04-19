@@ -32,7 +32,7 @@ func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
 	// Manually simulate what our new joinAndNormalize will do
 	tools := m.renderAllTools()
 	joined := strings.Join(tools, "")
-	normalized := NormalizeBlock(joined)
+	normalized := ui.NormalizeBlock(joined)
 
 	// We expect ONE blank line between boxes. 
 	// This means Box 1 ends with ╯ and Box 2 starts with \n\n.

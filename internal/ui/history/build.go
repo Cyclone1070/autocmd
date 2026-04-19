@@ -122,20 +122,29 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 			if h.Renderer != nil {
 				content = h.Renderer.Render(am.Content)
 			}
-			parts = append(parts, content)
+			parts = append(parts, ui.NormalizeBlock(content))
 		}
 
 		// Tool boxes exactly where tool calls occurred.
-		for _, tc := range am.ToolCalls {
-			rendered := h.renderToolCall(&tc, displays, contentWidth)
-			if rendered != "" {
-				parts = append(parts, rendered)
+		if len(am.ToolCalls) > 0 {
+			var toolBoxes []string
+			for _, tc := range am.ToolCalls {
+				rendered := h.renderToolCall(&tc, displays, contentWidth)
+				if rendered != "" {
+					toolBoxes = append(toolBoxes, rendered)
+				}
+			}
+			if len(toolBoxes) > 0 {
+				// Adjacent tool boxes are joined by "" and then normalized as one part.
+				// Since theme.Box correctly provides leading \n\n, NormalizeBlock
+				// will ensure exactly one blank line precedes the set and maintain internal gaps.
+				toolBlock := strings.Join(toolBoxes, "")
+				parts = append(parts, ui.NormalizeBlock(toolBlock))
 			}
 		}
 	}
 
-	// Parts may already include intentional leading spacing (e.g. Theme.Box starts with "\n"),
-	// so join with a single newline to avoid double-counting vertical gaps.
+	// Join the normalized parts with a single newline (simulating the tea.Printf gap).
 	body := strings.Join(parts, "\n")
 	writeFramedWithGutter(sb, roleLine, contPrefix, body)
 }
@@ -172,7 +181,7 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 	} else if h.Renderer != nil {
 		content = h.Renderer.Render(msg.Content)
 	}
-	writeFramedWithGutter(sb, roleLine, contPrefix, content)
+	writeFramedWithGutter(sb, roleLine, contPrefix, ui.NormalizeBlock(content))
 }
 
 func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
@@ -188,19 +197,25 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 		if h.Renderer != nil {
 			content = h.Renderer.Render(am.Content)
 		}
-		parts = append(parts, content)
+		parts = append(parts, ui.NormalizeBlock(content))
 	}
 
-	for _, tc := range am.ToolCalls {
-		rendered := h.renderToolCall(&tc, displays, contentWidth)
-		if rendered != "" {
-			parts = append(parts, rendered)
+	if len(am.ToolCalls) > 0 {
+		var toolBoxes []string
+		for _, tc := range am.ToolCalls {
+			rendered := h.renderToolCall(&tc, displays, contentWidth)
+			if rendered != "" {
+				toolBoxes = append(toolBoxes, rendered)
+			}
+		}
+		if len(toolBoxes) > 0 {
+			// Join with "" and normalize as one block.
+			toolBlock := strings.Join(toolBoxes, "")
+			parts = append(parts, ui.NormalizeBlock(toolBlock))
 		}
 	}
 
-	// Frame the assistant message exactly once, regardless of how many parts it has.
-	// Parts may already include intentional leading spacing (e.g. Theme.Box starts with "\n"),
-	// so join with a single newline to avoid double-counting vertical gaps.
+	// Join normalized parts with a single newline (as terminal surrogate).
 	body := strings.Join(parts, "\n")
 	writeFramedWithGutter(sb, roleLine, contPrefix, body)
 }

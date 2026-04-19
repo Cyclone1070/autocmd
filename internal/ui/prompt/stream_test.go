@@ -15,7 +15,7 @@ func canonicalize(s string) string {
 	var resultLines []string
 	for _, line := range lines {
 		// Only treat as empty if it's just ANSI/spaces (padding junk)
-		if isVisuallyEmpty(line) {
+		if ui.IsVisuallyEmpty(line) {
 			resultLines = append(resultLines, "")
 		} else {
 			// Otherwise keep content (including ANSI), only trim trailing plain whitespace

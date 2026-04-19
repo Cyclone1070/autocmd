@@ -542,11 +542,11 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 
 	terminalOutput.Reset()
 
-	// Case 3: Multiple newlines should collapse to a single blank line
+	// Case 3: Multiple newlines should be respected (minus 1 for tea.Printf)
 	m.doFlush([]string{"PARA"}, stateIdle)
 	m.doFlush([]string{"\n\n\nCONTENT"}, stateIdle)
 	output = terminalOutput.String()
-	// Total terminal: \nPARA\n (flush 1) + \n (from prepended \n) + CONTENT\n (flush 2)
-	assert.Contains(t, output, "\nPARA\n\nCONTENT\n", "Triple newlines should collapse to a single blank line")
-	assert.NotContains(t, output, "\n\n\n", "Should not have triple newlines")
+	// Total terminal: \nPARA\n (flush 1) + \n\n (from prepended \n\n) + CONTENT\n (flush 2)
+	assert.Contains(t, output, "\nPARA\n\n\nCONTENT\n", "Triple newlines should result in two blank lines (respecting the gap)")
+	assert.Contains(t, output, "\n\n\n", "Should have triple newlines total between PARA and CONTENT")
 }

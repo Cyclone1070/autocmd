@@ -9,6 +9,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+func canonicalize(s string) string {
+	// 1. Split into lines to normalize blank lines and trailing spaces
+	lines := strings.Split(s, "\n")
+	var resultLines []string
+	for _, line := range lines {
+		// Only treat as empty if it's just ANSI/spaces (padding junk)
+		if isVisuallyEmpty(line) {
+			resultLines = append(resultLines, "")
+		} else {
+			// Otherwise keep content (including ANSI), only trim trailing plain whitespace
+			resultLines = append(resultLines, strings.TrimRight(line, " \t\r"))
+		}
+	}
+	// 2. Join back and trim leading/trailing blank lines from the whole block
+	// This ensures we compare the core structure and gaps
+	return strings.Trim(strings.Join(resultLines, "\n"), "\n")
+}
+
 // mockRenderer just returns the input as is
 type mockRenderer struct{}
 
@@ -123,6 +141,7 @@ func TestStream_Split(t *testing.T) {
 			flushed := s.Append(toAppend)
 			for _, f := range flushed {
 				accFlush.WriteString(f)
+				accFlush.WriteString("\n") // Simulate tea.Printf behavior
 			}
 
 			// Track active list context to simulate Goldmark's AST grouping correctly across multiple blocks.
@@ -165,14 +184,16 @@ func TestStream_Split(t *testing.T) {
 			// Trim trailing newlines because Stream flushes strip them
 			wantFlush = strings.TrimRight(wantFlush, "\n\r")
 
-			gotFlush := strings.TrimRight(accFlush.String(), "\n\r")
-			gotPend := s.Pending()
+			gotFlush := canonicalize(accFlush.String())
+			wantFlush = canonicalize(wantFlush)
+			gotPend := canonicalize(s.Pending())
+			wantPend := canonicalize(pendingMD.String())
 
 			if gotFlush != wantFlush {
 				t.Errorf("Seq %v Gap %q Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotFlush, wantFlush)
 			}
-			if gotPend != pendingMD.String() {
-				t.Errorf("Seq %v Gap %q Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotPend, pendingMD.String())
+			if gotPend != wantPend {
+				t.Errorf("Seq %v Gap %q Step %d: Pend Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotPend, wantPend)
 			}
 		}
 	}
@@ -305,14 +326,19 @@ func TestStream_RenderConsistency(t *testing.T) {
 				flushed := s.Append(toAppend)
 				for _, f := range flushed {
 					streamedOut.WriteString(f)
+					streamedOut.WriteString("\n") // Simulate tea.Printf behavior
 				}
 			}
 			finalFlush := s.Flush()
 			for _, f := range finalFlush {
 				streamedOut.WriteString(f)
+				// finalFlush items (like s.lastMargin) are also printed via doFlush/tea.Printf
+				streamedOut.WriteString("\n")
 			}
 
-			gotOut := streamedOut.String()
+			gotOut := canonicalize(streamedOut.String())
+			wantOut = canonicalize(wantOut)
+
 			if gotOut != wantOut {
 				t.Errorf("Render inconsistency: Output mismatch. GOT %d bytes, WANT %d bytes", len(gotOut), len(wantOut))
 

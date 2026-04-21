@@ -422,8 +422,10 @@ func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 	m.cancelRequested = true
 	m.bus.SendAction(domain.StopAction{})
 	if m.stream != nil {
-		// Avoid draining/flush-updating any queued streamed text after cancellation.
-		m.stream.ClearBuffer()
+		blocks := m.stream.Flush()
+		if len(blocks) > 0 {
+			return m.doFlush(blocks, m.state)
+		}
 	}
 	return m.withPollIfNeeded()
 }

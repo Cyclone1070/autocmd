@@ -25,6 +25,9 @@ type mockStream struct {
 	appendCalls   int
 	lastAppend    string
 	appendReturns []string
+	flushReturns  []string
+	flushCalls    int
+	clearCalls    int
 }
 
 func (s *mockStream) Append(t string) []string {
@@ -32,9 +35,15 @@ func (s *mockStream) Append(t string) []string {
 	s.lastAppend = t
 	return s.appendReturns
 }
-func (s *mockStream) Flush() []string         { return []string{"flushed"} }
+func (s *mockStream) Flush() []string {
+	s.flushCalls++
+	if s.flushReturns != nil {
+		return s.flushReturns
+	}
+	return []string{"flushed"}
+}
 func (s *mockStream) Pending() string         { return s.p }
-func (s *mockStream) ClearBuffer()            {}
+func (s *mockStream) ClearBuffer()            { s.clearCalls++ }
 
 type mockThinkingRenderer struct{}
 func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
@@ -95,6 +104,11 @@ func TestModel_CancelRequested_ThinkingFlushUsesErrorStatusOnNextBusEvent(t *tes
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = res.(*Model)
 	assert.True(t, m.cancelRequested)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateThinking, m.nextState)
+
+	res, _ = m.Update(flushDoneMsg{})
+	m = res.(*Model)
 	assert.Equal(t, stateThinking, m.state)
 
 	// After cancel, queued non-terminal bus events are trashed, but View in stateThinking
@@ -115,7 +129,29 @@ func TestModel_HandleCancel_DoesNotStartDuplicatePollWhenAlreadyPolling(t *testi
 
 	assert.True(t, m.cancelRequested)
 	assert.True(t, m.isPolling, "cancel must not reset isPolling when a poll is already in flight")
-	assert.Nil(t, cmd, "cancel must not start a second poll when already polling")
+	assert.NotNil(t, cmd, "cancel now flushes pending stream content")
+}
+
+func TestModel_HandleCancel_FlushesPendingStreamBuffer(t *testing.T) {
+	var flushed []string
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	s := &mockStream{flushReturns: []string{"pending tail"}}
+	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, s, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
+		flushed = append(flushed, c)
+		return nil
+	}))
+	m.state = stateIdle
+	m.isPolling = true
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = res.(*Model)
+
+	assert.True(t, m.cancelRequested)
+	assert.Equal(t, 1, s.flushCalls, "cancel should flush buffered stream")
+	assert.Equal(t, 0, s.clearCalls, "cancel should not drop buffered stream")
+	require.NotEmpty(t, flushed)
+	assert.Contains(t, flushed[0], "pending tail")
 }
 
 func TestModel_CancelProcessesDoneEvent(t *testing.T) {
@@ -129,7 +165,8 @@ func TestModel_CancelProcessesDoneEvent(t *testing.T) {
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = res.(*Model)
 	assert.True(t, m.cancelRequested)
-	assert.Equal(t, stateThinking, m.state)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateThinking, m.nextState)
 	require.Len(t, bus.actions, 1)
 	_, ok := bus.actions[0].(domain.StopAction)
 	assert.True(t, ok, "first cancel should send StopAction")
@@ -161,6 +198,13 @@ func TestModel_CancelRequested_IgnoresQueuedTextAndThinkingEventsInStreaming(t *
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = res.(*Model)
 	assert.True(t, m.cancelRequested)
+	assert.Equal(t, stateFlushing, m.state)
+
+	// Flush completion returns to prior state, after which queued non-terminal
+	// events must still be ignored.
+	res, _ = m.Update(flushDoneMsg{})
+	m = res.(*Model)
+	assert.Equal(t, stateIdle, m.state)
 
 	// Queued thinking/text activity must be ignored after cancel.
 	res, _ = m.Update(busEventMsg{event: domain.TextEvent{Text: "ignored", IsThought: false}})

@@ -326,6 +326,32 @@ func TestRun_ContextCancelled(t *testing.T) {
 	assert.Equal(t, true, lastMsg.Extra[domain.CancelMessageExtraKey])
 }
 
+func TestRun_ContextCancelled_PersistsPartialAssistantProgress(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{
+				chunks: []mockChunk{
+					{text: "partial "},
+					{text: "assistant output"},
+				},
+				err: context.Canceled,
+			},
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{}, m, nil)
+	session := &domain.Session{}
+	err := l.Run(ctx, session, "hi")
+
+	assert.Error(t, err)
+	assert.Len(t, session.Messages, 2)
+	assert.Equal(t, schema.User, session.Messages[0].Role)
+	assert.Equal(t, schema.Assistant, session.Messages[1].Role)
+	assert.Equal(t, "partial assistant output", session.Messages[1].Content)
+}
+
 func TestRun_ParallelToolCalls(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -559,4 +585,29 @@ func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRun_ContextCancelled_PersistsPartialWithCollidingToolIndices(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id: "buggy-cancelled-stream",
+		streams: []*mockStream{
+			{
+				chunks: []mockChunk{
+					{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
+					{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
+				},
+				err: context.Canceled,
+			},
+		},
+	}
+
+	l := newTestLoop([]domain.Tool{}, m, nil)
+	session := &domain.Session{}
+	err := l.Run(ctx, session, "run")
+
+	assert.Error(t, err)
+	assert.Len(t, session.Messages, 2)
+	assert.Equal(t, schema.Assistant, session.Messages[1].Role)
+	assert.Len(t, session.Messages[1].ToolCalls, 2)
 }

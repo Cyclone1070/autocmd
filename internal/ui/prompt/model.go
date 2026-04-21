@@ -30,16 +30,7 @@ type stream interface {
 	Append(text string) []string
 	Flush() []string
 	Pending() string
-}
-
-type animator interface {
-	Enqueue(text string)
-	NextChunk() (string, bool)
-	HasPending() bool
-	// Clear discards any pending streamed runes.
-	// Used on Ctrl+C during stateStreaming to avoid flushing queued text events.
-	Clear()
-	FlushAll() string
+	ClearBuffer()
 }
 
 type bus interface {
@@ -56,7 +47,6 @@ type uiState int
 const (
 	stateIdle uiState = iota
 	stateThinking
-	stateStreaming
 	stateTooling
 	stateFlushing
 	stateDone
@@ -76,7 +66,6 @@ type Model struct {
 	state    uiState
 	bus      bus
 	stream   stream
-	animator animator
 	tools    []toolSlot
 
 	thinkingRenderer thinkingRenderer
@@ -117,7 +106,6 @@ func NewModel(
 	sp spinnerProvider,
 	th *ui.Theme,
 	s stream,
-	a animator,
 	g viewportGater,
 	chatWindowWidth int,
 	opts ...Option,
@@ -130,7 +118,6 @@ func NewModel(
 		spinnerProvider:  sp,
 		theme:            th,
 		stream:           s,
-		animator:         a,
 		width:            chatWindowWidth,
 		gater:            g,
 		flushFn:          func(content string) tea.Cmd { return tea.Printf("%s", content) },
@@ -170,8 +157,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleUnexpectedClose()
 	case flushDoneMsg:
 		return m.handleFlushDone()
-	case animatorDrainedMsg:
-		return m.tryResumePoll()
 	}
 
 	return m, nil
@@ -196,29 +181,7 @@ func (m *Model) handleTick() (tea.Model, tea.Cmd) {
 		m.spinnerFrame++
 	}
 
-	if m.state == stateStreaming && m.animator.HasPending() {
-		chunk, ok := m.animator.NextChunk()
-		if !ok {
-			m.state = stateIdle
-			return m, m.nextTick()
-		}
-		blocks := m.stream.Append(chunk)
-		if len(blocks) > 0 {
-			// Tick-triggered flush must still arm the next tick; handleFlushDone is poll-only.
-			_, flushCmd := m.doFlush(blocks, stateStreaming)
-			return m, tea.Batch(flushCmd, m.nextTick())
-		}
-		if !m.animator.HasPending() {
-			return m, tea.Batch(m.nextTick(), signalAnimatorDrained())
-		}
-		return m, m.nextTick()
-	}
-
 	return m, m.nextTick()
-}
-
-func (m *Model) tryResumePoll() (tea.Model, tea.Cmd) {
-	return m.withPollIfNeeded()
 }
 
 func (m *Model) withPollIfNeeded() (tea.Model, tea.Cmd) {
@@ -238,11 +201,6 @@ func (m *Model) isReadyForEvent() bool {
 	switch m.state {
 	case stateIdle, stateThinking, stateTooling:
 		return true
-	case stateStreaming:
-		if m.cancelRequested {
-			return true
-		}
-		return !m.animator.HasPending()
 	}
 	return false
 }
@@ -259,10 +217,6 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 	case stateThinking:
 		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
 		return m.doFlush([]string{thinkingLine, errLine}, stateDone)
-	case stateStreaming:
-		m.animator.FlushAll()
-		blocks := append(m.stream.Flush(), errLine)
-		return m.doFlush(blocks, stateDone)
 	case stateTooling:
 		for i := range m.tools {
 			if m.tools[i].status == ui.StatusRunning {
@@ -300,12 +254,12 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		if u.IsThought {
 			return m.schedulePollOnly()
 		}
-		m.animator.Enqueue(u.Text)
-		m.state = stateStreaming
+		flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
+		m.state = stateIdle
 		if len(flushBlocks) > 0 {
-			return m.doFlush(flushBlocks, stateStreaming)
+			return m.doFlush(flushBlocks, stateIdle)
 		}
-		return m, nil
+		return m.schedulePollOnly()
 	case domain.ToolStartEvent:
 		slot := toolSlot{
 			callID:  u.CallID,
@@ -406,11 +360,7 @@ func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) nextTick() tea.Cmd {
-	delay := tickHighDelay
-	if m.state == stateStreaming {
-		delay = tickLowDelay
-	}
-	return animationTick(delay)
+	return animationTick(tickHighDelay)
 }
 
 func (m *Model) View() string {
@@ -424,8 +374,6 @@ func (m *Model) View() string {
 			status = ui.StatusError
 		}
 		content = m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
-	case stateStreaming:
-		content = m.stream.Pending()
 	case stateTooling:
 		content = m.renderToolsView()
 	}
@@ -473,9 +421,9 @@ func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 	}
 	m.cancelRequested = true
 	m.bus.SendAction(domain.StopAction{})
-	if m.state == stateStreaming && m.animator != nil {
+	if m.stream != nil {
 		// Avoid draining/flush-updating any queued streamed text after cancellation.
-		m.animator.Clear()
+		m.stream.ClearBuffer()
 	}
 	return m.withPollIfNeeded()
 }

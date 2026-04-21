@@ -8,6 +8,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/stretchr/testify/assert"
 )
 
 var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
@@ -18,22 +19,14 @@ func stripANSIForTest(s string) string {
 
 func simulateStreamOutput(renderer ui.Renderer, chunks []string) string {
 	s := NewStream(renderer)
-	animator := NewTextAnimator(3)
 	var out strings.Builder
 
 	for _, ev := range chunks {
-		animator.Enqueue(ev)
-		for animator.HasPending() {
-			chunk, ok := animator.NextChunk()
-			if !ok {
-				break
-			}
-			for _, block := range s.Append(chunk) {
-				// Match tea.Printf line emission semantics
-				for _, line := range strings.Split(block, "\n") {
-					out.WriteString(line)
-					out.WriteByte('\n')
-				}
+		for _, block := range s.Append(ev) {
+			// Match tea.Printf line emission semantics
+			for _, line := range strings.Split(block, "\n") {
+				out.WriteString(line)
+				out.WriteByte('\n')
 			}
 		}
 	}
@@ -224,7 +217,7 @@ func TestStream_Split(t *testing.T) {
 			gotFlush := canonicalize(accFlush.String())
 			wantFlush = canonicalize(wantFlush)
 			gotPend := canonicalize(s.Pending())
-			wantPend := canonicalize(pendingMD.String())
+			wantPend := canonicalize(clipRenderedByCompleteLines(pendingMD.String()))
 
 			if gotFlush != wantFlush {
 				t.Errorf("Seq %v Gap %q Step %d: Flush Mismatch.\nGOT: %q\nWANT: %q", types, gap, i, gotFlush, wantFlush)
@@ -474,4 +467,18 @@ func TestStream_StillSplitsParagraphBeforeHeading(t *testing.T) {
 	if len(flushed) == 0 {
 		t.Fatalf("expected paragraph to flush before heading boundary")
 	}
+}
+
+func TestStream_Pending_HidesTrailingIncompleteLine(t *testing.T) {
+	s := NewStream(mockRenderer{})
+	s.Append("abcdefghij")
+	assert.Equal(t, "", s.Pending())
+}
+
+func TestClipRenderedByCompleteLines_ShowsOnlyCompleteLines(t *testing.T) {
+	assert.Equal(t, "line one", clipRenderedByCompleteLines("line one\nline two partial"))
+}
+
+func TestClipRenderedByCompleteLines_ShowsAllWhenEndsWithNewline(t *testing.T) {
+	assert.Equal(t, "line one\nline two\n", clipRenderedByCompleteLines("line one\nline two\n"))
 }

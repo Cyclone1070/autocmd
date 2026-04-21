@@ -77,7 +77,7 @@ func (s *Stream) Pending() string {
 		return s.lastMargin
 	}
 	rendered := s.renderDelta(s.buffer) // Removed error handling
-	return rendered
+	return clipRenderedByCompleteLines(rendered)
 }
 
 // RawBuffer returns the current raw markdown in the buffer.
@@ -351,4 +351,20 @@ func (s *Stream) renderDelta(newContent string) string {
 func splitTrailingNewlines(text string) (string, string) {
 	trimmed := strings.TrimRight(text, "\n")
 	return trimmed, text[len(trimmed):]
+}
+
+func clipRenderedByCompleteLines(rendered string) string {
+	if rendered == "" {
+		return ""
+	}
+	// Keep only complete rendered lines. If renderer already ended on a newline,
+	// everything is complete and visible.
+	if strings.HasSuffix(rendered, "\n") {
+		return rendered
+	}
+	lastNewline := strings.LastIndex(rendered, "\n")
+	if lastNewline < 0 {
+		return ""
+	}
+	return rendered[:lastNewline]
 }

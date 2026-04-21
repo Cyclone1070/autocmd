@@ -7,7 +7,6 @@ import (
 )
 
 const (
-	tickLowDelay  = 16 * time.Millisecond
 	tickHighDelay = 100 * time.Millisecond
 )
 
@@ -18,9 +17,3 @@ func animationTick(d time.Duration) tea.Cmd {
 	})
 }
 
-// signalAnimatorDrained enqueues animatorDrainedMsg so the poll loop can resume if parked.
-func signalAnimatorDrained() tea.Cmd {
-	return func() tea.Msg {
-		return animatorDrainedMsg{}
-	}
-}

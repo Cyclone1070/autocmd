@@ -197,3 +197,4 @@ func TestLoad_UnknownFields_Ignored(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1024), cfg.Tools().MaxFileSize())
 }
+

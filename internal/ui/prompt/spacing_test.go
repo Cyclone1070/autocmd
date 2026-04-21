@@ -17,7 +17,7 @@ func TestView_StrictToolboxSpacing(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	spinnerProvider := ui.NewSpinnerRenderer(lipgloss.NewStyle())
 
-	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, nil, ui.NewNoOpGater(), 80)
+	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, ui.NewNoOpGater(), 80)
 
 	// Add two tools to simulate the "String 1", "String 2" sequence in the user's image
 	m.handleBusEvent(domain.ToolStartEvent{

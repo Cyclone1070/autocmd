@@ -47,7 +47,6 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	animator := prompt.NewTextAnimator(3)
 	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
@@ -59,7 +58,6 @@ func main() {
 		spinner,
 		theme,
 		stream,
-		animator,
 		ui.NewTruncatingGater(termHeight),
 		chatWidth,
 	)

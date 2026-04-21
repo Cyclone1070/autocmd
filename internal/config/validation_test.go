@@ -42,3 +42,4 @@ func TestValidate_MultipleErrors_ReportsAll(t *testing.T) {
 	assert.Contains(t, msg, "max_file_size")
 	assert.Contains(t, msg, "max_iterations")
 }
+

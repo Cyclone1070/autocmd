@@ -9,21 +9,21 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/tool/file"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
-	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
-	"github.com/Cyclone1070/iav/internal/actionrouter"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -33,7 +33,7 @@ import (
 var debug bool
 
 var rootCmd = &cobra.Command{
-	Use:   "iav [prompt]",
+	Use:          "iav [prompt]",
 	Short:        "IAV is an agentic AI coding assistant",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
@@ -67,7 +67,7 @@ func Execute() {
 
 func runAgent(ctx context.Context, deps *Deps, input string) error {
 	if deps.State.Model() == "" {
-		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started.")
+		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started")
 	}
 
 	pathResolver, err := buildPathResolver()
@@ -124,17 +124,16 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		}
 		termHeight = height
 	}
-	
+
 	// Loop UI Wiring
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
-	animator := prompt.NewTextAnimator(3) // 3 runes per tick
-	
+
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().BashOutputHeight()))
-	
+
 	uiModel := prompt.NewModel(
 		bus,
 		thinking,
@@ -142,7 +141,6 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		spinner,
 		theme,
 		stream,
-		animator,
 		ui.NewTruncatingGater(termHeight),
 		chatWidth,
 	)

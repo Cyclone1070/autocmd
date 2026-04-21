@@ -166,13 +166,12 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := NewStream(renderer)
-	anim := NewTextAnimator(4)
 	thinking := NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	bus := dummyBus{updates: make(chan domain.UIUpdate, 100)}
-	m := NewModel(bus, thinking, tooling, spinner, theme, s, anim, ui.NewNoOpGater(), cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
+	m := NewModel(bus, thinking, tooling, spinner, theme, s, ui.NewNoOpGater(), cfg.ChatWindowWidth(), WithFlush(func(content string) tea.Cmd {
 		signals = append(signals, content)
 		return nil
 	}))
@@ -185,11 +184,6 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 			for i := 0; i < 100; i++ {
 				if m.state == stateFlushing {
 					res, _ = m.Update(flushDoneMsg{})
-					m = res.(*Model)
-					continue
-				}
-				if m.state == stateStreaming && m.animator.HasPending() {
-					res, _ = m.Update(tickMsg{})
 					m = res.(*Model)
 					continue
 				}
@@ -215,17 +209,5 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 }
 
 func (m *Model) DrainAnimationForTest() *Model {
-	for i := 0; i < 1000; i++ {
-		if !m.animator.HasPending() {
-			break
-		}
-		res, _ := m.Update(tickMsg{})
-		m = res.(*Model)
-		// Mirror tea.Batch(nextTick, signalAnimatorDrained) after last chunk drain (tests do not run cmds).
-		if m.state == stateStreaming && !m.animator.HasPending() {
-			res, _ = m.Update(animatorDrainedMsg{})
-			m = res.(*Model)
-		}
-	}
 	return m
 }

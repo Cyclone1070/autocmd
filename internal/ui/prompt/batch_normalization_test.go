@@ -17,7 +17,7 @@ func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	spinnerProvider := ui.NewSpinnerRenderer(lipgloss.NewStyle())
 
-	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, nil, ui.NewNoOpGater(), 80)
+	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, ui.NewNoOpGater(), 80)
 
 	// Add two tools
 	m.handleBusEvent(domain.ToolStartEvent{

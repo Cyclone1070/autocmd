@@ -16,7 +16,7 @@ func TestDeepCheck(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := ui.NewSpinnerRenderer(lipgloss.NewStyle())
 
-	m := NewModel(nil, nil, tr, sp, theme, stream, nil, ui.NewNoOpGater(), 80)
+	m := NewModel(nil, nil, tr, sp, theme, stream, ui.NewNoOpGater(), 80)
 
 	// Add tools
 	m.handleBusEvent(domain.ToolStartEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "")})

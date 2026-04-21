@@ -94,7 +94,6 @@ func main() {
 	theme := ui.NewTheme(themeCfg)
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
-	animator := prompt.NewTextAnimator(3)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := prompt.NewThinkingRenderer(theme)
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(uiCfg.BashOutputHeight()))
@@ -106,7 +105,6 @@ func main() {
 		spinner,
 		theme,
 		stream,
-		animator,
 		ui.NewTruncatingGater(termHeight),
 		chatWidth,
 	)
@@ -212,21 +210,13 @@ func reproducesGap(markdown string, chunks []string) bool {
 
 func simulateStream(renderer ui.Renderer, chunks []string) string {
 	stream := prompt.NewStream(renderer)
-	animator := prompt.NewTextAnimator(3)
 	var out strings.Builder
 
 	for _, ev := range chunks {
-		animator.Enqueue(ev)
-		for animator.HasPending() {
-			chunk, ok := animator.NextChunk()
-			if !ok {
-				break
-			}
-			for _, block := range stream.Append(chunk) {
-				for _, line := range strings.Split(block, "\n") {
-					out.WriteString(line)
-					out.WriteByte('\n')
-				}
+		for _, block := range stream.Append(ev) {
+			for _, line := range strings.Split(block, "\n") {
+				out.WriteString(line)
+				out.WriteByte('\n')
 			}
 		}
 	}

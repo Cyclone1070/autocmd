@@ -15,8 +15,9 @@ const gutterWidth = 2 // "A│" / "U┃" / " │" (assistant) or " ┃" (user)
 const userGutterPipe = "┃"
 
 type renderItem struct {
-	idx              int
-	assistantIndices []int
+	idx                int
+	assistantIndices   []int
+	assistantCancelled bool // session was cancelled after this assistant block; show gutter marker only (no cancel text).
 }
 
 func buildRenderItems(messages []*schema.Message) []renderItem {
@@ -30,10 +31,14 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 		if messages[i].Extra[domain.NotificationMessageExtraKey] == true {
 			continue
 		}
+		if messages[i].Extra[domain.CancelMessageExtraKey] == true {
+			continue
+		}
 
 		// Coalesce consecutive assistant turns into a single rendered assistant block.
 		if messages[i].Role == schema.Assistant {
 			assistantIdxs := []int{i}
+			assistantCancelled := false
 			j := i + 1
 			for j < len(messages) {
 				if messages[j].Role == schema.Tool {
@@ -44,14 +49,19 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 					j++
 					continue
 				}
+				if messages[j].Extra[domain.CancelMessageExtraKey] == true {
+					assistantCancelled = true
+					j++
+					continue
+				}
 				if messages[j].Role != schema.Assistant {
 					break
 				}
 				assistantIdxs = append(assistantIdxs, j)
 				j++
 			}
-			if len(assistantIdxs) > 1 {
-				items = append(items, renderItem{idx: i, assistantIndices: assistantIdxs})
+			if len(assistantIdxs) > 1 || assistantCancelled {
+				items = append(items, renderItem{idx: i, assistantIndices: assistantIdxs, assistantCancelled: assistantCancelled})
 				i = j - 1
 				continue
 			}
@@ -90,8 +100,8 @@ func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
 
 	items := buildRenderItems(messages)
 	for renderedCount, it := range items {
-		if len(it.assistantIndices) > 1 {
-			sb.WriteString(h.renderCoalescedAssistant(messages, it.assistantIndices, displays))
+		if len(it.assistantIndices) > 0 {
+			sb.WriteString(h.renderCoalescedAssistant(messages, it.assistantIndices, displays, it.assistantCancelled))
 			continue
 		}
 		sb.WriteString(h.RenderMessage(messages, it.idx, displays, renderedCount > 0))
@@ -100,20 +110,16 @@ func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) string {
+func (h *HistoryBuilder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
-	h.renderAssistantSequence(&sb, messages, assistantIndices, displays)
+	h.renderAssistantSequence(&sb, messages, assistantIndices, displays, assistantCancelled)
 	sb.WriteString("\n")
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) {
-	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
-	roleLine := style.Render("A│")
-	contPrefix := style.Render(" │")
-
+func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -151,9 +157,8 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 		}
 	}
 
-	// Join the normalized parts with a single newline (simulating the tea.Printf gap).
 	body := strings.Join(parts, "\n")
-	writeFramedWithGutter(sb, roleLine, contPrefix, body)
+	h.writeAssistantFramedWithGutter(sb, body, assistantCancelled)
 }
 
 // RenderMessage renders a single message at the given index.
@@ -190,10 +195,6 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 }
 
 func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
-	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
-	roleLine := style.Render("A│")
-	contPrefix := style.Render(" │")
-
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -222,7 +223,7 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 
 	// Join normalized parts with a single newline (as terminal surrogate).
 	body := strings.Join(parts, "\n")
-	writeFramedWithGutter(sb, roleLine, contPrefix, body)
+	h.writeAssistantFramedWithGutter(sb, body, false)
 }
 
 func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
@@ -268,6 +269,50 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 	}
 
 	return tooling.Box(rendered, boxWidth, status)
+}
+
+// writeAssistantFramedWithGutter frames assistant content like writeFramedWithGutter, but when
+// assistantCancelled the bottom symmetric gutter line becomes a red ✘ in the role column (cancel
+// text stays in session messages for the model; history shows this marker only).
+func (h *HistoryBuilder) writeAssistantFramedWithGutter(sb *strings.Builder, body string, assistantCancelled bool) {
+	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
+	roleLine := style.Render("A│")
+	contPrefix := style.Render(" │")
+
+	content := strings.Trim(body, "\n")
+	if content == "" {
+		sb.WriteString(roleLine)
+		sb.WriteString("\n")
+		if assistantCancelled {
+			sb.WriteString(h.assistantCancelGutterLine())
+		} else {
+			sb.WriteString(contPrefix)
+		}
+		return
+	}
+
+	lines := strings.Split(content, "\n")
+	sb.WriteString(roleLine)
+	sb.WriteString("\n")
+	for i, line := range lines {
+		sb.WriteString(contPrefix)
+		sb.WriteString(line)
+		if i < len(lines)-1 {
+			sb.WriteString("\n")
+		}
+	}
+	sb.WriteString("\n")
+	if assistantCancelled {
+		sb.WriteString(h.assistantCancelGutterLine())
+	} else {
+		sb.WriteString(contPrefix)
+	}
+}
+
+func (h *HistoryBuilder) assistantCancelGutterLine() string {
+	errSt := lipgloss.NewStyle().Foreground(h.Theme.ErrorColor()).Bold(true)
+	muted := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
+	return errSt.Render("✘") + muted.Render("│")
 }
 
 // writeFramedWithGutter renders a symmetric, guttered frame:

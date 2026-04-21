@@ -144,8 +144,8 @@ func (m *model) renderMessage(idx int) string {
 		return r
 	}
 	it := m.items[idx]
-	if len(it.assistantIndices) > 1 {
-		rendered := m.builder.renderCoalescedAssistant(m.messages, it.assistantIndices, m.displays)
+	if len(it.assistantIndices) > 0 {
+		rendered := m.builder.renderCoalescedAssistant(m.messages, it.assistantIndices, m.displays, it.assistantCancelled)
 		m.renderedMessages[idx] = rendered
 		return rendered
 	}

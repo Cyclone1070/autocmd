@@ -42,7 +42,6 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		return fmt.Errorf("session is required")
 	}
 
-
 	session.Messages = append(session.Messages, &schema.Message{
 		Role:    schema.User,
 		Content: input,
@@ -59,6 +58,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 				session.Messages = append(session.Messages, &schema.Message{
 					Role:    schema.User,
 					Content: "[Session cancelled by user]",
+					Extra:   map[string]any{domain.CancelMessageExtraKey: true},
 				})
 			}
 		}

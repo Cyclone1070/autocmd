@@ -388,6 +388,28 @@ func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testi
 	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant messages should still coalesce across notification-only entries")
 }
 
+func TestBuildHistory_CancelledAssistantShowsGutterMarkerNotCancelText(t *testing.T) {
+	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
+
+	msgs := []*schema.Message{
+		{Role: schema.Assistant, Content: "last assistant response"},
+		{
+			Role:    schema.User,
+			Content: "[Session cancelled by user]",
+			Extra:   map[string]any{domain.CancelMessageExtraKey: true},
+		},
+	}
+
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+
+	assert.Contains(t, out, "last assistant response")
+	assert.NotContains(t, out, "[Session cancelled by user]", "cancel line is LLM-only; history must not render it")
+	assert.Contains(t, out, "✘│", "cancelled assistant block should end with red gutter marker")
+	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant block should stay unified")
+	assert.Equal(t, 0, strings.Count(out, "\nU┃\n"), "cancel should not render as user message")
+}
+
 func TestDivider_Color(t *testing.T) {
 	// Force color profile for consistent testing of escape codes
 	lipgloss.SetColorProfile(termenv.TrueColor)

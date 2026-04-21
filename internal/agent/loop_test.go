@@ -323,6 +323,7 @@ func TestRun_ContextCancelled(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 	lastMsg := session.Messages[len(session.Messages)-1]
 	assert.Equal(t, "[Session cancelled by user]", lastMsg.Content)
+	assert.Equal(t, true, lastMsg.Extra[domain.CancelMessageExtraKey])
 }
 
 func TestRun_ParallelToolCalls(t *testing.T) {
@@ -460,6 +461,7 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	assert.Equal(t, "tc-2", session.Messages[3].ToolCallID)
 	assert.Equal(t, domain.ToolErrorCancelled, session.Messages[3].Content)
 	assert.Equal(t, "[Session cancelled by user]", session.Messages[4].Content)
+	assert.Equal(t, true, session.Messages[4].Extra[domain.CancelMessageExtraKey])
 }
 
 func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {

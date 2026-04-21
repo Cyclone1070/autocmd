@@ -93,6 +93,25 @@ func (s *Stream) ClearBuffer() {
 	s.lastMargin = ""
 }
 
+// separatorHasBlankLine reports whether sep contains a blank line (two newlines
+// with only spaces/tabs between, after normalizing CRLF).
+func separatorHasBlankLine(sep string) bool {
+	sep = strings.ReplaceAll(sep, "\r\n", "\n")
+	for i := 0; i < len(sep); i++ {
+		if sep[i] != '\n' {
+			continue
+		}
+		j := i + 1
+		for j < len(sep) && (sep[j] == ' ' || sep[j] == '\t') {
+			j++
+		}
+		if j < len(sep) && sep[j] == '\n' {
+			return true
+		}
+	}
+	return false
+}
+
 // findSafeSplit identifies the byte offset representing the end of the safe content.
 func (s *Stream) findSafeSplit() int {
 	reader := text.NewReader([]byte(s.buffer))
@@ -118,7 +137,23 @@ func (s *Stream) findSafeSplit() int {
 			curr = curr.NextSibling()
 		}
 		if prev != nil {
-			return s.getNodeEnd(prev, s.buffer)
+			split := s.getNodeEnd(prev, s.buffer)
+			// Streaming can briefly misparse list continuations as a new block: a lone
+			// "*" line is KindThematicBreak; a second top-level KindList can appear when
+			// a marker is split across chunks. Without a real blank-line gap in the
+			// source, defer splitting so the parse can stabilize (avoids an extra gap
+			// between bullets / false HR boundaries).
+			if last != nil && prev.Kind() == ast.KindList &&
+				(last.Kind() == ast.KindList || last.Kind() == ast.KindThematicBreak) {
+				lastStart := s.getNodeStart(last, s.buffer)
+				if lastStart > split && lastStart <= len(s.buffer) {
+					sep := s.buffer[split:lastStart]
+					if !separatorHasBlankLine(sep) {
+						return 0
+					}
+				}
+			}
+			return split
 		}
 		return 0
 	}

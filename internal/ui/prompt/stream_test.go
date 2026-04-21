@@ -2,12 +2,49 @@ package prompt
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/lipgloss"
 )
+
+var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+
+func stripANSIForTest(s string) string {
+	return ansiStripRE.ReplaceAllString(s, "")
+}
+
+func simulateStreamOutput(renderer ui.Renderer, chunks []string) string {
+	s := NewStream(renderer)
+	animator := NewTextAnimator(3)
+	var out strings.Builder
+
+	for _, ev := range chunks {
+		animator.Enqueue(ev)
+		for animator.HasPending() {
+			chunk, ok := animator.NextChunk()
+			if !ok {
+				break
+			}
+			for _, block := range s.Append(chunk) {
+				// Match tea.Printf line emission semantics
+				for _, line := range strings.Split(block, "\n") {
+					out.WriteString(line)
+					out.WriteByte('\n')
+				}
+			}
+		}
+	}
+	for _, block := range s.Flush() {
+		for _, line := range strings.Split(block, "\n") {
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+	return out.String()
+}
 
 func canonicalize(s string) string {
 	// 1. Split into lines to normalize blank lines and trailing spaces
@@ -359,5 +396,82 @@ func TestStream_RenderConsistency(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStream_NoExtraGap_WhenSecondBulletMarkerIsIsolatedChunk(t *testing.T) {
+	renderer := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
+	markdown := "### 2. The \"Deep Dive\" Bulleted List (Few items, long text)\n\n" +
+		"* **The Aurora Borealis (The Northern Lights):** This breathtaking natural phenomenon occurs when charged particles from the sun collide with gaseous atoms in the Earth's atmosphere. These collisions cause the gases to emit light, creating dancing curtains of green, pink, and violet across the high-latitude skies.\n" +
+		"* **The Concept of Stoicism:** Originating in ancient Greece, Stoicism is a school of Hellenistic philosophy that teaches the development of self-control and fortitude as a means of overcoming destructive emotions.\n"
+
+	marker := "\n* **The Concept of Stoicism:"
+	markerIdx := strings.Index(markdown, marker)
+	if markerIdx < 0 {
+		t.Fatalf("test fixture marker not found")
+	}
+	starIdx := markerIdx + 1 // isolate '*' into its own LLM chunk
+	chunks := []string{
+		markdown[:starIdx],
+		"*",
+		markdown[starIdx+1:],
+	}
+
+	oneShot := stripANSIForTest(renderer.Render(markdown))
+	streamed := stripANSIForTest(simulateStreamOutput(renderer, chunks))
+
+	gapPattern := regexp.MustCompile(`(?s)Aurora Borealis.*?\n\s*\n\s*• The Concept of Stoicism`)
+
+	// Guard fixture: one-shot should not contain the gap.
+	if gapPattern.MatchString(oneShot) {
+		t.Fatalf("invalid fixture: one-shot render already contains extra bullet gap")
+	}
+
+	// Regression assertion: streamed output should also not contain the extra gap.
+	// Current buggy behavior introduces this gap for certain chunk boundaries.
+	if gapPattern.MatchString(streamed) {
+		idx := strings.Index(streamed, "The Concept of Stoicism")
+		start := max(0, idx-220)
+		end := min(len(streamed), idx+120)
+		t.Fatalf("streaming regression: isolated bullet marker introduced extra gap between list items; context=%q", streamed[start:end])
+	}
+}
+
+func TestStream_NoExtraGap_WhenOrderedMarkerIsIsolatedChunk(t *testing.T) {
+	renderer := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
+	markdown := "1. First stage explains context in detail.\n" +
+		"2. Second stage elaborates on scaling and integration.\n"
+
+	// Isolate the start of the second marker as its own streamed event.
+	marker := "\n2. "
+	markerIdx := strings.Index(markdown, marker)
+	if markerIdx < 0 {
+		t.Fatalf("ordered marker fixture not found")
+	}
+	digitIdx := markerIdx + 1 // points at '2'
+	chunks := []string{
+		markdown[:digitIdx],
+		"2",
+		markdown[digitIdx+1:],
+	}
+
+	oneShot := stripANSIForTest(renderer.Render(markdown))
+	streamed := stripANSIForTest(simulateStreamOutput(renderer, chunks))
+	gapPattern := regexp.MustCompile(`(?s)First stage.*?\n\s*\n\s*2\. Second stage`)
+
+	if gapPattern.MatchString(oneShot) {
+		t.Fatalf("invalid fixture: one-shot ordered list already contains extra gap")
+	}
+	if gapPattern.MatchString(streamed) {
+		t.Fatalf("streaming regression: isolated ordered marker introduced extra gap between items")
+	}
+}
+
+func TestStream_StillSplitsParagraphBeforeHeading(t *testing.T) {
+	// Control case: non-list boundaries should keep existing split behavior.
+	s := NewStream(mockRenderer{})
+	flushed := s.Append("para\n\n## heading")
+	if len(flushed) == 0 {
+		t.Fatalf("expected paragraph to flush before heading boundary")
 	}
 }

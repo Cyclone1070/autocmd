@@ -365,6 +365,29 @@ func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "consecutive assistant messages should coalesce into one block")
 }
 
+func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testing.T) {
+	theme := newTestTheme()
+	width := 80
+	b := NewHistoryBuilder(nil, theme, width)
+
+	msgs := []*schema.Message{
+		{Role: schema.Assistant, Content: "part1"},
+		{
+			Role:    schema.User,
+			Content: "<task-notification>done</task-notification>",
+			Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
+		},
+		{Role: schema.Assistant, Content: "part2"},
+	}
+
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+
+	assert.Contains(t, out, "part1")
+	assert.Contains(t, out, "part2")
+	assert.NotContains(t, out, "<task-notification>")
+	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant messages should still coalesce across notification-only entries")
+}
+
 func TestDivider_Color(t *testing.T) {
 	// Force color profile for consistent testing of escape codes
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -576,21 +599,41 @@ func (m *mockRenderer) Render(s string) string {
 	// Real Glamour renderer adds a leading newline
 	return "\n" + s + "[rendered]"
 }
-func TestHistory_TaskNotification_RendersAsToolBox(t *testing.T) {
+func TestHistory_TaskNotification_IsNotRendered(t *testing.T) {
 	theme := newTestTheme()
 	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
-	
+
 	messages := []*schema.Message{
 		{
 			Role:    schema.User,
 			Content: "<task-notification>done</task-notification>",
-			Extra:   map[string]any{"iav/is_notification": true},
+			Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
 		},
 	}
-	
+
 	rendered := stripANSI(b.BuildSession(&domain.Session{Messages: messages}))
-	
-	// Should render as "Tool Box" despite the XML content
-	assert.Contains(t, rendered, "Tool Box")
+
+	assert.Equal(t, "", rendered)
+}
+
+func TestHistory_TaskNotification_OmittedFromMixedConversation(t *testing.T) {
+	theme := newTestTheme()
+	b := NewHistoryBuilder(nil, theme, testHistoryWidth)
+
+	messages := []*schema.Message{
+		{Role: schema.User, Content: "real user prompt"},
+		{
+			Role:    schema.User,
+			Content: "<task-notification>done</task-notification>",
+			Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
+		},
+		{Role: schema.Assistant, Content: "real assistant response"},
+	}
+
+	rendered := stripANSI(b.BuildSession(&domain.Session{Messages: messages}))
+
+	assert.Contains(t, rendered, "real user prompt")
+	assert.Contains(t, rendered, "real assistant response")
 	assert.NotContains(t, rendered, "<task-notification>")
+	assert.NotContains(t, rendered, "Tool Box")
 }

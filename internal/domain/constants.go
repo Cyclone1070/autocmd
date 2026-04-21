@@ -18,6 +18,11 @@ const (
 	ModelIDSeparator = "/"
 )
 
+// Message metadata keys
+const (
+	NotificationMessageExtraKey = "iav/is_notification"
+)
+
 // Application Metadata
 const (
 	AppName       = "iav"

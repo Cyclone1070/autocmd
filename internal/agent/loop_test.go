@@ -179,7 +179,7 @@ func TestRun_TaskNotificationInjection(t *testing.T) {
 	notifMsg := session.Messages[2]
 	assert.Equal(t, schema.User, notifMsg.Role)
 	assert.Equal(t, "<task-notification>done</task-notification>", notifMsg.Content)
-	assert.Equal(t, true, notifMsg.Extra["iav/is_notification"])
+	assert.Equal(t, true, notifMsg.Extra[domain.NotificationMessageExtraKey])
 }
 
 

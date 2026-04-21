@@ -27,6 +27,9 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 		if messages[i].Role == schema.Tool {
 			continue
 		}
+		if messages[i].Extra[domain.NotificationMessageExtraKey] == true {
+			continue
+		}
 
 		// Coalesce consecutive assistant turns into a single rendered assistant block.
 		if messages[i].Role == schema.Assistant {
@@ -34,6 +37,10 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 			j := i + 1
 			for j < len(messages) {
 				if messages[j].Role == schema.Tool {
+					j++
+					continue
+				}
+				if messages[j].Extra[domain.NotificationMessageExtraKey] == true {
 					j++
 					continue
 				}
@@ -176,9 +183,7 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 	contPrefix := style.Render(" " + userGutterPipe)
 
 	content := msg.Content
-	if msg.Extra["iav/is_notification"] == true {
-		content = "Tool Box"
-	} else if h.Renderer != nil {
+	if h.Renderer != nil {
 		content = h.Renderer.Render(msg.Content)
 	}
 	writeFramedWithGutter(sb, roleLine, contPrefix, ui.NormalizeBlock(content))

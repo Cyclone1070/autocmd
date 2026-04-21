@@ -71,7 +71,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 				session.Messages = append(session.Messages, &schema.Message{
 					Role:    schema.User,
 					Content: xml,
-					Extra:   map[string]any{"iav/is_notification": true},
+					Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
 				})
 			}
 		}

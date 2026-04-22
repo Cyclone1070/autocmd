@@ -17,9 +17,9 @@ type gater interface {
 }
 
 const (
-	toolInsetPrefix              = "    "
-	toolFirstContentGutterPrefix = "   ⎿ "
-	toolContentGutterPrefix      = "     "
+	ToolInsetPrefix              = "    "
+	ToolFirstContentGutterPrefix = "   ⎿ "
+	ToolContentGutterPrefix      = "     "
 )
 
 // ToolBlockSpec is the semantic rendering contract passed from ToolRenderer to Theme.
@@ -373,7 +373,7 @@ func (r *ToolRenderer) renderQuestionReviewBlock(st QuestionUIState) string {
 // the same continuation content width as tool block wrapping so footer/separator
 // lines don't overflow and wrap unexpectedly.
 func (r *ToolRenderer) questionInnerWidth() int {
-	inner := r.Width - lipgloss.Width(toolInsetPrefix+toolContentGutterPrefix)
+	inner := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
 	if inner < 12 {
 		return 12
 	}
@@ -521,11 +521,11 @@ func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st Quest
 
 func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) string {
 	headerPrefixWidth := lipgloss.Width(r.Theme.StatusPrefix(spec.Status, spec.Frame))
-	headerContinuationWidth := r.Width - lipgloss.Width(toolInsetPrefix)
+	headerContinuationWidth := r.Width - lipgloss.Width(ToolInsetPrefix)
 	headerFirstWidth := headerContinuationWidth - headerPrefixWidth
 
-	contentFirstWidth := r.Width - lipgloss.Width(toolInsetPrefix+toolFirstContentGutterPrefix)
-	contentContinuationWidth := r.Width - lipgloss.Width(toolInsetPrefix+toolContentGutterPrefix)
+	contentFirstWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolFirstContentGutterPrefix)
+	contentContinuationWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
 
 	spec.HeaderLines = r.wrapLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
 	if opts.TruncateMode == TruncateTailKeepLatest && len(spec.ContentLines) > 0 {

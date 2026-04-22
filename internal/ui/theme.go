@@ -95,7 +95,6 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 }
 
 func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
-	const inset = "    "
 	header := trimEmptyLines(spec.HeaderLines)
 	content := trimLeadingEmptyLines(spec.ContentLines)
 	if len(header) == 0 && len(content) == 0 {
@@ -104,20 +103,24 @@ func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 
 	prefix := t.StatusPrefix(spec.Status, spec.Frame)
 	if len(header) > 0 {
-		header[0] = inset + prefix + header[0]
+		header[0] = ToolInsetPrefix + prefix + header[0]
+		headerContinuationPrefix := ToolInsetPrefix + strings.Repeat(" ", lipgloss.Width(prefix))
+		for i := 1; i < len(header); i++ {
+			header[i] = headerContinuationPrefix + header[i]
+		}
 	} else {
 		// Do not promote content into the header. Empty header stays empty.
-		header = []string{inset + prefix}
+		header = []string{ToolInsetPrefix + prefix}
 	}
 
 	var out []string
 	out = append(out, header...)
 	for i, line := range content {
 		if i == 0 {
-			out = append(out, t.Muted(inset+"   ⎿ ")+line)
+			out = append(out, t.Muted(ToolInsetPrefix+ToolFirstContentGutterPrefix)+line)
 			continue
 		}
-		out = append(out, t.Muted(inset+"     ")+line)
+		out = append(out, t.Muted(ToolInsetPrefix+ToolContentGutterPrefix)+line)
 	}
 
 	return "\n\n" + strings.Join(out, "\n")

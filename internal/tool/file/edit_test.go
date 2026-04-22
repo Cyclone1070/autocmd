@@ -25,7 +25,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.txt",
-			Comment:    "changing hello to goodbye",
+			Description:    "changing hello to goodbye",
 			OldString:  "hello",
 			NewString:  "goodbye",
 			ReplaceAll: false,
@@ -40,7 +40,7 @@ func TestEditFile(t *testing.T) {
 		assert.Equal(t, "goodbye world", string(fs.files["/workspace/test.txt"]))
 
 		display := inv.Display().(domain.DiffDisplay)
-		assert.Equal(t, "changing hello to goodbye", display.Comment)
+		assert.Equal(t, "changing hello to goodbye", display.Description)
 	})
 
 	t.Run("Edit all matches successfully", func(t *testing.T) {
@@ -54,7 +54,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.txt",
-			Comment:    "changing all a to b",
+			Description:    "changing all a to b",
 			OldString:  "a",
 			NewString:  "b",
 			ReplaceAll: true,
@@ -79,7 +79,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.txt",
-			Comment:    "should fail",
+			Description:    "should fail",
 			OldString:  "a",
 			NewString:  "b",
 			ReplaceAll: false,
@@ -100,7 +100,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/new.txt",
-			Comment:    "creating new file",
+			Description:    "creating new file",
 			OldString:  "",
 			NewString:  "brand new content",
 			ReplaceAll: false,
@@ -125,7 +125,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/exists.txt",
-			Comment:    "trying to overwrite",
+			Description:    "trying to overwrite",
 			OldString:  "",
 			NewString:  "danger",
 			ReplaceAll: false,
@@ -148,7 +148,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.txt",
-			Comment:    "matching curly with straight",
+			Description:    "matching curly with straight",
 			OldString:  "\"hello\"", // LLM sends straight quotes
 			NewString:  "\"goodbye\"",
 			ReplaceAll: false,
@@ -174,7 +174,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.go",
-			Comment:    "adding comment",
+			Description:    "adding comment",
 			OldString:  "func main() {}",
 			NewString:  "func main() {} // comment    ", // Trailing spaces
 			ReplaceAll: false,
@@ -199,7 +199,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "/workspace/test.md",
-			Comment:    "adding line break",
+			Description:    "adding line break",
 			OldString:  "# Title",
 			NewString:  "# Title  ", // Markdown hard line break (2 spaces)
 			ReplaceAll: false,
@@ -221,7 +221,7 @@ func TestEditFile(t *testing.T) {
 
 		req := &EditFileRequest{
 			FilePath:   "test.txt",
-			Comment:    "should fail",
+			Description:    "should fail",
 			OldString:  "hello",
 			NewString:  "goodbye",
 			ReplaceAll: false,

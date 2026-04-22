@@ -63,7 +63,7 @@ func (t *TaskStopTool) Prepare(params string) (domain.Invocation, error) {
 	return &taskStopInvocation{
 		manager: t.manager,
 		taskID:  req.TaskID,
-		display: domain.NewStringDisplay("", fmt.Sprintf("STOP background bash task %s", req.TaskID)),
+		display: domain.NewStringDisplay(fmt.Sprintf("Stop background bash task %s", req.TaskID), ""),
 	}, nil
 }
 

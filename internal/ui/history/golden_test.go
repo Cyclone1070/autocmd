@@ -73,7 +73,7 @@ func getHistoryElements() []TestElement {
 			Displays: domain.ToolDisplays{
 				"tc-ok": domain.BashDisplay{
 					TypeField:      "bash",
-					Comment:        "Running Tests",
+					Description:        "Running Tests",
 					Command:        "go test ./...",
 					CapturedOutput: captured,
 				},
@@ -90,7 +90,7 @@ func getHistoryElements() []TestElement {
 			Displays: domain.ToolDisplays{
 				"tc-err": domain.BashDisplay{
 					TypeField: "bash",
-					Comment:   "Failing Command",
+					Description:   "Failing Command",
 					Command:   "false",
 				},
 			},
@@ -113,7 +113,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 	width := 80

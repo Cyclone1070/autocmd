@@ -40,7 +40,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	displays := ToolDisplays{
 		"call-1": BashDisplay{
 			TypeField:      "bash",
-			Comment:        "Listing files",
+			Description:        "Listing files",
 			Command:        "ls",
 			CapturedOutput: "",
 		},
@@ -81,5 +81,5 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 
 	require.Len(t, decodedDisplays, 1)
 	assert.IsType(t, BashDisplay{}, decodedDisplays["call-1"])
-	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(BashDisplay).Comment)
+	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(BashDisplay).Description)
 }

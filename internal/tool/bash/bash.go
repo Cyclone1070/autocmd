@@ -114,7 +114,7 @@ EOF
 				Desc:     fmt.Sprintf("The command to execute, with \"%s\" as workingDir", t.pathResolver.Root()),
 				Required: true,
 			},
-			"comment": {
+			"description": {
 				Type:     schema.String,
 				Desc:     "Clear, concise description of what this command does in active voice.",
 				Required: true,
@@ -134,7 +134,7 @@ EOF
 func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		Command         string `json:"command"`
-		Comment         string `json:"comment"`
+		Description     string `json:"description"`
 		Timeout         int    `json:"timeout"`
 		RunInBackground bool   `json:"run_in_background"`
 	}
@@ -148,8 +148,8 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	}
 
 	wd := t.pathResolver.Root()
-	if req.Comment == "" {
-		return nil, fmt.Errorf("comment is required")
+	if req.Description == "" {
+		return nil, fmt.Errorf("description is required")
 	}
 	return &bashInvocation{
 		fs:              t.fs,
@@ -157,7 +157,7 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		taskManager:     t.taskManager,
 		wd:              wd,
 		command:         req.Command,
-		comment:         req.Comment,
+		description:     req.Description,
 		timeoutMS:       req.Timeout,
 		runInBackground: req.RunInBackground,
 		proxy:           newProxyReader(),
@@ -226,14 +226,14 @@ type bashInvocation struct {
 	taskManager     backgroundRegistrar
 	wd              string
 	command         string
-	comment         string
+	description     string
 	timeoutMS       int
 	runInBackground bool
 	proxy           *proxyReader
 }
 
 func (i *bashInvocation) Display() domain.ToolDisplay {
-	return domain.NewBashDisplay(i.comment, i.command, "")
+	return domain.NewBashDisplay(i.description, i.command, "")
 }
 
 func (i *bashInvocation) Stream() io.Reader {
@@ -261,7 +261,7 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 
 	streamCmd, err := i.commandExecutor.RunStreaming(taskCtx, i.command, i.wd, true)
 	if err != nil {
-		d := domain.NewBashDisplay(i.comment, i.command, "")
+		d := domain.NewBashDisplay(i.description, i.command, "")
 		d.Error = domain.ToolErrorFailed
 		return fmt.Sprintf("failed to run command: %v", err), d
 	}
@@ -272,9 +272,9 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	if i.runInBackground {
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.command); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err == nil {
 				promoted = true
-				d := domain.NewBashDisplay(i.comment, i.command, "(command running in background)")
+				d := domain.NewBashDisplay(i.description, i.command, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
 			}
 		}
@@ -295,16 +295,16 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	case <-time.After(waitDuration):
 		if i.taskManager != nil {
 			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.comment, i.command); err == nil {
+			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err == nil {
 				promoted = true
-				d := domain.NewBashDisplay(i.comment, i.command, "(command running in background)")
+				d := domain.NewBashDisplay(i.description, i.command, "(command running in background)")
 				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
 			}
 		}
 		<-done
 	}
 
-	d := domain.NewBashDisplay(i.comment, i.command, "")
+	d := domain.NewBashDisplay(i.description, i.command, "")
 
 	llmOutput := res.Stdout
 	uiOutput := res.Stdout

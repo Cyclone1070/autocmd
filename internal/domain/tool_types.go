@@ -65,7 +65,7 @@ type ToolDisplay interface {
 // StringDisplay is for simple text output (most tools).
 type StringDisplay struct {
 	TypeField string `json:"type"`
-	Comment   string `json:"comment"`
+	Description string `json:"description"`
 	Content   string `json:"content"`
 	Error     string `json:"error,omitempty"`
 }
@@ -79,14 +79,14 @@ func (s StringDisplay) WithError(err string) ToolDisplay {
 }
 
 // NewStringDisplay creates a new StringDisplay with correct type.
-func NewStringDisplay(comment, content string) StringDisplay {
-	return StringDisplay{TypeField: "string", Comment: comment, Content: content}
+func NewStringDisplay(description, content string) StringDisplay {
+	return StringDisplay{TypeField: "string", Description: description, Content: content}
 }
 
 // DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
 	TypeField string `json:"type"`
-	Comment   string `json:"comment"` // User-friendly description (e.g. "Updating auth")
+	Description string `json:"description"` // User-friendly description (e.g. "Updating auth")
 	Target    string `json:"target"`  // Technical action (e.g. "Edit auth.go")
 	Added     int    `json:"added"`   // Lines added
 	Removed   int    `json:"removed"` // Lines removed
@@ -103,10 +103,10 @@ func (d DiffDisplay) WithError(err string) ToolDisplay {
 }
 
 // NewDiffDisplay creates a new DiffDisplay with correct type.
-func NewDiffDisplay(comment, target string, added, removed int, diff string) DiffDisplay {
+func NewDiffDisplay(description, target string, added, removed int, diff string) DiffDisplay {
 	return DiffDisplay{
 		TypeField: "diff",
-		Comment:   comment,
+		Description: description,
 		Target:    target,
 		Added:     added,
 		Removed:   removed,
@@ -117,7 +117,7 @@ func NewDiffDisplay(comment, target string, added, removed int, diff string) Dif
 // BashDisplay is for bash command execution with streaming output.
 type BashDisplay struct {
 	TypeField      string `json:"type"`
-	Comment        string `json:"comment"`         // Description from tool (e.g. "Installing dependencies")
+	Description    string `json:"description"` // Description from tool (e.g. "Installing dependencies")
 	Command        string `json:"command"`         // The command being run (e.g. "npm install")
 	CapturedOutput string `json:"captured_output"` // Raw output captured after execution (baked)
 	Error          string `json:"error,omitempty"`
@@ -132,10 +132,10 @@ func (s BashDisplay) WithError(err string) ToolDisplay {
 }
 
 // NewBashDisplay creates a new BashDisplay with correct type.
-func NewBashDisplay(comment, command, capturedOutput string) BashDisplay {
+func NewBashDisplay(description, command, capturedOutput string) BashDisplay {
 	return BashDisplay{
 		TypeField:      "bash",
-		Comment:        comment,
+		Description:    description,
 		Command:        command,
 		CapturedOutput: capturedOutput,
 	}

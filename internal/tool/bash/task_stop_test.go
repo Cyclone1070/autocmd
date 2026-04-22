@@ -25,8 +25,7 @@ func TestTaskStopTool_Execute_Success(t *testing.T) {
 	resLLM, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 	
 	assert.Equal(t, "task t-stop-1 stopped", resLLM)
-	assert.Equal(t, "", disp.(domain.StringDisplay).Comment)
-	assert.Equal(t, "STOP background bash task t-stop-1", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Stop background bash task t-stop-1", disp.(domain.StringDisplay).Description)
 	mockTM.AssertExpectations(t)
 }
 
@@ -52,5 +51,5 @@ func TestTaskStopTool_Execute_Cancelled(t *testing.T) {
 
 	_, display := inv.(domain.ExecutableInvocation).Execute(ctx)
 	// Red Phase: This currently returns "execution cancelled" as summary
-	assert.Equal(t, "STOP background bash task t1", display.(domain.StringDisplay).Content)
+	assert.Equal(t, "Stop background bash task t1", display.(domain.StringDisplay).Description)
 }

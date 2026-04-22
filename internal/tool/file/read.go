@@ -145,7 +145,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 		absPath:         abs,
 		offset:          req.Offset,
 		limit:           req.Limit,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("READ \"%s\"", filepath.ToSlash(displayPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Read \"%s\"", filepath.ToSlash(displayPath)), ""),
 	}, nil
 }
 

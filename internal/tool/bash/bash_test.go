@@ -107,7 +107,7 @@ func TestBashTool_Prepare_BlockedCommand(t *testing.T) {
 	}
 	for _, cmd := range forbidden {
 		t.Run(cmd, func(t *testing.T) {
-			params := fmt.Sprintf(`{"command": "%s", "comment": "test"}`, cmd)
+			params := fmt.Sprintf(`{"command": "%s", "description": "test"}`, cmd)
 			_, err := tool.Prepare(params)
 			if err == nil {
 				t.Errorf("Expected command %q to be blocked, but it was accepted", cmd)
@@ -150,7 +150,7 @@ func TestBashTool_Execute(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "echo test", "comment": "test command"}`
+	params := `{"command": "echo test", "description": "test command"}`
 	inv, err := tool.Prepare(params)
 	assert.NoError(t, err)
 
@@ -168,7 +168,7 @@ func TestBashTool_Execute(t *testing.T) {
 
 	assert.Equal(t, "test output", llmContent)
 	assert.Equal(t, "test output", display.(domain.BashDisplay).CapturedOutput)
-	assert.Equal(t, "test command", display.(domain.BashDisplay).Comment)
+	assert.Equal(t, "test command", display.(domain.BashDisplay).Description)
 	assert.Equal(t, "echo test", display.(domain.BashDisplay).Command)
 }
 
@@ -178,7 +178,7 @@ func TestBashTool_Stream(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "echo test", "comment": "test stream"}`
+	params := `{"command": "echo test", "description": "test stream"}`
 	inv, _ := tool.Prepare(params)
 	
 	// Stream should be available BEFORE Execute
@@ -218,7 +218,7 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 
 		tool := NewBashTool(mockFS, mockExec, mockResolver, mockTM)
 
-		inv, _ := tool.Prepare(`{"command": "long_running", "comment": "test", "timeout": 100}`)
+		inv, _ := tool.Prepare(`{"command": "long_running", "description": "test", "timeout": 100}`)
 
 		mockExec.On("RunStreaming", mock.Anything, "long_running", "/workspace", true).Return(
 			executor.NewStreamingCmd("task1", strings.NewReader("some output"), func() (*executor.Result, error) {
@@ -285,7 +285,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	// Tool with 0 foreground timeout
 	tool := NewBashTool(fs, exec, resolver, taskMgr)
 
-	params := `{"command": "long_command", "comment": "test backgrounding"}`
+	params := `{"command": "long_command", "description": "test backgrounding"}`
 	inv, _ := tool.Prepare(params)
 
 	waitCh := make(chan struct{})
@@ -315,7 +315,7 @@ func TestBashTool_IsConcurrentSafe(t *testing.T) {
 	assert.True(t, tool.IsConcurrentSafe())
 }
 
-func TestBashTool_Prepare_EmptyComment(t *testing.T) {
+func TestBashTool_Prepare_EmptyDescription(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
@@ -324,7 +324,7 @@ func TestBashTool_Prepare_EmptyComment(t *testing.T) {
 	params := `{"command": "ls"}`
 	_, err := tool.Prepare(params)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "comment is required")
+	assert.Contains(t, err.Error(), "description is required")
 }
 func TestBashTool_HardTimeout(t *testing.T) {
 	fs := &mockFileSystem{}
@@ -334,7 +334,7 @@ func TestBashTool_HardTimeout(t *testing.T) {
 	// foreground timeout 1s, but we'll trigger a hard timeout via context or timeoutMS earlier (e.g. 100ms)
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "sleep 10", "comment": "testing hard timeout", "timeout": 100}`
+	params := `{"command": "sleep 10", "description": "testing hard timeout", "timeout": 100}`
 	inv, _ := tool.Prepare(params)
 
 	output := strings.NewReader("some partial output")
@@ -359,7 +359,7 @@ func TestBashTool_Cancellation(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "ls", "comment": "testing cancellation"}`
+	params := `{"command": "ls", "description": "testing cancellation"}`
 	inv, _ := tool.Prepare(params)
 
 	output := strings.NewReader("")
@@ -385,7 +385,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "large_command", "comment": "testing large output"}`
+	params := `{"command": "large_command", "description": "testing large output"}`
 	inv, _ := tool.Prepare(params)
 
 	output := strings.NewReader("")
@@ -422,7 +422,7 @@ func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewBashTool(fs, exec, resolver, nil)
 
-	params := `{"command": "sleep 10", "comment": "testing timeout + large", "timeout": 100}`
+	params := `{"command": "sleep 10", "description": "testing timeout + large", "timeout": 100}`
 	inv, _ := tool.Prepare(params)
 
 	output := strings.NewReader("")

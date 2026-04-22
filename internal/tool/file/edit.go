@@ -30,7 +30,7 @@ type checksumManager interface {
 // EditFileRequest is the input for EditFileTool.
 type EditFileRequest struct {
 	FilePath   string `json:"file_path"`
-	Comment    string `json:"comment"`
+	Description    string `json:"description"`
 	OldString  string `json:"old_string"`
 	NewString  string `json:"new_string"`
 	ReplaceAll bool   `json:"replace_all"`
@@ -94,7 +94,7 @@ Usage:
 				Desc:     "The absolute path to the file to edit.",
 				Required: true,
 			},
-			"comment": {
+			"description": {
 				Type:     schema.String,
 				Desc:     "A brief explanation of why the file is being edited. Mandatory.",
 				Required: true,
@@ -127,8 +127,8 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 	if req.FilePath == "" {
 		return nil, fmt.Errorf("file_path is required")
 	}
-	if req.Comment == "" {
-		return nil, fmt.Errorf("comment is required")
+	if req.Description == "" {
+		return nil, fmt.Errorf("description is required")
 	}
 
 	abs, err := t.pathResolver.Abs(req.FilePath)
@@ -285,8 +285,8 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 		expectedChecksum: currentChecksum,
 		replaceAll:       req.ReplaceAll,
 		display: domain.NewDiffDisplay(
-			req.Comment,
-			fmt.Sprintf("EDIT \"%s\"", filepath.ToSlash(displayPath)),
+			req.Description,
+			fmt.Sprintf("Edit \"%s\"", filepath.ToSlash(displayPath)),
 			added,
 			removed,
 			diff,

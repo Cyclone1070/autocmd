@@ -21,7 +21,7 @@ func TestSleepTool_Execute_Success(t *testing.T) {
 
 	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 	assert.Equal(t, "slept for 10ms", llm)
-	assert.Equal(t, "SLEEP for 10ms", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Sleep for 10ms", disp.(domain.StringDisplay).Description)
 }
 
 func TestSleepTool_Execute_Interrupted(t *testing.T) {
@@ -40,7 +40,8 @@ func TestSleepTool_Execute_Interrupted(t *testing.T) {
 
 	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 	assert.Equal(t, "sleep interrupted: background bash process finished", llm)
-	assert.Equal(t, "SLEEP interrupted: background bash process finished", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Sleep interrupted: background bash process finished", disp.(domain.StringDisplay).Description)
+	assert.Equal(t, "", disp.(domain.StringDisplay).Content)
 }
 
 func TestSleepTool_Execute_Cancelled(t *testing.T) {
@@ -54,7 +55,7 @@ func TestSleepTool_Execute_Cancelled(t *testing.T) {
 	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
 	
 	assert.Equal(t, domain.ToolErrorCancelled, disp.(domain.StringDisplay).Error)
-	assert.Equal(t, "SLEEP for 1s", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Sleep for 1s", disp.(domain.StringDisplay).Description)
 }
 
 func TestSleepTool_Execute_AlreadyFinished(t *testing.T) {
@@ -82,5 +83,6 @@ func TestSleepTool_Execute_AlreadyFinished(t *testing.T) {
 
 	assert.Less(t, duration, 500*time.Millisecond, "Sleep should have been interrupted immediately, but took %v", duration)
 	assert.Equal(t, "sleep interrupted: background bash process finished", llm)
-	assert.Equal(t, "SLEEP interrupted: background bash process finished", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Sleep interrupted: background bash process finished", disp.(domain.StringDisplay).Description)
+	assert.Equal(t, "", disp.(domain.StringDisplay).Content)
 }

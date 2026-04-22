@@ -40,7 +40,7 @@ var historyCmd = &cobra.Command{
 			SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
 			ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
 			MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-			ShortToolbox: deps.Config.UI().ShortToolbox(),
+			ShortToolBlock: deps.Config.UI().ShortToolBlock(),
 		}
 		theme := ui.NewTheme(themeCfg)
 

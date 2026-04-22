@@ -18,12 +18,10 @@ type thinkingRenderer interface {
 }
 
 type toolRenderer interface {
-	StatusPrefix(status ui.ToolStatus, frame string) string
-	RenderString(d domain.StringDisplay, status ui.ToolStatus, err string, prefix string) string
-	RenderDiff(d domain.DiffDisplay, status ui.ToolStatus, err string, prefix string) string
-	RenderBash(d domain.BashDisplay, output string, status ui.ToolStatus, err string, prefix string) string
-	RenderQuestion(d domain.QuestionDisplay, state ui.QuestionUIState, status ui.ToolStatus, err string) string
-	Box(content string, width int, status ui.ToolStatus) string
+	RenderString(d domain.StringDisplay, status ui.ToolStatus, err string, frame string) string
+	RenderDiff(d domain.DiffDisplay, status ui.ToolStatus, err string, frame string) string
+	RenderBash(d domain.BashDisplay, output string, status ui.ToolStatus, err string, frame string) string
+	RenderQuestion(d domain.QuestionDisplay, state ui.QuestionUIState, status ui.ToolStatus, err string, frame string) string
 }
 
 type stream interface {
@@ -440,8 +438,7 @@ func (m *Model) flushCompletedToolPrefix() []string {
 }
 
 func (m *Model) renderToolBox(slot toolSlot) string {
-	boxWidth := max(m.width-2, 1)
-	prefix := m.toolRenderer.StatusPrefix(slot.status, m.spinnerProvider.Frame(m.spinnerFrame))
+	frame := m.spinnerProvider.Frame(m.spinnerFrame)
 
 	errorMsg := slot.errorMsg
 	if de := slot.display.GetError(); de != "" {
@@ -451,17 +448,17 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 	var rendered string
 	switch d := slot.display.(type) {
 	case domain.StringDisplay:
-		rendered = m.toolRenderer.RenderString(d, slot.status, errorMsg, prefix)
+		rendered = m.toolRenderer.RenderString(d, slot.status, errorMsg, frame)
 	case domain.DiffDisplay:
-		rendered = m.toolRenderer.RenderDiff(d, slot.status, errorMsg, prefix)
+		rendered = m.toolRenderer.RenderDiff(d, slot.status, errorMsg, frame)
 	case domain.BashDisplay:
 		output := slot.streamOutput
 		if d.CapturedOutput != "" {
 			output = d.CapturedOutput
 		}
-		rendered = m.toolRenderer.RenderBash(d, output, slot.status, errorMsg, prefix)
+		rendered = m.toolRenderer.RenderBash(d, output, slot.status, errorMsg, frame)
 	case domain.QuestionDisplay:
-		rendered = m.toolRenderer.RenderQuestion(d, slot.questionState, slot.status, errorMsg)
+		rendered = m.toolRenderer.RenderQuestion(d, slot.questionState, slot.status, errorMsg, frame)
 	default:
 		return ""
 	}
@@ -469,7 +466,7 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 	if rendered == "" {
 		return ""
 	}
-	return m.toolRenderer.Box(rendered, boxWidth, slot.status)
+	return rendered
 }
 
 func (m *Model) renderToolsView() string {

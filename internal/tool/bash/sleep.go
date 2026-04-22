@@ -71,7 +71,7 @@ func (t *SleepTool) Prepare(params string) (domain.Invocation, error) {
 	return &sleepInvocation{
 		notifier:   t.notifier,
 		durationMS: req.DurationMS,
-		display:    domain.NewStringDisplay("", fmt.Sprintf("SLEEP for %s", duration.String())),
+		display:    domain.NewStringDisplay(fmt.Sprintf("Sleep for %s", duration.String()), ""),
 	}, nil
 }
 
@@ -88,7 +88,8 @@ func (i *sleepInvocation) Display() domain.ToolDisplay {
 func (i *sleepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	if i.notifier.HasPending() {
 		llm := "sleep interrupted: background bash process finished"
-		i.display.Content = "SLEEP interrupted: background bash process finished"
+		i.display.Description = "Sleep interrupted: background bash process finished"
+		i.display.Content = ""
 		return llm, i.display
 	}
 
@@ -100,7 +101,8 @@ func (i *sleepInvocation) Execute(ctx context.Context) (string, domain.ToolDispl
 		return llm, i.display
 	case <-i.notifier.NotifyChan():
 		llm := "sleep interrupted: background bash process finished"
-		i.display.Content = "SLEEP interrupted: background bash process finished"
+		i.display.Description = "Sleep interrupted: background bash process finished"
+		i.display.Content = ""
 		return llm, i.display
 	case <-ctx.Done():
 		i.display.Error = domain.ToolErrorCancelled

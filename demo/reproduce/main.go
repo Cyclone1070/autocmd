@@ -89,7 +89,7 @@ func main() {
 		SuccessColor: ui.ToAdaptiveColor(uiCfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(uiCfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(uiCfg.MutedColor()),
-		ShortToolbox: uiCfg.ShortToolbox(),
+		ShortToolBlock: uiCfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 	glamour := ui.NewGlamourRenderer(chatWidth, true)

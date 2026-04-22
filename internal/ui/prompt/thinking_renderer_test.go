@@ -39,6 +39,7 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 
 		expectedLabel := theme.Primary("Thinking for 0s")
 		assert.Contains(t, got, expectedLabel, "Running label should be Primary color")
+		assert.Contains(t, got, "\n    ", "Thinking line should be inset by four spaces")
 	})
 
 	t.Run("StatusSuccess", func(t *testing.T) {

@@ -74,7 +74,7 @@ func DefaultConfig() *Config {
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
 			chatWindowWidth:  80,
 			bashOutputHeight: 12,
-			shortToolbox:     false,
+			shortToolBlock:     false,
 		},
 		providers: ProviderConfig{
 			"google": {

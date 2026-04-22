@@ -113,7 +113,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-		ShortToolbox: deps.Config.UI().ShortToolbox(),
+		ShortToolBlock: deps.Config.UI().ShortToolBlock(),
 	}
 	// Calculate width and height capping at terminal size
 	chatWidth := deps.Config.UI().ChatWindowWidth()

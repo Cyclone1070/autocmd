@@ -148,9 +148,6 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 				}
 			}
 			if len(toolBoxes) > 0 {
-				// Adjacent tool boxes are joined by "" and then normalized as one part.
-				// Since theme.Box correctly provides leading \n\n, NormalizeBlock
-				// will ensure exactly one blank line precedes the set and maintain internal gaps.
 				toolBlock := strings.Join(toolBoxes, "")
 				parts = append(parts, ui.NormalizeBlock(toolBlock))
 			}
@@ -215,7 +212,6 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 			}
 		}
 		if len(toolBoxes) > 0 {
-			// Join with "" and normalize as one block.
 			toolBlock := strings.Join(toolBoxes, "")
 			parts = append(parts, ui.NormalizeBlock(toolBlock))
 		}
@@ -235,9 +231,8 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 	status := ui.StatusSuccess
 	var toolErr string
 
-	boxWidth := contentWidth - 2
 	tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
-	prefix := tooling.StatusPrefix(status, "")
+	frame := ""
 	var rendered string
 
 	switch d := display.(type) {
@@ -245,30 +240,29 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 		if d.Error != "" {
 			status = ui.StatusError
 			toolErr = d.Error
-			prefix = tooling.StatusPrefix(status, "")
 		}
-		rendered = tooling.RenderString(d, status, toolErr, prefix)
+		rendered = tooling.RenderString(d, status, toolErr, frame)
 	case domain.DiffDisplay:
 		if d.Error != "" {
 			status = ui.StatusError
 			toolErr = d.Error
-			prefix = tooling.StatusPrefix(status, "")
 		}
-		rendered = tooling.RenderDiff(d, status, toolErr, prefix)
+		rendered = tooling.RenderDiff(d, status, toolErr, frame)
 	case domain.BashDisplay:
 		if d.Error != "" {
 			status = ui.StatusError
 			toolErr = d.Error
-			prefix = tooling.StatusPrefix(status, "")
 		}
-		rendered = tooling.RenderBash(d, d.CapturedOutput, status, toolErr, prefix)
+		rendered = tooling.RenderBash(d, d.CapturedOutput, status, toolErr, frame)
+	case domain.QuestionDisplay:
+		rendered = tooling.RenderQuestion(d, ui.NewQuestionUIState(d), status, toolErr, frame)
 	}
 
 	if rendered == "" {
 		return ""
 	}
 
-	return tooling.Box(rendered, boxWidth, status)
+	return rendered
 }
 
 // writeAssistantFramedWithGutter frames assistant content like writeFramedWithGutter, but when

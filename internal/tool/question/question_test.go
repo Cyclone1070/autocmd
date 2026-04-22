@@ -58,7 +58,7 @@ func TestQuestionTool(t *testing.T) {
 
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		assert.True(t, ok)
-		assert.Equal(t, "Questions attempted", sd.Comment)
+		assert.Equal(t, "Questions attempted", sd.Description)
 		assert.Contains(t, sd.Content, "Alice")
 	})
 
@@ -78,7 +78,7 @@ func TestQuestionTool(t *testing.T) {
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		require.True(t, ok)
 		assert.Equal(t, domain.ToolErrorCancelled, sd.Error)
-		assert.Equal(t, "Questions attempted", sd.Comment)
+		assert.Equal(t, "Questions attempted", sd.Description)
 		assert.Equal(t, "Q: Color?\n\nQ: Size?", sd.Content)
 	})
 }

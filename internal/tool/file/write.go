@@ -90,7 +90,7 @@ Usage:
 				Desc:     "The content to write to the file",
 				Required: true,
 			},
-			"comment": {
+			"description": {
 				Type:     schema.String,
 				Desc:     "A brief explanation of why the file is being written or updated. Mandatory.",
 				Required: true,
@@ -101,9 +101,9 @@ Usage:
 
 // WriteFileRequest is the input for WriteFileTool.
 type WriteFileRequest struct {
-	FilePath string `json:"file_path"`
-	Content  string `json:"content"`
-	Comment  string `json:"comment"`
+	FilePath    string `json:"file_path"`
+	Content     string `json:"content"`
+	Description string `json:"description"`
 }
 
 func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
@@ -166,7 +166,7 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		absPath:         abs,
 		exists:          exists,
 		content:         contentBytes,
-		display:         domain.NewStringDisplay(req.Comment, fmt.Sprintf("WRITE \"%s\"", filepath.ToSlash(displayPath))),
+		display:         domain.NewStringDisplay(req.Description, fmt.Sprintf("Write \"%s\"", filepath.ToSlash(displayPath))),
 	}, nil
 }
 

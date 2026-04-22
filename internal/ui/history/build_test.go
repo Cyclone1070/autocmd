@@ -31,13 +31,13 @@ const testHistoryWidth = 80
 
 func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig().UI()
-	cfg.SetShortToolbox(false)
+	cfg.SetShortToolBlock(false)
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	return ui.NewTheme(themeCfg)
 }
@@ -342,8 +342,8 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
 
-	// Should include the tool box and the summary text, but only a single assistant role line.
-	assert.Contains(t, out, "╭", "tool box should be present")
+	// Should include the tool block and the summary text, but only a single assistant role line.
+	assert.Contains(t, out, "✔", "tool block status header should be present")
 	assert.Contains(t, out, "Okay, I ran ls.", "summary text should be present")
 	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant role line should appear once after coalescing")
 }
@@ -421,7 +421,7 @@ func TestDivider_Color(t *testing.T) {
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 
@@ -467,8 +467,7 @@ func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 	assert.NotContains(t, rendered, "\n\n\n", "There should be no triple-blank-line spacing in history output")
 	assert.NotContains(t, rendered, "should not render", "Tool messages should not be rendered in history")
 }
-func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
-	// RED PHASE: This test should fail because tool box is currently trimmed.
+func TestIssue_History_ToolBlockHeaderAppearsInline(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
@@ -492,24 +491,11 @@ func TestIssue_History_ToolBoxLeadingNewline(t *testing.T) {
 	b.renderAssistantMessage(&sb, msg, displays)
 	rendered := sb.String()
 
-	// Re-rendering a box to see its start
-	rawBox := theme.Box("header", width-2, ui.StatusSuccess)
-	assert.True(t, strings.HasPrefix(rawBox, "\n"), "Raw theme.Box should start with a newline")
-
-	// We verify that the rendered history contains the box (starting with its unique top border)
-	// and that it is preceded by at least one newline (for spacing).
-	// Ensure the box top border is present (width may vary with gutter-width adjustments).
-	assert.Contains(t, rendered, "╭", "Rendered history should contain the tool box top border")
-
-	// Check that the character immediately preceding the top border is a newline.
-	borderIdx := strings.Index(rendered, "╭")
-	assert.Greater(t, borderIdx, 0, "Top border should not be at the very start")
-	// In gutter mode the box border is prefixed (e.g. "A|"), so it won't be directly preceded by '\n'.
-	// We only require that the box appears after some newline in the rendered output.
-	assert.Contains(t, rendered[:borderIdx], "\n", "Tool box should appear after a newline")
+	assert.Contains(t, rendered, "✔ header", "Rendered history should contain tool block header")
+	assert.Contains(t, rendered, "⎿ $ ls", "Rendered history should contain tool block tail line")
 }
 
-func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
+func TestHistory_ToolBlocks_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
@@ -531,9 +517,10 @@ func TestHistory_ToolBoxes_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	b.renderAssistantMessage(&sb, msg, displays)
 	rendered := stripANSI(sb.String())
 
-	// Exactly one guttered blank line between adjacent tool boxes.
-	assert.Contains(t, rendered, "╯\n │\n │╭", "tool boxes should be separated by one blank line")
-	assert.NotContains(t, rendered, "╯\n │\n │\n │╭", "tool boxes should not have two blank lines between them")
+	// Adjacent tool blocks should remain compact with one line per header-only block.
+	assert.Contains(t, rendered, "│    ✔ \n │       ⎿ Listing iav")
+	assert.Contains(t, rendered, "\n │    ✔ \n │       ⎿ Reading todos")
+	assert.NotContains(t, rendered, "╭")
 }
 
 func TestMessageHeaders(t *testing.T) {
@@ -587,7 +574,7 @@ func TestMessageHeaders(t *testing.T) {
 		style := lipgloss.NewStyle().Foreground(theme.MutedColor()).Bold(true)
 		assert.Contains(t, rendered, style.Render("A│"), "Should contain ASSISTANT first-line gutter")
 		assert.Contains(t, rendered, style.Render(" │"), "Should contain ASSISTANT continuation gutter")
-		assert.Contains(t, rendered, "╭", "Tool box top border should be present")
+		assert.Contains(t, rendered, "✔", "Tool block status header should be present")
 	})
 
 	t.Run("Assistant Header", func(t *testing.T) {

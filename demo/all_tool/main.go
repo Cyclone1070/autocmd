@@ -52,7 +52,7 @@ func main() {
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
@@ -143,13 +143,13 @@ func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, op
 		name string
 		args string
 	}{
-		{"write_file", `{"path": "temp.md", "content": "# Temp File\nInitial content.", "comment": "Creating temp file"}`},
-		{"edit_file", `{"path": "temp.md", "operations": [{"before": "Initial content.", "after": "Updated via Edit Tool.", "expected_replacements": 1}], "comment": "Updating content"}`},
+		{"write_file", `{"path": "temp.md", "content": "# Temp File\nInitial content.", "description": "Creating temp file"}`},
+		{"edit_file", `{"path": "temp.md", "operations": [{"before": "Initial content.", "after": "Updated via Edit Tool.", "expected_replacements": 1}], "description": "Updating content"}`},
 		{"read_file", `{"path": "temp.md"}`},
 		{"grep", `{"pattern": "Updated", "path": "."}`},
 		{"glob", `{"pattern": "temp.md"}`},
 		{"ask_question", `{"questions": [{"question": "Did you see the real tools working?", "options": ["Yes", "Hell yeah"]}]}`},
-		{"bash", `{"command": ["rm", "temp.md"], "comment": "Cleaning up"}`},
+		{"bash", `{"command": ["rm", "temp.md"], "description": "Cleaning up"}`},
 	}
 
 	var msg *schema.Message

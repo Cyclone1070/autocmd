@@ -41,7 +41,7 @@ func main() {
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))

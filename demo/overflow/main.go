@@ -50,7 +50,7 @@ func main() {
 		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
 	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
@@ -149,7 +149,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 3. bash.Overflow
 	bashArgsObj := map[string]any{
 		"command": []string{"sh", "-c", "echo '" + longArg + "'"},
-		"comment": "Running a multi-line echo for overflow testing. " + longArg,
+		"description": "Running a multi-line echo for overflow testing. " + longArg,
 	}
 	bashArgsData, _ := json.Marshal(bashArgsObj)
 	bashInv, _ := bashTool.Prepare(string(bashArgsData))
@@ -177,7 +177,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	writeArgsObj := map[string]string{
 		"path":    "some/extremely/deep/nested/path/to/main.go",
 		"content": "new content",
-		"comment": "Writing exactly one file with intent: " + longArg,
+		"description": "Writing exactly one file with intent: " + longArg,
 	}
 	writeArgsData, _ := json.Marshal(writeArgsObj)
 	writeInv, _ := writeTool.Prepare(string(writeArgsData))
@@ -195,7 +195,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	// 5. edit_file Overflow
 	editArgsObj := map[string]any{
 		"path":    "some/extremely/deep/nested/path/to/main.go",
-		"comment": "Applying multi-line refactoring: " + longArg,
+		"description": "Applying multi-line refactoring: " + longArg,
 		"operations": []map[string]any{
 			{"before": "Line ", "after": "CHANGED Line ", "expected_replacements": 15},
 		},

@@ -180,7 +180,7 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 				display: qd,
 				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay) {
 					assert.Equal(t, action, act)
-					return "User answered ans", domain.NewStringDisplay("", "Done")
+					return "User answered ans", domain.NewStringDisplay("Done", "")
 				},
 			}, nil
 		},
@@ -205,7 +205,7 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, "User answered ans", res.Content)
-	assert.Equal(t, "Done", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "Done", disp.(domain.StringDisplay).Description)
 
 	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
@@ -333,7 +333,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-789", start.CallID)
-	assert.Equal(t, domain.NewStringDisplay("", "Tool call failed"), start.Display)
+	assert.Equal(t, domain.NewStringDisplay("Tool call failed", ""), start.Display)
 
 	// Verify generic error event
 	e2 := <-sender.events
@@ -396,7 +396,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg1, disp1, err1 := executor.execute(context.Background(), tc1, sender)
 	assert.NoError(t, err1)
 	assert.NotNil(t, disp1)
-	exp1 := domain.NewStringDisplay("", "Tool call failed")
+	exp1 := domain.NewStringDisplay("Tool call failed", "")
 	exp1 = exp1.WithError("Unknown tool").(domain.StringDisplay)
 	assert.Equal(t, exp1, disp1)
 	assert.Equal(t, "tc-1", msg1.ToolCallID)
@@ -407,7 +407,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg2, disp2, err2 := executor.execute(context.Background(), tc2, sender)
 	assert.NoError(t, err2)
 	assert.NotNil(t, disp2)
-	exp2 := domain.NewStringDisplay("", "Tool call failed")
+	exp2 := domain.NewStringDisplay("Tool call failed", "")
 	exp2 = exp2.WithError("Bad READ FILE request").(domain.StringDisplay)
 	assert.Equal(t, exp2, disp2)
 	assert.Equal(t, "tc-2", msg2.ToolCallID)

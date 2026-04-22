@@ -312,12 +312,7 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	m.state = stateTooling
 	
 	v := m.View()
-	// Each box starts with \n. Join adds another \n.
-	// So we expect: ...bottom_border\n\n\nbox2_top_border...
-	// Wait, if Box1 is "\nBox1" and Box2 is "\nBox2", and we join with "\n", 
-	// we get "\nBox1" + "\n" + "\nBox2" = "\nBox1\n\nBox2".
-	// The blank line is EXACTLY there.
-	assert.Contains(t, v, "╯\n\n╭", "There should be a blank line between the boxes")
+	assert.Contains(t, v, "\n\n    ✔ \n       ⎿ c2", "There should be a blank line between tool blocks")
 }
 
 func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
@@ -544,9 +539,8 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, stream, ui.NewNoOpGater(), 80, WithFlush(mockPrintf))
 
-	// Case 1: Avoid sticking between Thinking/Box and Para
-	// Simulate Box ending turning into a flush
-	m.doFlush([]string{"\n┌─── BOX ───┐\n└─── DONE ───┘"}, stateIdle)
+	// Case 1: Avoid sticking between tool block and para
+	m.doFlush([]string{"✔ BOX\n  ╰ DONE"}, stateIdle)
 	// Simulate Para delta starting with \n
 	m.doFlush([]string{"\nPARA"}, stateIdle)
 
@@ -555,7 +549,7 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	
 	// We want exactly 1 blank line between them.
 	// Current buggy behavior (blind strip) results in 0 blank lines (stuck).
-	assert.Contains(t, output, "\n└─── DONE ───┘\n\nPARA\n", "Box and Para should have a blank line between them")
+	assert.Contains(t, output, "\n  ╰ DONE\n\nPARA\n", "Tool block and para should have a blank line between them")
 
 	terminalOutput.Reset()
 

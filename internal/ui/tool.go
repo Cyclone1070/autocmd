@@ -16,6 +16,33 @@ type gater interface {
 	Gate(content string) string
 }
 
+const (
+	toolInsetPrefix              = "    "
+	toolFirstContentGutterPrefix = "   ⎿ "
+	toolContentGutterPrefix      = "     "
+)
+
+// ToolBlockSpec is the semantic rendering contract passed from ToolRenderer to Theme.
+// Theme consumes this structure for placement and styling only.
+type ToolBlockSpec struct {
+	HeaderLines  []string
+	ContentLines []string
+	Status       ToolStatus
+	Frame        string
+}
+
+type ContentTruncateMode int
+
+const (
+	TruncateNone ContentTruncateMode = iota
+	TruncateTailKeepLatest
+)
+
+type RenderSpecOptions struct {
+	TruncateMode             ContentTruncateMode
+	TruncateFromContentIndex int
+}
+
 // ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, BashDisplay).
 type ToolRenderer struct {
 	Theme *Theme
@@ -32,92 +59,128 @@ func NewToolRenderer(theme *Theme, width int, g gater) *ToolRenderer {
 	}
 }
 
-func (r *ToolRenderer) SetShortToolbox(b bool) {
-	r.Theme.ShortToolbox = b
+func (r *ToolRenderer) SetShortToolBlock(b bool) {
+	r.Theme.ShortToolBlock = b
 }
 
-// StatusPrefix returns a styled and padded status indicator.
-func (r *ToolRenderer) StatusPrefix(status ToolStatus, frame string) string {
-	return r.Theme.StatusPrefix(status, frame)
-}
-
-// Pad adds the status prefix to the first line and standard indentation to others.
-func (r *ToolRenderer) Pad(text, prefix string) string {
-	if text == "" {
-		return ""
-	}
-
-	// Calculate the available width for content after borders (2), padding (2), and prefix.
-	// Total overhead is 4 (2 for borders + 2 for horizontal padding defined in theme.go).
-	prefixWidth := lipgloss.Width(prefix)
-	contentWidth := r.Width - 4 - prefixWidth
-
-	// Wrap and style the content as a vertical column.
-	contentStyle := lipgloss.NewStyle().Width(contentWidth)
-	wrappedContent := contentStyle.Render(text)
-
-	// Join the prefix and the content column horizontally.
-	// lipgloss.Top ensures the prefix is only aligned with the first line of content.
-	return lipgloss.JoinHorizontal(lipgloss.Top, prefix, wrappedContent)
-}
-
-func (r *ToolRenderer) formatError(prefix string, err string, isMuted bool) string {
+func (r *ToolRenderer) formatError(prefix string, err string) string {
 	if prefix == "" {
 		return r.Theme.Error(err)
 	}
-	separator := " - "
-	if isMuted {
-		return r.Theme.Muted(prefix+separator) + r.Theme.Error(err)
+	return r.Theme.Error(prefix + " - " + err)
+}
+
+func (r *ToolRenderer) mutedLines(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = r.Theme.Muted(line)
 	}
-	return prefix + separator + r.Theme.Error(err)
+	return out
+}
+
+func (r *ToolRenderer) statusColor(status ToolStatus, s string) string {
+	switch status {
+	case StatusRunning:
+		return r.Theme.Primary(s)
+	case StatusSuccess:
+		return r.Theme.Success(s)
+	case StatusError:
+		return r.Theme.Error(s)
+	default:
+		return s
+	}
+}
+
+func (r *ToolRenderer) wrapLines(lines []string, firstWidth, continuationWidth int) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	if firstWidth < 1 {
+		firstWidth = 1
+	}
+	if continuationWidth < 1 {
+		continuationWidth = 1
+	}
+
+	var out []string
+	for i, line := range lines {
+		width := continuationWidth
+		if i == 0 {
+			width = firstWidth
+		}
+		if line == "" {
+			out = append(out, "")
+			continue
+		}
+		wrapped := lipgloss.NewStyle().Width(width).Render(line)
+		parts := strings.SplitSeq(wrapped, "\n")
+		for part := range parts {
+			out = append(out, strings.TrimRight(part, " "))
+		}
+	}
+	return out
 }
 
 // RenderString renders StringDisplay.
-func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, err string, prefix string) string {
-	var parts []string
-
-	if d.Comment != "" {
-		header := "# " + d.Comment
-		if status == StatusError && err != "" {
-			header = r.formatError(header, err, true)
-		} else {
-			header = r.Theme.Muted(header)
-		}
-		parts = append(parts, header)
-		if d.Content != "" {
-			parts = append(parts, d.Content)
-		}
-	} else if d.Content != "" {
-		content := d.Content
-		if status == StatusError && err != "" {
-			lines := strings.Split(content, "\n")
-			lines[0] = r.formatError(lines[0], err, false)
-			content = strings.Join(lines, "\n")
-		}
-		parts = append(parts, content)
-	} else if status == StatusError && err != "" {
-		parts = append(parts, r.Theme.Error(err))
-	}
-
-	if len(parts) == 0 {
+func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, err string, frame string) string {
+	spec, ok := r.buildStringSpec(d, status, err, frame)
+	if !ok {
 		return ""
 	}
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateNone, TruncateFromContentIndex: 0})
+}
 
-	return r.Pad(strings.Join(parts, "\n\n"), prefix)
+func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+	spec := ToolBlockSpec{
+		Status: status,
+		Frame:  frame,
+	}
+
+	header := d.Description
+	if status == StatusError && err != "" {
+		header = r.formatError(header, err)
+	}
+	if header != "" {
+		if status == StatusError {
+			spec.HeaderLines = []string{header}
+		} else {
+			spec.HeaderLines = []string{r.statusColor(status, header)}
+		}
+	}
+	if d.Content != "" {
+		spec.ContentLines = r.mutedLines(strings.Split(d.Content, "\n"))
+	}
+
+	if len(spec.HeaderLines) == 0 && len(spec.ContentLines) == 0 {
+		return ToolBlockSpec{}, false
+	}
+	return spec, true
 }
 
 // RenderDiff renders DiffDisplay.
-func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, prefix string) string {
-	header := d.Comment
+func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, frame string) string {
+	spec, ok := r.buildDiffSpec(d, status, err, frame)
+	if !ok {
+		return ""
+	}
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
+}
+
+func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+	header := d.Description
 	target := d.Target
-	if target == "" {
-		target = header
+	spec := ToolBlockSpec{
+		HeaderLines: []string{r.statusColor(status, header)},
+		Status:      status,
+		Frame:       frame,
 	}
 
 	if status == StatusError {
-		header = r.formatError("# "+header, err, true)
-		parts := []string{header, target}
-		return r.Pad(strings.Join(parts, "\n\n"), prefix)
+		spec.HeaderLines[0] = r.formatError(header, err)
+		if target != "" {
+			spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
+		}
+		return spec, true
 	}
 
 	// Add stats to target if success
@@ -128,21 +191,15 @@ func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err s
 			r.Theme.Error(fmt.Sprintf("-%d", d.Removed)))
 	}
 
-	header = r.Theme.Muted("# " + header)
 	diffContent := r.colorizeDiff(d.Diff)
-	diffContent = r.gater.Gate(diffContent)
 
-	// Build parts with blank line separation
-	parts := []string{
-		header,
-		target,
+	if target != "" {
+		spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
 	}
-	if !r.Theme.ShortToolbox {
-		parts = append(parts, diffContent)
+	if diffContent != "" && !r.Theme.ShortToolBlock {
+		spec.ContentLines = append(spec.ContentLines, strings.Split(diffContent, "\n")...)
 	}
-
-	content := strings.Join(parts, "\n\n")
-	return r.Pad(content, prefix)
+	return spec, true
 }
 
 func (r *ToolRenderer) colorizeDiff(diff string) string {
@@ -152,44 +209,58 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 			lines[i] = r.Theme.Success(line)
 		} else if strings.HasPrefix(line, "-") {
 			lines[i] = r.Theme.Error(line)
+		} else {
+			lines[i] = r.Theme.Muted(line)
 		}
 	}
 	return strings.Join(lines, "\n")
 }
 
 // RenderBash renders BashDisplay.
-func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, prefix string) string {
-	header := d.Comment
-	if status == StatusError {
-		header = r.formatError("# "+header, err, true)
-		cmdLine := fmt.Sprintf("$ %s", d.Command)
-		content := strings.Join([]string{header, cmdLine}, "\n\n")
-		return r.Pad(content, prefix)
+func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) string {
+	spec, ok := r.buildBashSpec(d, output, status, err, frame)
+	if !ok {
+		return ""
 	}
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
+}
 
-	header = r.Theme.Muted("# " + header)
+func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+	header := d.Description
+	spec := ToolBlockSpec{
+		HeaderLines: []string{r.statusColor(status, header)},
+		Status:      status,
+		Frame:       frame,
+	}
+	if status == StatusError {
+		spec.HeaderLines[0] = r.formatError(header, err)
+		spec.ContentLines = []string{r.Theme.Muted(fmt.Sprintf("$ %s", d.Command))}
+		return spec, true
+	}
 	cmdLine := fmt.Sprintf("$ %s", d.Command)
 
-	bashOutput := r.gater.Gate(strings.TrimRight(output, "\n"))
+	bashOutput := strings.TrimRight(output, "\n")
 
-	// Build parts with blank line separation
-	parts := []string{
-		header,
-		cmdLine,
+	spec.ContentLines = []string{r.Theme.Muted(cmdLine)}
+	if bashOutput != "" && !r.Theme.ShortToolBlock {
+		spec.ContentLines = append(spec.ContentLines, r.mutedLines(strings.Split(bashOutput, "\n"))...)
 	}
-	if bashOutput != "" && !r.Theme.ShortToolbox {
-		parts = append(parts, bashOutput)
-	}
-
-	content := strings.Join(parts, "\n\n")
-	return r.Pad(content, prefix)
+	return spec, true
 }
 
 // RenderQuestion renders QuestionDisplay with interactive state (cursor, toggles, custom text).
 // Unlike other tool renderers, it never prepends a status prefix (spinner/checkmark); the question header is the first line.
-func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string) string {
-	if len(d.Questions) == 0 {
+func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string, frame string) string {
+	spec, ok := r.buildQuestionSpec(d, state, status, err, frame)
+	if !ok {
 		return ""
+	}
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateNone, TruncateFromContentIndex: 0})
+}
+
+func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+	if len(d.Questions) == 0 {
+		return ToolBlockSpec{}, false
 	}
 
 	n := len(d.Questions)
@@ -229,7 +300,7 @@ func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUI
 
 		var summary string
 		if status == StatusError && err != "" {
-			summary = r.formatError(plainSummary, err, true)
+			summary = r.formatError(plainSummary, err)
 		} else if answered == n {
 			summary = r.Theme.Success("All questions answered")
 		} else {
@@ -237,27 +308,26 @@ func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUI
 		}
 		body := summary + "\n\n" + r.renderQuestionReviewBlock(stRender)
 		body += "\n\n" + r.renderQuestionFooter(status, d.Questions[0], QuestionPerState{})
-		return r.Pad(body, "")
+		lines := strings.Split(body, "\n")
+		spec := ToolBlockSpec{
+			Status: status,
+			Frame:  frame,
+		}
+		spec.HeaderLines = []string{lines[0]}
+		if len(lines) > 1 {
+			spec.ContentLines = lines[1:]
+		}
+		return spec, true
 	}
 
 	cur := active + 1
 	q := d.Questions[active]
 	st := stRender.Per[active]
 
-	plainHeader := fmt.Sprintf("Question %d/%d", cur, n)
-	var header string
+	baseHeader := fmt.Sprintf("Question %d/%d", cur, n)
+	header := r.Theme.Primary(baseHeader)
 	if status == StatusError && err != "" {
-		header = r.formatError(plainHeader, err, true)
-	} else {
-		numColor := r.Theme.Primary
-		if QuestionHasAnswer(q, st) {
-			numColor = r.Theme.Success
-		}
-		// Highlight current index (e.g. the "2" in "Question 2/3").
-		header = r.Theme.Muted("Question ") +
-			numColor(fmt.Sprintf("%d", cur)) +
-			r.Theme.Muted("/") +
-			r.Theme.Muted(fmt.Sprintf("%d", n))
+		header = r.formatError(baseHeader, err)
 	}
 
 	parts := []string{header}
@@ -266,7 +336,16 @@ func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUI
 
 	body := strings.Join(parts, "\n\n")
 	body += "\n\n" + r.renderQuestionFooter(status, q, st)
-	return r.Pad(body, "")
+	lines := strings.Split(body, "\n")
+	spec := ToolBlockSpec{
+		Status:      status,
+		Frame:       frame,
+		HeaderLines: []string{lines[0]},
+	}
+	if len(lines) > 1 {
+		spec.ContentLines = lines[1:]
+	}
+	return spec, true
 }
 
 func (r *ToolRenderer) renderQuestionReviewBlock(st QuestionUIState) string {
@@ -291,11 +370,10 @@ func (r *ToolRenderer) renderQuestionReviewBlock(st QuestionUIState) string {
 }
 
 // questionInnerWidth is the printable width for one line inside the tool box. The prompt uses
-// boxWidth = max(width-2,1); lipgloss applies border + horizontal padding; empirically boxW-3
-// matches the last column of inner text flush with the box padding (boxW-4 left a 1-cell gap).
+// the same continuation content width as tool block wrapping so footer/separator
+// lines don't overflow and wrap unexpectedly.
 func (r *ToolRenderer) questionInnerWidth() int {
-	boxW := max(r.Width-2, 1)
-	inner := boxW - 3
+	inner := r.Width - lipgloss.Width(toolInsetPrefix+toolContentGutterPrefix)
 	if inner < 12 {
 		return 12
 	}
@@ -304,7 +382,6 @@ func (r *ToolRenderer) questionInnerWidth() int {
 
 func (r *ToolRenderer) renderQuestionFooter(status ToolStatus, _ domain.QuestionInfo, _ QuestionPerState) string {
 	inner := r.questionInnerWidth()
-	sep := r.Theme.Separator(inner, status)
 
 	// Key (primary) + label (muted), with gaps between groups like the toolbox hint row.
 	keyLabel := func(key, label string) string {
@@ -332,6 +409,8 @@ func (r *ToolRenderer) renderQuestionFooter(status ToolStatus, _ domain.Question
 			keyLabel("q", "quit") + gap +
 			keyLabel("s", "submit")
 	}
+	sepWidth := min(lipgloss.Width(row), inner)
+	sep := r.Theme.Separator(sepWidth, status)
 	return sep + "\n" + row
 }
 
@@ -440,12 +519,41 @@ func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st Quest
 	return strings.Join(lines, "\n")
 }
 
-// Box wraps content in a themed box.
-func (r *ToolRenderer) Box(content string, width int, status ToolStatus) string {
-	return r.Theme.Box(content, width, status)
-}
+func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) string {
+	headerPrefixWidth := lipgloss.Width(r.Theme.StatusPrefix(spec.Status, spec.Frame))
+	headerContinuationWidth := r.Width - lipgloss.Width(toolInsetPrefix)
+	headerFirstWidth := headerContinuationWidth - headerPrefixWidth
 
-// RenderErrorLine returns a themed failure message with a status prefix.
-func (r *ToolRenderer) RenderErrorLine(s string) string {
-	return "\n " + r.Theme.StatusPrefix(StatusError, "✘") + r.Theme.Error(s)
+	contentFirstWidth := r.Width - lipgloss.Width(toolInsetPrefix+toolFirstContentGutterPrefix)
+	contentContinuationWidth := r.Width - lipgloss.Width(toolInsetPrefix+toolContentGutterPrefix)
+
+	spec.HeaderLines = r.wrapLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
+	if opts.TruncateMode == TruncateTailKeepLatest && len(spec.ContentLines) > 0 {
+		start := min(max(opts.TruncateFromContentIndex, 0), len(spec.ContentLines))
+
+		// Preserve/truncate boundary is defined on logical lines first.
+		preservedLogical := spec.ContentLines[:start]
+		truncatableLogical := spec.ContentLines[start:]
+
+		preservedWrapped := r.wrapLines(preservedLogical, contentFirstWidth, contentContinuationWidth)
+		if len(truncatableLogical) == 0 {
+			spec.ContentLines = preservedWrapped
+		} else {
+			truncFirstWidth := contentContinuationWidth
+			if len(preservedLogical) == 0 {
+				truncFirstWidth = contentFirstWidth
+			}
+			truncWrapped := r.wrapLines(truncatableLogical, truncFirstWidth, contentContinuationWidth)
+			gated := r.gater.Gate(strings.Join(truncWrapped, "\n"))
+			if gated == "" {
+				spec.ContentLines = preservedWrapped
+			} else {
+				spec.ContentLines = append(preservedWrapped, strings.Split(gated, "\n")...)
+			}
+		}
+	} else {
+		spec.ContentLines = r.wrapLines(spec.ContentLines, contentFirstWidth, contentContinuationWidth)
+	}
+
+	return r.Theme.RenderToolBlock(spec)
 }

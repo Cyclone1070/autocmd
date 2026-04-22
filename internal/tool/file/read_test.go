@@ -389,8 +389,8 @@ func TestReadFile(t *testing.T) {
 		
 		// Display should show full absolute path
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "", display.Comment)
-		assert.Equal(t, "READ \"/workspace/subdir/test.txt\"", display.Content)
+		assert.Equal(t, "Read \"/workspace/subdir/test.txt\"", display.Description)
+		assert.Equal(t, "", display.Content)
 	})
 
 	t.Run("empty file returns system reminder", func(t *testing.T) {

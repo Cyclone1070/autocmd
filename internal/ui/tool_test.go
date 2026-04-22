@@ -21,13 +21,13 @@ func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetShortToolbox(false) // Default tests to full mode
+	cfg.SetShortToolBlock(false) // Default tests to full mode
 	themeCfg := ThemeConfig{
 		PrimaryColor: ToAdaptiveColor(cfg.PrimaryColor()),
 		SuccessColor: ToAdaptiveColor(cfg.SuccessColor()),
 		ErrorColor:   ToAdaptiveColor(cfg.ErrorColor()),
 		MutedColor:   ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolbox: cfg.ShortToolbox(),
+		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := NewTheme(themeCfg)
 	// For testing, we inject a gater that uses the standard 12 lines
@@ -49,7 +49,7 @@ func TestToolRenderer_RespectsGaterOnBashOutput(t *testing.T) {
 	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
 	tr := NewToolRenderer(theme, 80, g)
 
-	got := tr.RenderBash(domain.BashDisplay{Comment: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
+	got := tr.RenderBash(domain.BashDisplay{Description: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
 	assert.Contains(t, got, "stdout_gated", "RenderBash should gate captured output")
 }
 
@@ -60,7 +60,7 @@ func TestToolRenderer_RenderQuestionDoesNotUseGater(t *testing.T) {
 
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "✓")
 	assert.NotContains(t, got, "_gated", "RenderQuestion must not pass body through gater")
 }
 
@@ -102,7 +102,7 @@ func TestRenderString_ErrorWrap(t *testing.T) {
 func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
-		Comment: "Aligning logic",
+		Description: "Aligning logic",
 		Target:  "Edit align.go",
 		Diff:    "\n-line1\n+line2",
 	}
@@ -113,7 +113,7 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 func TestRenderDiff_SuccessWithStats(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
-		Comment: "Updating stats",
+		Description: "Updating stats",
 		Target:  "Edit file.go",
 		Added:   5,
 		Removed: 2,
@@ -126,7 +126,7 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 func TestRenderDiff_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
-		Comment: "Missing file",
+		Description: "Missing file",
 		Target:  "Edit file.go",
 	}
 	got := tr.RenderDiff(diff, StatusError, "file not found", "✗")
@@ -136,7 +136,7 @@ func TestRenderDiff_Error(t *testing.T) {
 func TestRenderDiff_ThreePartLayout(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
-		Comment: "Adding authentication middleware",
+		Description: "Adding authentication middleware",
 		Target:  "Edit auth.go",
 		Added:   10,
 		Removed: 5,
@@ -149,7 +149,7 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 func TestRenderBash_Running_Command(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
-		Comment: "List Files",
+		Description: "List Files",
 		Command: "ls -la",
 	}
 	got := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
@@ -159,7 +159,7 @@ func TestRenderBash_Running_Command(t *testing.T) {
 func TestRenderBash_LongOutputTruncation(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
-		Comment: "Log",
+		Description: "Log",
 		Command: "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
@@ -167,10 +167,24 @@ func TestRenderBash_LongOutputTruncation(t *testing.T) {
 	assertGolden(t, "RenderBash_Long_Output_Truncation", got)
 }
 
+func TestRenderBash_TruncatesByVisualLinesAfterWrap(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	tr := NewToolRenderer(theme, 30, NewToolOutputGater(2))
+	display := domain.BashDisplay{
+		Description: "Run",
+		Command:     "echo x",
+	}
+
+	// One long logical line that wraps into multiple visual lines before truncation.
+	got := tr.RenderBash(display, strings.Repeat("x", 100), StatusSuccess, "", "✓")
+
+	assert.Contains(t, got, "▲ [", "wrapped overflow should be truncated by visual lines")
+}
+
 func TestRenderBash_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
-		Comment: "List Files",
+		Description: "List Files",
 		Command: "ls -la",
 	}
 	got := tr.RenderBash(display, "", StatusError, "exit status 1", "✗")
@@ -181,7 +195,7 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
-		Comment: "Massive Change",
+		Description: "Massive Change",
 		Target:  "Edit big.go",
 		Diff:    "line 1\nline 2\nline 3\nline 4\nline 5",
 	}
@@ -189,29 +203,25 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	assertGolden(t, "RenderDiff_Long_Diff_Truncation", got)
 }
 
-func TestPad_WithPrefix(t *testing.T) {
-	tr := newTestToolRenderer(t)
-	output := tr.Pad("Line1\nLine2", "->")
-	assertGolden(t, "Pad_With_Prefix", output)
-}
+func TestRenderDiff_TruncatesByVisualLinesAfterWrap(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	tr := NewToolRenderer(theme, 30, NewToolOutputGater(2))
+	diff := domain.DiffDisplay{
+		Description: "Big",
+		Target:      "Edit x.go",
+		Diff:        "+" + strings.Repeat("x", 100),
+	}
 
-func TestPad_WithoutPrefix(t *testing.T) {
-	tr := newTestToolRenderer(t)
-	output := tr.Pad("Line1\nLine2", "")
-	assertGolden(t, "Pad_Without_Prefix", output)
-}
+	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 
-func TestPad_EmptyInput(t *testing.T) {
-	tr := newTestToolRenderer(t)
-	output := tr.Pad("", "->")
-	assertGolden(t, "Pad_Empty_Input", output)
+	assert.Contains(t, got, "▲ [", "wrapped overflow should be truncated by visual lines")
 }
 
 func TestRenderDiff_ShortMode(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	tr.SetShortToolbox(true)
+	tr.SetShortToolBlock(true)
 	diff := domain.DiffDisplay{
-		Comment: "Massive Change",
+		Description: "Massive Change",
 		Target:  "Edit big.go",
 		Diff:    "line 1\nline 2\nline 3",
 	}
@@ -223,9 +233,9 @@ func TestRenderDiff_ShortMode(t *testing.T) {
 
 func TestRenderBash_ShortMode(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	tr.SetShortToolbox(true)
+	tr.SetShortToolBlock(true)
 	display := domain.BashDisplay{
-		Comment: "List Files",
+		Description: "List Files",
 		Command: "ls -la",
 	}
 	output := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
@@ -234,11 +244,21 @@ func TestRenderBash_ShortMode(t *testing.T) {
 	assert.Contains(t, output, "ls -la")
 }
 
+func TestRenderString_UsesHeaderAndTailBlockShape(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	display := domain.NewStringDisplay("Read \"main.go\"", "")
+
+	got := tr.RenderString(display, StatusRunning, "", "")
+	assert.Contains(t, got, "Read \"main.go\"")
+	assert.NotContains(t, got, "╭")
+	assert.NotContains(t, got, "╮")
+}
+
 func TestRenderQuestion_Single(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderQuestion_Single", got)
 }
 
@@ -248,7 +268,7 @@ func TestRenderQuestion_MultiQuestionActiveSecond(t *testing.T) {
 	s := NewQuestionUIState(d)
 	s.Active = 1
 	s.Per[1].Cursor = 0
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderQuestion_MultiQuestion", got)
 }
 
@@ -259,7 +279,7 @@ func TestRenderQuestion_Review(t *testing.T) {
 	s.Per[0].MultiSelected[0] = true
 	s.Active = 2
 	s.ReviewCursor = 0
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderQuestion_Review", got)
 }
 
@@ -271,7 +291,7 @@ func TestRenderQuestion_ReviewAllAnswered(t *testing.T) {
 	s.Per[1].SingleSelected = 0
 	s.Active = 2
 	s.ReviewCursor = 0
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderQuestion_ReviewAllAnswered", got)
 }
 
@@ -279,7 +299,7 @@ func TestRenderQuestion_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
-	got := tr.RenderQuestion(d, s, StatusError, "permission denied")
+	got := tr.RenderQuestion(d, s, StatusError, "permission denied", "⣾")
 	assertGolden(t, "RenderQuestion_Error", got)
 }
 
@@ -287,8 +307,8 @@ func TestRenderQuestion_RunningDoesNotIncludeSpinnerPrefix(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
-	assert.NotContains(t, got, "⣾")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
+	assert.Contains(t, got, "⣾")
 }
 
 func TestRenderQuestion_CustomRowOnlyWhenVisible(t *testing.T) {
@@ -296,12 +316,12 @@ func TestRenderQuestion_CustomRowOnlyWhenVisible(t *testing.T) {
 	d := qDisplaySingle()
 	s := NewQuestionUIState(d)
 
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assert.NotContains(t, got, "Other")
 
 	s.Per[0].Cursor = len(d.Questions[0].Options)
 	s.Per[0].CustomInputFocused = true
-	got = tr.RenderQuestion(d, s, StatusRunning, "")
+	got = tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assert.Contains(t, got, "3.")
 	assert.Contains(t, got, "█")
 	assert.NotContains(t, got, "Other")
@@ -315,7 +335,7 @@ func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
 	s := NewQuestionUIState(d)
 	s.Per[0].CustomBuffer = "x"
 	s.Per[0].Cursor = 1
-	got := tr.RenderQuestion(d, s, StatusRunning, "")
+	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assert.Contains(t, got, "[ ]")
 	assert.Contains(t, got, "x")
 }

@@ -29,16 +29,12 @@ func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
 		Display: domain.NewBashDisplay("Tool 2", "pwd", ""),
 	})
 
-	// Manually simulate what our new joinAndNormalize will do
+	// Manually simulate flush batching (no extra spacing inserted by normalizer)
 	tools := m.renderAllTools()
 	joined := strings.Join(tools, "")
 	normalized := ui.NormalizeBlock(joined)
 
-	// We expect ONE blank line between boxes. 
-	// This means Box 1 ends with ╯ and Box 2 starts with \n\n.
-	// So we look for ╯\n\n╭
-	
-	// Currently, Theme.Box only adds ONE \n, so this test should FAIL 
-	// (it will only find ╯\n╭ which is zero blank lines)
-	assert.Contains(t, normalized, "╯\n\n╭", "There should be exactly one blank line between toolboxes")
+	assert.Contains(t, normalized, "⠹ Tool 1")
+	assert.Contains(t, normalized, "⠹ Tool 2")
+	assert.NotContains(t, normalized, "╭")
 }

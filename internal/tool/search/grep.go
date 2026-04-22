@@ -211,7 +211,7 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 		pathResolver:    t.pathResolver,
 		absPath:         absSearchPath,
 		req:             req,
-		display:         domain.NewStringDisplay("", fmt.Sprintf("GREP \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
+		display:         domain.NewStringDisplay(fmt.Sprintf("Grep \"%s\" in \"%s\"", req.Pattern, filepath.ToSlash(displayPath)), ""),
 	}, nil
 }
 

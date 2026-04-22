@@ -130,7 +130,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 		tool:    t,
 		absPath: absPath,
 		pattern: req.Pattern,
-		display: domain.NewStringDisplay("", fmt.Sprintf("GLOB \"%s\" IN \"%s\"", req.Pattern, filepath.ToSlash(displayPath))),
+		display: domain.NewStringDisplay(fmt.Sprintf("Glob \"%s\" in \"%s\"", req.Pattern, filepath.ToSlash(displayPath)), ""),
 	}, nil
 }
 

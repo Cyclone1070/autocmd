@@ -14,7 +14,7 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 			"call-1": {
 				"type": "string",
 				"content": "some content",
-				"comment": "some comment"
+				"description": "some comment"
 			}
 		}`
 
@@ -25,7 +25,7 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 		d, ok := m["call-1"].(StringDisplay)
 		assert.True(t, ok)
 		assert.Equal(t, "some content", d.Content)
-		assert.Equal(t, "some comment", d.Comment)
+		assert.Equal(t, "some comment", d.Description)
 	})
 	t.Run("QuestionDisplay", func(t *testing.T) {
 		data := `{
@@ -75,21 +75,21 @@ func TestToolDisplay_GetError(t *testing.T) {
 		d := NewStringDisplay("c", "x")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := StringDisplay{TypeField: "string", Comment: "c", Content: "x", Error: "e"}
+		d2 := StringDisplay{TypeField: "string", Description: "c", Content: "x", Error: "e"}
 		assert.Equal(t, "e", d2.GetError())
 	})
 	t.Run("DiffDisplay", func(t *testing.T) {
 		d := NewDiffDisplay("c", "t", 1, 2, "diff")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := DiffDisplay{TypeField: "diff", Comment: "c", Target: "t", Diff: "d", Error: "bad"}
+		d2 := DiffDisplay{TypeField: "diff", Description: "c", Target: "t", Diff: "d", Error: "bad"}
 		assert.Equal(t, "bad", d2.GetError())
 	})
 	t.Run("BashDisplay", func(t *testing.T) {
 		d := NewBashDisplay("c", "cmd", "out")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := BashDisplay{TypeField: "bash", Comment: "c", Command: "cmd", Error: "x"}
+		d2 := BashDisplay{TypeField: "bash", Description: "c", Command: "cmd", Error: "x"}
 		assert.Equal(t, "x", d2.GetError())
 	})
 	t.Run("QuestionDisplay", func(t *testing.T) {

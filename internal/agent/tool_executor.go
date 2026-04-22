@@ -242,7 +242,7 @@ func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSende
 	defsJSON, _ := json.MarshalIndent(defs, "", "  ")
 	errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-	display := domain.NewStringDisplay("", "Tool call failed")
+	display := domain.NewStringDisplay("Tool call failed", "")
 	endDisp := display.WithError("Unknown tool")
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{
@@ -268,7 +268,7 @@ func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall,
 	errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, prepErr, defJSON)
 
 	toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
-	display := domain.NewStringDisplay("", "Tool call failed")
+	display := domain.NewStringDisplay("Tool call failed", "")
 	endDisp := display.WithError(toolLabel)
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{

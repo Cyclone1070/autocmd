@@ -22,7 +22,7 @@ func TestWriteFile(t *testing.T) {
 		req := &WriteFileRequest{
 			FilePath: "/workspace/new.txt",
 			Content:  "hello",
-			Comment:  "creating new file",
+			Description:  "creating new file",
 		}
 
 		params, _ := json.Marshal(req)
@@ -34,7 +34,7 @@ func TestWriteFile(t *testing.T) {
 		assert.Equal(t, "hello", string(fs.files["/workspace/new.txt"]))
 		
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "creating new file", display.Comment)
+		assert.Equal(t, "creating new file", display.Description)
 	})
 
 	t.Run("Overwrite existing file after read", func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestWriteFile(t *testing.T) {
 		req := &WriteFileRequest{
 			FilePath: "/workspace/exists.txt",
 			Content:  "new",
-			Comment:  "overwriting file",
+			Description:  "overwriting file",
 		}
 
 		params, _ := json.Marshal(req)
@@ -61,7 +61,7 @@ func TestWriteFile(t *testing.T) {
 		assert.Equal(t, "new", string(fs.files["/workspace/exists.txt"]))
 
 		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "overwriting file", display.Comment)
+		assert.Equal(t, "overwriting file", display.Description)
 	})
 
 	t.Run("Rejects write if never read", func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestWriteFile(t *testing.T) {
 		req := &WriteFileRequest{
 			FilePath: "/workspace/crlf.txt",
 			Content:  "line1\r\nline2",
-			Comment:  "testing normalization",
+			Description:  "testing normalization",
 		}
 
 		params, _ := json.Marshal(req)

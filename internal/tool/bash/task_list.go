@@ -53,7 +53,7 @@ Returns a summary of each task:
 func (t *TaskListTool) Prepare(params string) (domain.Invocation, error) {
 	return &taskListInvocation{
 		manager: t.manager,
-		display: domain.NewStringDisplay("", "LIST active background bash tasks"),
+		display: domain.NewStringDisplay("List active background bash tasks", ""),
 	}, nil
 }
 

@@ -35,7 +35,7 @@ type ThemeConfig struct {
 	SuccessColor lipgloss.AdaptiveColor
 	ErrorColor   lipgloss.AdaptiveColor
 	MutedColor   lipgloss.AdaptiveColor
-	ShortToolbox bool
+	ShortToolBlock bool
 }
 
 // Theme provides styling for the UI.
@@ -45,8 +45,7 @@ type Theme struct {
 	success lipgloss.AdaptiveColor
 	err     lipgloss.AdaptiveColor
 
-	box          lipgloss.Style
-	ShortToolbox bool
+	ShortToolBlock bool
 }
 
 // NewTheme creates a theme from config.
@@ -56,13 +55,7 @@ func NewTheme(cfg ThemeConfig) *Theme {
 		primary:      cfg.PrimaryColor,
 		success:      cfg.SuccessColor,
 		err:          cfg.ErrorColor,
-		ShortToolbox: cfg.ShortToolbox,
-		box: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(cfg.MutedColor).
-			Padding(0, 1). // Add horizontal padding for breathing room
-			MarginTop(0).
-			MarginBottom(0),
+		ShortToolBlock: cfg.ShortToolBlock,
 	}
 }
 
@@ -101,9 +94,56 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 	return lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("─", width))
 }
 
-func (t *Theme) Box(content string, width int, status ToolStatus) string {
-	borderColor := t.colorForStatus(status)
-	return "\n\n" + t.box.BorderForeground(borderColor).Width(width).Render(content)
+func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
+	const inset = "    "
+	header := trimEmptyLines(spec.HeaderLines)
+	content := trimLeadingEmptyLines(spec.ContentLines)
+	if len(header) == 0 && len(content) == 0 {
+		return ""
+	}
+
+	prefix := t.StatusPrefix(spec.Status, spec.Frame)
+	if len(header) > 0 {
+		header[0] = inset + prefix + header[0]
+	} else {
+		// Do not promote content into the header. Empty header stays empty.
+		header = []string{inset + prefix}
+	}
+
+	var out []string
+	out = append(out, header...)
+	for i, line := range content {
+		if i == 0 {
+			out = append(out, t.Muted(inset+"   ⎿ ")+line)
+			continue
+		}
+		out = append(out, t.Muted(inset+"     ")+line)
+	}
+
+	return "\n\n" + strings.Join(out, "\n")
+}
+
+func (t *Theme) ToolBlock(content string, status ToolStatus, _ string) string {
+	content = strings.Trim(content, "\n")
+	if content == "" {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	spec := ToolBlockSpec{
+		Status: status,
+	}
+	if len(lines) > 0 {
+		spec.HeaderLines = []string{lines[0]}
+	}
+	if len(lines) > 1 {
+		spec.ContentLines = lines[1:]
+	}
+	return t.RenderToolBlock(spec)
+}
+
+// Box exists for compatibility while tests migrate from box-style assertions.
+func (t *Theme) Box(content string, _ int, status ToolStatus) string {
+	return t.ToolBlock(content, status, "")
 }
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
@@ -117,6 +157,25 @@ func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	default:
 		return t.muted
 	}
+}
+
+func trimLeadingEmptyLines(lines []string) []string {
+	out := append([]string(nil), lines...)
+	for len(out) > 0 && strings.TrimSpace(out[0]) == "" {
+		out = out[1:]
+	}
+	return out
+}
+
+func trimEmptyLines(lines []string) []string {
+	out := append([]string(nil), lines...)
+	for len(out) > 0 && strings.TrimSpace(out[0]) == "" {
+		out = out[1:]
+	}
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+	return out
 }
 
 func (t *Theme) PrimaryColor() lipgloss.AdaptiveColor { return t.primary }

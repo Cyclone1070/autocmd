@@ -29,8 +29,7 @@ func TestTaskListTool_Execute(t *testing.T) {
 	assert.Contains(t, llm, "active background bash tasks:") // lowercase
 	assert.Contains(t, llm, "t-list-1"); assert.Contains(t, llm, "list files"); assert.Contains(t, llm, "ls -R")
 	assert.Contains(t, llm, "Status: running")
-	assert.Equal(t, "", disp.(domain.StringDisplay).Comment)
-	assert.Equal(t, "LIST active background bash tasks", disp.(domain.StringDisplay).Content)
+	assert.Equal(t, "List active background bash tasks", disp.(domain.StringDisplay).Description)
 }
 
 func TestTaskListTool_Execute_Cancelled(t *testing.T) {
@@ -43,5 +42,5 @@ func TestTaskListTool_Execute_Cancelled(t *testing.T) {
 
 	_, display := inv.(domain.ExecutableInvocation).Execute(ctx)
 	// Red Phase: This currently returns "execution cancelled" as summary
-	assert.Equal(t, "LIST active background bash tasks", display.(domain.StringDisplay).Content)
+	assert.Equal(t, "List active background bash tasks", display.(domain.StringDisplay).Description)
 }

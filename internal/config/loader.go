@@ -83,7 +83,7 @@ func newConfig(dto configDTO) (*Config, error) {
 			},
 			chatWindowWidth:   dto.UI.ChatWindowWidth,
 			bashOutputHeight:  dto.UI.BashOutputHeight,
-			shortToolbox:      dto.UI.ShortToolbox,
+			shortToolBlock:      dto.UI.ShortToolBlock,
 		},
 		providers: dto.Providers,
 	}
@@ -114,7 +114,7 @@ func (m *Manager) Load() (*Config, error) {
 			MutedColor:        colorDTO{Light: defaults.ui.mutedColor.light, Dark: defaults.ui.mutedColor.dark},
 			ChatWindowWidth:   defaults.ui.chatWindowWidth,
 			BashOutputHeight:  defaults.ui.bashOutputHeight,
-			ShortToolbox:      defaults.ui.shortToolbox,
+			ShortToolBlock:      defaults.ui.shortToolBlock,
 		},
 		Providers: defaults.providers,
 	}

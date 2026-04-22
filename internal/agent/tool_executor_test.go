@@ -333,7 +333,9 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	start, ok := e1.(domain.ToolStartEvent)
 	assert.True(t, ok)
 	assert.Equal(t, "tc-789", start.CallID)
-	assert.Equal(t, domain.NewStringDisplay("Tool call failed", ""), start.Display)
+	expStart := domain.NewStringDisplay("", "")
+	expStart.Error = "Bad TEST request"
+	assert.Equal(t, expStart, start.Display)
 
 	// Verify generic error event
 	e2 := <-sender.events
@@ -396,8 +398,8 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg1, disp1, err1 := executor.execute(context.Background(), tc1, sender)
 	assert.NoError(t, err1)
 	assert.NotNil(t, disp1)
-	exp1 := domain.NewStringDisplay("Tool call failed", "")
-	exp1 = exp1.WithError("Unknown tool").(domain.StringDisplay)
+	exp1 := domain.NewStringDisplay("", "")
+	exp1.Error = "Unknown tool"
 	assert.Equal(t, exp1, disp1)
 	assert.Equal(t, "tc-1", msg1.ToolCallID)
 	assert.Contains(t, msg1.Content, "does not exist")
@@ -407,8 +409,8 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	msg2, disp2, err2 := executor.execute(context.Background(), tc2, sender)
 	assert.NoError(t, err2)
 	assert.NotNil(t, disp2)
-	exp2 := domain.NewStringDisplay("Tool call failed", "")
-	exp2 = exp2.WithError("Bad READ FILE request").(domain.StringDisplay)
+	exp2 := domain.NewStringDisplay("", "")
+	exp2.Error = "Bad READ FILE request"
 	assert.Equal(t, exp2, disp2)
 	assert.Equal(t, "tc-2", msg2.ToolCallID)
 	assert.Contains(t, msg2.Content, "failed to prepare")

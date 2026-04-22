@@ -54,12 +54,53 @@ func TestQuestionTool(t *testing.T) {
 
 		llmContent, finalDisplay := ii.Resolve(context.Background(), act)
 		assert.Contains(t, llmContent, "Alice")
-		assert.Contains(t, llmContent, "Q: Pick name?\nA: Alice")
+		assert.Contains(t, llmContent, "User has answered your questions (0 skipped):\n\nQ: Pick name?\nA: Alice\n\nYou can now continue with the user's answers in mind.")
 
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		assert.True(t, ok)
-		assert.Equal(t, "Questions attempted", sd.Description)
+		assert.Equal(t, "Questions answered", sd.Description)
 		assert.Contains(t, sd.Content, "Alice")
+	})
+
+	t.Run("Resolve omits skipped questions", func(t *testing.T) {
+		params := `{"questions": [{"question": "Q1?"}, {"question": "Q2?"}]}`
+		inv, _ := tool.Prepare(params)
+		ii, _ := inv.(domain.InteractiveInvocation)
+
+		act := domain.QuestionAnswerAction{
+			Answers: [][]string{{"A1"}, {}},
+		}
+
+		llmContent, finalDisplay := ii.Resolve(context.Background(), act)
+		assert.Contains(t, llmContent, "User has answered your questions (1 skipped):\n\nQ: Q1?\nA: A1\n\nYou can now continue with the user's answers in mind.")
+		assert.NotContains(t, llmContent, "Q: Q2?")
+		assert.NotContains(t, llmContent, "Not answered")
+
+		sd, ok := finalDisplay.(domain.StringDisplay)
+		assert.True(t, ok)
+		assert.Equal(t, "Questions answered", sd.Description)
+		assert.Contains(t, sd.Content, "Q: Q1?\nA: A1")
+		assert.NotContains(t, sd.Content, "Q: Q2?")
+		assert.NotContains(t, sd.Content, "Not answered")
+	})
+
+	t.Run("Resolve all skipped returns skipped message and display", func(t *testing.T) {
+		params := `{"questions": [{"question": "Q1?"}, {"question": "Q2?"}]}`
+		inv, _ := tool.Prepare(params)
+		ii, _ := inv.(domain.InteractiveInvocation)
+
+		act := domain.QuestionAnswerAction{
+			Answers: [][]string{{}, {}},
+		}
+
+		llmContent, finalDisplay := ii.Resolve(context.Background(), act)
+		assert.Equal(t, "User has skipped all questions.", llmContent)
+
+		sd, ok := finalDisplay.(domain.StringDisplay)
+		require.True(t, ok)
+		assert.Equal(t, "Questions skipped", sd.Description)
+		assert.Equal(t, "", sd.Content)
+		assert.Equal(t, "", sd.Error)
 	})
 
 	t.Run("Resolve Cancellation", func(t *testing.T) {
@@ -78,8 +119,8 @@ func TestQuestionTool(t *testing.T) {
 		sd, ok := finalDisplay.(domain.StringDisplay)
 		require.True(t, ok)
 		assert.Equal(t, domain.ToolErrorCancelled, sd.Error)
-		assert.Equal(t, "Questions attempted", sd.Description)
-		assert.Equal(t, "Q: Color?\n\nQ: Size?", sd.Content)
+		assert.Equal(t, "Question attempted", sd.Description)
+		assert.Equal(t, "", sd.Content)
 	})
 }
 

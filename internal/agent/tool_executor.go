@@ -242,8 +242,8 @@ func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSende
 	defsJSON, _ := json.MarshalIndent(defs, "", "  ")
 	errMsg := fmt.Sprintf("Error: tool %q does not exist.\n\nAvailable tools:\n%s", tc.Function.Name, defsJSON)
 
-	display := domain.NewStringDisplay("Tool call failed", "")
-	endDisp := display.WithError("Unknown tool")
+	display := domain.NewStringDisplay("", "")
+	display.Error = "Unknown tool"
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{
 			CallID:  tc.ID,
@@ -251,7 +251,7 @@ func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSende
 		})
 		events.SendUIUpdate(domain.ToolEndEvent{
 			CallID:  tc.ID,
-			Display: endDisp,
+			Display: display,
 		})
 	}
 
@@ -260,7 +260,7 @@ func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSende
 		ToolCallID: tc.ID,
 		ToolName:   tc.Function.Name,
 		Content:    errMsg,
-	}, endDisp
+	}, display
 }
 
 func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {
@@ -268,8 +268,8 @@ func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall,
 	errMsg := fmt.Sprintf("Error: failed to prepare tool %q: %v\n\nExpected schema:\n%s", tc.Function.Name, prepErr, defJSON)
 
 	toolLabel := fmt.Sprintf("Bad %s request", strings.ToUpper(strings.ReplaceAll(tc.Function.Name, "_", " ")))
-	display := domain.NewStringDisplay("Tool call failed", "")
-	endDisp := display.WithError(toolLabel)
+	display := domain.NewStringDisplay("", "")
+	display.Error = toolLabel
 	if events != nil {
 		events.SendUIUpdate(domain.ToolStartEvent{
 			CallID:  tc.ID,
@@ -277,7 +277,7 @@ func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall,
 		})
 		events.SendUIUpdate(domain.ToolEndEvent{
 			CallID:  tc.ID,
-			Display: endDisp,
+			Display: display,
 		})
 	}
 
@@ -286,5 +286,5 @@ func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall,
 		ToolCallID: tc.ID,
 		ToolName:   tc.Function.Name,
 		Content:    errMsg,
-	}, endDisp
+	}, display
 }

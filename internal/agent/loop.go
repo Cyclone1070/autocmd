@@ -127,10 +127,6 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 			return err
 		}
 
-		if l.events != nil {
-			l.events.SendUIUpdate(domain.ThinkingEvent{})
-		}
-
 		// Bind tools to the model
 		modelWithTools, err := l.llm.Model().WithTools(l.toolExecutor.definitions())
 		if err != nil {
@@ -144,6 +140,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		defer reader.Close()
 
 		var chunks []*schema.Message
+		thinkingSent := false
 		for {
 			chunk, err := reader.Recv()
 			if errors.Is(err, io.EOF) {
@@ -167,6 +164,10 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 					})
 				}
 				if chunk.ReasoningContent != "" {
+					if !thinkingSent {
+						l.events.SendUIUpdate(domain.ThinkingEvent{})
+						thinkingSent = true
+					}
 					l.events.SendUIUpdate(domain.TextEvent{
 						Text:      chunk.ReasoningContent,
 						IsThought: true,

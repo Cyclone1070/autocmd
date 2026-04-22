@@ -204,7 +204,6 @@ func TestRun_SingleTurn_TextOnly(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(session.Messages))
 
-	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.Equal(t, domain.TextEvent{Text: "Hello!"}, <-sender.events)
 }
 
@@ -238,10 +237,8 @@ func TestRun_SingleToolCall(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 4, len(session.Messages))
 
-	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
-	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.Equal(t, domain.TextEvent{Text: "It's sunny!"}, <-sender.events)
 }
 
@@ -272,9 +269,31 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 	l := newTestLoop([]domain.Tool{mt}, m, sender)
 	_ = l.Run(ctx, &domain.Session{}, "run")
 
-	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolStartEvent{}, <-sender.events)
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
+}
+
+func TestRun_ThinkingEvent_OnlyOnReasoningContent(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id: "test",
+		streams: []*mockStream{
+			{chunks: []mockChunk{
+				{text: "internal", isThought: true},
+				{text: "final"},
+			}},
+		},
+	}
+
+	session := &domain.Session{}
+	sender := newMockEventSender(10)
+	l := newTestLoop([]domain.Tool{}, m, sender)
+	err := l.Run(ctx, session, "Hi")
+
+	assert.NoError(t, err)
+	assert.IsType(t, domain.ThinkingEvent{}, <-sender.events)
+	assert.Equal(t, domain.TextEvent{Text: "internal", IsThought: true}, <-sender.events)
+	assert.Equal(t, domain.TextEvent{Text: "final"}, <-sender.events)
 }
 
 func TestRun_MaxIterationsExceeded(t *testing.T) {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/actionrouter"
 	"github.com/Cyclone1070/iav/internal/agent"
@@ -139,17 +141,26 @@ func (l *statefulMockLLM) Generate(ctx context.Context, msgs []*schema.Message, 
 }
 
 func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	// Slow down each turn a bit so the demo doesn't feel instant.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(450 * time.Millisecond):
+	}
+
+	cwd, _ := os.Getwd()
+	tempFile := filepath.ToSlash(filepath.Join(cwd, "temp.md"))
 	steps := []struct {
 		name string
 		args string
 	}{
-		{"write_file", `{"path": "temp.md", "content": "# Temp File\nInitial content.", "description": "Creating temp file"}`},
-		{"edit_file", `{"path": "temp.md", "operations": [{"before": "Initial content.", "after": "Updated via Edit Tool.", "expected_replacements": 1}], "description": "Updating content"}`},
-		{"read_file", `{"path": "temp.md"}`},
-		{"grep", `{"pattern": "Updated", "path": "."}`},
-		{"glob", `{"pattern": "temp.md"}`},
+		{"write_file", fmt.Sprintf(`{"file_path":"%s","content":"# Temp File\nInitial content.","description":"Creating temp file"}`, tempFile)},
+		{"edit_file", fmt.Sprintf(`{"file_path":"%s","description":"Updating content","old_string":"Initial content.","new_string":"Updated via Edit Tool."}`, tempFile)},
+		{"read_file", fmt.Sprintf(`{"file_path":"%s"}`, tempFile)},
+		{"grep", fmt.Sprintf(`{"pattern":"Updated","path":"%s","output_mode":"content"}`, filepath.ToSlash(cwd))},
+		{"glob", fmt.Sprintf(`{"pattern":"temp.md","path":"%s"}`, filepath.ToSlash(cwd))},
 		{"ask_question", `{"questions": [{"question": "Did you see the real tools working?", "options": ["Yes", "Hell yeah"]}]}`},
-		{"bash", `{"command": ["rm", "temp.md"], "description": "Cleaning up"}`},
+		{"bash", `{"command":"rm \"temp.md\"","description":"Cleaning up"}`},
 	}
 
 	var msg *schema.Message

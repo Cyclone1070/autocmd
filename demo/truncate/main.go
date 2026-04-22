@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -89,6 +90,11 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(350 * time.Millisecond):
+	}
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "This is a test of the truncation feature. The following lines should be truncated if they exceed the terminal width.\n\n"})
 	for i := 1; i <= 40; i++ {
 		select {
@@ -96,6 +102,11 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			return ctx.Err()
 		default:
 			a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("Line %d: This is a repeated line for truncation testing it's gonna be quite long to overflow my goated terminal.\n", i)})
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(35 * time.Millisecond):
 		}
 	}
 	return nil

@@ -85,7 +85,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch msg.String() {
-		case "enter":
+		case "enter", " ":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.selectedName = item.Label
 				m.bus.SendAction(domain.SelectModelAction{ID: item.ID})

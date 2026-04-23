@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPicker_Actions_Quit(t *testing.T) {
@@ -79,4 +80,22 @@ func TestPicker_View_ActiveItemIsHighlightedIndependentlyOfCursor(t *testing.T) 
 	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	viewAfterMove := m.View()
 	assert.Contains(t, viewAfterMove, "Second", "active label should still render after cursor moves")
+}
+
+func TestPicker_SpaceSelectsLikeEnter(t *testing.T) {
+	m := NewPicker(Config{
+		Items: []Item{
+			{ID: "1", Label: "First"},
+			{ID: "2", Label: "Second"},
+		},
+	})
+
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	require.NotNil(t, cmd, "space should trigger quit command after selection")
+
+	p := newModel.(*Picker)
+	selected, ok := p.Selected()
+	assert.True(t, ok, "space should select current cursor item")
+	assert.Equal(t, "1", selected.ID)
+	assert.True(t, p.quit, "picker should quit after space selection")
 }

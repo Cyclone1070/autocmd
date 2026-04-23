@@ -149,4 +149,24 @@ func TestAuthUI_Interactive(t *testing.T) {
 		assert.Contains(t, view, "https://github.com/login/device")
 		assert.Contains(t, view, "ABCD-1234")
 	})
+
+	t.Run("Field collection: space is text, not select shortcut", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		m.Update(domain.CredentialFieldEvent{
+			Method: domain.APIKeyAuthMethod{
+				ID: domain.AuthMethodAPIKey,
+				Fields: []domain.AuthField{
+					{ID: domain.AuthFieldAPIKey, Label: "API Key", Placeholder: "Enter key", IsSecret: false},
+				},
+			},
+			FieldIndex: 0,
+		})
+
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")})
+		m.Update(tea.KeyMsg{Type: tea.KeySpace})
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("cd")})
+
+		assert.Equal(t, "ab cd", m.textInput.Value(), "space should be treated as text input in auth field mode")
+	})
 }

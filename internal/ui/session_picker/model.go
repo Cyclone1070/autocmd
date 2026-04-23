@@ -139,7 +139,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.bus.SendAction(domain.DeleteSessionAction{ID: item.ID})
 				return m, nil
 			}
-		case "enter":
+		case "enter", " ":
 			if item, ok := m.picker.CursorItem(); ok {
 				m.selectedID = item.ID
 				m.selectedName = item.Label

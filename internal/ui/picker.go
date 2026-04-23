@@ -85,7 +85,7 @@ func (m *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 
-		case "enter":
+		case "enter", " ":
 			if len(m.selectableIndices) > 0 {
 				idx := m.selectableIndices[m.cursor]
 				m.selected = &m.items[idx]

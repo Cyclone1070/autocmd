@@ -56,6 +56,20 @@ func TestModelSelection(t *testing.T) {
 		bus.AssertExpectations(t)
 	})
 
+	t.Run("Space triggers SelectModelAction (hidden shortcut)", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectModelAction{ID: "m2"}).Return()
+
+		m := NewModel(bus, theme)
+		m.Update(result)
+		m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+
+		assert.Nil(t, cmd, "space select should dispatch action, not quit directly")
+		assert.Equal(t, "Model 2", m.selectedName)
+		bus.AssertExpectations(t)
+	})
+
 	t.Run("Escape sends StopAction and Quits", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.StopAction{}).Return()

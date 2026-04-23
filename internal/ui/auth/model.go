@@ -206,6 +206,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.bus.SendAction(domain.SubmitFieldAction{Value: val})
 				return m, nil
 			}
+			if msg.Type == tea.KeySpace {
+				// In text-input mode, space must remain a literal character, not a picker shortcut.
+				msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
+			}
 			m.textInput, cmd = m.textInput.Update(msg)
 			return m, cmd
 		}

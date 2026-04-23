@@ -106,6 +106,18 @@ func TestSessionPickerUI(t *testing.T) {
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		bus.AssertExpectations(t)
 	})
+
+	t.Run("Select session: 'space' (hidden shortcut)", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectSessionAction{ID: "s1"}).Return()
+
+		m := NewModel(bus, theme)
+		m.Update(result)
+
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+		assert.Nil(t, cmd, "space select should dispatch action, not quit directly")
+		bus.AssertExpectations(t)
+	})
 	
 	t.Run("DoneEvent -> Quitting", func(t *testing.T) {
 		bus := new(mockBus)

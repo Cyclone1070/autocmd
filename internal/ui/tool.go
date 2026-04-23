@@ -13,7 +13,7 @@ import (
 )
 
 type gater interface {
-	Gate(content string) string
+	Gate(lines []string) ([]string, int)
 }
 
 const (
@@ -542,12 +542,11 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 				truncFirstWidth = contentFirstWidth
 			}
 			truncWrapped := r.wrapLines(truncatableLogical, truncFirstWidth, contentContinuationWidth)
-			gated := r.gater.Gate(strings.Join(truncWrapped, "\n"))
-			if gated == "" {
-				spec.ContentLines = preservedWrapped
-			} else {
-				spec.ContentLines = append(preservedWrapped, strings.Split(gated, "\n")...)
+			gatedLines, indicatorLines := r.gater.Gate(truncWrapped)
+			for i := 0; i < indicatorLines && i < len(gatedLines); i++ {
+				gatedLines[i] = r.Theme.Muted(gatedLines[i])
 			}
+			spec.ContentLines = append(preservedWrapped, gatedLines...)
 		}
 	} else {
 		spec.ContentLines = r.wrapLines(spec.ContentLines, contentFirstWidth, contentContinuationWidth)

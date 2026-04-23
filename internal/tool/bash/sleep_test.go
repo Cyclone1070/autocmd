@@ -2,6 +2,7 @@ package bash
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -39,8 +40,8 @@ func TestSleepTool_Execute_Interrupted(t *testing.T) {
 	inv, _ := tl.Prepare(params)
 
 	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
-	assert.Equal(t, "sleep interrupted: background bash process finished", llm)
-	assert.Equal(t, "Sleep interrupted: background bash process finished", disp.(domain.StringDisplay).Description)
+	assert.Regexp(t, regexp.MustCompile(`^sleep interrupted after [0-9hms]+: background bash process finished$`), llm)
+	assert.Regexp(t, regexp.MustCompile(`^Sleep interrupted after [0-9hms]+: background bash process finished$`), disp.(domain.StringDisplay).Description)
 	assert.Equal(t, "", disp.(domain.StringDisplay).Content)
 }
 
@@ -82,7 +83,7 @@ func TestSleepTool_Execute_AlreadyFinished(t *testing.T) {
 	duration := time.Since(start)
 
 	assert.Less(t, duration, 500*time.Millisecond, "Sleep should have been interrupted immediately, but took %v", duration)
-	assert.Equal(t, "sleep interrupted: background bash process finished", llm)
-	assert.Equal(t, "Sleep interrupted: background bash process finished", disp.(domain.StringDisplay).Description)
+	assert.Regexp(t, regexp.MustCompile(`^sleep interrupted after [0-9hms]+: background bash process finished$`), llm)
+	assert.Regexp(t, regexp.MustCompile(`^Sleep interrupted after [0-9hms]+: background bash process finished$`), disp.(domain.StringDisplay).Description)
 	assert.Equal(t, "", disp.(domain.StringDisplay).Content)
 }

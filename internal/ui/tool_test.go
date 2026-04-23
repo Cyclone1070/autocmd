@@ -13,10 +13,10 @@ import (
 )
 
 type mockGater struct {
-	gateFunc func(string) string
+	gateFunc func([]string) ([]string, int)
 }
 
-func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
+func (m *mockGater) Gate(lines []string) ([]string, int) { return m.gateFunc(lines) }
 
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
@@ -36,7 +36,9 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 
 func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
-	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
+		return append(lines, "_gated"), 0
+	}}
 	tr := NewToolRenderer(theme, 80, g)
 
 	got := tr.RenderString(domain.NewStringDisplay("", "raw"), StatusSuccess, "", "✓")
@@ -46,16 +48,20 @@ func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
 
 func TestToolRenderer_RespectsGaterOnBashOutput(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
-	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
+		return append(lines, "_gated"), 0
+	}}
 	tr := NewToolRenderer(theme, 80, g)
 
 	got := tr.RenderBash(domain.BashDisplay{Description: "C", Command: "cmd"}, "stdout", StatusSuccess, "", "✓")
-	assert.Contains(t, got, "stdout_gated", "RenderBash should gate captured output")
+	assert.Contains(t, got, "_gated", "RenderBash should gate captured output")
 }
 
 func TestToolRenderer_RenderQuestionDoesNotUseGater(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
-	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
+		return append(lines, "_gated"), 0
+	}}
 	tr := NewToolRenderer(theme, 80, g)
 
 	d := qDisplaySingle()
@@ -179,6 +185,27 @@ func TestRenderBash_TruncatesByVisualLinesAfterWrap(t *testing.T) {
 	got := tr.RenderBash(display, strings.Repeat("x", 100), StatusSuccess, "", "✓")
 
 	assert.Contains(t, got, "▲ [", "wrapped overflow should be truncated by visual lines")
+}
+
+func TestRenderBash_TruncationIndicatorIsMutedInToolContent(t *testing.T) {
+	cfg := config.DefaultConfig().UI()
+	theme := NewTheme(ThemeConfig{
+		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
+		ShortToolBlock: false,
+	})
+	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
+	display := domain.BashDisplay{
+		Description: "Slow Shell",
+		Command:     "slow-cmd",
+	}
+
+	got := tr.RenderBash(display, strings.Repeat("line\n", 5), StatusSuccess, "", "✓")
+	expectedMutedIndicator := theme.Muted("  ▲ [3 lines truncated]")
+
+	assert.Contains(t, got, expectedMutedIndicator, "truncate indicator should be muted inside tool content")
 }
 
 func TestRenderBash_Error(t *testing.T) {

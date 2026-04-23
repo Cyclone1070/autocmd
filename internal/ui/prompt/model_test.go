@@ -286,17 +286,19 @@ func TestModel_ExplicitGater(t *testing.T) {
 }
 
 type mockGater struct {
-	gateFunc func(string) string
+	gateFunc func([]string) ([]string, int)
 }
-func (m *mockGater) Gate(s string) string { return m.gateFunc(s) }
+func (m *mockGater) Gate(lines []string) ([]string, int) { return m.gateFunc(lines) }
 
 func TestModel_ViewUsesGater(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	g := &mockGater{gateFunc: func(s string) string { return s + "_gated" }}
+	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
+		return append(lines, "_gated"), 0
+	}}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{p: "raw"}, g, 80)
 	
-	assert.Equal(t, "raw_gated", m.View())
+	assert.Equal(t, "raw\n_gated", m.View())
 }
 
 func TestModel_ToolsViewSpacing(t *testing.T) {

@@ -37,7 +37,7 @@ type bus interface {
 }
 
 type viewportGater interface {
-	Gate(content string) string
+	Gate(lines []string) ([]string, int)
 }
 
 type uiState int
@@ -375,7 +375,8 @@ func (m *Model) View() string {
 	case stateTooling:
 		content = ui.NormalizeBlock(strings.Join(m.renderAllTools(), ""))
 	}
-	return m.gater.Gate(content)
+	gated, _ := m.gater.Gate(strings.Split(content, "\n"))
+	return strings.Join(gated, "\n")
 }
 
 func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {

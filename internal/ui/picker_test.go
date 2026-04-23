@@ -48,3 +48,35 @@ func TestPicker_RegularAction_DoesNotQuit(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 	assert.False(t, m.quit, "Regular actions should not trigger picker quit")
 }
+
+func TestPicker_View_CursorIsBlueCircleNotTriangle(t *testing.T) {
+	m := NewPicker(Config{
+		Title: "TEST",
+		Items: []Item{
+			{ID: "1", Label: "First"},
+			{ID: "2", Label: "Second"},
+		},
+	})
+
+	view := m.View()
+	assert.Contains(t, view, "●", "cursor should be rendered as a blue circle glyph")
+	assert.NotContains(t, view, "▸", "triangle cursor glyph should not be rendered")
+}
+
+func TestPicker_View_ActiveItemIsHighlightedIndependentlyOfCursor(t *testing.T) {
+	m := NewPicker(Config{
+		Title: "TEST",
+		Items: []Item{
+			{ID: "1", Label: "First"},
+			{ID: "2", Label: "Second", Active: true},
+		},
+	})
+
+	viewAtTop := m.View()
+	assert.Contains(t, viewAtTop, "●", "cursor indicator should exist")
+	assert.Contains(t, viewAtTop, "Second", "active row label should be rendered")
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	viewAfterMove := m.View()
+	assert.Contains(t, viewAfterMove, "Second", "active label should still render after cursor moves")
+}

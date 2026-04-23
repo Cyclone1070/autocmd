@@ -167,7 +167,8 @@ func (m *Picker) View() string {
 	}
 	helpParts = append(helpParts, helpItem("q", "quit"))
 
-	s.WriteString("  " + strings.Join(helpParts, "   ") + "\n\n")
+	helpRow := "  " + strings.Join(helpParts, "   ")
+	s.WriteString(helpRow + "\n\n")
 
 	if len(m.items) == 0 {
 		s.WriteString(descStyle.Render("    No entries found.") + "\n")
@@ -194,18 +195,13 @@ func (m *Picker) View() string {
 
 		var icon string
 		if isCursor {
-			icon = cursorStyle.Render("▸")
+			icon = cursorStyle.Render("●")
 		} else {
 			icon = " "
 		}
 
-		status := " "
-		if item.Active {
-			status = activeStyle.Render("●")
-		}
-
 		var labelText string
-		if isCursor {
+		if item.Active {
 			labelText = activeStyle.Bold(true).Render(item.Label)
 		} else {
 			labelText = inactiveStyle.Render(item.Label)
@@ -221,7 +217,7 @@ func (m *Picker) View() string {
 
 		detailText := fadedStyle.Render(item.Detail)
 
-		line := fmt.Sprintf(" %s %s %s%s  %s\n", icon, status, labelText, strings.Repeat(" ", padding), detailText)
+		line := fmt.Sprintf(" %s %s%s  %s\n", icon, labelText, strings.Repeat(" ", padding), detailText)
 		s.WriteString(line)
 	}
 

@@ -169,4 +169,74 @@ func TestAuthUI_Interactive(t *testing.T) {
 
 		assert.Equal(t, "ab cd", m.textInput.Value(), "space should be treated as text input in auth field mode")
 	})
+
+	t.Run("Method selection back keys return to provider selection", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "openai"}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+		}
+
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		assert.Equal(t, stateMethodSelection, m.state)
+
+		backKeys := []tea.KeyMsg{
+			{Type: tea.KeyBackspace},
+			{Type: tea.KeyRunes, Runes: []rune("h")},
+			{Type: tea.KeyLeft},
+		}
+		for _, key := range backKeys {
+			m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+			_, _ = m.Update(key)
+			assert.Equal(t, stateProviderSelection, m.state)
+			assert.Contains(t, m.View(), "SELECT PROVIDER")
+		}
+	})
+
+	t.Run("Method selection shows backspace hint", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "openai"}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+		}
+
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+
+		view := m.View()
+		assert.Contains(t, view, "backspace")
+		assert.Contains(t, view, "back")
+	})
+
+	t.Run("Field collection back keys return to method selection", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "openai"}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{
+				ID: "api_key", Name: "API Key",
+				Fields: []domain.AuthField{{ID: "key", Label: "API Key", Placeholder: "Enter key"}},
+			},
+		}
+
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
+		assert.Equal(t, stateFieldCollection, m.state)
+
+		backKeys := []tea.KeyMsg{
+			{Type: tea.KeyBackspace},
+			{Type: tea.KeyRunes, Runes: []rune("h")},
+			{Type: tea.KeyLeft},
+		}
+		for _, key := range backKeys {
+			m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
+			_, _ = m.Update(key)
+			assert.Equal(t, stateMethodSelection, m.state)
+			assert.Contains(t, m.View(), "SELECT AUTH MODE (openai)")
+		}
+	})
 }

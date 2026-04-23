@@ -75,6 +75,7 @@ Usage:
 - The file_path parameter MUST be an absolute path.
 - Results are returned using "cat -n" format, with line numbers starting at 1.
 - By default, it reads up to 2000 lines starting from the beginning of the file.
+- Negative offsets count backward from the end of the file (-1 is the last line).
 - When you already know which part of the file you need, only read that part by specifying offset and limit. This is important for larger files.
 - This tool can only read files, not directories. To read a directory, use "ls" via the bash tool.
 - If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.`,
@@ -86,7 +87,7 @@ Usage:
 			},
 			"offset": {
 				Type: schema.Integer,
-				Desc: "The line number to start reading from. Line numbers start at 1.",
+				Desc: "The line index to start reading from. 0 starts at the first line; negative values count backward from end of file (-1 is last line).",
 			},
 			"limit": {
 				Type: schema.Integer,
@@ -112,9 +113,6 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	if req.FilePath == "" {
 		return nil, fmt.Errorf("file_path is required")
-	}
-	if req.Offset < 0 {
-		req.Offset = 0
 	}
 	if req.Limit <= 0 {
 		req.Limit = defaultReadFileLimit
@@ -143,6 +141,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
+		displayPath:     filepath.ToSlash(displayPath),
 		offset:          req.Offset,
 		limit:           req.Limit,
 		display:         domain.NewStringDisplay(fmt.Sprintf("Read \"%s\"", filepath.ToSlash(displayPath)), ""),
@@ -153,6 +152,7 @@ type readFileInvocation struct {
 	fileOps         fileReader
 	checksumManager checksumComputer
 	absPath         string
+	displayPath     string
 	offset          int
 	limit           int
 	display         domain.StringDisplay
@@ -184,13 +184,18 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	i.checksumManager.Update(i.absPath, checksum)
 
 	lines := content.SplitLines(normalized)
-	paginatedLines, pagRes := pagination.ApplyPagination(lines, i.offset, i.limit)
+	offset := i.offset
+	if offset < 0 {
+		offset = max(len(lines)+offset, 0)
+	}
+	paginatedLines, pagRes := pagination.ApplyPagination(lines, offset, i.limit)
 
-	startLine := i.offset + 1
+	startLine := offset + 1
 	endLine := startLine + len(paginatedLines) - 1
 	if len(paginatedLines) == 0 {
 		endLine = startLine - 1
 	}
+	d.Description = fmt.Sprintf("Read \"%s\" Lines %d-%d", i.displayPath, offset, offset+len(paginatedLines))
 
 	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d
 }

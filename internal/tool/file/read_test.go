@@ -271,22 +271,22 @@ func TestReadFile(t *testing.T) {
 		assertContains(t, err.Error(), "absolute path required")
 	})
 
-	t.Run("negative offset clamps to zero", func(t *testing.T) {
+	t.Run("negative offset reads from end of file", func(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
 		fs.createFile("/workspace/test.txt", []byte("line1\nline2"))
 
 		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 
-		readReq := &ReadFileRequest{FilePath: "/workspace/test.txt", Offset: -5, Limit: 10}
+		readReq := &ReadFileRequest{FilePath: "/workspace/test.txt", Offset: -1, Limit: 1}
 		output, err := executeRead(t, readTool, readReq)
 
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
 
-		// Should start from line 1 (offset clamped to 0)
-		assertContains(t, output, "1\tline1")
+		assertContains(t, output, "2\tline2")
+		assertContains(t, output, "(End of file - total 2 lines)")
 	})
 
 	t.Run("zero limit defaults to constant", func(t *testing.T) {
@@ -391,6 +391,24 @@ func TestReadFile(t *testing.T) {
 		display := inv.Display().(domain.StringDisplay)
 		assert.Equal(t, "Read \"/workspace/subdir/test.txt\"", display.Description)
 		assert.Equal(t, "", display.Content)
+	})
+
+	t.Run("execute includes read range in display", func(t *testing.T) {
+		fs := newMockFileSystemForRead()
+		checksumManager := newMockChecksumManagerForRead()
+		workspaceRoot := "/workspace"
+		absFile := "/workspace/subdir/test.txt"
+		fs.createFile(absFile, []byte("line1\nline2\nline3"))
+
+		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
+		params, _ := json.Marshal(&ReadFileRequest{FilePath: absFile, Offset: 0, Limit: 2})
+		inv, err := readTool.Prepare(string(params))
+		require.NoError(t, err)
+
+		_, finalDisplay := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		typed, ok := finalDisplay.(domain.StringDisplay)
+		require.True(t, ok)
+		assert.Equal(t, "Read \"/workspace/subdir/test.txt\" L0-2", typed.Description)
 	})
 
 	t.Run("empty file returns system reminder", func(t *testing.T) {

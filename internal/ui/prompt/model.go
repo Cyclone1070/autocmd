@@ -345,7 +345,7 @@ func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
 	m.state = stateFlushing
 	m.nextState = next
 
-	fullContent := m.joinAndNormalize(blocks)
+	fullContent := ui.NormalizeBlock(strings.Join(blocks, ""))
 	if fullContent != "" && m.flushFn != nil {
 		return m, tea.Sequence(m.flushFn(fullContent), func() tea.Msg { return flushDoneMsg{} })
 	}
@@ -373,7 +373,7 @@ func (m *Model) View() string {
 		}
 		content = m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
 	case stateTooling:
-		content = m.renderToolsView()
+		content = ui.NormalizeBlock(strings.Join(m.renderAllTools(), ""))
 	}
 	return m.gater.Gate(content)
 }
@@ -467,14 +467,6 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 		return ""
 	}
 	return rendered
-}
-
-func (m *Model) renderToolsView() string {
-	return m.joinAndNormalize(m.renderAllTools())
-}
-
-func (m *Model) joinAndNormalize(blocks []string) string {
-	return ui.NormalizeBlock(strings.Join(blocks, ""))
 }
 
 func (m *Model) renderAllTools() []string {

@@ -22,11 +22,11 @@ func TestView_StrictToolboxSpacing(t *testing.T) {
 	// Add two tools to simulate the "String 1", "String 2" sequence in the user's image
 	m.handleBusEvent(domain.ToolStartEvent{
 		CallID:  "1",
-		Display: domain.NewBashDisplay("Tool 1", "ls", ""),
+		Display: domain.NewBashDisplay("Tool 1", "ls", "", ""),
 	})
 	m.handleBusEvent(domain.ToolStartEvent{
 		CallID:  "2",
-		Display: domain.NewBashDisplay("Tool 2", "pwd", ""),
+		Display: domain.NewBashDisplay("Tool 2", "pwd", "", ""),
 	})
 
 	view := m.View()

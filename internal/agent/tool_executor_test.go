@@ -423,7 +423,7 @@ func TestExecute_Bash_StreamsAndEnds(t *testing.T) {
 			return &mockStreamInvocation{
 				content: "Command finished",
 				stream:  strings.NewReader("file1\nfile2\n"),
-				display: domain.NewBashDisplay("ls", "ls", ""),
+				display: domain.NewBashDisplay("ls", "ls", "", ""),
 			}, nil
 		},
 	}
@@ -531,7 +531,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 		prepare: func(params string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				stream:  output,
-				display: domain.NewBashDisplay("Header", "cmd", "").WithError(domain.ToolErrorFailed),
+				display: domain.NewBashDisplay("Header", "cmd", "", "").WithError(domain.ToolErrorFailed),
 				content: "specific error",
 				err:     nil,
 			}, nil
@@ -1069,7 +1069,7 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 			return &mockStreamInvocation{
 				content: "done",
 				stream:  strings.NewReader(data),
-				display: domain.NewBashDisplay("test", "test", ""),
+				display: domain.NewBashDisplay("test", "test", "", ""),
 			}, nil
 		},
 	}

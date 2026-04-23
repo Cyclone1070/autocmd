@@ -144,6 +144,10 @@ func (m *mockPathResolver) Root() string {
 	return m.root
 }
 
+func (m *mockPathResolver) DisplayPath(path string) string {
+	return path
+}
+
 func TestBashTool_Execute(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
@@ -166,10 +170,12 @@ func TestBashTool_Execute(t *testing.T) {
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
 
-	assert.Equal(t, "test output", llmContent)
+	assert.Contains(t, llmContent, "test output")
+	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
 	assert.Equal(t, "test output", display.(domain.BashDisplay).CapturedOutput)
 	assert.Equal(t, "test command", display.(domain.BashDisplay).Description)
 	assert.Equal(t, "echo test", display.(domain.BashDisplay).Command)
+	assert.Equal(t, "/tmp", display.(domain.BashDisplay).Cwd)
 }
 
 func TestBashTool_Stream(t *testing.T) {
@@ -235,8 +241,10 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 		duration := time.Since(start)
 
 		assert.Contains(t, resp, "the command is running in the background")
+		assert.Contains(t, resp, "<cwd>/workspace</cwd>")
 		bd := display.(domain.BashDisplay)
-		assert.Equal(t, "(command running in background)", bd.CapturedOutput)
+		assert.Contains(t, bd.CapturedOutput, "(command is running in background")
+		assert.Equal(t, "/workspace", bd.Cwd)
 		assert.Less(t, duration, 150*time.Millisecond)
 		
 		<-mockTM.done // Ensure background goroutine finishes Wait() and sync.Once Unlock
@@ -303,7 +311,9 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 
 	// Should have backgrounded immediately
 	assert.Contains(t, llmContent, "<background_task_id>")
-	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(command running in background)")
+	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
+	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(command is running in background")
+	assert.Equal(t, "/tmp", display.(domain.BashDisplay).Cwd)
 	
 	exec.AssertExpectations(t)
 	close(waitCh) // Cleanup
@@ -326,7 +336,7 @@ func TestBashTool_Prepare_EmptyDescription(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "description is required")
 }
-func TestBashTool_HardTimeout(t *testing.T) {
+func TestBashTool_DeadlineExceeded_TreatedAsFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
@@ -348,9 +358,9 @@ func TestBashTool_HardTimeout(t *testing.T) {
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
 
-	assert.Contains(t, llmContent, "<execution_status>")
-	assert.Contains(t, llmContent, "<timedout>true</timedout>")
-	assert.Equal(t, domain.ToolErrorTimedOut, display.GetError())
+	assert.Contains(t, llmContent, "Error: command failed:")
+	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
+	assert.Equal(t, domain.ToolErrorFailed, display.GetError())
 }
 
 func TestBashTool_Cancellation(t *testing.T) {
@@ -416,7 +426,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	assert.Equal(t, "(Output too large, saved to /tmp/large.log)", display.(domain.BashDisplay).CapturedOutput)
 }
 
-func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
+func TestBashTool_DeadlineExceeded_LargeOutput_TreatedAsFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
@@ -448,11 +458,12 @@ func TestBashTool_HardTimeout_LargeOutput(t *testing.T) {
 	ctx := context.Background()
 	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
 
-	assert.Contains(t, llmContent, "<execution_status>")
-	assert.Contains(t, llmContent, "<timedout>true</timedout>")
+	assert.Contains(t, llmContent, "Error: command failed:")
 	assert.Contains(t, llmContent, "too large")
 	assert.Contains(t, llmContent, "small tail")
+	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
 	assert.Equal(t, "(Output too large, saved to /tmp/large.log)", display.(domain.BashDisplay).CapturedOutput)
+	assert.Equal(t, domain.ToolErrorFailed, display.GetError())
 }
 
 

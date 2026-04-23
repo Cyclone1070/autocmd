@@ -181,17 +181,22 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		count, _ := i.countLines(res.LogPath)
 		output = fmt.Sprintf("Output too large (%d files found). Full output saved to %s. Use `read_file` tool to read full output.", count, res.LogPath)
 	}
-
-	if res.ExitCode != 0 && res.ExitCode != 1 && !timedOut {
-		d.Error = domain.ToolErrorFailed
-		output = fmt.Sprintf("Error: ripgrep failed with exit code %d\n%s", res.ExitCode, output)
-	} else if output == "" && (res.ExitCode == 0 || res.ExitCode == 1) && !timedOut {
-		return "No files found", d
+	if output == "" {
+		output = "No files found"
 	}
 
+	if !timedOut {
+		if res.ExitCode != 0 && res.ExitCode != 1 {
+			d.Error = domain.ToolErrorFailed
+			output = fmt.Sprintf("Error: ripgrep failed\n%s", output)
+		}
+	}
+
+	output = strings.TrimRight(output, "\n")
+	output = fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>", output, res.ExitCode)
 	if timedOut {
 		d.Error = domain.ToolErrorTimedOut
-		output = fmt.Sprintf("%s\n\n<execution_status>\n  <exit_code>%d</exit_code>\n  <timedout>true</timedout>\n</execution_status>", output, res.ExitCode)
+		output = fmt.Sprintf("%s\n<timeout>true</timeout>", output)
 	}
 
 	return strings.TrimSpace(output), d

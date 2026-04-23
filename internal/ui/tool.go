@@ -234,14 +234,12 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	}
 	if status == StatusError {
 		spec.HeaderLines[0] = r.formatError(header, err)
-		spec.ContentLines = []string{r.Theme.Muted(fmt.Sprintf("$ %s", d.Command))}
+		spec.ContentLines = []string{r.Theme.Muted(fmt.Sprintf("%s$ %s", d.Cwd, d.Command))}
 		return spec, true
 	}
-	cmdLine := fmt.Sprintf("$ %s", d.Command)
-
 	bashOutput := strings.TrimRight(output, "\n")
 
-	spec.ContentLines = []string{r.Theme.Muted(cmdLine)}
+	spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(fmt.Sprintf("%s$ %s", d.Cwd, d.Command)))
 	if bashOutput != "" && !r.Theme.ShortToolBlock {
 		spec.ContentLines = append(spec.ContentLines, r.mutedLines(strings.Split(bashOutput, "\n"))...)
 	}

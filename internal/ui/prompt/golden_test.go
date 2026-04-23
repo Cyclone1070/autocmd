@@ -64,11 +64,11 @@ func getPromptElements() []PromptElement {
 			Events: []domain.UIUpdate{
 				domain.ToolStartEvent{
 					CallID:  tcID,
-					Display: domain.NewBashDisplay("Running Tests", "go test ./...", ""),
+					Display: domain.NewBashDisplay("Running Tests", "go test ./...", "", ""),
 				},
 				domain.ToolEndEvent{
 					CallID:  tcID,
-					Display: domain.NewBashDisplay("Running Tests", "go test ./...", ""),
+					Display: domain.NewBashDisplay("Running Tests", "go test ./...", "", ""),
 				},
 			},
 		},
@@ -77,10 +77,10 @@ func getPromptElements() []PromptElement {
 			Events: []domain.UIUpdate{
 				domain.ToolStartEvent{
 					CallID:  tcErrID,
-					Display: domain.NewBashDisplay("Failing Command", "false", ""),
+					Display: domain.NewBashDisplay("Failing Command", "false", "", ""),
 				},
 				func() domain.ToolEndEvent {
-					d := domain.NewBashDisplay("Failing Command", "false", "")
+					d := domain.NewBashDisplay("Failing Command", "false", "", "")
 					d.Error = "Execution failed"
 					return domain.ToolEndEvent{CallID: tcErrID, Display: d}
 				}(),

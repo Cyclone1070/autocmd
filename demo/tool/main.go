@@ -190,9 +190,9 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	// 3. Shell Suite (with more streaming)
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "### SUITE: SHELL (Heavy Streaming)\n\n"})
-	tt.Start("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", ""))
-	tt.Start("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", ""))
-	tt.Start("SHELL-3", domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", ""))
+	tt.Start("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", ""))
+	tt.Start("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", ""))
+	tt.Start("SHELL-3", domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", ""))
 
 	// Heavy streaming
 	for i := 1; i <= 20; i++ {
@@ -213,12 +213,12 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// Finishes
-	tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "")) // Fast
+		tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", "")) // Fast
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1000 * time.Millisecond):
-		bash3 := domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "")
+		bash3 := domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", "")
 		bash3.Error = "exit status 1: middle tool error"
 		tt.End("SHELL-3", bash3) // Medium/Fail
 	}
@@ -227,7 +227,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(1000 * time.Millisecond):
-		tt.End("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "")) // Slow
+		tt.End("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", "")) // Slow
 	}
 
 	return nil

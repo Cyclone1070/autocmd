@@ -46,7 +46,7 @@ func TestGlob_Basic(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "/workspace/a.go", result)
+	assert.Equal(t, "/workspace/a.go\n\n<exit_code>0</exit_code>", result)
 }
 
 func TestGlob_NoMatches(t *testing.T) {
@@ -65,7 +65,7 @@ func TestGlob_NoMatches(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "No files found", result)
+	assert.Equal(t, "No files found\n\n<exit_code>0</exit_code>", result)
 }
 
 func TestGlob_Offloaded(t *testing.T) {

@@ -337,7 +337,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 		},
 	}
 	displays := domain.ToolDisplays{
-		"tc-1": domain.NewBashDisplay("List directory contents", "ls", ""),
+		"tc-1": domain.NewBashDisplay("List directory contents", "ls", "", ""),
 	}
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
@@ -484,7 +484,7 @@ func TestIssue_History_ToolBlockHeaderAppearsInline(t *testing.T) {
 		},
 	}
 	displays := domain.ToolDisplays{
-		"1": domain.NewBashDisplay("header", "ls", ""),
+		"1": domain.NewBashDisplay("header", "ls", "", ""),
 	}
 
 	var sb strings.Builder
@@ -566,7 +566,7 @@ func TestMessageHeaders(t *testing.T) {
 			},
 		}
 		displays := domain.ToolDisplays{
-			tcID: domain.NewBashDisplay("header", "ls", ""),
+			tcID: domain.NewBashDisplay("header", "ls", "", ""),
 		}
 
 		rendered := ab.RenderMessage(messages, 0, displays, false)

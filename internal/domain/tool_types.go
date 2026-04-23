@@ -119,6 +119,7 @@ type BashDisplay struct {
 	TypeField      string `json:"type"`
 	Description    string `json:"description"` // Description from tool (e.g. "Installing dependencies")
 	Command        string `json:"command"`         // The command being run (e.g. "npm install")
+	Cwd            string `json:"cwd,omitempty"`   // Command working directory
 	CapturedOutput string `json:"captured_output"` // Raw output captured after execution (baked)
 	Error          string `json:"error,omitempty"`
 }
@@ -132,11 +133,12 @@ func (s BashDisplay) WithError(err string) ToolDisplay {
 }
 
 // NewBashDisplay creates a new BashDisplay with correct type.
-func NewBashDisplay(description, command, capturedOutput string) BashDisplay {
+func NewBashDisplay(description, command, cwd, capturedOutput string) BashDisplay {
 	return BashDisplay{
 		TypeField:      "bash",
 		Description:    description,
 		Command:        command,
+		Cwd:            cwd,
 		CapturedOutput: capturedOutput,
 	}
 }

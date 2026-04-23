@@ -139,7 +139,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// 3. Parallel Tool Calls (3 tools)
-	tool1Disp := domain.NewBashDisplay("Finish last", "npm list --depth=0", "")
+	tool1Disp := domain.NewBashDisplay("Finish last", "npm list --depth=0", "/workspace/web", "")
 	tt.Start("tool-1", tool1Disp)
 	select {
 	case <-ctx.Done():
@@ -147,7 +147,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(400 * time.Millisecond):
 	}
 
-	tool2Disp := domain.NewBashDisplay("Finish first", "eslint .", "")
+	tool2Disp := domain.NewBashDisplay("Finish first", "eslint .", "/workspace/web", "")
 	tt.Start("tool-2", tool2Disp)
 	select {
 	case <-ctx.Done():
@@ -162,7 +162,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(400 * time.Millisecond):
 	}
 
-	tool3Disp := domain.NewBashDisplay("Finish second", "go test ./...", "")
+	tool3Disp := domain.NewBashDisplay("Finish second", "go test ./...", "/workspace/api", "")
 	tt.Start("tool-3", tool3Disp)
 	select {
 	case <-ctx.Done():

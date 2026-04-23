@@ -28,8 +28,9 @@ func TestGrep_RawRelative(t *testing.T) {
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
 
-	// Result should be EXACTLY what ripgrep produced
-	assert.Equal(t, output, result)
+	// Result should preserve ripgrep output and append metadata at the end.
+	assert.Contains(t, result, output)
+	assert.Contains(t, result, "<exit_code>0</exit_code>")
 }
 
 func TestGrep_OffloadedRaw(t *testing.T) {
@@ -79,7 +80,7 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
-	assert.Equal(t, "No files found", result)
+	assert.Equal(t, "No matches found\n\n<exit_code>1</exit_code>", result)
 }
 
 func TestGrep_MalformedStats(t *testing.T) {

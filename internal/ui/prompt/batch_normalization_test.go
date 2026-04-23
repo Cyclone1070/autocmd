@@ -22,11 +22,11 @@ func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
 	// Add two tools
 	m.handleBusEvent(domain.ToolStartEvent{
 		CallID:  "1",
-		Display: domain.NewBashDisplay("Tool 1", "ls", ""),
+		Display: domain.NewBashDisplay("Tool 1", "ls", "", ""),
 	})
 	m.handleBusEvent(domain.ToolStartEvent{
 		CallID:  "2",
-		Display: domain.NewBashDisplay("Tool 2", "pwd", ""),
+		Display: domain.NewBashDisplay("Tool 2", "pwd", "", ""),
 	})
 
 	// Manually simulate flush batching (no extra spacing inserted by normalizer)

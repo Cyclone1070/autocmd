@@ -3,7 +3,6 @@ package bash
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -27,6 +26,7 @@ type commandExecutor interface {
 
 type pathResolver interface {
 	Root() string
+	DisplayPath(path string) string
 }
 
 type backgroundRegistrar interface {
@@ -148,6 +148,7 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	}
 
 	wd := t.pathResolver.Root()
+	wdDisplay := t.pathResolver.DisplayPath(wd)
 	if req.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
@@ -156,6 +157,7 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		commandExecutor: t.commandExecutor,
 		taskManager:     t.taskManager,
 		wd:              wd,
+		wdDisplay:       wdDisplay,
 		command:         req.Command,
 		description:     req.Description,
 		timeoutMS:       req.Timeout,
@@ -225,6 +227,7 @@ type bashInvocation struct {
 	commandExecutor commandExecutor
 	taskManager     backgroundRegistrar
 	wd              string
+	wdDisplay       string
 	command         string
 	description     string
 	timeoutMS       int
@@ -232,8 +235,23 @@ type bashInvocation struct {
 	proxy           *proxyReader
 }
 
+func (i *bashInvocation) tryPromoteToBackground(streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {
+	if i.taskManager == nil {
+		return "", domain.BashDisplay{}, false
+	}
+
+	id := streamCmd.ID()
+	if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err != nil {
+		return "", domain.BashDisplay{}, false
+	}
+
+	display = domain.NewBashDisplay(i.description, i.command, i.wdDisplay, fmt.Sprintf("(command is running in background. Live output is saved at \"%s\")", streamCmd.LogPath()))
+	llmContent = fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, i.wd)
+	return llmContent, display, true
+}
+
 func (i *bashInvocation) Display() domain.ToolDisplay {
-	return domain.NewBashDisplay(i.description, i.command, "")
+	return domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
 }
 
 func (i *bashInvocation) Stream() io.Reader {
@@ -261,22 +279,18 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 
 	streamCmd, err := i.commandExecutor.RunStreaming(taskCtx, i.command, i.wd, true)
 	if err != nil {
-		d := domain.NewBashDisplay(i.description, i.command, "")
+		d := domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("failed to run command: %v", err), d
+		return fmt.Sprintf("failed to run command: %v\n\n<cwd>%s</cwd>", err, i.wd), d
 	}
 
 	// Plug the real follower into the proxy
 	i.proxy.Set(streamCmd.Output())
 
 	if i.runInBackground {
-		if i.taskManager != nil {
-			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err == nil {
-				promoted = true
-				d := domain.NewBashDisplay(i.description, i.command, "(command running in background)")
-				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
-			}
+		if llmContent, d, ok := i.tryPromoteToBackground(streamCmd, taskCancel); ok {
+			promoted = true
+			return llmContent, d
 		}
 	}
 
@@ -293,18 +307,14 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	case <-done:
 		// Done case handled below
 	case <-time.After(waitDuration):
-		if i.taskManager != nil {
-			id := streamCmd.ID()
-			if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err == nil {
-				promoted = true
-				d := domain.NewBashDisplay(i.description, i.command, "(command running in background)")
-				return fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>", streamCmd.LogPath(), id), d
-			}
+		if llmContent, d, ok := i.tryPromoteToBackground(streamCmd, taskCancel); ok {
+			promoted = true
+			return llmContent, d
 		}
 		<-done
 	}
 
-	d := domain.NewBashDisplay(i.description, i.command, "")
+	d := domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
 
 	llmOutput := res.Stdout
 	uiOutput := res.Stdout
@@ -315,21 +325,16 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	}
 
 	if waitErr != nil {
-		if errors.Is(waitErr, context.DeadlineExceeded) {
-			d.Error = domain.ToolErrorTimedOut
-			llmOutput = fmt.Sprintf("%s\n\n<execution_status>\n  <exit_code>%d</exit_code>\n  <timedout>true</timedout>\n</execution_status>", llmOutput, res.ExitCode)
-		} else if ctx.Err() != nil {
+		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
-		} else {
-			d.Error = domain.ToolErrorFailed
-			d.CapturedOutput = uiOutput
-			return fmt.Sprintf("Error: command failed: %v\n\n%s", waitErr, llmOutput), d
 		}
+		d.Error = domain.ToolErrorFailed
+		llmOutput = fmt.Sprintf("Error: command failed: %v\n\n%s", waitErr, llmOutput)
 	}
 
 	d.CapturedOutput = uiOutput
-	return llmOutput, d
+	return fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>\n<cwd>%s</cwd>", llmOutput, res.ExitCode, i.wd), d
 }
 
 func (i *bashInvocation) readTail(path string, size int64) string {

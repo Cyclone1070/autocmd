@@ -19,9 +19,9 @@ func TestDeepCheck(t *testing.T) {
 	m := NewModel(nil, nil, tr, sp, theme, stream, ui.NewNoOpGater(), 80)
 
 	// Add tools
-	m.handleBusEvent(domain.ToolStartEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "")})
-	m.handleBusEvent(domain.ToolEndEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "")})
-	m.handleBusEvent(domain.ToolStartEvent{CallID: "2", Display: domain.NewBashDisplay("pwd", "pwd", "")})
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "", "")})
+	m.handleBusEvent(domain.ToolEndEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "", "")})
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "2", Display: domain.NewBashDisplay("pwd", "pwd", "", "")})
 
 	tools := m.renderAllTools()
 	for i, tool := range tools {

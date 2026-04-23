@@ -191,6 +191,19 @@ func TestRenderBash_Error(t *testing.T) {
 	assertGolden(t, "RenderBash_Error", got)
 }
 
+func TestRenderBash_ShowsCwdWhenPresent(t *testing.T) {
+	tr := newTestToolRenderer(t)
+	display := domain.BashDisplay{
+		Description: "List Files",
+		Command:     "ls -la",
+		Cwd:         "/workspace/project",
+	}
+	got := tr.RenderBash(display, "file1.txt", StatusSuccess, "", "✓")
+	assert.Contains(t, got, "/workspace/project")
+	assert.Contains(t, got, "$ ls -la")
+	assert.NotContains(t, got, "cwd:")
+}
+
 func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	theme := NewTheme(ThemeConfig{})
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))

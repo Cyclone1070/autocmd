@@ -6,6 +6,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,15 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Started new session\n")
+		themeCfg := ui.ThemeConfig{
+			PrimaryColor:   ui.ToAdaptiveColor(cfg.UI().PrimaryColor()),
+			SuccessColor:   ui.ToAdaptiveColor(cfg.UI().SuccessColor()),
+			ErrorColor:     ui.ToAdaptiveColor(cfg.UI().ErrorColor()),
+			MutedColor:     ui.ToAdaptiveColor(cfg.UI().MutedColor()),
+			ShortToolBlock: cfg.UI().ShortToolBlock(),
+		}
+		theme := ui.NewTheme(themeCfg)
+		fmt.Printf("\nSelected session: %s\n\n", theme.Success("(new session)"))
 		return nil
 	},
 }

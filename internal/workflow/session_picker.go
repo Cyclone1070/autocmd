@@ -8,6 +8,7 @@ import (
 
 type sessionPickerStore interface {
 	List() ([]domain.SessionSummary, error)
+	FindBlank() (*domain.SessionSummary, error)
 	Create() (*domain.Session, error)
 	Rename(id, name string) error
 	Delete(id string) error
@@ -38,7 +39,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 		wf := newSessionPickerWorkflow(deps.Store, deps.State)
 
 		// 1. Send initial snapshot
-		snapshot, err := wf.prepareSelection(ctx)
+		snapshot, err := wf.prepareSelection()
 		if err != nil {
 			done <- err
 			return
@@ -59,7 +60,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 
 				switch a := act.(type) {
 				case domain.SelectSessionAction:
-					if err := wf.applySelection(ctx, a.ID); err != nil {
+					if err := wf.applySelection(a.ID); err != nil {
 						done <- err
 						return
 					}
@@ -68,7 +69,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 					return
 
 				case domain.CreateSessionAction:
-					if _, err := wf.createSession(ctx); err != nil {
+					if _, err := wf.createSession(); err != nil {
 						done <- err
 						return
 					}
@@ -77,13 +78,13 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 					return
 
 				case domain.RenameSessionAction:
-					if err := wf.renameSession(ctx, a.ID, a.Name); err != nil {
+					if err := wf.renameSession(a.ID, a.Name); err != nil {
 						done <- err
 						return
 					}
 
 				case domain.DeleteSessionAction:
-					if err := wf.deleteSession(ctx, a.ID); err != nil {
+					if err := wf.deleteSession(a.ID); err != nil {
 						done <- err
 						return
 					}
@@ -95,7 +96,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 				}
 
 				// After any mutation (or if we need to refresh), send a new snapshot
-				snapshot, err := wf.prepareSelection(ctx)
+				snapshot, err := wf.prepareSelection()
 				if err != nil {
 					done <- err
 					return
@@ -111,7 +112,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 // Used by the 'iav session new' command.
 func CreateSession(store sessionPickerStore, state sessionPickerState) (string, error) {
 	wf := newSessionPickerWorkflow(store, state)
-	return wf.createSession(context.Background())
+	return wf.createSession()
 }
 
 type sessionPickerWorkflow struct {
@@ -126,7 +127,7 @@ func newSessionPickerWorkflow(store sessionPickerStore, state sessionPickerState
 	}
 }
 
-func (w *sessionPickerWorkflow) prepareSelection(ctx context.Context) (domain.SessionListEvent, error) {
+func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, error) {
 	summaries, err := w.store.List()
 	if err != nil {
 		return domain.SessionListEvent{}, err
@@ -138,12 +139,24 @@ func (w *sessionPickerWorkflow) prepareSelection(ctx context.Context) (domain.Se
 	}, nil
 }
 
-func (w *sessionPickerWorkflow) applySelection(ctx context.Context, id string) error {
+func (w *sessionPickerWorkflow) applySelection(id string) error {
 	w.state.SetCurrentSessionID(id)
 	return w.state.Save()
 }
 
-func (w *sessionPickerWorkflow) createSession(ctx context.Context) (string, error) {
+func (w *sessionPickerWorkflow) createSession() (string, error) {
+	existingBlank, err := w.store.FindBlank()
+	if err != nil {
+		return "", err
+	}
+	if existingBlank != nil {
+		w.state.SetCurrentSessionID(existingBlank.ID)
+		if err := w.state.Save(); err != nil {
+			return "", err
+		}
+		return existingBlank.ID, nil
+	}
+
 	sess, err := w.store.Create()
 	if err != nil {
 		return "", err
@@ -157,11 +170,11 @@ func (w *sessionPickerWorkflow) createSession(ctx context.Context) (string, erro
 	return sess.ID, nil
 }
 
-func (w *sessionPickerWorkflow) renameSession(ctx context.Context, id, name string) error {
+func (w *sessionPickerWorkflow) renameSession(id, name string) error {
 	return w.store.Rename(id, name)
 }
 
-func (w *sessionPickerWorkflow) deleteSession(ctx context.Context, id string) error {
+func (w *sessionPickerWorkflow) deleteSession(id string) error {
 	if err := w.store.Delete(id); err != nil {
 		return err
 	}

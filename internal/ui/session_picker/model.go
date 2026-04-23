@@ -169,7 +169,7 @@ func (m *model) initializePicker(data *domain.SessionListEvent) {
 	for _, s := range data.Sessions {
 		name := s.Name
 		if name == "" {
-			name = "(untitled)"
+			name = "(new session)"
 		}
 
 		if s.ID == data.CurrentSessionID {

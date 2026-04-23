@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"context"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -21,6 +20,14 @@ func (m *mockSessionPickerStore) List() ([]domain.SessionSummary, error) {
 func (m *mockSessionPickerStore) Create() (*domain.Session, error) {
 	args := m.Called()
 	return args.Get(0).(*domain.Session), args.Error(1)
+}
+
+func (m *mockSessionPickerStore) FindBlank() (*domain.SessionSummary, error) {
+	args := m.Called()
+	if v := args.Get(0); v != nil {
+		return v.(*domain.SessionSummary), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *mockSessionPickerStore) Rename(id, name string) error {
@@ -52,7 +59,6 @@ func (m *mockSessionPickerState) Save() error {
 }
 
 func TestSessionPickerWorkflow(t *testing.T) {
-	ctx := context.Background()
 	summaries := []domain.SessionSummary{
 		{ID: "s1", Name: "Session 1"},
 		{ID: "s2", Name: "Session 2"},
@@ -66,7 +72,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.On("CurrentSessionID").Return("s1")
 
 		wf := newSessionPickerWorkflow(store, state)
-		res, err := wf.prepareSelection(ctx)
+		res, err := wf.prepareSelection()
 
 		assert.NoError(t, err)
 		assert.Equal(t, summaries, res.Sessions)
@@ -83,7 +89,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.On("Save").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, state)
-		err := wf.applySelection(ctx, "s2")
+		err := wf.applySelection("s2")
 
 		assert.NoError(t, err)
 		state.AssertExpectations(t)
@@ -94,15 +100,35 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state := new(mockSessionPickerState)
 
 		newSess := &domain.Session{ID: "new-id"}
+		store.On("FindBlank").Return((*domain.SessionSummary)(nil), nil)
 		store.On("Create").Return(newSess, nil)
 		state.On("SetCurrentSessionID", "new-id").Return()
 		state.On("Save").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, state)
-		id, err := wf.createSession(ctx)
+		id, err := wf.createSession()
 
 		assert.NoError(t, err)
 		assert.Equal(t, "new-id", id)
+		store.AssertExpectations(t)
+		state.AssertExpectations(t)
+	})
+
+	t.Run("createSession reuses existing blank session", func(t *testing.T) {
+		store := new(mockSessionPickerStore)
+		state := new(mockSessionPickerState)
+
+		blank := &domain.SessionSummary{ID: "existing-new", Name: "", MessageCount: 0}
+		store.On("FindBlank").Return(blank, nil)
+		state.On("SetCurrentSessionID", "existing-new").Return()
+		state.On("Save").Return(nil)
+
+		wf := newSessionPickerWorkflow(store, state)
+		id, err := wf.createSession()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "existing-new", id)
+		store.AssertNotCalled(t, "Create")
 		store.AssertExpectations(t)
 		state.AssertExpectations(t)
 	})
@@ -114,7 +140,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		store.On("Rename", "s1", "Better Name").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, state)
-		err := wf.renameSession(ctx, "s1", "Better Name")
+		err := wf.renameSession("s1", "Better Name")
 
 		assert.NoError(t, err)
 		store.AssertExpectations(t)
@@ -130,7 +156,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		state.On("Save").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, state)
-		err := wf.deleteSession(ctx, "s1")
+		err := wf.deleteSession("s1")
 
 		assert.NoError(t, err)
 		store.AssertExpectations(t)

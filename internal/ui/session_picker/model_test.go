@@ -49,6 +49,19 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Contains(t, m.View(), "Session 1")
 	})
 
+	t.Run("Snapshot with blank name shows new session label", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+		blank := domain.SessionListEvent{
+			Sessions:         []domain.SessionSummary{{ID: "s-new", Name: ""}},
+			CurrentSessionID: "s-new",
+		}
+
+		m.Update(blank)
+		assert.Contains(t, m.View(), "(new session)")
+		assert.NotContains(t, m.View(), "(untitled)")
+	})
+
 	t.Run("Create session: 'n'", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.CreateSessionAction{}).Return()

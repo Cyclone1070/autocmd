@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
@@ -18,6 +19,29 @@ type Loop struct {
 	events        eventSender
 	notifier      taskNotifier
 	maxIterations int
+}
+
+func classifyModelErr(err error) error {
+	if err == nil {
+		return ErrModelBackend
+	}
+	// Provider SDKs often return transport-specific errors without stable typed surfaces.
+	// Normalize common auth/authz markers here so cmd can present a precise message.
+	s := strings.ToLower(err.Error())
+	if strings.Contains(s, "unauthorized") ||
+		strings.Contains(s, "unauthenticated") ||
+		strings.Contains(s, "permission_denied") ||
+		strings.Contains(s, "permission denied") ||
+		strings.Contains(s, "invalid api key") ||
+		strings.Contains(s, "api key not valid") ||
+		strings.Contains(s, "invalid authentication") ||
+		strings.Contains(s, "status: unauthenticated") ||
+		strings.Contains(s, "status: permission_denied") ||
+		strings.Contains(s, "error 401") ||
+		strings.Contains(s, "error 403") {
+		return ErrModelAuth
+	}
+	return ErrModelBackend
 }
 
 func normalizeToolCallIndices(chunks []*schema.Message) {
@@ -130,12 +154,12 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 		// Bind tools to the model
 		modelWithTools, err := l.llm.Model().WithTools(l.toolExecutor.definitions())
 		if err != nil {
-			return fmt.Errorf("bind tools: %w", err)
+			return fmt.Errorf("%w: bind tools: %w", classifyModelErr(err), err)
 		}
 
 		reader, err := modelWithTools.Stream(ctx, session.Messages)
 		if err != nil {
-			return fmt.Errorf("LLM.Stream: %w", err)
+			return fmt.Errorf("%w: LLM.Stream: %w", classifyModelErr(err), err)
 		}
 		defer reader.Close()
 
@@ -150,7 +174,7 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 				if appendErr := appendConcatenatedAssistantMessage(session, chunks); appendErr != nil {
 					return appendErr
 				}
-				return fmt.Errorf("reader.Recv: %w", err)
+				return fmt.Errorf("%w: reader.Recv: %w", classifyModelErr(err), err)
 			}
 
 			chunks = append(chunks, chunk)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/actionrouter"
@@ -14,6 +13,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/logging"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -43,7 +43,7 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps, err := Wire()
 		if err != nil {
-			return err
+			return wrapForUser(withCategory(ErrBootstrap, err))
 		}
 
 		if len(args) == 0 {
@@ -51,7 +51,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		input := strings.Join(args, " ")
-		return runAgent(cmd.Context(), deps, input)
+		return wrapForUser(runAgent(cmd.Context(), deps, input))
 	},
 }
 
@@ -67,12 +67,12 @@ func Execute() {
 
 func runAgent(ctx context.Context, deps *Deps, input string) error {
 	if deps.State.Model() == "" {
-		return fmt.Errorf("No model selected. Please run 'iav model' or 'iav auth' to get started")
+		return ErrNoModelSelected
 	}
 
 	pathResolver, err := buildPathResolver()
 	if err != nil {
-		return err
+		return withCategory(ErrWorkspaceUnavailable, err)
 	}
 
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
@@ -97,7 +97,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())
 	if err != nil {
-		return fmt.Errorf("get llm: %w", err)
+		return withCategory(ErrModelInitialization, err)
 	}
 
 	// Wiring
@@ -159,38 +159,31 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("UI failed: %w", err)
+		return withCategory(ErrUIRuntime, err)
 	}
 
 	agentErr := <-done
 	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
-		return fmt.Errorf("agent failed: %w", agentErr)
+		if errors.Is(agentErr, agent.ErrModelAuth) {
+			return withCategory(ErrModelAuth, agentErr)
+		}
+		if errors.Is(agentErr, agent.ErrModelBackend) {
+			return withCategory(ErrModelBackend, agentErr)
+		}
+		return agentErr
 	}
 
 	return nil
 }
 
 func setupLogging() {
-	if !debug {
-		slog.SetDefault(slog.New(slog.DiscardHandler))
-		return
-	}
-
-	home, err := os.UserHomeDir()
+	logger, logPath, err := logging.Init(logging.Options{Debug: debug})
 	if err != nil {
+		fallback := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+		slog.SetDefault(fallback)
+		slog.Warn("failed to initialize file logging; falling back to stderr", "error", err)
 		return
 	}
-
-	logDir := filepath.Join(home, domain.ConfigBaseDir, domain.AppName)
-	_ = os.MkdirAll(logDir, domain.DefaultDirPerm)
-	logPath := filepath.Join(logDir, "debug.log")
-
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, domain.DefaultFilePerm)
-	if err != nil {
-		return
-	}
-
-	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
-	slog.Debug("Logging initialized")
+	slog.Debug("logging initialized", "path", logPath, "debug", debug)
 }

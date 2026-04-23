@@ -305,7 +305,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 			summary = r.Theme.Error(plainSummary)
 		}
 		body := summary + "\n\n" + r.renderQuestionReviewBlock(stRender)
-		body += "\n\n" + r.renderQuestionFooter(status, d.Questions[0], QuestionPerState{})
+		body += "\n\n" + r.renderQuestionFooter()
 		lines := strings.Split(body, "\n")
 		spec := ToolBlockSpec{
 			Status: status,
@@ -333,7 +333,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 	parts = append(parts, r.renderQuestionOptionBlock(q, st))
 
 	body := strings.Join(parts, "\n\n")
-	body += "\n\n" + r.renderQuestionFooter(status, q, st)
+	body += "\n\n" + r.renderQuestionFooter()
 	lines := strings.Split(body, "\n")
 	spec := ToolBlockSpec{
 		Status:      status,
@@ -378,7 +378,7 @@ func (r *ToolRenderer) questionInnerWidth() int {
 	return inner
 }
 
-func (r *ToolRenderer) renderQuestionFooter(status ToolStatus, _ domain.QuestionInfo, _ QuestionPerState) string {
+func (r *ToolRenderer) renderQuestionFooter() string {
 	inner := r.questionInnerWidth()
 
 	// Key (primary) + label (muted), with gaps between groups like the toolbox hint row.
@@ -407,9 +407,7 @@ func (r *ToolRenderer) renderQuestionFooter(status ToolStatus, _ domain.Question
 			keyLabel("q", "quit") + gap +
 			keyLabel("s", "submit")
 	}
-	sepWidth := min(lipgloss.Width(row), inner)
-	sep := r.Theme.Separator(sepWidth, status)
-	return sep + "\n" + row
+	return row
 }
 
 func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st QuestionPerState) string {

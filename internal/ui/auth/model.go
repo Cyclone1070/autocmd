@@ -8,6 +8,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type bus interface {
@@ -142,11 +143,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			m.cancelRequested = true
 			m.providerID = ""
 			m.bus.SendAction(domain.StopAction{})
 			return m, m.pollBus()
+		case "esc":
+			if m.handleBackKey(msg) {
+				return m, nil
+			}
+			// Esc is stealth back. If no back transition exists in the current state, ignore it.
+			return m, nil
 		case "q":
 			if m.state != stateFieldCollection {
 				m.cancelRequested = true
@@ -272,7 +279,7 @@ func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthM
 		Items: items,
 		Theme: m.theme,
 		Actions: []ui.Action{
-			{Key: "backspace", Label: "back"},
+			{Key: "Backspace", Label: "back"},
 		},
 	})
 }
@@ -293,16 +300,25 @@ func (m *model) initializeTextInput() {
 }
 
 func (m *model) handleBackKey(msg tea.KeyMsg) bool {
-	if !isBackKey(msg) {
-		return false
-	}
-
 	switch m.state {
 	case stateMethodSelection:
+		if !isMethodBackKey(msg) && msg.Type != tea.KeyEsc {
+			return false
+		}
 		m.state = stateProviderSelection
 		m.initializeProviderPicker(m.providers)
 		return true
 	case stateFieldCollection:
+		if msg.Type != tea.KeyEsc {
+			return false
+		}
+		m.state = stateMethodSelection
+		m.initializeMethodPicker(m.providerID, m.methods)
+		return true
+	case stateOAuthFlow:
+		if !isOAuthBackKey(msg) {
+			return false
+		}
 		m.state = stateMethodSelection
 		m.initializeMethodPicker(m.providerID, m.methods)
 		return true
@@ -311,12 +327,19 @@ func (m *model) handleBackKey(msg tea.KeyMsg) bool {
 	}
 }
 
-func isBackKey(msg tea.KeyMsg) bool {
+func isMethodBackKey(msg tea.KeyMsg) bool {
 	switch msg.Type {
 	case tea.KeyBackspace, tea.KeyLeft:
 		return true
 	}
 	return msg.String() == "h"
+}
+
+func isOAuthBackKey(msg tea.KeyMsg) bool {
+	if msg.Type == tea.KeyEsc {
+		return true
+	}
+	return isMethodBackKey(msg)
 }
 
 // View determines what content to display.
@@ -341,14 +364,52 @@ func (m *model) View() string {
 			return "\n  Saving...\n\n"
 		}
 		field := apiKeyMeth.Fields[m.fieldIndex]
-		return fmt.Sprintf("\n  %s\n\n  %s\n\n", field.Label, m.textInput.View())
+		var s strings.Builder
+		fmt.Fprintf(&s, "  %s\n\n", m.renderStageTitle(m.fieldTitle(field.Label, m.fieldIndex, len(apiKeyMeth.Fields))))
+		fmt.Fprintf(&s, "  %s\n\n", m.renderHelpRow([]helpKey{
+			{key: "Enter", label: "save"},
+			{key: "Esc", label: "back"},
+			{key: "Ctrl+c", label: "quit"},
+		}))
+		fmt.Fprintf(&s, "  %s\n\n", m.textInput.View())
+		return s.String()
 	case stateOAuthFlow:
 		var s strings.Builder
-		fmt.Fprintf(&s, "\n  %s\n\n", m.theme.Muted("OAuth Device Authorization:"))
+		fmt.Fprintf(&s, "  %s\n\n", m.renderStageTitle("OAUTH DEVICE AUTHORIZATION"))
+		fmt.Fprintf(&s, "  %s\n\n", m.renderHelpRow([]helpKey{
+			{key: "Backspace", label: "back"},
+			{key: "q", label: "quit"},
+		}))
 		fmt.Fprintf(&s, "  1. Visit: %s\n", m.theme.Primary(m.oauth.uri))
 		fmt.Fprintf(&s, "  2. Enter code: %s\n", m.theme.Success(m.oauth.code))
 		fmt.Fprintf(&s, "\n  %s\n", m.theme.Muted("Waiting for authorization..."))
 		return s.String()
 	}
 	return ""
+}
+
+type helpKey struct {
+	key   string
+	label string
+}
+
+func (m *model) renderHelpRow(keys []helpKey) string {
+	parts := make([]string, 0, len(keys))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(m.theme.PrimaryColor())
+	labelStyle := lipgloss.NewStyle().Foreground(m.theme.MutedColor())
+	for _, item := range keys {
+		parts = append(parts, fmt.Sprintf("%s %s", keyStyle.Render(item.key), labelStyle.Render(item.label)))
+	}
+	return strings.Join(parts, "   ")
+}
+
+func (m *model) renderStageTitle(title string) string {
+	return lipgloss.NewStyle().Bold(true).Foreground(m.theme.PrimaryColor()).Render(title)
+}
+
+func (m *model) fieldTitle(label string, idx, total int) string {
+	if total <= 1 {
+		return label
+	}
+	return fmt.Sprintf("%s (%d/%d)", label, idx+1, total)
 }

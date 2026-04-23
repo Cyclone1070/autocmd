@@ -75,6 +75,7 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 					return
 				}
 
+			processAction:
 				switch a := act.(type) {
 				case domain.SelectProviderAction:
 					p, ok := wf.registry.Get(a.ID)
@@ -181,18 +182,25 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 							done <- ctx.Err()
 							return
 						case act2, ok := <-deps.Bus.WorkflowActions():
-							// Only StopAction is meaningful while we are blocked waiting for OAuth.
-							if ok {
-								if _, isStop := act2.(domain.StopAction); isStop {
-									cancel()
-									oauthCancel = nil
-									deps.Bus.SendUIUpdate(domain.DoneEvent{})
-									done <- nil
-									return
-								}
+							if !ok {
+								cancel()
+								oauthCancel = nil
+								done <- nil
+								return
 							}
-							// Any other action is ignored while waiting; continue loop and let next iteration handle it.
-							continue
+							if _, isStop := act2.(domain.StopAction); isStop {
+								cancel()
+								oauthCancel = nil
+								deps.Bus.SendUIUpdate(domain.DoneEvent{})
+								done <- nil
+								return
+							}
+							// User changed direction while OAuth was in progress.
+							// Cancel OAuth and process the new action immediately.
+							cancel()
+							oauthCancel = nil
+							act = act2
+							goto processAction
 						case res := <-resultCh:
 							oauthCancel = nil
 							if res.err != nil {

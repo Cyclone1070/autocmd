@@ -335,6 +335,76 @@ func TestRunAuth(t *testing.T) {
 			t.Fatal("workflow timed out on StopAction during OAuth flow")
 		}
 	})
+
+	t.Run("OAuth Flow selecting another provider cancels and processes action", func(t *testing.T) {
+		registry := new(mockAuthRegistry)
+		authMgr := new(mockAuthManager)
+		oauthMgr := new(mockOAuthManager)
+		state := new(mockAuthState)
+		bus := new(mockAuthBus)
+		actions := make(chan domain.Action, 10)
+		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
+
+		// Initial provider list.
+		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}, {ID: "google"}}, nil)
+		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
+
+		done := RunAuth(ctx, &AuthDeps{
+			Bus:      bus,
+			Registry: registry,
+			AuthMgr:  authMgr,
+			OAuthMgr: oauthMgr,
+			State:    state,
+		})
+
+		// Provider 1: github with OAuth method.
+		githubProvider := new(mockProvider)
+		githubProvider.On("ID").Return("github")
+		githubOAuthMethod := domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"}
+		githubProvider.On("SupportedAuthMethods").Return([]domain.AuthMethod{githubOAuthMethod})
+		registry.On("Get", "github").Return(githubProvider, true)
+		bus.On("SendUIUpdate", domain.AuthMethodEvent{
+			ProviderID: "github",
+			Methods:    []domain.AuthMethod{githubOAuthMethod},
+		}).Return()
+
+		// Provider 2: google with API key method.
+		googleProvider := new(mockProvider)
+		googleProvider.On("ID").Return("google")
+		googleAPIKeyMethod := domain.APIKeyAuthMethod{
+			ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "api_key"}},
+		}
+		googleProvider.On("SupportedAuthMethods").Return([]domain.AuthMethod{googleAPIKeyMethod})
+		registry.On("Get", "google").Return(googleProvider, true)
+		bus.On("SendUIUpdate", domain.AuthMethodEvent{
+			ProviderID: "google",
+			Methods:    []domain.AuthMethod{googleAPIKeyMethod},
+		}).Return()
+
+		// OAuth run stays blocked until cancelled.
+		oauthMgr.On("RunDeviceFlow", mock.Anything, githubOAuthMethod, mock.Anything).Return("", context.Canceled).Run(func(args mock.Arguments) {
+			<-args.Get(0).(context.Context).Done()
+		})
+
+		actions <- domain.SelectProviderAction{ID: "github"}
+		actions <- domain.SelectAuthMethodAction{ID: "github_oauth"}
+		actions <- domain.SelectProviderAction{ID: "google"}
+
+		// Stop workflow after asserting it kept progressing.
+		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+		actions <- domain.StopAction{}
+
+		select {
+		case err := <-done:
+			assert.NoError(t, err)
+		case <-time.After(2 * time.Second):
+			t.Fatal("workflow timed out while switching providers during OAuth")
+		}
+
+		bus.AssertExpectations(t)
+		registry.AssertExpectations(t)
+		oauthMgr.AssertExpectations(t)
+	})
 }
 
 type mockOAuthManager struct {

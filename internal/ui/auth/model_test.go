@@ -148,6 +148,11 @@ func TestAuthUI_Interactive(t *testing.T) {
 		view := m.View()
 		assert.Contains(t, view, "https://github.com/login/device")
 		assert.Contains(t, view, "ABCD-1234")
+		assert.Contains(t, view, "Backspace")
+		assert.Contains(t, view, "back")
+		assert.Contains(t, view, "q")
+		assert.NotContains(t, view, "esc")
+		assert.NotContains(t, view, "←")
 	})
 
 	t.Run("Field collection: space is text, not select shortcut", func(t *testing.T) {
@@ -168,6 +173,47 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("cd")})
 
 		assert.Equal(t, "ab cd", m.textInput.Value(), "space should be treated as text input in auth field mode")
+	})
+
+	t.Run("Field collection shows instruction row", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		m.Update(domain.CredentialFieldEvent{
+			Method: domain.APIKeyAuthMethod{
+				ID: domain.AuthMethodAPIKey,
+				Fields: []domain.AuthField{
+					{ID: domain.AuthFieldAPIKey, Label: "API Key", Placeholder: "Enter key", IsSecret: false},
+				},
+			},
+			FieldIndex: 0,
+		})
+
+		view := m.View()
+		assert.Contains(t, view, "Enter")
+		assert.Contains(t, view, "save")
+		assert.Contains(t, view, "Esc")
+		assert.Contains(t, view, "back")
+		assert.Contains(t, view, "Ctrl+c")
+	})
+
+	t.Run("Field collection title uses current field label", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		m.Update(domain.CredentialFieldEvent{
+			Method: domain.APIKeyAuthMethod{
+				ID: domain.AuthMethodAPIKey,
+				Fields: []domain.AuthField{
+					{ID: "org", Label: "Organization", Placeholder: "Enter org", IsSecret: false},
+					{ID: "key", Label: "API Key", Placeholder: "Enter key", IsSecret: true},
+				},
+			},
+			FieldIndex: 1,
+		})
+
+		view := m.View()
+		assert.Contains(t, view, "API Key")
+		assert.Contains(t, view, "(2/2)")
+		assert.NotContains(t, view, "API KEY")
 	})
 
 	t.Run("Method selection back keys return to provider selection", func(t *testing.T) {
@@ -195,7 +241,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		}
 	})
 
-	t.Run("Method selection shows backspace hint", func(t *testing.T) {
+	t.Run("Method selection shows Backspace hint", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: "openai"}}
@@ -207,11 +253,11 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
 
 		view := m.View()
-		assert.Contains(t, view, "backspace")
+		assert.Contains(t, view, "Backspace")
 		assert.Contains(t, view, "back")
 	})
 
-	t.Run("Field collection back keys return to method selection", func(t *testing.T) {
+	t.Run("Field collection back keys stay in field collection", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: "openai"}}
@@ -234,9 +280,74 @@ func TestAuthUI_Interactive(t *testing.T) {
 		}
 		for _, key := range backKeys {
 			m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
+			m.textInput.SetValue("abc")
+			_, _ = m.Update(key)
+			assert.Equal(t, stateFieldCollection, m.state)
+			assert.Contains(t, m.View(), "API Key")
+		}
+	})
+
+	t.Run("Field collection esc returns to method selection", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "openai"}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{
+				ID: "api_key", Name: "API Key",
+				Fields: []domain.AuthField{{ID: "key", Label: "API Key", Placeholder: "Enter key"}},
+			},
+		}
+
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
+
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		assert.Equal(t, stateMethodSelection, m.state)
+		assert.Contains(t, m.View(), "SELECT AUTH MODE (openai)")
+	})
+
+	t.Run("OAuth flow back keys return to method selection", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "github"}}
+		methods := []domain.AuthMethod{
+			domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"},
+		}
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "github", Methods: methods})
+		m.Update(domain.OAuthDeviceFlowEvent{
+			VerificationURI: "https://github.com/login/device",
+			UserCode:        "ABCD-1234",
+		})
+
+		backKeys := []tea.KeyMsg{
+			{Type: tea.KeyBackspace},
+			{Type: tea.KeyEsc},
+		}
+		for _, key := range backKeys {
+			m.Update(domain.OAuthDeviceFlowEvent{
+				VerificationURI: "https://github.com/login/device",
+				UserCode:        "ABCD-1234",
+			})
 			_, _ = m.Update(key)
 			assert.Equal(t, stateMethodSelection, m.state)
-			assert.Contains(t, m.View(), "SELECT AUTH MODE (openai)")
+			assert.Contains(t, m.View(), "SELECT AUTH MODE (github)")
 		}
+	})
+
+	t.Run("Esc in method selection goes back (stealth)", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme).(*model)
+		providers := []domain.ProviderSummary{{ID: "openai"}}
+		methods := []domain.AuthMethod{
+			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+		}
+		m.Update(domain.AuthProviderListEvent{Providers: providers})
+		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+
+		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		assert.Equal(t, stateProviderSelection, m.state)
+		assert.Contains(t, m.View(), "SELECT PROVIDER")
 	})
 }

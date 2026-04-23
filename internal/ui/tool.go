@@ -382,8 +382,9 @@ func (r *ToolRenderer) renderQuestionFooter() string {
 	inner := r.questionInnerWidth()
 
 	// Key (primary) + label (muted), with gaps between groups like the toolbox hint row.
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(r.Theme.PrimaryColor())
 	keyLabel := func(key, label string) string {
-		return r.Theme.Primary(key) + " " + r.Theme.Muted(label)
+		return keyStyle.Render(key) + " " + r.Theme.Muted(label)
 	}
 	gap := "   "
 	row := keyLabel("↑/↓/←/→", "navigate") + gap +

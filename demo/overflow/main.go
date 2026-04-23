@@ -2,23 +2,29 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Cyclone1070/iav/internal/actionrouter"
+	"github.com/Cyclone1070/iav/internal/agent"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
+	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/state"
+	"github.com/Cyclone1070/iav/internal/tool"
+	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/tool/file"
+	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/search"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/bash"
+	"github.com/Cyclone1070/iav/internal/tool/service/hash"
+	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -46,10 +52,10 @@ func main() {
 	}
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -69,13 +75,42 @@ func main() {
 		chatWidth,
 	)
 
+	router := actionrouter.New()
+	defer router.Close()
+
+	cwd, _ := os.Getwd()
+	pathResolver := path.NewResolver(cwd)
+	fileSystem := fs.NewOSFileSystem(1024 * 1024)
+	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
+	checksumManager := hash.NewChecksumManager()
+	taskMgr := bash.NewTaskManager(fileSystem)
+
+	tools := []domain.Tool{
+		file.NewWriteFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
+		file.NewEditFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
+		file.NewReadFileTool(fileSystem, checksumManager, pathResolver),
+		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
+		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
+		question.NewQuestionTool(),
+		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr),
+		bash.NewSleepTool(taskMgr),
+		bash.NewTaskListTool(taskMgr),
+		bash.NewTaskStopTool(taskMgr),
+	}
+	registry := tool.NewRegistry(tools)
+	toolExecutor := agent.NewToolExecutor(registry, router)
+
+	overflowLLM := &overflowMockLLM{}
+	agentLoop := agent.NewLoop(overflowLLM, toolExecutor, 20, bus, taskMgr)
+
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},
 		Store:        &mockStore{},
-		LLM:          &mockLLM{},
-		Agent:        &mockAgent{bus: bus},
+		LLM:          overflowLLM,
+		Agent:        agentLoop,
 		Bus:          bus,
-		ToolRegistry: &mockRegistry{},
+		Forwarder:    router,
+		ToolRegistry: registry,
 	}
 
 	done := workflow.RunPrompt(context.Background(), "", deps)
@@ -92,218 +127,95 @@ func main() {
 	}
 }
 
-type mockAgent struct {
-	bus *eventbus.EventBus
-}
-
-func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
-	// Initialize real tools with mock deps
-	fs := &mockDeps{}
-	exec := &mockDeps{}
-	res := &mockDeps{}
-
-	searchTool := search.NewGrepTool(fs, exec, res)
-	findTool := search.NewGlobTool(fs, exec, res)
-	readTool := file.NewReadFileTool(fs, fs, res)
-	writeTool := file.NewWriteFileTool(fs, fs, res, 1024*1024)
-	editTool := file.NewEditFileTool(fs, fs, res, 1024*1024)
-	bashTool := bash.NewBashTool(fs, exec, res, bash.NewTaskManager(fs))
-
-	// 15-line argument (simulating Go code or large config)
-	lines := make([]string, 15)
-	for i := 0; i < 15; i++ {
-		lines[i] = fmt.Sprintf("Line %d: This is content for overflow testing.", i+1)
-	}
-	longArg := strings.Join(lines, "\n")
-
-	// 1. search_content Overflow
-	argsObj := map[string]string{"pattern": longArg, "path": "internal/agent"}
-	argsData, _ := json.Marshal(argsObj)
-	inv, _ := searchTool.Prepare(string(argsData))
-	var searchEnd domain.ToolDisplay
-	if inv != nil {
-		searchEnd = inv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "search-overflow",
-			Display:  inv.Display(),
-		})
-	}
-	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "search-overflow", Display: searchEnd})
-
-	// 2. find_file Overflow
-	findArgsObj := map[string]string{"pattern": longArg, "path": "internal"}
-	findArgsData, _ := json.Marshal(findArgsObj)
-	findInv, _ := findTool.Prepare(string(findArgsData))
-	var findEnd domain.ToolDisplay
-	if findInv != nil {
-		findEnd = findInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "find-overflow",
-			Display:  findInv.Display(),
-		})
-	}
-	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "find-overflow", Display: findEnd})
-
-	// 3. bash.Overflow
-	bashArgsObj := map[string]any{
-		"command": []string{"sh", "-c", "echo '" + longArg + "'"},
-		"description": "Running a multi-line echo for overflow testing. " + longArg,
-	}
-	bashArgsData, _ := json.Marshal(bashArgsObj)
-	bashInv, _ := bashTool.Prepare(string(bashArgsData))
-	var bashEnd domain.ToolDisplay
-	if bashInv != nil {
-		bashEnd = bashInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "bash-overflow",
-			Display:  bashInv.Display(),
-		})
-	}
-	time.Sleep(100 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolStreamEvent{
-		CallID: "bash-overflow",
-		Chunk:  longArg,
-	})
-	time.Sleep(200 * time.Millisecond)
-	if sd, ok := bashEnd.(domain.BashDisplay); ok {
-		sd.CapturedOutput = longArg
-		bashEnd = sd
-	}
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "bash-overflow", Display: bashEnd})
-
-	// 4. write_file Overflow
-	writeArgsObj := map[string]string{
-		"path":    "some/extremely/deep/nested/path/to/main.go",
-		"content": "new content",
-		"description": "Writing exactly one file with intent: " + longArg,
-	}
-	writeArgsData, _ := json.Marshal(writeArgsObj)
-	writeInv, _ := writeTool.Prepare(string(writeArgsData))
-	var writeEnd domain.ToolDisplay
-	if writeInv != nil {
-		writeEnd = writeInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "write-overflow",
-			Display:  writeInv.Display(),
-		})
-	}
-	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "write-overflow", Display: writeEnd})
-
-	// 5. edit_file Overflow
-	editArgsObj := map[string]any{
-		"path":    "some/extremely/deep/nested/path/to/main.go",
-		"description": "Applying multi-line refactoring: " + longArg,
-		"operations": []map[string]any{
-			{"before": "Line ", "after": "CHANGED Line ", "expected_replacements": 15},
-		},
-	}
-	editArgsData, _ := json.Marshal(editArgsObj)
-	editInv, err := editTool.Prepare(string(editArgsData))
-	if err != nil {
-		fmt.Printf("Edit Prepare Error: %v\n", err)
-	}
-	var editEnd domain.ToolDisplay
-	if editInv != nil {
-		editEnd = editInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "edit-overflow",
-			Display:  editInv.Display(),
-		})
-	}
-	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "edit-overflow", Display: editEnd})
-
-	time.Sleep(200 * time.Millisecond)
-
-	// 7. read_file (Full Path Verification)
-	readArgsObj := map[string]string{"path": "some/extremely/deep/nested/path/to/main.go"}
-	readArgsData, _ := json.Marshal(readArgsObj)
-	readInv, _ := readTool.Prepare(string(readArgsData))
-	var readEnd domain.ToolDisplay
-	if readInv != nil {
-		readEnd = readInv.Display()
-		a.bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "read-overflow",
-			Display:  readInv.Display(),
-		})
-	}
-	time.Sleep(200 * time.Millisecond)
-	a.bus.SendUIUpdate(domain.ToolEndEvent{CallID: "read-overflow", Display: readEnd})
-
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "Demo finished. Each tool displayed above had at least one multi-line or extremely long argument."})
-
-	return nil
-}
-
 type mockStore struct{}
 
 func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
 func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
-func (s *mockStore) Save(sess *domain.Session) error       { return nil }
+func (s *mockStore) Save(sess *domain.Session) error        { return nil }
 func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return "Test Session", nil
 }
 
-type mockLLM struct{}
+type overflowMockLLM struct {
+	turn int
+}
 
-func (l *mockLLM) ID() string                        { return "mock" }
-func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int                { return 1000 }
-func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
-func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
+func (l *overflowMockLLM) ID() string                        { return "overflow-mock" }
+func (l *overflowMockLLM) DisplayName() string               { return "Overflow Mock" }
+func (l *overflowMockLLM) ContextWindow() int                { return 1000 }
+func (l *overflowMockLLM) Model() model.ToolCallingChatModel { return l }
+func (l *overflowMockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }
 
-type mockRegistry struct{}
-
-func (r *mockRegistry) Definitions() []*schema.ToolInfo    { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }
-
-// mockDeps satisfies multiple interfaces for tools
-type mockDeps struct{}
-
-func (m *mockDeps) Stat(path string) (os.FileInfo, error) {
-	isDir := !strings.HasSuffix(path, ".go")
-	return &mockFileInfo{isDir: isDir}, nil
+func (l *overflowMockLLM) Generate(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return nil, errors.New("not implemented")
+}
+func (l *overflowMockLLM) BindTools(tools []*schema.ToolInfo) error { return nil }
+func (l *overflowMockLLM) Bind(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return l, nil
 }
 
-type mockFileInfo struct {
-	os.FileInfo
-	isDir bool
+func (l *overflowMockLLM) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	return l, nil
 }
 
-func (m *mockFileInfo) IsDir() bool        { return m.isDir }
-func (m *mockFileInfo) Mode() os.FileMode { return 0644 }
-func (m *mockDeps) Abs(path string) (string, error) { return "/abs/" + path, nil }
-func (m *mockDeps) Root() string                  { return "/abs" }
-func (m *mockDeps) DisplayPath(path string) string { return path }
-func (m *mockDeps) Run(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.Result, error) {
-	return &executor.Result{ExitCode: 0}, nil
-}
-func (m *mockDeps) RunStreaming(ctx context.Context, cmd string, dir string, enableLogging bool) (*executor.StreamingCmd, error) {
-	return &executor.StreamingCmd{}, nil
-}
-func (m *mockDeps) Open(path string) (domain.File, error) { return nil, nil }
-func (m *mockDeps) CreateAtomic(path string) (io.WriteCloser, error) { return nil, nil }
-func (m *mockDeps) Remove(path string) error { return nil }
-func (m *mockDeps) ReadFile(path string) ([]byte, error) {
-	lines := make([]string, 15)
-	for i := 0; i < 15; i++ {
-		lines[i] = fmt.Sprintf("Line %d: old", i+1)
+func (l *overflowMockLLM) Stream(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	// Pace demo turns so tool transitions are readable.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(500 * time.Millisecond):
 	}
-	return []byte(strings.Join(lines, "\n")), nil
+
+	lines := make([]string, 15)
+	for i := range 15 {
+		lines[i] = fmt.Sprintf("Line %d: This is content for overflow testing.", i+1)
+	}
+	longArg := strings.Join(lines, "\n")
+	cwd, _ := os.Getwd()
+	target := filepath.ToSlash(filepath.Join(cwd, "demo/overflow/overflow_demo_tmp.txt"))
+
+	steps := []struct {
+		name string
+		args string
+	}{
+		{"grep", fmt.Sprintf(`{"pattern":"package ","path":%q,"output_mode":"files_with_matches","type":"go"}`, filepath.ToSlash(filepath.Join(cwd, "internal/agent")))},
+		{"glob", fmt.Sprintf(`{"pattern":"*.go","path":%q}`, filepath.ToSlash(filepath.Join(cwd, "internal")))},
+		{"bash", fmt.Sprintf(`{"command":"echo overflow-demo","description":%q}`, "Running bash overflow description. "+longArg)},
+		{"write_file", fmt.Sprintf(`{"file_path":"%s","content":"new content","description":%q}`, target, "Writing exactly one file with intent: "+longArg)},
+		{"edit_file", fmt.Sprintf(`{"file_path":"%s","description":%q,"old_string":"new content","new_string":"changed content"}`, target, "Applying multi-line refactoring: "+longArg)},
+		{"read_file", fmt.Sprintf(`{"file_path":"%s"}`, target)},
+	}
+
+	var msg *schema.Message
+	if l.turn >= len(steps) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+		msg = &schema.Message{
+			Role:    schema.Assistant,
+			Content: "Demo finished. Each tool displayed above had at least one multi-line or extremely long argument.",
+		}
+	} else {
+		s := steps[l.turn]
+		l.turn++
+		msg = &schema.Message{
+			Role:    schema.Assistant,
+			Content: fmt.Sprintf("Running overflow step %d: %s...", l.turn, s.name),
+			ToolCalls: []schema.ToolCall{
+				{
+					ID:       fmt.Sprintf("overflow-%d-%s", l.turn, s.name),
+					Function: schema.FunctionCall{Name: s.name, Arguments: s.args},
+				},
+			},
+		}
+	}
+
+	sr, sw := schema.Pipe[*schema.Message](1)
+	sw.Send(msg, nil)
+	sw.Close()
+	return sr, nil
 }
-func (m *mockDeps) Compute(data []byte) string           { return "hash" }
-func (m *mockDeps) Get(path string) (string, bool)       { return "hash", true }
-func (m *mockDeps) Update(path, checksum string)         {}
-func (m *mockDeps) WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
-	return nil
-}
-func (m *mockDeps) EnsureDirs(path string) error { return nil }
-func (m *mockDeps) ListDir(path string) ([]os.DirEntry, error) {
-	return []os.DirEntry{}, nil
-}
-func (m *mockDeps) Mode() os.FileMode { return 0644 }

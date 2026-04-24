@@ -51,20 +51,21 @@ const (
 )
 
 type toolSlot struct {
-	callID       string
-	display      domain.ToolDisplay
-	status       ui.ToolStatus
-	errorMsg     string
-	streamOutput string
+	callID           string
+	display          domain.ToolDisplay
+	status           ui.ToolStatus
+	errorMsg         string
+	streamOutput     string
+	awaitingApproval bool
 	// questionState is used when display is QuestionDisplay (interactive toolbox).
 	questionState ui.QuestionUIState
 }
 
 type Model struct {
-	state    uiState
-	bus      bus
-	stream   stream
-	tools    []toolSlot
+	state  uiState
+	bus    bus
+	stream stream
+	tools  []toolSlot
 
 	thinkingRenderer thinkingRenderer
 	toolRenderer     toolRenderer
@@ -276,6 +277,16 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		m.state = stateTooling
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
 		return m.doFlush(flushBlocks, stateTooling)
+	case domain.ToolApprovalRequestEvent:
+		if m.state == stateTooling {
+			for i := range m.tools {
+				if m.tools[i].callID == u.CallID {
+					m.tools[i].awaitingApproval = true
+					break
+				}
+			}
+		}
+		return m.schedulePollOnly()
 	case domain.DoneEvent:
 		m.state = stateDone
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
@@ -294,6 +305,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		if m.state == stateTooling {
 			for i := range m.tools {
 				if m.tools[i].callID == u.CallID {
+					m.tools[i].awaitingApproval = false
 					if u.Display != nil {
 						m.tools[i].display = u.Display
 						m.tools[i].errorMsg = ""
@@ -385,17 +397,66 @@ func (m *Model) View() string {
 }
 
 func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {
-	// 1. Global cancel shortcut
 	if key.Type == tea.KeyCtrlC {
-		_, cmd := m.handleCancel()
-		return cmd
+		return m.handleCancelKey()
 	}
 
-	// 2. Question toolbox interaction (only in tooling state)
-	if m.state != stateTooling || len(m.tools) == 0 || m.toolRenderer == nil {
+	if m.state != stateTooling || len(m.tools) == 0 {
 		return nil
 	}
 
+	if handled := m.handleApprovalKey(key); handled {
+		return nil
+	}
+
+	return m.handleQuestionKey(key)
+}
+
+func (m *Model) handleCancelKey() tea.Cmd {
+	_, cmd := m.handleCancel()
+	return cmd
+}
+
+func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
+	approvalSlot := m.firstAwaitingApprovalSlot()
+	if approvalSlot == nil {
+		return false
+	}
+
+	sendDecision := func(approved bool) {
+		if m.bus == nil {
+			return
+		}
+		m.bus.SendAction(domain.PermissionDecisionAction{CallID: approvalSlot.callID, Approved: approved})
+	}
+
+	switch key.Type {
+	case tea.KeyRunes:
+		if len(key.Runes) != 1 {
+			return false
+		}
+		switch key.Runes[0] {
+		case 'y', 'Y':
+			sendDecision(true)
+			return true
+		case 'n', 'N':
+			sendDecision(false)
+			return true
+		default:
+			return false
+		}
+	case tea.KeyEnter:
+		sendDecision(true)
+		return true
+	case tea.KeyEsc:
+		sendDecision(false)
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Model) handleQuestionKey(key tea.KeyMsg) tea.Cmd {
 	slot := &m.tools[0]
 	qd, ok := slot.display.(domain.QuestionDisplay)
 	if !ok || slot.status != ui.StatusRunning {
@@ -405,16 +466,13 @@ func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {
 	newState, outcome := ui.HandleQuestionKey(qd, slot.questionState, key)
 	slot.questionState = newState
 	if outcome.Cancelled {
-		_, cmd := m.handleCancel()
-		return cmd
+		return m.handleCancelKey()
 	}
-	if outcome.Done {
-		if m.bus != nil {
-			m.bus.SendAction(domain.QuestionAnswerAction{
-				CallID:  slot.callID,
-				Answers: outcome.Answers,
-			})
-		}
+	if outcome.Done && m.bus != nil {
+		m.bus.SendAction(domain.QuestionAnswerAction{
+			CallID:  slot.callID,
+			Answers: outcome.Answers,
+		})
 	}
 	return nil
 }
@@ -452,7 +510,11 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 	}
 
 	var rendered string
-	switch d := slot.display.(type) {
+	display := slot.display
+	if slot.awaitingApproval && slot.status == ui.StatusRunning {
+		display = decorateApprovalPrompt(slot.display)
+	}
+	switch d := display.(type) {
 	case domain.StringDisplay:
 		rendered = m.toolRenderer.RenderString(d, slot.status, errorMsg, frame)
 	case domain.DiffDisplay:
@@ -473,6 +535,31 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 		return ""
 	}
 	return rendered
+}
+
+func decorateApprovalPrompt(d domain.ToolDisplay) domain.ToolDisplay {
+	switch v := d.(type) {
+	case domain.StringDisplay:
+		v.Error = domain.ToolErrorPermissionDenied
+		return v
+	case domain.DiffDisplay:
+		v.Error = domain.ToolErrorPermissionDenied
+		return v
+	case domain.BashDisplay:
+		v.Error = domain.ToolErrorPermissionDenied
+		return v
+	default:
+		return d
+	}
+}
+
+func (m *Model) firstAwaitingApprovalSlot() *toolSlot {
+	for i := range m.tools {
+		if m.tools[i].awaitingApproval && m.tools[i].status == ui.StatusRunning {
+			return &m.tools[i]
+		}
+	}
+	return nil
 }
 
 func (m *Model) renderAllTools() []string {

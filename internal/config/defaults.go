@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 )
@@ -25,12 +26,20 @@ type SessionConfig struct {
 func (c SessionConfig) StorageDir() string { return c.storageDir }
 
 type ToolsConfig struct {
-	maxFileSize     int64
-	maxIterations         int
+	maxFileSize       int64
+	maxIterations     int
+	permissionDefault string
+	toolPermissions   map[string]string
 }
 
-func (c ToolsConfig) MaxFileSize() int64 { return c.maxFileSize }
-func (c ToolsConfig) MaxIterations() int { return c.maxIterations }
+func (c ToolsConfig) MaxFileSize() int64        { return c.maxFileSize }
+func (c ToolsConfig) MaxIterations() int        { return c.maxIterations }
+func (c ToolsConfig) PermissionDefault() string { return c.permissionDefault }
+func (c ToolsConfig) ToolPermissions() map[string]string {
+	out := make(map[string]string, len(c.toolPermissions))
+	maps.Copy(out, c.toolPermissions)
+	return out
+}
 
 type ModelConfig struct {
 	ID            string `json:"id"`
@@ -46,8 +55,14 @@ type sessionDTO struct {
 }
 
 type toolsDTO struct {
-	MaxFileSize           int64 `json:"max_file_size"`
-	MaxIterations         int   `json:"max_iterations"`
+	MaxFileSize   int64          `json:"max_file_size"`
+	MaxIterations int            `json:"max_iterations"`
+	Permissions   permissionsDTO `json:"permissions"`
+}
+
+type permissionsDTO struct {
+	Default string            `json:"default"`
+	ByTool  map[string]string `json:"by_tool"`
 }
 
 type configDTO struct {
@@ -61,8 +76,10 @@ type configDTO struct {
 func DefaultConfig() *Config {
 	return &Config{
 		tools: ToolsConfig{
-			maxFileSize:           20 * 1024 * 1024,
-			maxIterations:         50,
+			maxFileSize:       20 * 1024 * 1024,
+			maxIterations:     50,
+			permissionDefault: "ask",
+			toolPermissions:   map[string]string{},
 		},
 		session: SessionConfig{
 			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
@@ -74,7 +91,7 @@ func DefaultConfig() *Config {
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
 			chatWindowWidth:  80,
 			bashOutputHeight: 12,
-			shortToolBlock:     false,
+			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{
 			"google": {

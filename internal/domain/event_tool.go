@@ -4,8 +4,8 @@ package domain
 
 // ToolStartEvent is emitted after Prepare succeeds.
 type ToolStartEvent struct {
-	CallID   string      // Unique ID from domain.ToolCall.ID
-	Display  ToolDisplay // Rich display computed during Prepare
+	CallID  string      // Unique ID from domain.ToolCall.ID
+	Display ToolDisplay // Rich display computed during Prepare
 }
 
 func (ToolStartEvent) isUIUpdate() {}
@@ -25,3 +25,10 @@ type ToolEndEvent struct {
 }
 
 func (ToolEndEvent) isUIUpdate() {}
+
+// ToolApprovalRequestEvent marks a running tool as awaiting explicit user approval.
+type ToolApprovalRequestEvent struct {
+	CallID string
+}
+
+func (ToolApprovalRequestEvent) isUIUpdate() {}

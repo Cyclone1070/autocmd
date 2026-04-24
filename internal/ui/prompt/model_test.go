@@ -7,8 +7,8 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ type mockBus struct {
 }
 
 func (m *mockBus) UIUpdates() <-chan domain.UIUpdate { return m.updates }
-func (m *mockBus) SendAction(a domain.Action)       { m.actions = append(m.actions, a) }
+func (m *mockBus) SendAction(a domain.Action)        { m.actions = append(m.actions, a) }
 
 type mockStream struct {
 	p             string
@@ -43,22 +43,24 @@ func (s *mockStream) Flush() []string {
 	}
 	return []string{"flushed"}
 }
-func (s *mockStream) Pending() string         { return s.p }
-func (s *mockStream) ClearBuffer()            { s.clearCalls++ }
+func (s *mockStream) Pending() string { return s.p }
+func (s *mockStream) ClearBuffer()    { s.clearCalls++ }
 
 type mockThinkingRenderer struct{}
+
 func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
 	return "thinking_rendered"
 }
 
 type mockThinkingRendererWithLeadingGap struct{}
+
 func (t *mockThinkingRendererWithLeadingGap) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
 	return "\n\n    thinking_rendered"
 }
 
 // mockThinkingRecorder records the last status passed to RenderThinking (for cancel / bus-driven flush tests).
 type mockThinkingRecorder struct {
-	lastStatus ui.ToolStatus
+	lastStatus      ui.ToolStatus
 	lastThoughtText string
 }
 
@@ -254,10 +256,10 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 		return nil
 	}))
 	m.state = stateThinking
-	
+
 	// Transition to streaming
 	m.handleBusEvent(domain.TextEvent{Text: "hi"})
-	
+
 	require.NotEmpty(t, flushed)
 	assert.Contains(t, flushed[0], "thinking_rendered", "Thinking result should be flushed on transition")
 }
@@ -282,7 +284,7 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	m := &Model{}
 	m.flushFn = func(c string) tea.Cmd { return nil }
 	_, cmd := m.doFlush([]string{"b1", "b2"}, stateIdle)
-	
+
 	// Verified in code: return m, tea.Sequence(cmds...)
 	assert.NotNil(t, cmd)
 }
@@ -296,6 +298,7 @@ func TestModel_ExplicitGater(t *testing.T) {
 type mockGater struct {
 	gateFunc func([]string) ([]string, int)
 }
+
 func (m *mockGater) Gate(lines []string) ([]string, int) { return m.gateFunc(lines) }
 
 func TestModel_ViewUsesGater(t *testing.T) {
@@ -305,7 +308,7 @@ func TestModel_ViewUsesGater(t *testing.T) {
 	}}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{p: "raw"}, g, 80)
-	
+
 	assert.Equal(t, "raw\n_gated", m.View())
 }
 
@@ -314,13 +317,13 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(nil, nil, tr, sp, theme, nil, ui.NewNoOpGater(), 80)
-	
+
 	m.tools = []toolSlot{
 		{callID: "1", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c1"}},
 		{callID: "2", status: ui.StatusSuccess, display: domain.StringDisplay{Content: "c2"}},
 	}
 	m.state = stateTooling
-	
+
 	v := m.View()
 	assert.Contains(t, v, "\n\n    ✔ \n       ⎿ c2", "There should be a blank line between tool blocks")
 }
@@ -531,6 +534,83 @@ func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
 	require.Len(t, bus.actions, 1)
 }
 
+func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{
+			callID:           "call-1",
+			display:          domain.NewStringDisplay("Read file", "preview"),
+			status:           ui.StatusRunning,
+			awaitingApproval: true,
+		},
+	}
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	require.Len(t, bus.actions, 1)
+	act, ok := bus.actions[0].(domain.PermissionDecisionAction)
+	require.True(t, ok)
+	assert.Equal(t, "call-1", act.CallID)
+	assert.True(t, act.Approved)
+}
+
+func TestModel_ToolApprovalRequestEvent_MarksRunningTool(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{
+			callID:  "call-1",
+			display: domain.NewStringDisplay("Read file", "preview"),
+			status:  ui.StatusRunning,
+		},
+	}
+
+	res, _ := m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "call-1"})
+	m2 := res.(*Model)
+	require.Len(t, m2.tools, 1)
+	assert.True(t, m2.tools[0].awaitingApproval)
+}
+
+func TestModel_PermissionApproval_UsesFirstAwaitingApprovalNotFirstSlot(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{
+			callID:           "done-slot",
+			display:          domain.NewStringDisplay("Done", ""),
+			status:           ui.StatusSuccess,
+			awaitingApproval: false,
+		},
+		{
+			callID:           "await-slot",
+			display:          domain.NewStringDisplay("Run grep", "preview"),
+			status:           ui.StatusRunning,
+			awaitingApproval: true,
+		},
+	}
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	require.Len(t, bus.actions, 1)
+	act, ok := bus.actions[0].(domain.PermissionDecisionAction)
+	require.True(t, ok)
+	assert.Equal(t, "await-slot", act.CallID)
+	assert.False(t, act.Approved)
+}
+
 func TestModel_FlushSpacingRegression(t *testing.T) {
 	var terminalOutput strings.Builder
 	// mockPrintf mimics tea.Printf's internal behavior: split on \n, each line gets \n
@@ -556,7 +636,7 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 
 	output := terminalOutput.String()
 	t.Logf("Output Case 1:\n%q", output)
-	
+
 	// We want exactly 1 blank line between them.
 	// Current buggy behavior (blind strip) results in 0 blank lines (stuck).
 	assert.Contains(t, output, "\n  ╰ DONE\n\nPARA\n", "Tool block and para should have a blank line between them")

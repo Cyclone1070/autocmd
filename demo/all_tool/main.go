@@ -15,6 +15,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/permission"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
@@ -50,10 +51,10 @@ func main() {
 	}
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -97,7 +98,14 @@ func main() {
 		bash.NewTaskStopTool(taskMgr),
 	}
 	registry := tool.NewRegistry(tools)
-	toolExecutor := agent.NewToolExecutor(registry, router)
+	permissionResolver := permission.NewResolver(
+		"ask",
+		map[string]string{
+			"task_list": "allow",
+			"task_stop": "allow",
+		},
+	)
+	toolExecutor := agent.NewToolExecutor(registry, router, permissionResolver)
 
 	// NEW: Use the real agent.Loop with a stateful MockLLM
 	mockLLM := &statefulMockLLM{}

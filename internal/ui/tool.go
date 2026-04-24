@@ -27,6 +27,7 @@ const (
 type ToolBlockSpec struct {
 	HeaderLines  []string
 	ContentLines []string
+	FooterLines  []string
 	Status       ToolStatus
 	Frame        string
 }
@@ -150,6 +151,9 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 	if d.Content != "" {
 		spec.ContentLines = r.mutedLines(strings.Split(d.Content, "\n"))
 	}
+	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
+	}
 
 	if len(spec.HeaderLines) == 0 && len(spec.ContentLines) == 0 {
 		return ToolBlockSpec{}, false
@@ -180,6 +184,9 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 		if target != "" {
 			spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
 		}
+		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
+		}
 		return spec, true
 	}
 
@@ -198,6 +205,9 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 	}
 	if diffContent != "" && !r.Theme.ShortToolBlock {
 		spec.ContentLines = append(spec.ContentLines, strings.Split(diffContent, "\n")...)
+	}
+	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
 	return spec, true
 }
@@ -235,6 +245,9 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	if status == StatusError {
 		spec.HeaderLines[0] = r.formatError(header, err)
 		spec.ContentLines = []string{r.Theme.Muted(fmt.Sprintf("%s$ %s", d.Cwd, d.Command))}
+		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
+		}
 		return spec, true
 	}
 	bashOutput := strings.TrimRight(output, "\n")
@@ -243,7 +256,19 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	if bashOutput != "" && !r.Theme.ShortToolBlock {
 		spec.ContentLines = append(spec.ContentLines, r.mutedLines(strings.Split(bashOutput, "\n"))...)
 	}
+	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
+	}
 	return spec, true
+}
+
+func (r *ToolRenderer) isAwaitingApprovalDisplay(d domain.ToolDisplay) bool {
+	return strings.Contains(strings.ToLower(d.GetError()), domain.ToolErrorPermissionDenied)
+}
+
+func (r *ToolRenderer) renderApprovalFooter() string {
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(r.Theme.PrimaryColor())
+	return r.Theme.Primary("Permission required:  ") + keyStyle.Render("y") + " " + r.Theme.Muted("allow") + "   " + keyStyle.Render("n") + " " + r.Theme.Muted("deny")
 }
 
 // RenderQuestion renders QuestionDisplay with interactive state (cursor, toggles, custom text).
@@ -305,7 +330,6 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 			summary = r.Theme.Error(plainSummary)
 		}
 		body := summary + "\n\n" + r.renderQuestionReviewBlock(stRender)
-		body += "\n\n" + r.renderQuestionFooter()
 		lines := strings.Split(body, "\n")
 		spec := ToolBlockSpec{
 			Status: status,
@@ -315,6 +339,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 		if len(lines) > 1 {
 			spec.ContentLines = lines[1:]
 		}
+		spec.FooterLines = []string{r.renderQuestionFooter()}
 		return spec, true
 	}
 
@@ -333,7 +358,6 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 	parts = append(parts, r.renderQuestionOptionBlock(q, st))
 
 	body := strings.Join(parts, "\n\n")
-	body += "\n\n" + r.renderQuestionFooter()
 	lines := strings.Split(body, "\n")
 	spec := ToolBlockSpec{
 		Status:      status,
@@ -343,6 +367,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 	if len(lines) > 1 {
 		spec.ContentLines = lines[1:]
 	}
+	spec.FooterLines = []string{r.renderQuestionFooter()}
 	return spec, true
 }
 
@@ -523,6 +548,7 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 
 	contentFirstWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolFirstContentGutterPrefix)
 	contentContinuationWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
+	footerWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
 
 	spec.HeaderLines = r.wrapLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
 	if opts.TruncateMode == TruncateTailKeepLatest && len(spec.ContentLines) > 0 {
@@ -550,6 +576,7 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 	} else {
 		spec.ContentLines = r.wrapLines(spec.ContentLines, contentFirstWidth, contentContinuationWidth)
 	}
+	spec.FooterLines = r.wrapLines(spec.FooterLines, footerWidth, footerWidth)
 
 	return r.Theme.RenderToolBlock(spec)
 }

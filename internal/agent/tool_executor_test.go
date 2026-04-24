@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/permission"
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -256,6 +257,172 @@ func TestExecute_UnknownTool_ReturnsMessageToLLM(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "tc-123", res.ToolCallID)
 	assert.Contains(t, res.Content, "Error: tool \"unknown\" does not exist")
+}
+
+func TestExecute_PermissionDenied_ReturnsErrorAndSkipsPrepare(t *testing.T) {
+	prepareCalled := false
+	mt := &mockTool{
+		name: "bash",
+		prepare: func(params string) (domain.Invocation, error) {
+			prepareCalled = true
+			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := NewToolExecutor(registry, nil, permission.NewResolver("ask", map[string]string{
+		"bash": "deny",
+	}))
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID:       "tc-deny",
+		Function: schema.FunctionCall{Name: "bash"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.False(t, prepareCalled)
+	assert.Equal(t, "tc-deny", res.ToolCallID)
+	assert.Contains(t, res.Content, "permission denied")
+	assert.Equal(t, domain.ToolErrorPermissionDenied, disp.GetError())
+
+	e1 := <-sender.events
+	_, ok := e1.(domain.ToolStartEvent)
+	assert.True(t, ok)
+	e2 := <-sender.events
+	_, ok = e2.(domain.ToolEndEvent)
+	assert.True(t, ok)
+}
+
+func TestExecute_PermissionAsk_Approve_ExecutesPreparedInvocation(t *testing.T) {
+	mt := &mockTool{
+		name: "bash",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("Run bash", "preview")}, nil
+		},
+	}
+	waiter := &mockActionWaiter{
+		wait: func(ctx context.Context, callID string) (domain.Action, error) {
+			return domain.PermissionDecisionAction{CallID: callID, Approved: true}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := NewToolExecutor(registry, waiter, permission.NewResolver("ask", nil))
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID:       "tc-ask-allow",
+		Function: schema.FunctionCall{Name: "bash"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", res.Content)
+	assert.Empty(t, disp.GetError())
+
+	e1 := <-sender.events
+	_, ok := e1.(domain.ToolStartEvent)
+	assert.True(t, ok)
+	e2 := <-sender.events
+	_, ok = e2.(domain.ToolApprovalRequestEvent)
+	assert.True(t, ok)
+	e3 := <-sender.events
+	_, ok = e3.(domain.ToolEndEvent)
+	assert.True(t, ok)
+}
+
+func TestExecute_PermissionAsk_Deny_ReturnsDenied(t *testing.T) {
+	prepareCalled := false
+	mt := &mockTool{
+		name: "bash",
+		prepare: func(params string) (domain.Invocation, error) {
+			prepareCalled = true
+			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("Run bash", "preview")}, nil
+		},
+	}
+	waiter := &mockActionWaiter{
+		wait: func(ctx context.Context, callID string) (domain.Action, error) {
+			return domain.PermissionDecisionAction{CallID: callID, Approved: false}, nil
+		},
+	}
+	registry := newMockToolRegistry([]domain.Tool{mt})
+	executor := NewToolExecutor(registry, waiter, permission.NewResolver("ask", nil))
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID:       "tc-ask-deny",
+		Function: schema.FunctionCall{Name: "bash"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.True(t, prepareCalled)
+	assert.Contains(t, res.Content, "permission denied")
+	assert.Equal(t, domain.ToolErrorPermissionDenied, disp.GetError())
+	sd, ok := disp.(domain.StringDisplay)
+	require.True(t, ok)
+	assert.Equal(t, "Run bash", sd.Description)
+	assert.Equal(t, "preview", sd.Content)
+
+	e1 := <-sender.events
+	_, ok = e1.(domain.ToolStartEvent)
+	assert.True(t, ok)
+	e2 := <-sender.events
+	_, ok = e2.(domain.ToolApprovalRequestEvent)
+	assert.True(t, ok)
+	e3 := <-sender.events
+	_, ok = e3.(domain.ToolEndEvent)
+	assert.True(t, ok)
+	select {
+	case extra := <-sender.events:
+		t.Fatalf("unexpected extra event after ask deny: %T", extra)
+	default:
+	}
+}
+
+func TestExecute_InteractiveInvocation_SkipsPermissionApprovalGate(t *testing.T) {
+	callID := "tc-question"
+	qd := domain.QuestionDisplay{TypeField: "question", Questions: []domain.QuestionInfo{{Question: "Proceed?", Options: []string{"Yes"}}}}
+	questionAnswer := domain.QuestionAnswerAction{CallID: callID, Answers: [][]string{{"Yes"}}}
+
+	mt := &mockTool{
+		name: "ask_question",
+		prepare: func(params string) (domain.Invocation, error) {
+			return &mockInteractiveInvocation{
+				display: qd,
+				resolve: func(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
+					assert.Equal(t, questionAnswer, action)
+					return "answered", domain.NewStringDisplay("Question answered", "Yes")
+				},
+			}, nil
+		},
+	}
+	waiter := &mockActionWaiter{
+		wait: func(ctx context.Context, gotCallID string) (domain.Action, error) {
+			assert.Equal(t, callID, gotCallID)
+			return questionAnswer, nil
+		},
+	}
+	executor := NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), waiter, permission.NewResolver("ask", nil))
+	sender := newMockEventSender(10)
+
+	res, disp, err := executor.execute(context.Background(), &schema.ToolCall{
+		ID:       callID,
+		Function: schema.FunctionCall{Name: "ask_question"},
+	}, sender)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "answered", res.Content)
+	assert.Empty(t, disp.GetError())
+
+	e1 := <-sender.events
+	_, ok := e1.(domain.ToolStartEvent)
+	assert.True(t, ok)
+	e2 := <-sender.events
+	_, ok = e2.(domain.ToolEndEvent)
+	assert.True(t, ok)
+	select {
+	case extra := <-sender.events:
+		t.Fatalf("unexpected extra event for interactive invocation: %T", extra)
+	default:
+	}
 }
 
 // mockDisplayOnlyInvocation implements Invocation but not ExecutableInvocation (for executor guard tests).
@@ -613,7 +780,6 @@ func TestExecute_ContextCancelled_ReturnsProperMessage(t *testing.T) {
 	assert.Equal(t, domain.ToolErrorCancelled, res.Content)
 }
 
-
 func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -653,7 +819,8 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 	assert.Equal(t, domain.ToolErrorCancelled, res.Responses[1].Content)
 
 	assert.Nil(t, res.Displays["tc-1"])
-	assert.Nil(t, res.Displays["tc-2"])}
+	assert.Nil(t, res.Displays["tc-2"])
+}
 
 func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1120,7 +1287,7 @@ func TestExecute_ContextCancelled_DuringPrepare_Silent(t *testing.T) {
 	sender := newMockEventSender(10)
 
 	res, disp, err := executor.execute(ctx, &schema.ToolCall{
-		ID: "tc-1",
+		ID:       "tc-1",
 		Function: schema.FunctionCall{Name: "test"},
 	}, sender)
 
@@ -1144,7 +1311,7 @@ func (e *ToolExecutor) execute(ctx context.Context, tc *schema.ToolCall, events 
 	return resp, finalDisp, ctx.Err()
 }
 func TestToolExecutor_LogDirInjection(t *testing.T) {
-	
+
 	// Create a mock invocation that is LogAware
 	mt := &mockTool{
 		name: "loggy",
@@ -1154,27 +1321,27 @@ func TestToolExecutor_LogDirInjection(t *testing.T) {
 			}, nil
 		},
 	}
-	
+
 	registry := newMockToolRegistry([]domain.Tool{mt})
 	executor := NewToolExecutor(registry, nil)
 	sender := newMockEventSender(10)
-	
+
 	// executeBatch now expects logDir as 4th arg
 	calls := []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "loggy"}}}
 	_, err := executor.executeBatch(context.Background(), calls, sender)
 	assert.NoError(t, err)
-	
+
 	// Implementation note: The actual check happens inside the mock's Execute call or we check a field.
 	// For this test, the mockLogAwareInvocation will be defined below.
 }
 
 type mockLogAwareInvocation struct {
-	display domain.ToolDisplay
+	display        domain.ToolDisplay
 	capturedLogDir string
 }
 
 func (m *mockLogAwareInvocation) Display() domain.ToolDisplay { return m.display }
-func (m *mockLogAwareInvocation) SetLogDir(path string) { m.capturedLogDir = path }
+func (m *mockLogAwareInvocation) SetLogDir(path string)       { m.capturedLogDir = path }
 func (m *mockLogAwareInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	if m.capturedLogDir == "" {
 		return "fail: log dir not set", m.display.WithError("Log dir not set")

@@ -198,3 +198,27 @@ func TestLoad_UnknownFields_Ignored(t *testing.T) {
 	assert.Equal(t, int64(1024), cfg.Tools().MaxFileSize())
 }
 
+func TestLoad_ToolPermissions_DefaultAndByTool(t *testing.T) {
+	configJSON := `{
+		"tools": {
+			"permissions": {
+				"default": "deny",
+				"by_tool": {
+					"read_file": "allow",
+					"bash": "ask"
+				}
+			}
+		}
+	}`
+	fs := createMockFS(map[string][]byte{
+		"/home/user/.config/iav/config.json": []byte(configJSON),
+	})
+	mgr := config.NewManager(fs)
+
+	cfg, err := mgr.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "deny", cfg.Tools().PermissionDefault())
+	assert.Equal(t, "allow", cfg.Tools().ToolPermissions()["read_file"])
+	assert.Equal(t, "ask", cfg.Tools().ToolPermissions()["bash"])
+}

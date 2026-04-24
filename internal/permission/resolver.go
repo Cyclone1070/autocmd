@@ -1,0 +1,50 @@
+package permission
+
+// Mode is the effective policy decision for a tool call.
+type Mode string
+
+const (
+	ModeAsk   Mode = "ask"
+	ModeAllow Mode = "allow"
+	ModeDeny  Mode = "deny"
+)
+
+// Resolver returns effective permission mode for tools.
+type Resolver struct {
+	defaultMode Mode
+	byTool      map[string]Mode
+}
+
+// NewResolver builds a resolver from config values.
+// Invalid values are normalized to ask as a safe fallback.
+func NewResolver(defaultMode string, byTool map[string]string) *Resolver {
+	resolver := &Resolver{
+		defaultMode: parseMode(defaultMode),
+		byTool:      make(map[string]Mode, len(byTool)),
+	}
+	for tool, mode := range byTool {
+		resolver.byTool[tool] = parseMode(mode)
+	}
+	return resolver
+}
+
+func (r *Resolver) Resolve(toolName string) Mode {
+	if r == nil {
+		return ModeAllow
+	}
+	if mode, ok := r.byTool[toolName]; ok {
+		return mode
+	}
+	return r.defaultMode
+}
+
+func parseMode(mode string) Mode {
+	switch Mode(mode) {
+	case ModeAllow:
+		return ModeAllow
+	case ModeDeny:
+		return ModeDeny
+	default:
+		return ModeAsk
+	}
+}

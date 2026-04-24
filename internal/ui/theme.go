@@ -31,10 +31,10 @@ func ToAdaptiveColor(c ColorInfo) lipgloss.AdaptiveColor {
 
 // ThemeConfig holds the colors and styling needed for the theme.
 type ThemeConfig struct {
-	PrimaryColor lipgloss.AdaptiveColor
-	SuccessColor lipgloss.AdaptiveColor
-	ErrorColor   lipgloss.AdaptiveColor
-	MutedColor   lipgloss.AdaptiveColor
+	PrimaryColor   lipgloss.AdaptiveColor
+	SuccessColor   lipgloss.AdaptiveColor
+	ErrorColor     lipgloss.AdaptiveColor
+	MutedColor     lipgloss.AdaptiveColor
 	ShortToolBlock bool
 }
 
@@ -51,10 +51,10 @@ type Theme struct {
 // NewTheme creates a theme from config.
 func NewTheme(cfg ThemeConfig) *Theme {
 	return &Theme{
-		muted:        cfg.MutedColor,
-		primary:      cfg.PrimaryColor,
-		success:      cfg.SuccessColor,
-		err:          cfg.ErrorColor,
+		muted:          cfg.MutedColor,
+		primary:        cfg.PrimaryColor,
+		success:        cfg.SuccessColor,
+		err:            cfg.ErrorColor,
 		ShortToolBlock: cfg.ShortToolBlock,
 	}
 }
@@ -97,14 +97,15 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 	header := trimEmptyLines(spec.HeaderLines)
 	content := trimLeadingEmptyLines(spec.ContentLines)
-	if len(header) == 0 && len(content) == 0 {
+	footer := trimEmptyLines(spec.FooterLines)
+	if len(header) == 0 && len(content) == 0 && len(footer) == 0 {
 		return ""
 	}
 
 	prefix := t.StatusPrefix(spec.Status, spec.Frame)
+	headerContinuationPrefix := ToolInsetPrefix + strings.Repeat(" ", lipgloss.Width(prefix))
 	if len(header) > 0 {
 		header[0] = ToolInsetPrefix + prefix + header[0]
-		headerContinuationPrefix := ToolInsetPrefix + strings.Repeat(" ", lipgloss.Width(prefix))
 		for i := 1; i < len(header); i++ {
 			header[i] = headerContinuationPrefix + header[i]
 		}
@@ -121,6 +122,12 @@ func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 			continue
 		}
 		out = append(out, t.Muted(ToolInsetPrefix+ToolContentGutterPrefix)+line)
+	}
+	if len(footer) > 0 {
+		out = append(out, "")
+		for _, line := range footer {
+			out = append(out, headerContinuationPrefix+line)
+		}
 	}
 
 	return "\n\n" + strings.Join(out, "\n")

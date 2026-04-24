@@ -14,6 +14,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/logging"
+	"github.com/Cyclone1070/iav/internal/permission"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
 	"github.com/Cyclone1070/iav/internal/tool/file"
@@ -105,14 +106,18 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	defer bus.Close()
 	router := actionrouter.New()
 	defer router.Close()
-	agentExecutor := agent.NewToolExecutor(toolRegistry, router)
+	permissionResolver := permission.NewResolver(
+		deps.Config.Tools().PermissionDefault(),
+		deps.Config.Tools().ToolPermissions(),
+	)
+	agentExecutor := agent.NewToolExecutor(toolRegistry, router, permissionResolver)
 	agentLoop := agent.NewLoop(llmInstance, agentExecutor, deps.Config.Tools().MaxIterations(), bus, taskMgr)
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
 		ShortToolBlock: deps.Config.UI().ShortToolBlock(),
 	}
 	// Calculate width and height capping at terminal size

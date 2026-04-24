@@ -20,6 +20,9 @@ const ToolErrorFailed = "execution failed"
 // ToolErrorTimedOut is ToolDisplay.Error when Execute returns because the operation took too long.
 const ToolErrorTimedOut = "execution timed out"
 
+// ToolErrorPermissionDenied is ToolDisplay.Error when execution is blocked by permission policy.
+const ToolErrorPermissionDenied = "permission denied"
+
 // Invocation is a validated, prepared tool call: at minimum a display for the UI.
 // Returned by Tool.Prepare(). Concrete kinds implement ExecutableInvocation, StreamableInvocation,
 // and/or InteractiveInvocation.
@@ -64,10 +67,10 @@ type ToolDisplay interface {
 
 // StringDisplay is for simple text output (most tools).
 type StringDisplay struct {
-	TypeField string `json:"type"`
+	TypeField   string `json:"type"`
 	Description string `json:"description"`
-	Content   string `json:"content"`
-	Error     string `json:"error,omitempty"`
+	Content     string `json:"content"`
+	Error       string `json:"error,omitempty"`
 }
 
 func (StringDisplay) isToolDisplay()     {}
@@ -85,13 +88,13 @@ func NewStringDisplay(description, content string) StringDisplay {
 
 // DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
-	TypeField string `json:"type"`
+	TypeField   string `json:"type"`
 	Description string `json:"description"` // User-friendly description (e.g. "Updating auth")
-	Target    string `json:"target"`  // Technical action (e.g. "Edit auth.go")
-	Added     int    `json:"added"`   // Lines added
-	Removed   int    `json:"removed"` // Lines removed
-	Diff      string `json:"diff"`    // Unified diff content
-	Error     string `json:"error,omitempty"`
+	Target      string `json:"target"`      // Technical action (e.g. "Edit auth.go")
+	Added       int    `json:"added"`       // Lines added
+	Removed     int    `json:"removed"`     // Lines removed
+	Diff        string `json:"diff"`        // Unified diff content
+	Error       string `json:"error,omitempty"`
 }
 
 func (DiffDisplay) isToolDisplay()     {}
@@ -105,19 +108,19 @@ func (d DiffDisplay) WithError(err string) ToolDisplay {
 // NewDiffDisplay creates a new DiffDisplay with correct type.
 func NewDiffDisplay(description, target string, added, removed int, diff string) DiffDisplay {
 	return DiffDisplay{
-		TypeField: "diff",
+		TypeField:   "diff",
 		Description: description,
-		Target:    target,
-		Added:     added,
-		Removed:   removed,
-		Diff:      diff,
+		Target:      target,
+		Added:       added,
+		Removed:     removed,
+		Diff:        diff,
 	}
 }
 
 // BashDisplay is for bash command execution with streaming output.
 type BashDisplay struct {
 	TypeField      string `json:"type"`
-	Description    string `json:"description"` // Description from tool (e.g. "Installing dependencies")
+	Description    string `json:"description"`     // Description from tool (e.g. "Installing dependencies")
 	Command        string `json:"command"`         // The command being run (e.g. "npm install")
 	Cwd            string `json:"cwd,omitempty"`   // Command working directory
 	CapturedOutput string `json:"captured_output"` // Raw output captured after execution (baked)
@@ -182,6 +185,17 @@ func (QuestionAnswerAction) isAction() {}
 // GetCallID implements CallIDer for action routing.
 func (a QuestionAnswerAction) GetCallID() string { return a.CallID }
 
+// PermissionDecisionAction is sent by the prompt UI to approve or deny a tool permission request.
+type PermissionDecisionAction struct {
+	CallID   string
+	Approved bool
+}
+
+func (PermissionDecisionAction) isAction() {}
+
+// GetCallID implements CallIDer for action routing.
+func (a PermissionDecisionAction) GetCallID() string { return a.CallID }
+
 // ToolDisplays is a helper type for polymorphic JSON unmarshaling of ToolDisplay maps.
 type ToolDisplays map[string]ToolDisplay
 
@@ -241,4 +255,3 @@ type Tool interface {
 	Definition() *schema.ToolInfo
 	Prepare(params string) (Invocation, error)
 }
-

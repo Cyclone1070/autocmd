@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 )
@@ -46,6 +47,15 @@ type Manager struct {
 	fs FileSystem
 }
 
+func copyStringMap(in map[string]string) map[string]string {
+	if in == nil {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	maps.Copy(out, in)
+	return out
+}
+
 // NewManager creates a Manager with the provided filesystem
 func NewManager(fs FileSystem) *Manager {
 	if fs == nil {
@@ -58,8 +68,10 @@ func NewManager(fs FileSystem) *Manager {
 func newConfig(dto configDTO) (*Config, error) {
 	cfg := &Config{
 		tools: ToolsConfig{
-			maxFileSize:           dto.Tools.MaxFileSize,
-			maxIterations:         dto.Tools.MaxIterations,
+			maxFileSize:       dto.Tools.MaxFileSize,
+			maxIterations:     dto.Tools.MaxIterations,
+			permissionDefault: dto.Tools.Permissions.Default,
+			toolPermissions:   copyStringMap(dto.Tools.Permissions.ByTool),
 		},
 		session: SessionConfig{
 			storageDir: dto.Session.StorageDir,
@@ -81,9 +93,9 @@ func newConfig(dto configDTO) (*Config, error) {
 				light: dto.UI.MutedColor.Light,
 				dark:  dto.UI.MutedColor.Dark,
 			},
-			chatWindowWidth:   dto.UI.ChatWindowWidth,
-			bashOutputHeight:  dto.UI.BashOutputHeight,
-			shortToolBlock:      dto.UI.ShortToolBlock,
+			chatWindowWidth:  dto.UI.ChatWindowWidth,
+			bashOutputHeight: dto.UI.BashOutputHeight,
+			shortToolBlock:   dto.UI.ShortToolBlock,
 		},
 		providers: dto.Providers,
 	}
@@ -101,20 +113,24 @@ func (m *Manager) Load() (*Config, error) {
 	defaults := DefaultConfig()
 	dto := configDTO{
 		Tools: toolsDTO{
-			MaxFileSize:           defaults.tools.maxFileSize,
-			MaxIterations:         defaults.tools.maxIterations,
+			MaxFileSize:   defaults.tools.maxFileSize,
+			MaxIterations: defaults.tools.maxIterations,
+			Permissions: permissionsDTO{
+				Default: defaults.tools.permissionDefault,
+				ByTool:  copyStringMap(defaults.tools.toolPermissions),
+			},
 		},
 		Session: sessionDTO{
 			StorageDir: defaults.session.storageDir,
 		},
 		UI: uiDTO{
-			PrimaryColor:      colorDTO{Light: defaults.ui.primaryColor.light, Dark: defaults.ui.primaryColor.dark},
-			SuccessColor:      colorDTO{Light: defaults.ui.successColor.light, Dark: defaults.ui.successColor.dark},
-			ErrorColor:        colorDTO{Light: defaults.ui.errorColor.light, Dark: defaults.ui.errorColor.dark},
-			MutedColor:        colorDTO{Light: defaults.ui.mutedColor.light, Dark: defaults.ui.mutedColor.dark},
-			ChatWindowWidth:   defaults.ui.chatWindowWidth,
-			BashOutputHeight:  defaults.ui.bashOutputHeight,
-			ShortToolBlock:      defaults.ui.shortToolBlock,
+			PrimaryColor:     colorDTO{Light: defaults.ui.primaryColor.light, Dark: defaults.ui.primaryColor.dark},
+			SuccessColor:     colorDTO{Light: defaults.ui.successColor.light, Dark: defaults.ui.successColor.dark},
+			ErrorColor:       colorDTO{Light: defaults.ui.errorColor.light, Dark: defaults.ui.errorColor.dark},
+			MutedColor:       colorDTO{Light: defaults.ui.mutedColor.light, Dark: defaults.ui.mutedColor.dark},
+			ChatWindowWidth:  defaults.ui.chatWindowWidth,
+			BashOutputHeight: defaults.ui.bashOutputHeight,
+			ShortToolBlock:   defaults.ui.shortToolBlock,
 		},
 		Providers: defaults.providers,
 	}

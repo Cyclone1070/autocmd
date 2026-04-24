@@ -8,12 +8,14 @@ import (
 	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/permission"
 	"github.com/cloudwego/eino/schema"
 )
 
 type ToolExecutor struct {
-	registry toolRegistry
-	waiter   actionWaiter
+	registry           toolRegistry
+	waiter             actionWaiter
+	permissionResolver *permission.Resolver
 }
 
 type batchResult struct {
@@ -22,10 +24,15 @@ type batchResult struct {
 }
 
 // NewToolExecutor creates a new ToolExecutor with its dependencies.
-func NewToolExecutor(registry toolRegistry, waiter actionWaiter) *ToolExecutor {
+func NewToolExecutor(registry toolRegistry, waiter actionWaiter, permissionResolver ...*permission.Resolver) *ToolExecutor {
+	var resolver *permission.Resolver
+	if len(permissionResolver) > 0 {
+		resolver = permissionResolver[0]
+	}
 	return &ToolExecutor{
-		registry: registry,
-		waiter:   waiter,
+		registry:           registry,
+		waiter:             waiter,
+		permissionResolver: resolver,
 	}
 }
 
@@ -146,6 +153,10 @@ func (e *ToolExecutor) prepareTool(ctx context.Context, tc *schema.ToolCall, eve
 		msg, disp := e.unknownToolOutcome(tc, events)
 		return nil, msg, disp
 	}
+	if e.permissionResolver.Resolve(toolName) == permission.ModeDeny {
+		msg, disp := e.permissionDeniedBeforePrepareOutcome(tc, events)
+		return nil, msg, disp
+	}
 
 	inv, err := tool.Prepare(tc.Function.Arguments)
 	if err != nil {
@@ -153,10 +164,25 @@ func (e *ToolExecutor) prepareTool(ctx context.Context, tc *schema.ToolCall, eve
 		return nil, msg, disp
 	}
 
-
 	previewDisplay := inv.Display()
 	if previewDisplay == nil {
 		panic(fmt.Sprintf("tool %q Prepare returned invocation with nil display (callID=%s)", toolName, callID))
+	}
+	if _, isInteractive := inv.(domain.InteractiveInvocation); isInteractive {
+		emitToolStart(events, callID, previewDisplay)
+		return inv, nil, nil
+	}
+	if e.permissionResolver.Resolve(toolName) == permission.ModeAsk {
+		emitToolStart(events, callID, previewDisplay)
+		if events != nil {
+			events.SendUIUpdate(domain.ToolApprovalRequestEvent{CallID: callID})
+		}
+		approved := e.waitForPermissionDecision(ctx, callID)
+		if !approved {
+			msg, disp := e.permissionDeniedAfterPrepareOutcome(tc, previewDisplay, events)
+			return nil, msg, disp
+		}
+		return inv, nil, nil
 	}
 
 	emitToolStart(events, callID, previewDisplay)
@@ -261,6 +287,59 @@ func (e *ToolExecutor) unknownToolOutcome(tc *schema.ToolCall, events eventSende
 		ToolName:   tc.Function.Name,
 		Content:    errMsg,
 	}, display
+}
+
+func (e *ToolExecutor) permissionDeniedMessage(tc *schema.ToolCall) *schema.Message {
+	errMsg := fmt.Sprintf("Error: permission denied for %q tool", tc.Function.Name)
+	return &schema.Message{
+		Role:       schema.Tool,
+		ToolCallID: tc.ID,
+		ToolName:   tc.Function.Name,
+		Content:    errMsg,
+	}
+}
+
+func (e *ToolExecutor) permissionDeniedBeforePrepareOutcome(tc *schema.ToolCall, events eventSender) (*schema.Message, domain.ToolDisplay) {
+	display := domain.NewStringDisplay("", "").WithError(domain.ToolErrorPermissionDenied)
+	if events != nil {
+		events.SendUIUpdate(domain.ToolStartEvent{
+			CallID:  tc.ID,
+			Display: display,
+		})
+		events.SendUIUpdate(domain.ToolEndEvent{
+			CallID:  tc.ID,
+			Display: display,
+		})
+	}
+	return e.permissionDeniedMessage(tc), display
+}
+
+func (e *ToolExecutor) permissionDeniedAfterPrepareOutcome(tc *schema.ToolCall, previewDisplay domain.ToolDisplay, events eventSender) (*schema.Message, domain.ToolDisplay) {
+	display := previewDisplay.WithError(domain.ToolErrorPermissionDenied)
+	if events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{
+			CallID:  tc.ID,
+			Display: display,
+		})
+	}
+	return e.permissionDeniedMessage(tc), display
+}
+
+func (e *ToolExecutor) waitForPermissionDecision(ctx context.Context, callID string) bool {
+	if e.waiter == nil {
+		return false
+	}
+	for {
+		action, err := e.waiter.Wait(ctx, callID)
+		if err != nil {
+			return false
+		}
+		decision, ok := action.(domain.PermissionDecisionAction)
+		if !ok {
+			continue
+		}
+		return decision.Approved
+	}
 }
 
 func (e *ToolExecutor) prepareFailureOutcome(t domain.Tool, tc *schema.ToolCall, prepErr error, events eventSender) (*schema.Message, domain.ToolDisplay) {

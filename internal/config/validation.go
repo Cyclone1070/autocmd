@@ -5,6 +5,10 @@ import (
 	"regexp"
 )
 
+func isPermissionModeValid(mode string) bool {
+	return mode == "ask" || mode == "allow" || mode == "deny"
+}
+
 // Validate checks config values for life correctness.
 // Returns an error if any values are invalid.
 func (c *Config) Validate() error {
@@ -16,6 +20,14 @@ func (c *Config) Validate() error {
 	}
 	if c.tools.maxIterations < 1 {
 		errs = append(errs, "tools.max_iterations must be >= 1")
+	}
+	if !isPermissionModeValid(c.tools.permissionDefault) {
+		errs = append(errs, "tools.permissions.default must be one of ask, allow, deny")
+	}
+	for toolName, mode := range c.tools.toolPermissions {
+		if !isPermissionModeValid(mode) {
+			errs = append(errs, fmt.Sprintf("tools.permissions.by_tool.%s must be one of ask, allow, deny", toolName))
+		}
 	}
 
 	// Session validation

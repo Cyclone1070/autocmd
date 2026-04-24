@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -613,4 +614,130 @@ func TestModel_TextEvent_DoesNotEnterStreamingState(t *testing.T) {
 	m = res.(*Model)
 
 	assert.Equal(t, stateIdle, m.state)
+}
+
+func TestNormalizeBlock(t *testing.T) {
+	// Simple paragraph
+	assert.Equal(t, "\nPara 1", ui.NormalizeBlock("Para 1"))
+
+	// Double leading newlines (typical glamour delta)
+	assert.Equal(t, "\nPara 2", ui.NormalizeBlock("\n\nPara 2"))
+
+	// Mixed ANSI and newlines
+	gapLine := "\x1b[0m  \x1b[0m"
+	assert.Equal(t, "\n## Header", ui.NormalizeBlock(gapLine+"\n\n## Header"))
+
+	// Trailing newlines should be trimmed
+	assert.Equal(t, "\nPara 3", ui.NormalizeBlock("Para 3\n\n"))
+}
+
+func TestNormalization_ANSI_GapLines(t *testing.T) {
+	// Verify that trimVisuallyEmpty handles ANSI gap lines correctly.
+	// These are common in glamour header output.
+	gapLine := "\x1b[0m  \x1b[0m"
+	input := gapLine + "\n" + "## HEADER"
+
+	normalized := ui.NormalizeBlock(input)
+	assert.Equal(t, "\n## HEADER", normalized, "Should trim ANSI gap line and prepend exactly one newline")
+}
+
+func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	renderer := ui.NewGlamourRenderer(80, true)
+	stream := NewStream(renderer)
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	spinnerProvider := ui.NewSpinnerRenderer(lipgloss.NewStyle())
+
+	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, ui.NewNoOpGater(), 80)
+
+	// Add two tools
+	m.handleBusEvent(domain.ToolStartEvent{
+		CallID:  "1",
+		Display: domain.NewBashDisplay("Tool 1", "ls", "", ""),
+	})
+	m.handleBusEvent(domain.ToolStartEvent{
+		CallID:  "2",
+		Display: domain.NewBashDisplay("Tool 2", "pwd", "", ""),
+	})
+
+	// Manually simulate flush batching (no extra spacing inserted by normalizer)
+	tools := m.renderAllTools()
+	joined := strings.Join(tools, "")
+	normalized := ui.NormalizeBlock(joined)
+
+	assert.Contains(t, normalized, "⠹ Tool 1")
+	assert.Contains(t, normalized, "⠹ Tool 2")
+	assert.NotContains(t, normalized, "╭")
+}
+
+func TestDeepCheck(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	renderer := ui.NewGlamourRenderer(80, true)
+	stream := NewStream(renderer)
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := ui.NewSpinnerRenderer(lipgloss.NewStyle())
+
+	m := NewModel(nil, nil, tr, sp, theme, stream, ui.NewNoOpGater(), 80)
+
+	// Add tools
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "", "")})
+	m.handleBusEvent(domain.ToolEndEvent{CallID: "1", Display: domain.NewBashDisplay("ls", "ls", "", "")})
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "2", Display: domain.NewBashDisplay("pwd", "pwd", "", "")})
+
+	tools := m.renderAllTools()
+	for i, tool := range tools {
+		t.Logf("Tool %d: %q", i, tool)
+	}
+
+	joined := strings.Join(tools, "")
+	t.Logf("Joined: %q", joined)
+}
+
+func TestView_StrictToolboxSpacing(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	renderer := ui.NewGlamourRenderer(80, true)
+	stream := NewStream(renderer)
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	spinnerProvider := ui.NewSpinnerRenderer(lipgloss.NewStyle())
+
+	m := NewModel(nil, nil, tr, spinnerProvider, theme, stream, ui.NewNoOpGater(), 80)
+
+	// Add two tools to simulate the "String 1", "String 2" sequence in the user's image
+	m.handleBusEvent(domain.ToolStartEvent{
+		CallID:  "1",
+		Display: domain.NewBashDisplay("Tool 1", "ls", "", ""),
+	})
+	m.handleBusEvent(domain.ToolStartEvent{
+		CallID:  "2",
+		Display: domain.NewBashDisplay("Tool 2", "pwd", "", ""),
+	})
+
+	view := m.View()
+
+	// Between two boxes, we expect:
+	// ╰──────╯ (End of Box 1)
+	// \n       (First newline: ends the line)
+	// \n       (Second newline: creates the blank line)
+	// ╭──────╮ (Start of Box 2)
+	//
+	// If there is a third \n, it means we have TWO blank lines.
+	// Print the substring between the boxes.
+	sep := "╰"
+	parts := strings.Split(view, sep)
+	if len(parts) > 1 {
+		// Get everything between the end of the first box line and the start of the next box.
+		// The next box starts with \n╭.
+		afterBox1 := parts[1]
+		endOfLine := strings.Index(afterBox1, "\n")
+		if endOfLine != -1 {
+			gap := afterBox1[endOfLine:]
+			nextBoxStart := strings.Index(gap, "╭")
+			if nextBoxStart != -1 {
+				actualGap := gap[:nextBoxStart]
+				t.Logf("Actual gap between boxes: %q", actualGap)
+			}
+		}
+	}
+
+	assert.False(t, strings.Contains(view, "\n\n\n"), "View should not contain triple newlines (double blank lines) between boxes")
 }

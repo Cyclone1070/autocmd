@@ -14,7 +14,7 @@ type spinnerProvider interface {
 }
 
 type thinkingRenderer interface {
-	RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string
+	RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string
 }
 
 type toolRenderer interface {
@@ -75,6 +75,7 @@ type Model struct {
 	theme         *ui.Theme
 	flushFn       func(content string) tea.Cmd
 	thinkingStart time.Time
+	thoughtText   string
 	spinnerFrame  int
 	nextState     uiState
 	// isPolling is true while a pollBus goroutine is blocked waiting on the bus.
@@ -213,7 +214,7 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 
 	switch m.state {
 	case stateThinking:
-		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
+		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, "", m.spinnerProvider)
 		return m.doFlush([]string{thinkingLine, errLine}, stateDone)
 	case stateTooling:
 		for i := range m.tools {
@@ -238,18 +239,22 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		if m.cancelRequested {
 			thinkingStatus = ui.StatusError
 		}
-		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(thinkingStatus, m.thinkingStart, m.spinnerFrame, m.spinnerProvider))
+		flushBlocks = append(flushBlocks, m.thinkingRenderer.RenderThinking(thinkingStatus, m.thinkingStart, m.spinnerFrame, "", m.spinnerProvider))
 	}
 
 	switch u := u.(type) {
 	case domain.ThinkingEvent:
 		m.state = stateThinking
 		m.thinkingStart = time.Now()
+		m.thoughtText = ""
 		m.spinnerFrame = 0
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
 		return m.doFlush(flushBlocks, stateThinking)
 	case domain.TextEvent:
 		if u.IsThought {
+			if m.state == stateThinking {
+				m.thoughtText += u.Text
+			}
 			return m.schedulePollOnly()
 		}
 		flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
@@ -371,7 +376,7 @@ func (m *Model) View() string {
 		if m.cancelRequested {
 			status = ui.StatusError
 		}
-		content = m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.spinnerProvider)
+		content = ui.NormalizeBlock(m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.thoughtText, m.spinnerProvider))
 	case stateTooling:
 		content = ui.NormalizeBlock(strings.Join(m.renderAllTools(), ""))
 	}

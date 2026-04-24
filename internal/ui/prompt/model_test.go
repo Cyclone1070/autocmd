@@ -47,17 +47,24 @@ func (s *mockStream) Pending() string         { return s.p }
 func (s *mockStream) ClearBuffer()            { s.clearCalls++ }
 
 type mockThinkingRenderer struct{}
-func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
+func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
 	return "thinking_rendered"
+}
+
+type mockThinkingRendererWithLeadingGap struct{}
+func (t *mockThinkingRendererWithLeadingGap) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
+	return "\n\n    thinking_rendered"
 }
 
 // mockThinkingRecorder records the last status passed to RenderThinking (for cancel / bus-driven flush tests).
 type mockThinkingRecorder struct {
 	lastStatus ui.ToolStatus
+	lastThoughtText string
 }
 
-func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
+func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
 	t.lastStatus = status
+	t.lastThoughtText = thoughtText
 	return "thinking_rendered"
 }
 
@@ -614,6 +621,34 @@ func TestModel_TextEvent_DoesNotEnterStreamingState(t *testing.T) {
 	m = res.(*Model)
 
 	assert.Equal(t, stateIdle, m.state)
+}
+
+func TestModel_ThoughtChunks_StreamIntoThinkingView(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	th := &mockThinkingRecorder{}
+	m := NewModel(bus, th, nil, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+
+	m.state = stateThinking
+	m.isPolling = true
+	res, _ := m.Update(busEventMsg{event: domain.TextEvent{Text: "first ", IsThought: true}})
+	m = res.(*Model)
+	res, _ = m.Update(busEventMsg{event: domain.TextEvent{Text: "second\n", IsThought: true}})
+	m = res.(*Model)
+
+	_ = m.View()
+	assert.Equal(t, "first second\n", th.lastThoughtText)
+}
+
+func TestModel_ViewThinking_NormalizesLeadingBlankLines(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	m := NewModel(nil, &mockThinkingRendererWithLeadingGap{}, nil, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateThinking
+	m.thinkingStart = time.Now()
+
+	v := m.View()
+	assert.True(t, strings.HasPrefix(v, "\n    "), "thinking view should start with a single leading newline")
+	assert.False(t, strings.HasPrefix(v, "\n\n"), "thinking view should not include an extra leading blank line")
 }
 
 func TestNormalizeBlock(t *testing.T) {

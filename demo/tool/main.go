@@ -48,7 +48,7 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme)
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 

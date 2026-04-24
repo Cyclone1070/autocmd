@@ -166,7 +166,7 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := NewStream(renderer)
-	thinking := NewThinkingRenderer(theme)
+	thinking := NewThinkingRenderer(theme, width, ui.NewToolOutputGater(5))
 	tooling := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 

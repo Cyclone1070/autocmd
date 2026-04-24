@@ -26,11 +26,9 @@ func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(80)
 
-	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
+	termHeight := 0
 	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
 		if chatWidth <= 0 || width < chatWidth {
 			chatWidth = width
@@ -46,7 +44,7 @@ func main() {
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
-	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
+	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
 	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
@@ -57,7 +55,7 @@ func main() {
 		tooling,
 		spinner,
 		theme,
-		s,
+		stream,
 		ui.NewTruncatingGater(termHeight),
 		chatWidth,
 	)
@@ -71,8 +69,7 @@ func main() {
 		ToolRegistry: &mockRegistry{},
 	}
 
-	done := workflow.RunPrompt(context.Background(), "", deps)
-
+	done := workflow.RunPrompt(context.Background(), "thinking demo", deps)
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running UI: %v\n", err)
@@ -90,35 +87,102 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(350 * time.Millisecond):
-	}
-	a.bus.SendUIUpdate(domain.TextEvent{Text: "This is a test of the truncation feature. The following lines should be truncated if they exceed the terminal width.\n\n"})
-	for i := 1; i <= 40; i++ {
+	sleep := func() error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("Line %d: This is a repeated line for truncation testing it's gonna be quite long to overflow my goated terminal.\n", i)})
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(250 * time.Millisecond):
+			return nil
 		}
 	}
+
+	sendThoughtChunks := func(chunks []string) error {
+		a.bus.SendUIUpdate(domain.ThinkingEvent{})
+		for _, chunk := range chunks {
+			if err := sleep(); err != nil {
+				return err
+			}
+			a.bus.SendUIUpdate(domain.TextEvent{
+				Text:      chunk,
+				IsThought: true,
+			})
+		}
+		if err := sleep(); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	firstThinking := []string{
+		"Inspecting recent user request and planning UI updates. ",
+		"I should keep this short enough to preview in the live thought content block, ",
+		"but long enough to show wrapping and truncation behavior while the spinner is active.",
+		"Inspecting recent user request and planning UI updates. ",
+		"I should keep this short enough to preview in the live thought content block, ",
+		"but long enough to show wrapping and truncation behavior while the spinner is active.",
+		"Inspecting recent user request and planning UI updates. ",
+		"I should keep this short enough to preview in the live thought content block, ",
+		"but long enough to show wrapping and truncation behavior while the spinner is active.",
+	}
+	if err := sendThoughtChunks(firstThinking); err != nil {
+		return err
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	a.bus.SendUIUpdate(domain.TextEvent{
+		Text: "Thought phase one finished. Next we run one tool call.\n\n",
+	})
+
+	callID := "tool-1"
+	tool := domain.NewBashDisplay("Inspect files", "rg -n \"thinking\" internal/ui/prompt", "/Users/mac/repos/iav", "")
+	a.bus.SendUIUpdate(domain.ToolStartEvent{CallID: callID, Display: tool})
+	if err := sleep(); err != nil {
+		return err
+	}
+	if err := sleep(); err != nil {
+		return err
+	}
+	a.bus.SendUIUpdate(domain.ToolEndEvent{
+		CallID: callID,
+		Display: domain.NewBashDisplay(
+			"Inspect files",
+			"rg -n \"thinking\" internal/ui/prompt",
+			"/Users/mac/repos/iav",
+			"",
+		),
+	})
+
+	secondThinking := []string{
+		"Now composing final response after the tool output. ",
+		"Ensuring we keep streamed thought content visible during thinking, ",
+		"and collapse back to only the final duration line once the phase completes.",
+		"Now composing final response after the tool output. ",
+		"Now composing final response after the tool output. ",
+		"Ensuring we keep streamed thought content visible during thinking, ",
+		"and collapse back to only the final duration line once the phase completes.",
+		"Ensuring we keep streamed thought content visible during thinking, ",
+		"and collapse back to only the final duration line once the phase completes.",
+	}
+	if err := sendThoughtChunks(secondThinking); err != nil {
+		return err
+	}
+
+	a.bus.SendUIUpdate(domain.TextEvent{
+		Text: "Done. This demo streamed thought -> tool -> thought with 250ms cadence.\n",
+	})
 	return nil
 }
 
 type mockStore struct{}
 
-func (s *mockStore) Create() (*domain.Session, error)       { return &domain.Session{ID: "test"}, nil }
+func (s *mockStore) Create() (*domain.Session, error) {
+	return &domain.Session{ID: "thinking-demo"}, nil
+}
 func (s *mockStore) Get(id string) (*domain.Session, error) { return &domain.Session{ID: id}, nil }
 func (s *mockStore) Save(sess *domain.Session) error        { return nil }
 func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
-	return "Test Session", nil
+	return "Thinking Demo", nil
 }
 
 type mockLLM struct{}
@@ -127,7 +191,6 @@ func (l *mockLLM) ID() string                        { return "mock" }
 func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
 func (l *mockLLM) ContextWindow() int                { return 1000 }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
-
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }

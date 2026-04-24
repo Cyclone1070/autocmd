@@ -2,26 +2,40 @@ package prompt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/charmbracelet/lipgloss"
 )
 
-// thinkingRenderer handles the "Thinking" state rendering.
+type thoughtContentGater interface {
+	Gate(lines []string) ([]string, int)
+}
+
+// ThinkingRenderer handles the "Thinking" state rendering.
 type ThinkingRenderer struct {
 	Theme *ui.Theme
+	Width int
+	gater thoughtContentGater
 }
 
 // NewThinkingRenderer creates a new ThinkingRenderer.
-func NewThinkingRenderer(th *ui.Theme) *ThinkingRenderer {
-	return &ThinkingRenderer{Theme: th}
+func NewThinkingRenderer(th *ui.Theme, width int, g thoughtContentGater) *ThinkingRenderer {
+	if g == nil {
+		g = ui.NewNoOpGater()
+	}
+	return &ThinkingRenderer{
+		Theme: th,
+		Width: width,
+		gater: g,
+	}
 }
 
-// RenderThinking renders a blank line above, status indicator, and label.
-func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, sp spinnerProvider) string {
-	dur := time.Since(start).Round(time.Second)
+// RenderThinking renders a thinking line and optional live thought content.
+func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
+	dur := time.Since(start).Round(time.Second).String()
 
-	prefix := r.Theme.StatusPrefix(status, sp.Frame(tick))
 	var label string
 
 	switch status {
@@ -33,5 +47,74 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 		label = r.Theme.Error(fmt.Sprintf("Thought for %s", dur))
 	}
 
-	return fmt.Sprintf("\n    %s%s", prefix, label)
+	spec := ui.ToolBlockSpec{
+		Status:      status,
+		Frame:       sp.Frame(tick),
+		HeaderLines: []string{label},
+	}
+	headerPrefixWidth := lipgloss.Width(r.Theme.StatusPrefix(spec.Status, spec.Frame))
+	headerContinuationWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix)
+	headerFirstWidth := headerContinuationWidth - headerPrefixWidth
+	spec.HeaderLines = wrapThinkingLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
+
+	if status == ui.StatusRunning {
+		contentFirstWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix+ui.ToolFirstContentGutterPrefix)
+		contentContinuationWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix+ui.ToolContentGutterPrefix)
+		wrappedContent := completedVisualThoughtLines(thoughtText, contentFirstWidth, contentContinuationWidth)
+		wrappedContent, indicatorLines := r.gater.Gate(wrappedContent)
+		for i := range wrappedContent {
+			wrappedContent[i] = r.Theme.Muted(wrappedContent[i])
+		}
+		for i := 0; i < indicatorLines && i < len(wrappedContent); i++ {
+			wrappedContent[i] = r.Theme.Muted(wrappedContent[i])
+		}
+		spec.ContentLines = wrappedContent
+	}
+	return r.Theme.RenderToolBlock(spec)
+}
+
+func completedVisualThoughtLines(text string, firstWidth, continuationWidth int) []string {
+	if text == "" {
+		return nil
+	}
+	endedWithNewline := strings.HasSuffix(text, "\n")
+	text = strings.TrimSuffix(text, "\n")
+	logicalLines := strings.Split(text, "\n")
+	wrapped := wrapThinkingLines(logicalLines, firstWidth, continuationWidth)
+	if endedWithNewline {
+		return wrapped
+	}
+	if len(wrapped) == 0 {
+		return nil
+	}
+	return wrapped[:len(wrapped)-1]
+}
+
+func wrapThinkingLines(lines []string, firstWidth, continuationWidth int) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	if firstWidth < 1 {
+		firstWidth = 1
+	}
+	if continuationWidth < 1 {
+		continuationWidth = 1
+	}
+
+	var out []string
+	for i, line := range lines {
+		width := continuationWidth
+		if i == 0 {
+			width = firstWidth
+		}
+		if line == "" {
+			out = append(out, "")
+			continue
+		}
+		wrapped := lipgloss.NewStyle().Width(width).Render(line)
+		for part := range strings.SplitSeq(wrapped, "\n") {
+			out = append(out, strings.TrimRight(part, " "))
+		}
+	}
+	return out
 }

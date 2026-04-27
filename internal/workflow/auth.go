@@ -65,7 +65,6 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 			case <-ctx.Done():
 				if oauthCancel != nil {
 					oauthCancel()
-					oauthCancel = nil
 				}
 				done <- ctx.Err()
 				return
@@ -178,19 +177,16 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 						select {
 						case <-ctx.Done():
 							cancel()
-							oauthCancel = nil
 							done <- ctx.Err()
 							return
 						case act2, ok := <-deps.Bus.WorkflowActions():
 							if !ok {
 								cancel()
-								oauthCancel = nil
 								done <- nil
 								return
 							}
 							if _, isStop := act2.(domain.StopAction); isStop {
 								cancel()
-								oauthCancel = nil
 								deps.Bus.SendUIUpdate(domain.DoneEvent{})
 								done <- nil
 								return
@@ -198,7 +194,6 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 							// User changed direction while OAuth was in progress.
 							// Cancel OAuth and process the new action immediately.
 							cancel()
-							oauthCancel = nil
 							act = act2
 							goto processAction
 						case res := <-resultCh:
@@ -228,7 +223,6 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 				case domain.StopAction:
 					if oauthCancel != nil {
 						oauthCancel()
-						oauthCancel = nil
 					}
 					deps.Bus.SendUIUpdate(domain.DoneEvent{})
 					done <- nil
@@ -283,7 +277,7 @@ func (w *AuthWorkflow) Gather(ctx context.Context) (*domain.AuthProviderListEven
 }
 
 // RemoveAuth removes the authentication credentials for a provider and resets active model if needed.
-func (w *AuthWorkflow) RemoveAuth(ctx context.Context, providerID string) error {
+func (w *AuthWorkflow) RemoveAuth(_ context.Context, providerID string) error {
 	if err := w.authMgr.Remove(providerID); err != nil {
 		return err
 	}

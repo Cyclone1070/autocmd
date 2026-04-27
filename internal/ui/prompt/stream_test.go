@@ -106,7 +106,7 @@ func makeBlock(kind string, index int) string {
 		return fmt.Sprintf("```text\nplain %d\n```", index)
 	case "CODE_FENCE_NONE":
 		return fmt.Sprintf("```\nraw %d\n```", index)
-	case "CODE_INDENT":
+	case codeIndentKey:
 		return fmt.Sprintf("    indented code %d", index)
 	case "QUOTE_SIMPLE":
 		return fmt.Sprintf("> Quote %d simple.", index)
@@ -131,13 +131,15 @@ func makeBlock(kind string, index int) string {
 	}
 }
 
+const codeIndentKey = "CODE_INDENT"
+
 var (
 	testKeys = []string{
 		"PARA_SIMPLE", "PARA_BOLD_END", "PARA_ITALIC_END", "PARA_CODE_END", "PARA_LINK_END",
 		"H1", "H2", "H3", "H4", "H5",
 		"SETEXT_1", "SETEXT_2",
 		"LIST_BUL_DAT", "LIST_BUL_AST", "LIST_NUM_DOT", "LIST_NUM_PAR",
-		"CODE_FENCE_GO", "CODE_FENCE_TXT", "CODE_FENCE_NONE", "CODE_INDENT",
+		"CODE_FENCE_GO", "CODE_FENCE_TXT", "CODE_FENCE_NONE", codeIndentKey,
 		"QUOTE_SIMPLE", "QUOTE_NESTED",
 		"HR_DASH", "HR_STAR", "HR_UNDER",
 		"CODE_FENCE_TILDE_4", "HR_SPACED_DASH", "HR_SPACED_STAR", "SETEXT_PADDED",
@@ -183,7 +185,7 @@ func TestStream_Split(t *testing.T) {
 			} else {
 				// Determine if Goldmark would split types[i] from the currently pending block
 				split := true
-				if types[i] == "CODE_INDENT" && (activeListContext != "" || types[i-1] == "CODE_INDENT") {
+				if types[i] == codeIndentKey && (activeListContext != "" || types[i-1] == codeIndentKey) {
 					split = false
 				} else if strings.HasPrefix(types[i], "LIST_") && activeListContext == types[i] {
 					split = false

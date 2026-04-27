@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/testutil"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -28,21 +29,21 @@ func TestGlob_Basic(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	pathResolver.On("Abs", "/workspace").Return("/workspace", nil).Maybe()
+	pathResolver.On("Abs", testutil.TestWorkspaceRoot).Return(testutil.TestWorkspaceRoot, nil).Maybe()
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	output := "/workspace/a.go\n"
 	exec.On("Run", mock.Anything,
 		mock.MatchedBy(func(s string) bool {
-			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, "/workspace")
+			return strings.Contains(s, "rg") && strings.Contains(s, "*.go") && strings.Contains(s, testutil.TestWorkspaceRoot)
 		}),
-		"/workspace",
+		testutil.TestWorkspaceRoot,
 		true,
 	).Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
+	req := &GlobRequest{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -55,13 +56,13 @@ func TestGlob_NoMatches(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: "", ExitCode: 0}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
+	req := &GlobRequest{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -74,10 +75,10 @@ func TestGlob_Offloaded(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate offloaded output
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{
 			Stdout:   "tail-output",
 			ExitCode: 0,
@@ -92,7 +93,7 @@ func TestGlob_Offloaded(t *testing.T) {
 	fs.On("Stat", "/tmp/offloaded.log").Return(&toolMockFileInfo{name: "offloaded.log"}, nil).Maybe()
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
+	req := &GlobRequest{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -106,14 +107,14 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	// Simulate fd failure
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: "fatal error", ExitCode: 2}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
+	req := &GlobRequest{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
@@ -126,10 +127,10 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
-	req := &GlobRequest{Pattern: "*.go", Path: "/workspace"}
+	req := &GlobRequest{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 	params, _ := json.Marshal(req)
 	inv, err := tool.Prepare(string(params))
 	assert.NoError(t, err)

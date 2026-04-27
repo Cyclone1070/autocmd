@@ -20,7 +20,7 @@ func init() {
 var sessionCmd = &cobra.Command{
 	Use:   "session",
 	Short: "Manage conversation sessions",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		deps, err := Wire()
 		if err != nil {
 			return err
@@ -34,10 +34,7 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 	defer bus.Close()
 
 	fileSystem := fs.NewOSFileSystem(-1)
-	store, err := buildSessionStore(deps.Config, fileSystem)
-	if err != nil {
-		return err
-	}
+	store := buildSessionStore(deps.Config, fileSystem)
 
 	done := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
 		Bus:   bus,

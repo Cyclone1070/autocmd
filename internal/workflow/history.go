@@ -30,7 +30,7 @@ type HistoryDeps struct {
 }
 
 // RunHistory starts the history gathering workflow asynchronously.
-func RunHistory(ctx context.Context, deps *HistoryDeps, bus historyBus) <-chan error {
+func RunHistory(_ context.Context, deps *HistoryDeps, bus historyBus) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)

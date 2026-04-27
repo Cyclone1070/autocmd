@@ -12,6 +12,11 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const (
+	testSessionID = "test-session"
+	session1ID    = "session-1"
+)
+
 // mockDirEntry implements os.DirEntry for testing.
 type mockDirEntry struct {
 	name  string
@@ -171,7 +176,7 @@ func TestCreate_SaveFails(t *testing.T) {
 func TestGet_Success(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -228,7 +233,7 @@ func TestGet_NotFound(t *testing.T) {
 func TestGet_CorruptedInfoJSON(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = []byte("invalid json{")
 
@@ -244,7 +249,7 @@ func TestGet_CorruptedInfoJSON(t *testing.T) {
 func TestGet_CorruptedMessagesJSON(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -274,7 +279,7 @@ func TestGet_CorruptedMessagesJSON(t *testing.T) {
 func TestGet_MessagesFileMissing(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -303,7 +308,7 @@ func TestSave_Success(t *testing.T) {
 	store, fs := newTestStore()
 
 	sess := &domain.Session{
-		ID:      "test-session-123",
+		ID:      testSessionID,
 		Name:    "Test Session",
 		Created: time.Now(),
 		Updated: time.Now(),
@@ -338,7 +343,7 @@ func TestSave_InfoWriteFails(t *testing.T) {
 	fs.writeErr = errors.New("write failed")
 
 	sess := &domain.Session{
-		ID:   "test-session-123",
+		ID:   testSessionID,
 		Name: "Test",
 	}
 
@@ -355,7 +360,7 @@ func TestSave_MessagesWriteFails(t *testing.T) {
 	store, fs := newTestStore()
 
 	sess := &domain.Session{
-		ID:   "test-session-123",
+		ID:   testSessionID,
 		Name: "Test",
 	}
 
@@ -375,7 +380,7 @@ func TestList_Success(t *testing.T) {
 	store, fs := newTestStore()
 
 	now := time.Now()
-	sess1ID := "session-1"
+	sess1ID := session1ID
 	sess2ID := "session-2"
 
 	// Create two valid sessions
@@ -458,7 +463,7 @@ func TestList_DirNotExists(t *testing.T) {
 func TestList_SkipsMessagesFiles(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "session-1"
+	sessID := session1ID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -492,7 +497,7 @@ func TestList_SkipsMessagesFiles(t *testing.T) {
 func TestList_SkipsCorruptedFiles(t *testing.T) {
 	store, fs := newTestStore()
 
-	sess1ID := "session-1"
+	sess1ID := session1ID
 	sess2ID := "session-2"
 	now := time.Now()
 
@@ -593,7 +598,7 @@ func TestList_SortsByUpdatedDesc(t *testing.T) {
 func TestDelete_Success(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	sessDir := filepath.Join(store.storageDir, sessID)
 	infoPath := filepath.Join(sessDir, "metadata.json")
 	messagesPath := filepath.Join(sessDir, "messages.json")
@@ -625,7 +630,7 @@ func TestDelete_FilesNotExist(t *testing.T) {
 func TestDelete_RemoveFails(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "test-session-123"
+	sessID := testSessionID
 	sessDir := filepath.Join(store.storageDir, sessID)
 	fs.files[filepath.Join(sessDir, "metadata.json")] = []byte("info")
 
@@ -689,7 +694,7 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 func TestList_SkipsSubdirectories(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "session-1"
+	sessID := session1ID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -736,7 +741,7 @@ func TestList_ReadDirError(t *testing.T) {
 func TestList_SkipsNonJSONFiles(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "session-1"
+	sessID := session1ID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{
@@ -770,7 +775,7 @@ func TestList_SkipsNonJSONFiles(t *testing.T) {
 func TestList_SkipsDirectoriesWithoutMetadata(t *testing.T) {
 	store, fs := newTestStore()
 
-	sessID := "session-1"
+	sessID := session1ID
 	now := time.Now()
 
 	infoDTO := sessionInfoDTO{

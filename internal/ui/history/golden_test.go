@@ -127,7 +127,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	for _, e := range elements {
 		name := fmt.Sprintf("SINGLE_%s", e.ID)
 		msgs, displays := createHistoryData(e)
-		renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
+		renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width)
 	}
 
 	// 2. Pairs
@@ -135,7 +135,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 		for _, e2 := range elements {
 			name := fmt.Sprintf("PAIR_%s_%s", e1.ID, e2.ID)
 			msgs, displays := createHistoryData(e1, e2)
-			renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
+			renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width)
 		}
 	}
 
@@ -145,7 +145,7 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 			for _, e3 := range elements {
 				name := fmt.Sprintf("TRIPLE_%s_%s_%s", e1.ID, e2.ID, e3.ID)
 				msgs, displays := createHistoryData(e1, e2, e3)
-				renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width, isDark)
+				renderHistoryToGolden(&goldenOutput, name, msgs, displays, renderer, theme, width)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func createHistoryData(elems ...TestElement) ([]*schema.Message, domain.ToolDisp
 	return []*schema.Message{msg}, displays
 }
 
-func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int, isDark bool) {
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int) {
 	var sb strings.Builder
 	am := msgs[0]
 	if am.Role != schema.Assistant {

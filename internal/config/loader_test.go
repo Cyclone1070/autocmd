@@ -34,7 +34,7 @@ func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
+func (m *mockFileSystem) WriteFile(path string, data []byte, _ os.FileMode) error {
 	if m.Files == nil {
 		m.Files = make(map[string][]byte)
 	}
@@ -42,7 +42,7 @@ func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 	return nil
 }
 
-func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
+func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 	// For mock purposes, we assume directory creation always succeeds
 	return nil
 }

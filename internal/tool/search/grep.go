@@ -236,11 +236,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		return domain.ToolErrorCancelled, d
 	}
 
-	cmdStr, err := i.prepareGrepCommand()
-	if err != nil {
-		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: %v", err), d
-	}
+	cmdStr := i.prepareGrepCommand()
 	workDir := i.pathResolver.Root()
 
 	ctx, cancel := context.WithTimeout(ctx, DefaultGrepTimeout)
@@ -286,7 +282,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	return output, d
 }
 
-func (i *grepInvocation) prepareGrepCommand() (string, error) {
+func (i *grepInvocation) prepareGrepCommand() string {
 	mode := i.req.OutputMode
 	args := []string{"rg", "--hidden", "--stats"}
 	for _, excl := range vcsExclusions {
@@ -347,7 +343,7 @@ func (i *grepInvocation) prepareGrepCommand() (string, error) {
 	// Always use absolute path for rg to get absolute path output
 	args = append(args, i.absPath)
 
-	return joinArgs(args), nil
+	return joinArgs(args)
 }
 
 func (i *grepInvocation) analyzeLog(path string) (matches, files int, err error) {

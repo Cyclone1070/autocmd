@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 	Short:        "IAV is an agentic AI coding assistant",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
 		setupLogging()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {

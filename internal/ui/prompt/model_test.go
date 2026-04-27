@@ -683,7 +683,7 @@ func TestModel_TextEvent_AppendsImmediatelyAndFlushesReturnedBlocks(t *testing.T
 	m.isPolling = true
 
 	res, _ := m.Update(busEventMsg{event: domain.TextEvent{Text: "hello"}})
-	m = res.(*Model)
+	_ = res.(*Model)
 
 	assert.Equal(t, 1, s.appendCalls)
 	assert.Equal(t, "hello", s.lastAppend)

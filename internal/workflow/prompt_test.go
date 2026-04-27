@@ -129,7 +129,7 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 
 	// Keep the agent running so we can send an action
 	agentRunDone := make(chan struct{})
-	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
 		<-agentRunDone
 	}).Return(nil)
 
@@ -304,7 +304,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 
 	// Simulate GenerateName waiting for agent to start appending
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").
-		Run(func(args mock.Arguments) {
+		Run(func(_ mock.Arguments) {
 			<-agentStartedAppending // Wait until agent says it started appending
 		}).
 		Return("Named Session", nil)

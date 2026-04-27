@@ -3,10 +3,12 @@ package path
 import (
 	"strings"
 	"testing"
+
+	"github.com/Cyclone1070/iav/internal/testutil"
 )
 
 func TestAbs(t *testing.T) {
-	workspaceRoot := "/workspace"
+	workspaceRoot := testutil.TestWorkspaceRoot
 	resolver := NewResolver(workspaceRoot)
 
 	tests := []struct {
@@ -24,8 +26,8 @@ func TestAbs(t *testing.T) {
 		},
 		{
 			name:      "absolute path within workspace",
-			input:     "/workspace/src/main.go",
-			expected:  "/workspace/src/main.go",
+			input:     testutil.TestWorkspaceRoot + "/src/main.go",
+			expected:  testutil.TestWorkspaceRoot + "/src/main.go",
 			wantError: false,
 		},
 		{
@@ -36,8 +38,8 @@ func TestAbs(t *testing.T) {
 		},
 		{
 			name:      "absolute workspace root",
-			input:     "/workspace",
-			expected:  "/workspace",
+			input:     testutil.TestWorkspaceRoot,
+			expected:  testutil.TestWorkspaceRoot,
 			wantError: false,
 		},
 		{

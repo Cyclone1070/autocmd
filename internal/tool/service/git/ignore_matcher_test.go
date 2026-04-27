@@ -4,7 +4,11 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	"github.com/Cyclone1070/iav/internal/testutil"
 )
+
+const testWorkspaceRoot = testutil.TestWorkspaceRoot
 
 // mockFileSystem is a local mock implementing fileSystem for testing.
 type mockFileSystem struct {
@@ -41,11 +45,11 @@ func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
 }
 
 func TestLoadGitignore(t *testing.T) {
-	workspaceRoot := "/workspace"
+	workspaceRoot := testWorkspaceRoot
 
 	t.Run("load gitignore from workspace root", func(t *testing.T) {
 		fs := newMockFileSystem()
-		fs.createFile("/workspace/.gitignore", []byte("*.log\n*.tmp\n"))
+		fs.createFile(testWorkspaceRoot + "/.gitignore", []byte("*.log\n*.tmp\n"))
 
 		matcher, err := NewIgnoreMatcher(workspaceRoot, fs)
 		if err != nil {
@@ -86,7 +90,7 @@ func TestLoadGitignore(t *testing.T) {
 
 	t.Run("dotfiles matching gitignore patterns", func(t *testing.T) {
 		fs := newMockFileSystem()
-		fs.createFile("/workspace/.gitignore", []byte("*.log\n"))
+		fs.createFile(testWorkspaceRoot + "/.gitignore", []byte("*.log\n"))
 
 		matcher, err := NewIgnoreMatcher(workspaceRoot, fs)
 		if err != nil {
@@ -106,11 +110,11 @@ func TestLoadGitignore(t *testing.T) {
 }
 
 func TestNewIgnoreMatcherErrors(t *testing.T) {
-	workspaceRoot := "/workspace"
+	workspaceRoot := testWorkspaceRoot
 
 	t.Run("ReadError", func(t *testing.T) {
 		fs := newMockFileSystem()
-		fs.createFile("/workspace/.gitignore", []byte("*.log"))
+		fs.createFile(testWorkspaceRoot + "/.gitignore", []byte("*.log"))
 		fs.readErr = errors.New("disk failure")
 
 		_, err := NewIgnoreMatcher(workspaceRoot, fs)
@@ -125,12 +129,12 @@ func TestNewIgnoreMatcherErrors(t *testing.T) {
 }
 
 func TestShouldIgnoreLogic(t *testing.T) {
-	workspaceRoot := "/workspace"
+	workspaceRoot := testWorkspaceRoot
 
 	t.Run("WindowsLineEndings", func(t *testing.T) {
 		fs := newMockFileSystem()
 		// Use \r\n line endings
-		fs.createFile("/workspace/.gitignore", []byte("*.log\r\nnode_modules\r\n"))
+		fs.createFile(testWorkspaceRoot + "/.gitignore", []byte("*.log\r\nnode_modules\r\n"))
 
 		matcher, err := NewIgnoreMatcher(workspaceRoot, fs)
 		if err != nil {
@@ -147,7 +151,7 @@ func TestShouldIgnoreLogic(t *testing.T) {
 
 	t.Run("PathNormalization", func(t *testing.T) {
 		fs := newMockFileSystem()
-		fs.createFile("/workspace/.gitignore", []byte("*.log"))
+		fs.createFile(testWorkspaceRoot + "/.gitignore", []byte("*.log"))
 
 		matcher, err := NewIgnoreMatcher(workspaceRoot, fs)
 		if err != nil {

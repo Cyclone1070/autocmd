@@ -34,10 +34,7 @@ func runInfo(ctx context.Context, deps *Deps) error {
 	defer bus.Close()
 
 	fileSystem := fs.NewOSFileSystem(-1)
-	store, err := buildSessionStore(deps.Config, fileSystem)
-	if err != nil {
-		return err
-	}
+	store := buildSessionStore(deps.Config, fileSystem)
 
 	done := workflow.RunInfo(ctx, &workflow.InfoDeps{
 		Bus:              bus,

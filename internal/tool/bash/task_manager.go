@@ -108,7 +108,6 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 		exitCode = res.ExitCode
 	}
 
-	logFileXML := ""
 	effectiveLogPath := logPath
 	if res != nil {
 		if res.LogPath != "" {
@@ -121,7 +120,7 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 			}
 		}
 	}
-	logFileXML = fmt.Sprintf("\n  <log-file>%s</log-file>", effectiveLogPath)
+	logFileXML := fmt.Sprintf("\n  <log-file>%s</log-file>", effectiveLogPath)
 
 	// Format XML notification
 	xml := fmt.Sprintf(`<task-notification>

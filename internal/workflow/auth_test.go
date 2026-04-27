@@ -70,7 +70,7 @@ func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return m.Called().Get(0).([]domain.AuthMethod)
 }
 func (m *mockProvider) List() []domain.LLMInfo { return nil }
-func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
+func (m *mockProvider) GetLLM(_ context.Context, _ *domain.Credential, _ domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }
 
@@ -316,7 +316,7 @@ func TestRunAuth(t *testing.T) {
 
 		// 3. Select OAuth Method: block forever unless ctx is cancelled.
 		blocked := make(chan struct{})
-		oauthMgr.On("RunDeviceFlow", mock.Anything, oauthMethod, mock.Anything).Return("", context.Canceled).Run(func(args mock.Arguments) {
+		oauthMgr.On("RunDeviceFlow", mock.Anything, oauthMethod, mock.Anything).Return("", context.Canceled).Run(func(_ mock.Arguments) {
 			<-blocked
 		})
 

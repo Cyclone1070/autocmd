@@ -163,14 +163,11 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 
 // RenderDiff renders DiffDisplay.
 func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, frame string) string {
-	spec, ok := r.buildDiffSpec(d, status, err, frame)
-	if !ok {
-		return ""
-	}
+	spec := r.buildDiffSpec(d, status, err, frame)
 	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
 }
 
-func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) ToolBlockSpec {
 	header := d.Description
 	target := d.Target
 	spec := ToolBlockSpec{
@@ -187,7 +184,7 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
 			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 		}
-		return spec, true
+		return spec
 	}
 
 	// Add stats to target if success
@@ -209,7 +206,7 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
 		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
-	return spec, true
+	return spec
 }
 
 func (r *ToolRenderer) colorizeDiff(diff string) string {
@@ -228,14 +225,11 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 
 // RenderBash renders BashDisplay.
 func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) string {
-	spec, ok := r.buildBashSpec(d, output, status, err, frame)
-	if !ok {
-		return ""
-	}
+	spec := r.buildBashSpec(d, output, status, err, frame)
 	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
 }
 
-func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) ToolBlockSpec {
 	header := d.Description
 	spec := ToolBlockSpec{
 		HeaderLines: []string{r.statusColor(status, header)},
@@ -248,7 +242,7 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
 			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 		}
-		return spec, true
+		return spec
 	}
 	bashOutput := strings.TrimRight(output, "\n")
 
@@ -259,7 +253,7 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
 		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
-	return spec, true
+	return spec
 }
 
 func (r *ToolRenderer) isAwaitingApprovalDisplay(d domain.ToolDisplay) bool {

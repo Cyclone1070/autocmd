@@ -58,7 +58,7 @@ func RunModelPicker(ctx context.Context, deps *ModelPickerDeps) <-chan error {
 
 				switch a := act.(type) {
 				case domain.SelectModelAction:
-					if err := wf.applySelection(ctx, a.ID); err != nil {
+					if err := wf.applySelection(a.ID); err != nil {
 						done <- err
 						return
 					}
@@ -101,7 +101,7 @@ func (w *modelPickerWorkflow) prepareSelection(ctx context.Context) (domain.Mode
 	}, nil
 }
 
-func (w *modelPickerWorkflow) applySelection(ctx context.Context, id string) error {
+func (w *modelPickerWorkflow) applySelection(id string) error {
 	w.state.SetModel(id)
 	return w.state.Save()
 }

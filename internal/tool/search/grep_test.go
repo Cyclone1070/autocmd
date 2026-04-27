@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/testutil"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -24,15 +25,15 @@ func TestGrep_RawRelative(t *testing.T) {
 	setupMockResolver(pathResolver)
 
 	// Mock existence of the search target
-	fs.On("Stat", "/workspace/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
+	fs.On("Stat", testutil.TestWorkspaceRoot + "/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
 
 	// Ripgrep is run with absolute path and returns absolute paths.
-	output := "/workspace/internal/file.txt:1:match\n"
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	output := testutil.TestWorkspaceRoot + "/internal/file.txt:1:match\n"
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "/workspace/internal"}
+	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot + "/internal"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -48,9 +49,9 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{
 			Stdout:   "",
 			ExitCode: 0,
@@ -66,7 +67,7 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 	fs.On("Open", "/tmp/offloaded.log").Return(mf, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
+	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -81,13 +82,13 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
+	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -100,9 +101,9 @@ func TestGrep_MalformedStats(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{
 			Stdout:   "",
 			ExitCode: 0,
@@ -122,7 +123,7 @@ func TestGrep_MalformedStats(t *testing.T) {
 	fs.On("Open", "/tmp/malformed.log").Return(mf, nil)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "/workspace"}
+	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -253,11 +254,11 @@ func (m *mockPathResolver) DisplayPath(p string) string {
 }
 
 func (m *mockPathResolver) Root() string {
-	return "/workspace"
+	return testutil.TestWorkspaceRoot
 }
 
 func setupMockResolver(m *mockPathResolver) {
-	m.On("Abs", "/workspace").Return("/workspace", nil).Maybe()
+	m.On("Abs", testutil.TestWorkspaceRoot).Return(testutil.TestWorkspaceRoot, nil).Maybe()
 }
 
 type toolMockFileInfo struct {

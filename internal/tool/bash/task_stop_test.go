@@ -9,13 +9,11 @@ import (
 )
 
 func TestTaskStopTool_Execute_Success(t *testing.T) {
-	tm := NewTaskManager(nil)
-	tl := NewTaskStopTool(tm)
 	ctx := context.Background()
 
 	// I'll use a mock TaskManager for this specific test case to simplify.
 	mockTM := new(mockTaskManager)
-	tl = NewTaskStopTool(mockTM)
+	tl := NewTaskStopTool(mockTM)
 
 	mockTM.On("Stop", "t-stop-1").Return(nil)
 

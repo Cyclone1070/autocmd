@@ -16,6 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testFast1 = "fast1"
+	testFast2 = "fast2"
+)
+
 // ptr is defined in loop_test.go in the same package.
 
 // --- Mocks ---
@@ -947,16 +952,16 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 
 	registry := newMockToolRegistry([]domain.Tool{
 		&mockTool{
-			name:          "fast1",
+			name:          testFast1,
 			concurrent:    true,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
-					display: domain.NewStringDisplay("", "fast1"),
+					display: domain.NewStringDisplay("", testFast1),
 					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						startedFast1 <- struct{}{}
 						<-doneFast1
-						return "fast1", domain.NewStringDisplay("", "fast1")
+						return testFast1, domain.NewStringDisplay("", testFast1)
 					},
 				}, nil
 			},
@@ -977,15 +982,15 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			},
 		},
 		&mockTool{
-			name:          "fast2",
+			name:          testFast2,
 			concurrent:    true,
 			setConcurrent: true,
 			prepare: func(params string) (domain.Invocation, error) {
 				return &mockInvocation{
-					display: domain.NewStringDisplay("", "fast2"),
+					display: domain.NewStringDisplay("", testFast2),
 					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
 						startedFast2 <- struct{}{}
-						return "fast2", domain.NewStringDisplay("", "fast2")
+						return testFast2, domain.NewStringDisplay("", testFast2)
 					},
 				}, nil
 			},

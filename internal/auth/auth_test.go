@@ -25,12 +25,12 @@ func (m *mockFileSystem) ReadFile(name string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
+func (m *mockFileSystem) WriteFile(name string, data []byte, _ os.FileMode) error {
 	m.files[name] = data
 	return nil
 }
 
-func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
+func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 	return nil
 }
 

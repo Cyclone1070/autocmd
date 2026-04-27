@@ -48,10 +48,7 @@ func Wire() (*Deps, error) {
 
 	llmRegistry, providerRegistry := buildRegistries(cfg, authMgr)
 
-	sessionStore, err := buildSessionStore(cfg, bootstrapFS)
-	if err != nil {
-		return nil, err
-	}
+	sessionStore := buildSessionStore(cfg, bootstrapFS)
 
 	return &Deps{
 		Config:           cfg,

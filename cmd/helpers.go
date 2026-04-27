@@ -22,8 +22,8 @@ func buildPathResolver() (*path.Resolver, error) {
 	return path.NewResolver(canonicalRoot), nil
 }
 
-func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) (*session.Store, error) {
-	return session.NewStore(filesystem, cfg.Session().StorageDir()), nil
+func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) *session.Store {
+	return session.NewStore(filesystem, cfg.Session().StorageDir())
 }
 
 // buildRegistries creates the Provider and LLM registries with injected model lists.

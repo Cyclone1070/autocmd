@@ -18,7 +18,7 @@ func init() {
 var newCmd = &cobra.Command{
 	Use:   "new",
 	Short: "Start a new chat session",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		bootstrapFS := fs.NewOSFileSystem(-1)
 
 		configMgr := config.NewManager(bootstrapFS)
@@ -33,10 +33,7 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		store, err := buildSessionStore(cfg, bootstrapFS)
-		if err != nil {
-			return err
-		}
+		store := buildSessionStore(cfg, bootstrapFS)
 
 		if _, err := workflow.CreateSession(store, appState); err != nil {
 			return err

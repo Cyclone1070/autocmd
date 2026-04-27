@@ -111,7 +111,7 @@ func (m *model) initializeContent() {
 	m.topIdx = m.bottomIdx
 
 	var renderedParts []string
-	currentHeight := 0
+	var currentHeight int
 	limit := m.height * 2
 
 	for m.topIdx >= 0 {

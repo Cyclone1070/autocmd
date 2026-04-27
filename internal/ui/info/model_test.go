@@ -36,8 +36,7 @@ func TestModel(t *testing.T) {
 		eventChan <- info
 
 		// BubbleTea tick manually
-		newModel, cmd := m.Update(info)
-		m = newModel.(*Model)
+		_, cmd := m.Update(info)
 
 		// Check that it returns a command that eventually calls Printf (wrapped in tea.Sequence)
 		assert.NotNil(t, cmd)

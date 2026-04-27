@@ -13,14 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockProcess struct {
-	wait func() (*executor.Result, error)
-}
-
-func (m *mockProcess) Wait() (*executor.Result, error) {
-	return m.wait()
-}
-
 func TestTaskManager_RegisterAndDrain(t *testing.T) {
 	tm := NewTaskManager(nil)
 

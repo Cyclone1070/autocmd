@@ -9,10 +9,10 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
-	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -37,10 +37,10 @@ func main() {
 	}
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -136,8 +136,7 @@ func (l *mockLLM) Model() model.ToolCallingChatModel {
 	return nil
 }
 
-
 type mockRegistry struct{}
 
-func (r *mockRegistry) Definitions() []*schema.ToolInfo  { return nil }
+func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
 func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

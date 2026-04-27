@@ -33,7 +33,7 @@ func (c UIConfig) ShortToolBlock() bool      { return c.shortToolBlock }
 func (c *UIConfig) SetChatWindowWidth(w int) { c.chatWindowWidth = w }
 func (c *UIConfig) SetShortToolBlock(b bool) { c.shortToolBlock = b }
 
-// DTOs for JSON persistence
+// DTOs for JSON persistence.
 type colorDTO struct {
 	Light string `json:"light"`
 	Dark  string `json:"dark"`

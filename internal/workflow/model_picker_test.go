@@ -51,8 +51,7 @@ func (m *mockModelPickerBus) WorkflowActions() <-chan domain.Action {
 }
 
 func TestRunModelPicker(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	registry := new(mockModelLLMRegistry)
 	state := new(mockModelState)
@@ -83,14 +82,14 @@ func TestRunModelPicker(t *testing.T) {
 		})
 
 		actions <- domain.SelectModelAction{ID: "m2"}
-		
+
 		select {
 		case err := <-done:
 			assert.NoError(t, err)
 		case <-time.After(200 * time.Millisecond):
 			t.Fatal("workflow timed out")
 		}
-		
+
 		state.AssertExpectations(t)
 		bus.AssertExpectations(t)
 	})

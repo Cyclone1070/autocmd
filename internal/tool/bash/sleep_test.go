@@ -54,7 +54,7 @@ func TestSleepTool_Execute_Cancelled(t *testing.T) {
 	params := `{"duration_ms": 1000}`
 	inv, _ := tl.Prepare(params)
 	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
-	
+
 	assert.Equal(t, domain.ToolErrorCancelled, disp.(domain.StringDisplay).Error)
 	assert.Equal(t, "Sleep for 1s", disp.(domain.StringDisplay).Description)
 }

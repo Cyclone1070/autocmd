@@ -24,14 +24,14 @@ func simulateStreamOutput(renderer ui.Renderer, chunks []string) string {
 	for _, ev := range chunks {
 		for _, block := range s.Append(ev) {
 			// Match tea.Printf line emission semantics
-			for _, line := range strings.Split(block, "\n") {
+			for line := range strings.SplitSeq(block, "\n") {
 				out.WriteString(line)
 				out.WriteByte('\n')
 			}
 		}
 	}
 	for _, block := range s.Flush() {
-		for _, line := range strings.Split(block, "\n") {
+		for line := range strings.SplitSeq(block, "\n") {
 			out.WriteString(line)
 			out.WriteByte('\n')
 		}
@@ -57,7 +57,7 @@ func canonicalize(s string) string {
 	return strings.Trim(strings.Join(resultLines, "\n"), "\n")
 }
 
-// mockRenderer just returns the input as is
+// mockRenderer just returns the input as is.
 type mockRenderer struct{}
 
 func (m mockRenderer) Render(markdown string) string {
@@ -251,11 +251,11 @@ func TestStream_Split(t *testing.T) {
 	t.Run("CuratedTriples", func(t *testing.T) {
 		// Specific triples that are known to be tricky (e.g. nested contexts)
 		curated := [][]string{
-			{"LIST_BUL_DAT", "LIST_BUL_DAT", "PARA_SIMPLE"}, // Sequential lists
-			{"QUOTE_SIMPLE", "QUOTE_NESTED", "PARA_SIMPLE"}, // Nested quotes
+			{"LIST_BUL_DAT", "LIST_BUL_DAT", "PARA_SIMPLE"},   // Sequential lists
+			{"QUOTE_SIMPLE", "QUOTE_NESTED", "PARA_SIMPLE"},   // Nested quotes
 			{"CODE_FENCE_GO", "CODE_INDENT", "CODE_FENCE_GO"}, // Code block transitions
-			{"PARA_SIMPLE", "HR_DASH", "PARA_SIMPLE"},      // HR separation
-			{"H1", "PARA_SIMPLE", "H2"},                    // Header nesting
+			{"PARA_SIMPLE", "HR_DASH", "PARA_SIMPLE"},         // HR separation
+			{"H1", "PARA_SIMPLE", "H2"},                       // Header nesting
 		}
 		for _, gap := range testGaps {
 			for _, types := range curated {
@@ -374,7 +374,7 @@ func TestStream_RenderConsistency(t *testing.T) {
 
 				// Find first difference to help debugging
 				minLen := min(len(wantOut), len(gotOut))
-				for i := 0; i < minLen; i++ {
+				for i := range minLen {
 					if gotOut[i] != wantOut[i] {
 						start := max(i-50, 0)
 

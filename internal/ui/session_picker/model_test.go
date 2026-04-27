@@ -42,7 +42,7 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("Snapshot received -> List view", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme)
-		
+
 		m.Update(result)
 
 		assert.Contains(t, m.View(), "SESSIONS")
@@ -65,7 +65,7 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("Create session: 'n'", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.CreateSessionAction{}).Return()
-		
+
 		m := NewModel(bus, theme)
 		m.Update(result)
 
@@ -87,13 +87,13 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("Rename session submit: enter", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.RenameSessionAction{ID: "s1", Name: "Edited"}).Return()
-		
+
 		m := NewModel(bus, theme)
 		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
 		m.textInput.SetValue("Edited")
-		
+
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		bus.AssertExpectations(t)
 	})
@@ -101,7 +101,7 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("Delete session: 'd'", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.DeleteSessionAction{ID: "s1"}).Return()
-		
+
 		m := NewModel(bus, theme)
 		m.Update(result)
 
@@ -112,7 +112,7 @@ func TestSessionPickerUI(t *testing.T) {
 	t.Run("Select session: 'enter'", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.SelectSessionAction{ID: "s1"}).Return()
-		
+
 		m := NewModel(bus, theme)
 		m.Update(result)
 
@@ -131,7 +131,7 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Nil(t, cmd, "space select should dispatch action, not quit directly")
 		bus.AssertExpectations(t)
 	})
-	
+
 	t.Run("DoneEvent -> Quitting", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme)
@@ -153,7 +153,7 @@ func TestSessionPickerUI(t *testing.T) {
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-		
+
 		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent (not quit immediately)")
 		msg := cmd()
 		_, ok := msg.(domain.DoneEvent)

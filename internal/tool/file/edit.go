@@ -29,11 +29,11 @@ type checksumManager interface {
 
 // EditFileRequest is the input for EditFileTool.
 type EditFileRequest struct {
-	FilePath   string `json:"file_path"`
-	Description    string `json:"description"`
-	OldString  string `json:"old_string"`
-	NewString  string `json:"new_string"`
-	ReplaceAll bool   `json:"replace_all"`
+	FilePath    string `json:"file_path"`
+	Description string `json:"description"`
+	OldString   string `json:"old_string"`
+	NewString   string `json:"new_string"`
+	ReplaceAll  bool   `json:"replace_all"`
 }
 
 // EditFileTool handles file editing operations.

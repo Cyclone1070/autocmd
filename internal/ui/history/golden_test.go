@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,7 +74,7 @@ func getHistoryElements() []TestElement {
 			Displays: domain.ToolDisplays{
 				"tc-ok": domain.BashDisplay{
 					TypeField:      "bash",
-					Description:        "Running Tests",
+					Description:    "Running Tests",
 					Command:        "go test ./...",
 					CapturedOutput: captured,
 				},
@@ -89,9 +90,9 @@ func getHistoryElements() []TestElement {
 			},
 			Displays: domain.ToolDisplays{
 				"tc-err": domain.BashDisplay{
-					TypeField: "bash",
-					Description:   "Failing Command",
-					Command:   "false",
+					TypeField:   "bash",
+					Description: "Failing Command",
+					Command:     "false",
 				},
 			},
 		},
@@ -109,10 +110,10 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	elements := getHistoryElements()
 	cfg := config.DefaultConfig().UI()
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -177,9 +178,7 @@ func createHistoryData(elems ...TestElement) ([]*schema.Message, domain.ToolDisp
 			}
 			calls = append(calls, e.Msg.ToolCalls...)
 		}
-		for k, v := range e.Displays {
-			displays[k] = v
-		}
+		maps.Copy(displays, e.Displays)
 	}
 
 	msg := &schema.Message{
@@ -199,7 +198,7 @@ func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message,
 	}
 	NewHistoryBuilder(renderer, theme, width).renderAssistantMessage(&sb, am, displays)
 
-	w.WriteString(fmt.Sprintf("=== START [%s] ===\n", name))
+	fmt.Fprintf(w, "=== START [%s] ===\n", name)
 	w.WriteString(sb.String())
-	w.WriteString(fmt.Sprintf("\n=== END [%s] ===\n\n", name))
+	fmt.Fprintf(w, "\n=== END [%s] ===\n\n", name)
 }

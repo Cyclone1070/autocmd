@@ -40,10 +40,10 @@ func main() {
 	}
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -213,7 +213,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	// Finishes
-		tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", "")) // Fast
+	tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", "")) // Fast
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

@@ -12,8 +12,8 @@ type mockProvider struct {
 	id string
 }
 
-func (m *mockProvider) ID() string                                     { return m.id }
-func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod      { return nil }
+func (m *mockProvider) ID() string                                { return m.id }
+func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod { return nil }
 func (m *mockProvider) List() []domain.LLMInfo {
 	return []domain.LLMInfo{{ID: m.id + "/" + "model", DisplayName: "Model"}}
 }
@@ -52,7 +52,7 @@ func TestRegistry(t *testing.T) {
 		prSorted := NewProviderRegistry(store, pC, pA, pB)
 
 		// Run multiple times to ensure order is stable and sorted.
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			providers, err := prSorted.List(context.Background())
 			assert.NoError(t, err)
 			assert.Len(t, providers, 3)

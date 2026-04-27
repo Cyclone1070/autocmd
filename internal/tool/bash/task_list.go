@@ -90,7 +90,7 @@ func (i *taskListInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 			activityStr = (time.Duration(t.SecondsSinceActivity) * time.Second).String()
 		}
 
-		fmt.Fprintf(&sbLLM, "- ID: %s\n  Description: %s\n  Command: %s\n  Status: %s (last activity: %s)\n", 
+		fmt.Fprintf(&sbLLM, "- ID: %s\n  Description: %s\n  Command: %s\n  Status: %s (last activity: %s)\n",
 			t.ID, t.Description, t.Command, status, activityStr)
 	}
 

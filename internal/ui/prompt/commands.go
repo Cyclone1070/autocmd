@@ -16,4 +16,3 @@ func animationTick(d time.Duration) tea.Cmd {
 		return tickMsg{}
 	})
 }
-

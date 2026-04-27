@@ -45,4 +45,3 @@ func TestTheme_RenderToolBlock_HeaderContinuationIndented(t *testing.T) {
 
 	assert.Equal(t, "\n\n    ✔ Read \"main.go\"\n      with extra context", got)
 }
-

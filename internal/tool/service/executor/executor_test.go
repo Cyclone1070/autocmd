@@ -6,11 +6,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
-	"reflect"
-	"syscall"
+
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ type mockSignalKiller struct {
 func (m *mockSignalKiller) Kill(pid int, sig syscall.Signal) error {
 	m.killedPid = pid
 	m.killedSig = sig
-	// Actually kill the process (negating back to positive if needed) 
+	// Actually kill the process (negating back to positive if needed)
 	// so the test command terminates and Wait() returns.
 	target := pid
 	if target < 0 {
@@ -82,7 +83,7 @@ func (m *mockCommandFactory) Command(ctx context.Context, name string, args ...s
 	m.gotName = name
 	m.gotArgs = args
 	// We still return a real Cmd so Start/Wait don't panic, but we don't care about its execution
-	return exec.CommandContext(ctx, "true") 
+	return exec.CommandContext(ctx, "true")
 }
 
 type mockFile struct {
@@ -100,12 +101,12 @@ type mockFileInfo struct {
 	size int64
 }
 
-func (m *mockFileInfo) Size() int64 { return m.size }
-func (m *mockFileInfo) IsDir() bool { return false }
-func (m *mockFileInfo) Name() string { return "mock" }
-func (m *mockFileInfo) Mode() os.FileMode { return 0 }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) IsDir() bool        { return false }
+func (m *mockFileInfo) Name() string       { return "mock" }
+func (m *mockFileInfo) Mode() os.FileMode  { return 0 }
 func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
-func (m *mockFileInfo) Sys() interface{} { return nil }
+func (m *mockFileInfo) Sys() any           { return nil }
 
 type mockWriteCloser struct {
 	*bytes.Buffer
@@ -117,7 +118,7 @@ func (m *mockWriteCloser) Close() error {
 
 func TestOSCommandExecutor_StringCommand(t *testing.T) {
 	exec := NewOSCommandExecutor(&mockFileSystem{})
-	
+
 	// Test that it can parse and run a simple string command
 	res, err := exec.Run(context.Background(), "echo 'hello world'", "", false)
 	if err != nil {
@@ -131,7 +132,7 @@ func TestOSCommandExecutor_StringCommand(t *testing.T) {
 
 func TestOSCommandExecutor_QuotedArgs(t *testing.T) {
 	exec := NewOSCommandExecutor(&mockFileSystem{})
-	
+
 	// Test complex quoting
 	res, err := exec.Run(context.Background(), "printf '%s %s' 'arg one' \"arg two\"", "", false)
 	if err != nil {
@@ -159,7 +160,7 @@ func TestStreamingCmd_ActivityTracking(t *testing.T) {
 	// Manual update
 	now := time.Now()
 	cmd.UpdateActivity()
-	
+
 	activityAt := cmd.LastActivityAt()
 	if activityAt.Before(now) {
 		t.Errorf("Expected LastActivityAt to be at or after %v, got %v", now, activityAt)
@@ -196,7 +197,7 @@ func TestOSCommandExecutor_InternalLogPath(t *testing.T) {
 func TestStreamingCmd_ID(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := NewOSCommandExecutor(fs)
-	
+
 	sc, err := exec.RunStreaming(context.Background(), "echo test", "", true)
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +208,7 @@ func TestStreamingCmd_ID(t *testing.T) {
 	if id == "" {
 		t.Error("Expected non-empty ID from StreamingCmd")
 	}
-	
+
 	if !strings.Contains(sc.LogPath(), id) {
 		t.Errorf("Expected LogPath %q to contain ID %q", sc.LogPath(), id)
 	}
@@ -269,7 +270,7 @@ func TestOSCommandExecutor_EnvironmentSanitization(t *testing.T) {
 
 	fs := &mockFileSystem{}
 	exec := NewOSCommandExecutor(fs)
-	
+
 	// Run a command that prints ENV
 	// We use strings.Contains because POSIX env output format is VAR=VAL
 	res, err := exec.Run(context.Background(), "env", "", false)
@@ -308,7 +309,7 @@ func TestOSCommandExecutor_NoFallbackTimeout(t *testing.T) {
 	// We'll just test for 1s to prove there is no short-circuit.
 	osFS := fs.NewOSFileSystem(-1)
 	exec := NewOSCommandExecutor(osFS)
-	
+
 	ctx := context.Background()
 	start := time.Now()
 	// Command that sleeps for 1.5s

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockFS implements state.FileSystem for testing
+// MockFS implements state.FileSystem for testing.
 type MockFS struct {
 	Files map[string][]byte
 	Dirs  []string
@@ -70,7 +70,7 @@ func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
 	statePath := filepath.Join("/home/user", ".config", "iav", "state.json")
 	fs.Files[statePath] = []byte(`{"model": "saved-model", "current_session_id": "999"}`)
-	
+
 	mgr := state.NewManager(fs)
 	s, err := mgr.Load()
 	require.NoError(t, err)

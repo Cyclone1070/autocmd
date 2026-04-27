@@ -95,7 +95,7 @@ func TestModel_SpinnerIncrementsOncePerTick(t *testing.T) {
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.spinnerFrame = 0
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		res, _ := m.Update(tickMsg{})
 		m = res.(*Model)
 		assert.Equal(t, i+1, m.spinnerFrame, "exactly one spinner step per tick in thinking")
@@ -615,8 +615,8 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	var terminalOutput strings.Builder
 	// mockPrintf mimics tea.Printf's internal behavior: split on \n, each line gets \n
 	mockPrintf := func(s string) tea.Cmd {
-		lines := strings.Split(s, "\n")
-		for _, l := range lines {
+		lines := strings.SplitSeq(s, "\n")
+		for l := range lines {
 			terminalOutput.WriteString(l + "\n")
 		}
 		return nil
@@ -846,9 +846,9 @@ func TestView_StrictToolboxSpacing(t *testing.T) {
 		endOfLine := strings.Index(afterBox1, "\n")
 		if endOfLine != -1 {
 			gap := afterBox1[endOfLine:]
-			nextBoxStart := strings.Index(gap, "╭")
-			if nextBoxStart != -1 {
-				actualGap := gap[:nextBoxStart]
+			before, _, ok := strings.Cut(gap, "╭")
+			if ok {
+				actualGap := before
 				t.Logf("Actual gap between boxes: %q", actualGap)
 			}
 		}

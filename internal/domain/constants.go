@@ -1,24 +1,24 @@
 package domain
 
-// Provider IDs
+// Provider IDs.
 const (
 	ProviderGoogle = "google"
 	ProviderGitHub = "github"
 )
 
-// Auth Method and Field IDs
+// Auth Method and Field IDs.
 const (
 	AuthMethodAPIKey = "api_key"
 	AuthMethodEnv    = "env"
 	AuthFieldAPIKey  = "api_key"
 )
 
-// UI and Formatting
+// UI and Formatting.
 const (
 	ModelIDSeparator = "/"
 )
 
-// Message metadata keys
+// Message metadata keys.
 const (
 	NotificationMessageExtraKey = "iav/is_notification"
 	// CancelMessageExtraKey marks the synthetic user message appended on session cancel (LLM-facing).
@@ -26,13 +26,13 @@ const (
 	CancelMessageExtraKey = "iav/is_cancel_message"
 )
 
-// Application Metadata
+// Application Metadata.
 const (
 	AppName       = "iav"
 	ConfigBaseDir = ".config"
 )
 
-// Standard Permissions (Unix)
+// Standard Permissions (Unix).
 const (
 	DefaultDirPerm  = 0o755
 	DefaultFilePerm = 0o644

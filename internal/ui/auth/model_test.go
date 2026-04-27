@@ -30,15 +30,15 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("StopAction on 'q'", func(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		m.state = stateProviderSelection
-		
+
 		ch := make(chan domain.UIUpdate, 1)
 		ch <- domain.DoneEvent{}
 		close(ch)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		bus.On("SendAction", domain.StopAction{}).Return()
-		
+
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-		
+
 		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent (not quit immediately)")
 		msg := cmd()
 		_, ok := msg.(domain.DoneEvent)
@@ -48,9 +48,9 @@ func TestAuthUI_Interactive(t *testing.T) {
 
 	t.Run("DoneEvent triggers tea.Quit", func(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
-		
+
 		_, cmd := m.Update(domain.DoneEvent{})
-		
+
 		// The cmd should be tea.Quit or a sequence ending in tea.Quit
 		// We look at the command's value or behavior if possible
 		assert.NotNil(t, cmd)
@@ -60,11 +60,11 @@ func TestAuthUI_Interactive(t *testing.T) {
 		ch := make(chan domain.UIUpdate)
 		close(ch)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
-		
+
 		m := NewModel(bus, theme).(*model)
 		cmd := m.Init()
 		msg := cmd()
-		
+
 		// msg should be tea.Batch/Sequence containing tea.Quit
 		assert.NotNil(t, msg)
 	})
@@ -78,7 +78,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 			},
 		}
 		m.Update(snapshot)
-		
+
 		view := m.View()
 		assert.Contains(t, view, "openai")
 		assert.Contains(t, view, "api_key")
@@ -96,9 +96,9 @@ func TestAuthUI_Interactive(t *testing.T) {
 		close(ch)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
 		bus.On("SendAction", domain.StopAction{}).Return()
-		
+
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-		
+
 		assert.Empty(t, m.providerID)
 		assert.NotNil(t, cmd, "cancel should keep polling for DoneEvent")
 		msg := cmd()
@@ -137,14 +137,14 @@ func TestAuthUI_Interactive(t *testing.T) {
 	})
 	t.Run("OAuthDeviceFlowEvent shows code", func(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
-		
+
 		event := domain.OAuthDeviceFlowEvent{
 			VerificationURI: "https://github.com/login/device",
 			UserCode:        "ABCD-1234",
 		}
-		
+
 		m.Update(event)
-		
+
 		view := m.View()
 		assert.Contains(t, view, "https://github.com/login/device")
 		assert.Contains(t, view, "ABCD-1234")

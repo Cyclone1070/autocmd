@@ -17,8 +17,8 @@ type ToolTracker struct {
 }
 
 type trackedTool struct {
-	callID   string
-	display  domain.ToolDisplay
+	callID  string
+	display domain.ToolDisplay
 }
 
 func NewToolTracker(bus *eventbus.EventBus) *ToolTracker {
@@ -41,8 +41,8 @@ func (t *ToolTracker) Start(callID string, display domain.ToolDisplay) {
 	t.mu.Unlock()
 
 	t.bus.SendUIUpdate(domain.ToolStartEvent{
-		CallID:   callID,
-		Display:  display,
+		CallID:  callID,
+		Display: display,
 	})
 }
 
@@ -88,4 +88,3 @@ func withCancelledError(d domain.ToolDisplay) domain.ToolDisplay {
 	}
 	return d.WithError(domain.ToolErrorCancelled)
 }
-

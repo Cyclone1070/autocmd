@@ -60,11 +60,9 @@ func TestMapUserFacingError(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.want, mapUserFacingError(tc.err))
 		})
 	}
 }
-

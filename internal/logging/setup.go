@@ -150,4 +150,3 @@ func cleanupLogs(logDir string, now time.Time, maxAge time.Duration, maxTotalByt
 	}
 	return nil
 }
-

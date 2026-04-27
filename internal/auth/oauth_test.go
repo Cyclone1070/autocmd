@@ -18,7 +18,7 @@ func TestOAuthManager_RunDeviceFlow(t *testing.T) {
 	// 1. Device Code Mock
 	mux.HandleFunc("/device/code", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"device_code":      "dev_123",
 			"user_code":        "ABCD-1234",
 			"verification_uri": "https://github.com/login/device",

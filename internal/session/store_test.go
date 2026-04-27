@@ -12,7 +12,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// mockDirEntry implements os.DirEntry for testing
+// mockDirEntry implements os.DirEntry for testing.
 type mockDirEntry struct {
 	name  string
 	isDir bool
@@ -23,7 +23,7 @@ func (m *mockDirEntry) IsDir() bool                { return m.isDir }
 func (m *mockDirEntry) Type() os.FileMode          { return 0 }
 func (m *mockDirEntry) Info() (os.FileInfo, error) { return nil, errors.New("not implemented") }
 
-// mockFileSystem implements fileSystem interface for testing
+// mockFileSystem implements fileSystem interface for testing.
 type mockFileSystem struct {
 	files map[string][]byte
 	dirs  map[string][]os.DirEntry
@@ -399,10 +399,10 @@ func TestList_Success(t *testing.T) {
 
 	info1Path := filepath.Join(store.storageDir, sess1ID, "metadata.json")
 	info2Path := filepath.Join(store.storageDir, sess2ID, "metadata.json")
- 
+
 	fs.files[info1Path] = info1Data
 	fs.files[info2Path] = info2Data
- 
+
 	// Create directory entries (List now iterates over session directories)
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sess1ID, isDir: true},
@@ -472,18 +472,18 @@ func TestList_SkipsMessagesFiles(t *testing.T) {
 
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = infoData
- 
+
 	// Directory contains session directories, not .json files
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sessID, isDir: true},
 		&mockDirEntry{name: "some-other-dir", isDir: true}, // metadata.json missing in some-other-dir, should skip
 	}
- 
+
 	summaries, err := store.List()
 	if err != nil {
 		t.Fatalf("List() failed: %v", err)
 	}
- 
+
 	if len(summaries) != 1 {
 		t.Errorf("Expected 1 summary (skipping directory without metadata), got %d", len(summaries))
 	}
@@ -508,11 +508,11 @@ func TestList_SkipsCorruptedFiles(t *testing.T) {
 
 	info1Path := filepath.Join(store.storageDir, sess1ID, "metadata.json")
 	fs.files[info1Path] = info1Data
- 
+
 	// Corrupted session
 	info2Path := filepath.Join(store.storageDir, sess2ID, "metadata.json")
 	fs.files[info2Path] = []byte("invalid json{")
- 
+
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sess1ID, isDir: true},
 		&mockDirEntry{name: sess2ID, isDir: true},
@@ -558,7 +558,7 @@ func TestList_SortsByUpdatedDesc(t *testing.T) {
 		fs.files[infoPath] = infoData
 		entries = append(entries, &mockDirEntry{name: s.id, isDir: true})
 	}
- 
+
 	fs.dirs[store.storageDir] = entries
 
 	summaries, err := store.List()
@@ -592,20 +592,20 @@ func TestList_SortsByUpdatedDesc(t *testing.T) {
 
 func TestDelete_Success(t *testing.T) {
 	store, fs := newTestStore()
- 
+
 	sessID := "test-session-123"
 	sessDir := filepath.Join(store.storageDir, sessID)
 	infoPath := filepath.Join(sessDir, "metadata.json")
 	messagesPath := filepath.Join(sessDir, "messages.json")
- 
+
 	fs.files[infoPath] = []byte("info")
 	fs.files[messagesPath] = []byte("messages")
- 
+
 	err := store.Delete(sessID)
 	if err != nil {
 		t.Fatalf("Delete() failed: %v", err)
 	}
- 
+
 	// Delete in subfolder mode means we Remove the whole directory
 	if fs.lastRemovedPath != sessDir {
 		t.Errorf("Expected directory %q to be removed, got %q", sessDir, fs.lastRemovedPath)
@@ -750,7 +750,7 @@ func TestList_SkipsNonJSONFiles(t *testing.T) {
 
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = infoData
- 
+
 	// Directory contains session subdirectories. Skips non-directory files like .txt.
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sessID, isDir: true},
@@ -769,10 +769,10 @@ func TestList_SkipsNonJSONFiles(t *testing.T) {
 
 func TestList_SkipsDirectoriesWithoutMetadata(t *testing.T) {
 	store, fs := newTestStore()
- 
+
 	sessID := "session-1"
 	now := time.Now()
- 
+
 	infoDTO := sessionInfoDTO{
 		ID:           sessID,
 		Name:         "Session 1",
@@ -781,26 +781,25 @@ func TestList_SkipsDirectoriesWithoutMetadata(t *testing.T) {
 		Updated:      now.UnixMilli(),
 	}
 	infoData, _ := json.MarshalIndent(infoDTO, "", "  ")
- 
+
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = infoData
- 
+
 	// Directory contains one valid session and one directory without metadata.json
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sessID, isDir: true},
 		&mockDirEntry{name: "empty-dir", isDir: true},
 	}
- 
+
 	summaries, err := store.List()
 	if err != nil {
 		t.Fatalf("List() failed: %v", err)
 	}
- 
+
 	if len(summaries) != 1 {
 		t.Errorf("Expected 1 summary (skipping directory without metadata.json), got %d", len(summaries))
 	}
 }
-
 
 func TestFindBlank(t *testing.T) {
 	store, fs := newTestStore()

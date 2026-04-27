@@ -85,10 +85,10 @@ func main() {
 	agentLoop := agent.NewLoop(llm, agentExecutor, cfg.Tools().MaxIterations(), bus, taskMgr)
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(uiCfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(uiCfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(uiCfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(uiCfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(uiCfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(uiCfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(uiCfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(uiCfg.MutedColor()),
 		ShortToolBlock: uiCfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -214,14 +214,14 @@ func simulateStream(renderer ui.Renderer, chunks []string) string {
 
 	for _, ev := range chunks {
 		for _, block := range stream.Append(ev) {
-			for _, line := range strings.Split(block, "\n") {
+			for line := range strings.SplitSeq(block, "\n") {
 				out.WriteString(line)
 				out.WriteByte('\n')
 			}
 		}
 	}
 	for _, block := range stream.Flush() {
-		for _, line := range strings.Split(block, "\n") {
+		for line := range strings.SplitSeq(block, "\n") {
 			out.WriteString(line)
 			out.WriteByte('\n')
 		}
@@ -242,4 +242,3 @@ func (s *mockStore) Save(sess *domain.Session) error        { return nil }
 func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return "Repro Session", nil
 }
-

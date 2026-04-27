@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockFileSystem is a local mock implementing config.FileSystem for testing
+// mockFileSystem is a local mock implementing config.FileSystem for testing.
 type mockFileSystem struct {
 	Files       map[string][]byte
 	HomeDirErr  error
@@ -47,7 +47,7 @@ func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	return nil
 }
 
-// createMockFS helper to reduce boilerplate
+// createMockFS helper to reduce boilerplate.
 func createMockFS(files map[string][]byte) *mockFileSystem {
 	return &mockFileSystem{
 		Files: files,

@@ -79,9 +79,9 @@ func TestGlob_Offloaded(t *testing.T) {
 	// Simulate offloaded output
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
-			Stdout: "tail-output", 
-			ExitCode: 0, 
-			LogPath: "/tmp/offloaded.log",
+			Stdout:   "tail-output",
+			ExitCode: 0,
+			LogPath:  "/tmp/offloaded.log",
 		}, nil)
 
 	// Mock file for analyzer
@@ -103,7 +103,8 @@ func TestGlob_Offloaded(t *testing.T) {
 func TestGlob_ExecutionFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
@@ -119,11 +120,11 @@ func TestGlob_ExecutionFailure(t *testing.T) {
 	assert.Contains(t, result, "fatal error")
 }
 
-
 func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
 
@@ -144,7 +145,8 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 func TestGlob_RejectsRelativePath(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	tool := NewGlobTool(fs, exec, pathResolver)
 	req := &GlobRequest{Pattern: "*.go", Path: "relative/path"}

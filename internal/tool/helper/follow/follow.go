@@ -1,6 +1,7 @@
 package follow
 
 import (
+	"errors"
 	"io"
 	"sync"
 
@@ -77,7 +78,7 @@ func (f *Follower) Read(p []byte) (int, error) {
 		}
 
 		// 4. Handle EOF - wait for more data OR stop
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			select {
 			case <-f.pokeChan:
 				// Data likely arrived, loop back and read immediately

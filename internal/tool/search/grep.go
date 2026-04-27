@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	// Prevents base64/minified files from blowing up context
+	// Prevents base64/minified files from blowing up context.
 	defaultMaxColumns = 500
 
 	OutputModeContent          = "content"

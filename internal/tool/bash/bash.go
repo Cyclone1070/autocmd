@@ -139,7 +139,7 @@ func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 		RunInBackground bool   `json:"run_in_background"`
 	}
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
-		return nil, fmt.Errorf("failed to parse bash parameters: %v", err)
+		return nil, fmt.Errorf("failed to parse bash parameters: %w", err)
 	}
 
 	// Validate command against block list

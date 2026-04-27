@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
+	"strings"
+
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
-	"strings"
 )
 
 // GitHubProvider implements the domain.Provider interface for GitHub Copilot.
@@ -82,7 +83,6 @@ func (t *tokenTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Editor-Plugin-Version", "copilot/1.155.0")
 	return http.DefaultTransport.RoundTrip(req)
 }
-
 
 type copilotLLM struct {
 	tokenSource   *TokenSource

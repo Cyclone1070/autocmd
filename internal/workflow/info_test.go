@@ -59,9 +59,9 @@ type infoMockLLM struct {
 	mock.Mock
 }
 
-func (m *infoMockLLM) ID() string                    { return m.Called().String(0) }
-func (m *infoMockLLM) DisplayName() string           { return m.Called().String(0) }
-func (m *infoMockLLM) ContextWindow() int            { return m.Called().Int(0) }
+func (m *infoMockLLM) ID() string          { return m.Called().String(0) }
+func (m *infoMockLLM) DisplayName() string { return m.Called().String(0) }
+func (m *infoMockLLM) ContextWindow() int  { return m.Called().Int(0) }
 func (m *infoMockLLM) Model() model.ToolCallingChatModel {
 	return nil
 }

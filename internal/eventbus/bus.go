@@ -85,7 +85,7 @@ func (b *EventBus) Close() {
 
 func (b *EventBus) runUIUpdates() {
 	defer b.wg.Done()
-	
+
 	var queue []domain.UIUpdate
 	in := b.uiIn
 

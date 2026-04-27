@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// mockFileSystem is a local mock implementing fileSystem for testing
+// mockFileSystem is a local mock implementing fileSystem for testing.
 type mockFileSystem struct {
 	files   map[string][]byte
 	readErr error

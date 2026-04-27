@@ -82,7 +82,7 @@ func (g *GlamourRenderer) Render(markdown string) string {
 			// Remove glamour's right-side padding before adding our bar
 			trimmedLine := strings.TrimRight(line, " ")
 
-			// Normalize indentation: Glamour/Goldmark often adds 2 spaces of ghost 
+			// Normalize indentation: Glamour/Goldmark often adds 2 spaces of ghost
 			// indentation to lines 2+ of code blocks but not the first line.
 			// These spaces can be preceded by ANSI escape codes.
 			if i > 0 {

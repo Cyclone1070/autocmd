@@ -37,20 +37,20 @@ func TestModelSelection(t *testing.T) {
 	t.Run("Selection triggers SelectModelAction", func(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.SelectModelAction{ID: "m2"}).Return()
-		
+
 		m := NewModel(bus, theme)
-		
+
 		// Initial state
 		assert.Empty(t, m.View())
 
 		// Receive data
 		m.Update(result)
 		assert.Contains(t, m.View(), "MODELS")
-		
+
 		// Press Enter on item
 		m.Update(tea.KeyMsg{Type: tea.KeyDown})
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		
+
 		assert.Nil(t, cmd, "Keypress should not trigger new poller")
 		assert.Equal(t, "Model 2", m.selectedName)
 		bus.AssertExpectations(t)
@@ -77,7 +77,7 @@ func TestModelSelection(t *testing.T) {
 		ch <- domain.DoneEvent{}
 		close(ch)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
-		
+
 		m := NewModel(bus, theme)
 		m.Update(result)
 

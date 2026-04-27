@@ -20,9 +20,9 @@ func TestWriteFile(t *testing.T) {
 		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{
-			FilePath: "/workspace/new.txt",
-			Content:  "hello",
-			Description:  "creating new file",
+			FilePath:    "/workspace/new.txt",
+			Content:     "hello",
+			Description: "creating new file",
 		}
 
 		params, _ := json.Marshal(req)
@@ -32,7 +32,7 @@ func TestWriteFile(t *testing.T) {
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
 		assert.Contains(t, out, "File created successfully at: /workspace/new.txt")
 		assert.Equal(t, "hello", string(fs.files["/workspace/new.txt"]))
-		
+
 		display := inv.Display().(domain.StringDisplay)
 		assert.Equal(t, "creating new file", display.Description)
 	})
@@ -47,9 +47,9 @@ func TestWriteFile(t *testing.T) {
 		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{
-			FilePath: "/workspace/exists.txt",
-			Content:  "new",
-			Description:  "overwriting file",
+			FilePath:    "/workspace/exists.txt",
+			Content:     "new",
+			Description: "overwriting file",
 		}
 
 		params, _ := json.Marshal(req)
@@ -109,9 +109,9 @@ func TestWriteFile(t *testing.T) {
 		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &WriteFileRequest{
-			FilePath: "/workspace/crlf.txt",
-			Content:  "line1\r\nline2",
-			Description:  "testing normalization",
+			FilePath:    "/workspace/crlf.txt",
+			Content:     "line1\r\nline2",
+			Description: "testing normalization",
 		}
 
 		params, _ := json.Marshal(req)

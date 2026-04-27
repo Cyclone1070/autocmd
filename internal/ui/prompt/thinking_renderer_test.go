@@ -83,7 +83,7 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 	t.Run("RunningThoughtWrapsToWidth", func(t *testing.T) {
 		narrow := NewThinkingRenderer(theme, 42, &passThroughGater{})
 		got := narrow.RenderThinking(ui.StatusRunning, time.Now(), 0, "this line is intentionally very long so we can verify wrapping to avoid content overflow in thinking tool block content", sp)
-		for _, line := range strings.Split(got, "\n") {
+		for line := range strings.SplitSeq(got, "\n") {
 			if strings.TrimSpace(line) == "" {
 				continue
 			}

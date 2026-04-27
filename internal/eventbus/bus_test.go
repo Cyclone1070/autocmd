@@ -51,7 +51,7 @@ func TestEventBus_Shutdown_NoHang(t *testing.T) {
 	// Fill more than the channel buffer
 	count := 200
 	go func() {
-		for i := 0; i < count; i++ {
+		for range count {
 			bus.SendUIUpdate(domain.TextEvent{Text: "msg"})
 		}
 	}()
@@ -84,7 +84,7 @@ func TestEventBus_Concurrent_Safe(t *testing.T) {
 	defer bus.Close()
 
 	// Multiple goroutines sending updates and actions
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			bus.SendUIUpdate(domain.ThinkingEvent{})
 			bus.SendAction(domain.StopAction{})
@@ -101,7 +101,7 @@ func TestEventBus_CloseDeadlock_Reproduction(t *testing.T) {
 	// We send 101 messages.
 	// 100 go into the output channel buffer.
 	// 1 stays in the internal 'queue' slice.
-	for i := 0; i < 101; i++ {
+	for range 101 {
 		bus.SendUIUpdate(domain.TextEvent{Text: "deadlock-me"})
 	}
 

@@ -163,8 +163,8 @@ type authMockProvider struct {
 	methods []domain.AuthMethod
 }
 
-func (p *authMockProvider) ID() string                                     { return p.id }
-func (p *authMockProvider) SupportedAuthMethods() []domain.AuthMethod      { return p.methods }
+func (p *authMockProvider) ID() string                                { return p.id }
+func (p *authMockProvider) SupportedAuthMethods() []domain.AuthMethod { return p.methods }
 func (p *authMockProvider) List() []domain.LLMInfo {
 	return nil
 }

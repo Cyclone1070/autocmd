@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-
 // --- Mocks ---
 
 type mockLLM struct {
@@ -36,7 +35,7 @@ func (m *mockLLM) Model() model.ToolCallingChatModel {
 	return &mockEinoModelBridge{llm: m}
 }
 
-// mockEinoModelBridge adapts the old mockLLM.Stream for the new loop.go
+// mockEinoModelBridge adapts the old mockLLM.Stream for the new loop.go.
 type mockEinoModelBridge struct {
 	llm *mockLLM
 }
@@ -120,7 +119,7 @@ func (m *mockEventSender) SendUIUpdate(ev domain.UIUpdate) {
 	}
 }
 
-// Ensure mockEventSender implements local eventSender
+// Ensure mockEventSender implements local eventSender.
 var _ eventSender = (*mockEventSender)(nil)
 
 func newMockEventSender(size int) *mockEventSender {
@@ -161,12 +160,12 @@ func TestRun_TaskNotificationInjection(t *testing.T) {
 			{Role: schema.User, Content: "Wait for it"},
 		},
 	}
-	
+
 	registry := newMockToolRegistry(nil)
 	executor := NewToolExecutor(registry, nil)
 	// This will fail to compile as NewLoop only takes 4 args
-	l := NewLoop(m, executor, 5, nil, notifier) 
-	
+	l := NewLoop(m, executor, 5, nil, notifier)
+
 	err := l.Run(ctx, session, "Next")
 	assert.NoError(t, err)
 
@@ -181,7 +180,6 @@ func TestRun_TaskNotificationInjection(t *testing.T) {
 	assert.Equal(t, "<task-notification>done</task-notification>", notifMsg.Content)
 	assert.Equal(t, true, notifMsg.Extra[domain.NotificationMessageExtraKey])
 }
-
 
 // mockToolRegistry is defined in tool_executor_test.go
 
@@ -564,7 +562,7 @@ func TestRun_ParallelToolCalls_SequentialCollidingIndices(t *testing.T) {
 				// Tool 1: Index 0
 				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-1", Function: schema.FunctionCall{Name: "t1"}}},
 				{toolCall: &schema.ToolCall{Index: new(0), Function: schema.FunctionCall{Arguments: `{"a":1}`}}},
-				
+
 				// Tool 2: ALSO Index 0 (Collision starts here)
 				{toolCall: &schema.ToolCall{Index: new(0), ID: "tc-2", Function: schema.FunctionCall{Name: "t2"}}},
 				{toolCall: &schema.ToolCall{Index: new(0), Function: schema.FunctionCall{Arguments: `{"b":2}`}}},

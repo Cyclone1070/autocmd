@@ -54,7 +54,6 @@ func (m *mockLLM) DisplayName() string {
 	return args.String(0)
 }
 
-
 func (m *mockLLM) ComputeTokens(ctx context.Context, messages []*schema.Message) (int, error) {
 	args := m.Called(ctx, messages)
 	return args.Int(0), args.Error(1)
@@ -105,8 +104,7 @@ func (m *mockActionForwarder) Deliver(act domain.Action) {
 }
 
 func TestRunPrompt_ActionForwarding(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
@@ -151,8 +149,7 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 }
 
 func TestRunPrompt_GREEN(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
@@ -236,11 +233,6 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	store.AssertNotCalled(t, "GenerateName", mock.Anything, mock.Anything, mock.Anything)
 }
 
-
-
-
-
-
 type trackableBus struct {
 	*eventbus.EventBus
 	closed bool
@@ -252,14 +244,13 @@ func (b *trackableBus) Close() {
 }
 
 func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
 	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
-	
+
 	eb := eventbus.New()
 	bus := &trackableBus{EventBus: eb}
 
@@ -323,7 +314,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 		Run(func(args mock.Arguments) {
 			s := args.Get(1).(*domain.Session)
 			// Append some messages to simulate work and race
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				s.Messages = append(s.Messages, &schema.Message{Role: schema.User, Content: "msg"})
 				if i == 5 {
 					close(agentStartedAppending) // Signal that we've started appending
@@ -333,7 +324,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 		Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
-	
+
 	select {
 	case err := <-done:
 		assert.NoError(t, err)
@@ -343,8 +334,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 }
 
 func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
@@ -366,7 +356,7 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 
 	// Mocking the "not found" error - wrapped as it is in the real store
 	store.On("Get", "non-existent-id").Return((*domain.Session)(nil), fmt.Errorf("read session info: %w", os.ErrNotExist))
-	
+
 	// Fallback expectations
 	store.On("Create").Return(&domain.Session{ID: "new-id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)

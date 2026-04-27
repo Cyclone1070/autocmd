@@ -15,4 +15,3 @@ type busEventMsg struct {
 
 // busClosedMsg signals the bus channel closed unexpectedly.
 type busClosedMsg struct{}
-

@@ -49,7 +49,7 @@ type ModelConfig struct {
 
 type ProviderConfig map[string][]ModelConfig
 
-// DTOs for JSON persistence
+// DTOs for JSON persistence.
 type sessionDTO struct {
 	StorageDir string `json:"storage_dir"`
 }

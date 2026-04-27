@@ -33,10 +33,10 @@ func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig().UI()
 	cfg.SetShortToolBlock(false)
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	return ui.NewTheme(themeCfg)
@@ -261,9 +261,8 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		{role: "U", content: "u"},
 		{role: "A", content: "a"},
 		{role: "A", content: "\nleading\n"}, // renderer-like newlines inside content
-		{role: "A", content: "x\n\ny"},       // internal blank line
+		{role: "A", content: "x\n\ny"},      // internal blank line
 	}
-
 
 	// Test all pairs and triples.
 	sequences := [][]elem{}
@@ -323,7 +322,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 
 	msgs := []*schema.Message{
 		{
-			Role: schema.Assistant,
+			Role:      schema.Assistant,
 			ToolCalls: []schema.ToolCall{{ID: "tc-1", Function: schema.FunctionCall{Name: "bash"}}},
 		},
 		{
@@ -417,10 +416,10 @@ func TestDivider_Color(t *testing.T) {
 
 	cfg := config.DefaultConfig().UI()
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)

@@ -16,14 +16,14 @@ func TestTaskStopTool_Execute_Success(t *testing.T) {
 	// I'll use a mock TaskManager for this specific test case to simplify.
 	mockTM := new(mockTaskManager)
 	tl = NewTaskStopTool(mockTM)
-	
+
 	mockTM.On("Stop", "t-stop-1").Return(nil)
-	
+
 	params := `{"task_id": "t-stop-1"}`
 	inv, err := tl.Prepare(params)
 	assert.NoError(t, err)
 	resLLM, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
-	
+
 	assert.Equal(t, "task t-stop-1 stopped", resLLM)
 	assert.Equal(t, "Stop background bash task t-stop-1", disp.(domain.StringDisplay).Description)
 	mockTM.AssertExpectations(t)
@@ -37,7 +37,7 @@ func TestTaskStopTool_Execute_NotFound(t *testing.T) {
 	params := `{"task_id": "none"}`
 	inv, _ := tl.Prepare(params)
 	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
-	
+
 	assert.Equal(t, domain.ToolErrorFailed, disp.GetError())
 }
 

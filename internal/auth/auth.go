@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -134,9 +135,7 @@ func (m *Manager) All() (map[string]domain.Credential, error) {
 	m.mu.RLock()
 	if m.cache != nil {
 		res := make(map[string]domain.Credential, len(m.cache))
-		for k, v := range m.cache {
-			res[k] = v
-		}
+		maps.Copy(res, m.cache)
 		m.mu.RUnlock()
 		return res, nil
 	}
@@ -147,9 +146,7 @@ func (m *Manager) All() (map[string]domain.Credential, error) {
 
 	if m.cache != nil {
 		res := make(map[string]domain.Credential, len(m.cache))
-		for k, v := range m.cache {
-			res[k] = v
-		}
+		maps.Copy(res, m.cache)
 		return res, nil
 	}
 
@@ -160,9 +157,7 @@ func (m *Manager) All() (map[string]domain.Credential, error) {
 	m.cache = all
 
 	res := make(map[string]domain.Credential, len(all))
-	for k, v := range all {
-		res[k] = v
-	}
+	maps.Copy(res, all)
 	return res, nil
 }
 

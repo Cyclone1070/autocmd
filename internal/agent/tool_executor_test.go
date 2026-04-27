@@ -212,7 +212,7 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 	assert.IsType(t, domain.ToolEndEvent{}, <-sender.events)
 }
 
-// Ensure mockToolRegistry implements local toolRegistry
+// Ensure mockToolRegistry implements local toolRegistry.
 var _ toolRegistry = (*mockToolRegistry)(nil)
 
 // --- Tests ---

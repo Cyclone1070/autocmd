@@ -46,10 +46,10 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 	})
 
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
 		ShortToolBlock: deps.Config.UI().ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)

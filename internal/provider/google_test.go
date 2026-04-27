@@ -9,7 +9,7 @@ import (
 
 func TestGoogleProviderAuthSpec(t *testing.T) {
 	p := NewGoogleProvider(nil)
-	
+
 	assert.Equal(t, "google", p.ID())
 
 	methods := p.SupportedAuthMethods()

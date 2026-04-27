@@ -8,7 +8,6 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-
 func TestRouter_WaitDeliver(t *testing.T) {
 	t.Run("deliver after wait", func(t *testing.T) {
 		r := New()
@@ -67,13 +66,13 @@ func TestRouter_WaitDeliver(t *testing.T) {
 	t.Run("discard stale actions", func(t *testing.T) {
 		r := New()
 		defer r.Close()
-		
+
 		staleAct := domain.QuestionAnswerAction{CallID: "stale-call"}
 		correctAct := domain.QuestionAnswerAction{CallID: "fresh-call"}
 
 		// Deliver stale action first (e.g. from an accidental previous multi-submit)
 		r.Deliver(staleAct)
-		
+
 		// Deliver the valid action for the current executing tool
 		r.Deliver(correctAct)
 
@@ -86,7 +85,7 @@ func TestRouter_WaitDeliver(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Wait failed: %v", err)
 		}
-		
+
 		if q, ok := got.(domain.QuestionAnswerAction); !ok || q.CallID != "fresh-call" {
 			t.Errorf("expected fresh-call, got %#v", got)
 		}

@@ -19,7 +19,7 @@ const (
 	DefaultGlobTimeout = 20 * time.Second
 )
 
-// GlobRequest represents the parameters for a glob operation
+// GlobRequest represents the parameters for a glob operation.
 type GlobRequest struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path"`
@@ -99,7 +99,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 
 	// Validate pattern syntax
 	if _, err := filepath.Match(req.Pattern, ""); err != nil {
-		return nil, fmt.Errorf("invalid pattern %s: %v", req.Pattern, err)
+		return nil, fmt.Errorf("invalid pattern %s: %w", req.Pattern, err)
 	}
 
 	searchPath := req.Path
@@ -220,7 +220,7 @@ func (i *globInvocation) countLines(path string) (int, error) {
 				}
 			}
 		}
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

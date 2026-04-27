@@ -12,7 +12,7 @@ const (
 	StateFile = "state.json"
 )
 
-// FileSystem abstracts file operations for testability
+// FileSystem abstracts file operations for testability.
 type FileSystem interface {
 	UserHomeDir() (string, error)
 	ReadFile(path string) ([]byte, error)
@@ -20,12 +20,12 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 }
 
-// Manager handles state loading and saving with injected dependencies
+// Manager handles state loading and saving with injected dependencies.
 type Manager struct {
 	fs FileSystem
 }
 
-// NewManager creates a new Manager with the provided filesystem
+// NewManager creates a new Manager with the provided filesystem.
 func NewManager(fs FileSystem) *Manager {
 	if fs == nil {
 		panic("fs is required")
@@ -74,7 +74,7 @@ type stateDTO struct {
 	Model            string `json:"model"`
 }
 
-// Default returns the default application state
+// Default returns the default application state.
 func Default() *State {
 	return &State{
 		model: "",

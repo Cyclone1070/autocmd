@@ -44,4 +44,3 @@ func TestRotateIfNeeded_RenamesWhenOverLimit(t *testing.T) {
 	_, err := os.Stat(filepath.Join(dir, "error.log.1"))
 	assert.NoError(t, err)
 }
-

@@ -113,7 +113,7 @@ func (m *OAuthManager) RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod
 			case "access_denied":
 				return "", fmt.Errorf("access denied by user")
 			case "":
-				// No error, but no token? 
+				// No error, but no token?
 			default:
 				return "", fmt.Errorf("oauth error: %s", tr.Error)
 			}

@@ -85,10 +85,7 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, width, height int, op
 	}
 
 	if m.renderer == nil {
-		renderWidth := m.width - gutterWidth
-		if renderWidth < 10 {
-			renderWidth = 10
-		}
+		renderWidth := max(m.width-gutterWidth, 10)
 		m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 	}
 
@@ -229,10 +226,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if newWidth != m.width {
 			m.width = newWidth
-			renderWidth := m.width - gutterWidth
-			if renderWidth < 10 {
-				renderWidth = 10
-			}
+			renderWidth := max(m.width-gutterWidth, 10)
 			m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 			m.syncBuilder()
 			m.renderedMessages = make(map[int]string)

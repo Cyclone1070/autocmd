@@ -23,7 +23,7 @@ func (m *mockProcess) Wait() (*executor.Result, error) {
 
 func TestTaskManager_RegisterAndDrain(t *testing.T) {
 	tm := NewTaskManager(nil)
-	
+
 	// Mock a process that finishes immediately
 	waitCalled := make(chan struct{})
 	cmd := executor.NewStreamingCmd("t1", strings.NewReader("output"), func() (*executor.Result, error) {
@@ -60,7 +60,7 @@ func TestTaskManager_RegisterAndDrain(t *testing.T) {
 
 func TestTaskManager_ActivityTracking(t *testing.T) {
 	tm := NewTaskManager(nil)
-	
+
 	// Create a command that won't finish immediately
 	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
 		time.Sleep(100 * time.Millisecond)
@@ -85,9 +85,9 @@ func TestTaskManager_ActivityTracking(t *testing.T) {
 
 func TestTaskManager_NotifyChan(t *testing.T) {
 	tm := NewTaskManager(nil)
-	
+
 	notify := tm.NotifyChan()
-	
+
 	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
 		return &executor.Result{ExitCode: 0}, nil
 	}, "")
@@ -105,7 +105,7 @@ func TestTaskManager_NotifyChan(t *testing.T) {
 func TestTaskManager_Register_ReconstructsLogPath(t *testing.T) {
 	fs := &mockBashFileSystem{files: make(map[string][]byte)}
 	tm := NewTaskManager(fs)
-	
+
 	logPath := "/tmp/task.log"
 	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
 		// Mock result with Stdout but no LogPath (simulating <16kb deletion)

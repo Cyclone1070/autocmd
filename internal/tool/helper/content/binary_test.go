@@ -80,7 +80,7 @@ func TestIsBinaryContent(t *testing.T) {
 }
 
 // Helper to create a byte slice with a null byte at a specific index
-// All other bytes are 'a'
+// All other bytes are 'a'.
 func makeNullByteAt(index int) []byte {
 	// Make slice large enough to include the index
 	b := make([]byte, index+1)

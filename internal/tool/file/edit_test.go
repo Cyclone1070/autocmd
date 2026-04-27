@@ -24,11 +24,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.txt",
-			Description:    "changing hello to goodbye",
-			OldString:  "hello",
-			NewString:  "goodbye",
-			ReplaceAll: false,
+			FilePath:    "/workspace/test.txt",
+			Description: "changing hello to goodbye",
+			OldString:   "hello",
+			NewString:   "goodbye",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -53,11 +53,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.txt",
-			Description:    "changing all a to b",
-			OldString:  "a",
-			NewString:  "b",
-			ReplaceAll: true,
+			FilePath:    "/workspace/test.txt",
+			Description: "changing all a to b",
+			OldString:   "a",
+			NewString:   "b",
+			ReplaceAll:  true,
 		}
 
 		params, _ := json.Marshal(req)
@@ -78,11 +78,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.txt",
-			Description:    "should fail",
-			OldString:  "a",
-			NewString:  "b",
-			ReplaceAll: false,
+			FilePath:    "/workspace/test.txt",
+			Description: "should fail",
+			OldString:   "a",
+			NewString:   "b",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -99,11 +99,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/new.txt",
-			Description:    "creating new file",
-			OldString:  "",
-			NewString:  "brand new content",
-			ReplaceAll: false,
+			FilePath:    "/workspace/new.txt",
+			Description: "creating new file",
+			OldString:   "",
+			NewString:   "brand new content",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -124,11 +124,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/exists.txt",
-			Description:    "trying to overwrite",
-			OldString:  "",
-			NewString:  "danger",
-			ReplaceAll: false,
+			FilePath:    "/workspace/exists.txt",
+			Description: "trying to overwrite",
+			OldString:   "",
+			NewString:   "danger",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -147,11 +147,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.txt",
-			Description:    "matching curly with straight",
-			OldString:  "\"hello\"", // LLM sends straight quotes
-			NewString:  "\"goodbye\"",
-			ReplaceAll: false,
+			FilePath:    "/workspace/test.txt",
+			Description: "matching curly with straight",
+			OldString:   "\"hello\"", // LLM sends straight quotes
+			NewString:   "\"goodbye\"",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -173,11 +173,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.go",
-			Description:    "adding comment",
-			OldString:  "func main() {}",
-			NewString:  "func main() {} // comment    ", // Trailing spaces
-			ReplaceAll: false,
+			FilePath:    "/workspace/test.go",
+			Description: "adding comment",
+			OldString:   "func main() {}",
+			NewString:   "func main() {} // comment    ", // Trailing spaces
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -198,11 +198,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "/workspace/test.md",
-			Description:    "adding line break",
-			OldString:  "# Title",
-			NewString:  "# Title  ", // Markdown hard line break (2 spaces)
-			ReplaceAll: false,
+			FilePath:    "/workspace/test.md",
+			Description: "adding line break",
+			OldString:   "# Title",
+			NewString:   "# Title  ", // Markdown hard line break (2 spaces)
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)
@@ -220,11 +220,11 @@ func TestEditFile(t *testing.T) {
 		tool := NewEditFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
 		req := &EditFileRequest{
-			FilePath:   "test.txt",
-			Description:    "should fail",
-			OldString:  "hello",
-			NewString:  "goodbye",
-			ReplaceAll: false,
+			FilePath:    "test.txt",
+			Description: "should fail",
+			OldString:   "hello",
+			NewString:   "goodbye",
+			ReplaceAll:  false,
 		}
 
 		params, _ := json.Marshal(req)

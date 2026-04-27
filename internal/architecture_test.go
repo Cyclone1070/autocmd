@@ -19,7 +19,7 @@ func TestArchitecture(t *testing.T) {
 	if err := arch.ParsePackages(); err != nil {
 		t.Fatalf("failed to parse packages: %v", err)
 	}
-	
+
 	cwd, _ := os.Getwd()
 	fmt.Printf("Debug: Working Dir: %s\n", cwd)
 
@@ -87,7 +87,7 @@ func TestArchitecture(t *testing.T) {
 	}
 	for _, service := range services {
 		serviceRelPath := "internal/" + service
-		
+
 		// Services cannot import workflow, ui, or cmd
 		serviceForbidden := []string{
 			module + "/internal/workflow",
@@ -120,7 +120,7 @@ func TestArchitecture(t *testing.T) {
 	if !success {
 		// Group violations by source package for clearer reporting
 		fmt.Printf("\n--- ARCHITECTURE VIOLATIONS DETECTED ---\n")
-		
+
 		// We use a map to deduplicate (arctest might report the same violation multiple times if it appears in multiple files)
 		seen := make(map[string]bool)
 		for _, v := range violations {
@@ -128,7 +128,7 @@ func TestArchitecture(t *testing.T) {
 				continue
 			}
 			seen[v] = true
-			
+
 			// Clean up output: remove internal/ prefix from source to make it more readable
 			cleaned := strings.Replace(v, "Package \"internal/", "Package \"", 1)
 			fmt.Printf("Violation: %s\n", cleaned)

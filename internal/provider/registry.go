@@ -142,9 +142,7 @@ func (r *LLMRegistry) List(ctx context.Context) ([]domain.LLMInfo, error) {
 		}
 
 		llms := p.List()
-		for _, m := range llms {
-			all = append(all, m)
-		}
+		all = append(all, llms...)
 	}
 	return all, nil
 }

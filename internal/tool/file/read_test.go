@@ -20,14 +20,14 @@ import (
 // Local mocks for read tests
 
 type mockFileSystemForRead struct {
-	files  map[string][]byte
-	dirs   map[string]bool
+	files map[string][]byte
+	dirs  map[string]bool
 }
 
 func newMockFileSystemForRead() *mockFileSystemForRead {
 	return &mockFileSystemForRead{
-		files:  make(map[string][]byte),
-		dirs:   make(map[string]bool),
+		files: make(map[string][]byte),
+		dirs:  make(map[string]bool),
 	}
 }
 
@@ -69,7 +69,6 @@ type mockFileInfoForRead struct {
 	isDir bool
 }
 
-
 func (m mockFileInfoForRead) Name() string       { return m.name }
 func (m mockFileInfoForRead) Size() int64        { return m.size }
 func (m mockFileInfoForRead) Mode() os.FileMode  { return 0o644 }
@@ -104,7 +103,7 @@ func (m *mockChecksumManagerForRead) Get(path string) (string, bool) {
 
 // executeRead calls Prepare then Execute, returning the LLM output string.
 // Prepare errors: returns ("", err)
-// Execute errors: returns (llmContent, err) per contract
+// Execute errors: returns (llmContent, err) per contract.
 func executeRead(t *testing.T, rtool *ReadFileTool, req *ReadFileRequest) (string, error) {
 	t.Helper()
 	params, _ := json.Marshal(req)
@@ -379,16 +378,16 @@ func TestReadFile(t *testing.T) {
 		workspaceRoot := "/workspace"
 		absFile := "/workspace/subdir/test.txt"
 		fs.createFile(absFile, []byte("content"))
-		
+
 		readTool := NewReadFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
-		
+
 		// Agent sends absolute path
 		params, _ := json.Marshal(&ReadFileRequest{FilePath: absFile})
 		inv, err := readTool.Prepare(string(params))
 		if err != nil {
 			t.Fatalf("Prepare failed: %v", err)
 		}
-		
+
 		// Display should show full absolute path
 		display := inv.Display().(domain.StringDisplay)
 		assert.Equal(t, "Read \"/workspace/subdir/test.txt\"", display.Description)

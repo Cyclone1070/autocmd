@@ -11,7 +11,7 @@ import (
 
 const defaultExchangeURL = "https://api.github.com/copilot_internal/v2/token"
 
-// TokenSource manages the exchange of a long-lived GitHub OAuth token 
+// TokenSource manages the exchange of a long-lived GitHub OAuth token
 // for short-lived Copilot session tokens.
 type TokenSource struct {
 	oauthToken  string

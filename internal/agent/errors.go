@@ -8,4 +8,3 @@ var (
 	// ErrModelAuth marks model/provider authentication failures (invalid/expired credentials).
 	ErrModelAuth = errors.New("model authentication failure")
 )
-

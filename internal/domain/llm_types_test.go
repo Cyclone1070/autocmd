@@ -40,7 +40,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	displays := ToolDisplays{
 		"call-1": BashDisplay{
 			TypeField:      "bash",
-			Description:        "Listing files",
+			Description:    "Listing files",
 			Command:        "ls",
 			CapturedOutput: "",
 		},
@@ -51,7 +51,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that "role" field is present in JSON
-	var raw []map[string]interface{}
+	var raw []map[string]any
 	err = json.Unmarshal(data, &raw)
 	require.NoError(t, err)
 	assert.Equal(t, "user", raw[0]["role"])

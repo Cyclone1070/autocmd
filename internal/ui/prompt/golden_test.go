@@ -158,10 +158,10 @@ func (d dummyBus) SendAction(domain.Action) {}
 func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...PromptElement) {
 	var signals []string
 	themeCfg := ui.ThemeConfig{
-		PrimaryColor: ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := ui.NewTheme(themeCfg)
@@ -181,7 +181,7 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 			m.isPolling = true
 			res, _ := m.Update(busEventMsg{event: ev})
 			m = res.(*Model)
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				if m.state == stateFlushing {
 					res, _ = m.Update(flushDoneMsg{})
 					m = res.(*Model)
@@ -196,16 +196,16 @@ func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, ren
 
 	var trace strings.Builder
 	for _, s := range signals {
-		lines := strings.Split(s, "\n")
-		for _, l := range lines {
+		lines := strings.SplitSeq(s, "\n")
+		for l := range lines {
 			trace.WriteString(l + "\n")
 		}
 	}
 	trace.WriteString(m.View())
 
-	w.WriteString(fmt.Sprintf("\n=== START [%s] ===\n", name))
+	fmt.Fprintf(w, "\n=== START [%s] ===\n", name)
 	w.WriteString(trace.String())
-	w.WriteString(fmt.Sprintf("\n=== END [%s] ===\n", name))
+	fmt.Fprintf(w, "\n=== END [%s] ===\n", name)
 }
 
 func (m *Model) DrainAnimationForTest() *Model {

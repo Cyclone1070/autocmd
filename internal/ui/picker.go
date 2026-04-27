@@ -236,7 +236,7 @@ func (m *Picker) CursorItem() (Item, bool) {
 	return m.items[idx], true
 }
 
-// RefreshItems allows the caller to update the list (e.g. after a rename or delete)
+// RefreshItems allows the caller to update the list (e.g. after a rename or delete).
 func (m *Picker) RefreshItems(items []Item) {
 	m.items = items
 	// Re-calculate selectable indices

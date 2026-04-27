@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
-	"github.com/Cyclone1070/iav/internal/eventbus"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -43,8 +43,8 @@ func main() {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		bus.SendUIUpdate(domain.ToolStartEvent{
-			CallID:   "1",
-			Display:  domain.StringDisplay{Content: "Running some long background task..."},
+			CallID:  "1",
+			Display: domain.StringDisplay{Content: "Running some long background task..."},
 		})
 		time.Sleep(2 * time.Second)
 		bus.Close()

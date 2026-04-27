@@ -20,9 +20,9 @@ import (
 
 const (
 	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
-	DefaultSmartDrainThreshold = 16 * 1024        // 16KB
-	DefaultBinarySampleSize    = 8000             // 8KB sample for binary detection
-	DefaultBufferSize          = 4096             // 4KB standard buffer
+	DefaultSmartDrainThreshold = 16 * 1024         // 16KB
+	DefaultBinarySampleSize    = 8000              // 8KB sample for binary detection
+	DefaultBufferSize          = 4096              // 4KB standard buffer
 )
 
 type signalKiller interface {
@@ -153,7 +153,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	envMap := sanitizeEnv()
 	sanitizedEnv := envMapToSlice(envMap)
 
-	// On Unix-like systems, we execute via the detected shell with -l -c 
+	// On Unix-like systems, we execute via the detected shell with -l -c
 	// to ensure environment parity (profiles, aliases) and POSIX features.
 	shell := envMap["SHELL"]
 	if shell == "" {
@@ -166,7 +166,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	// Build a sanitization prefix that runs INSIDE the shell after profiles are sourced.
 	// This ensures our policies (like TERM) survive the login shell's initialization.
 	sanitizationPrefix := "export TERM=dumb; "
-	
+
 	cmd := f.commander.Command(ctx, shell, "-l", "-c", sanitizationPrefix+command)
 	cmd.Dir = dir
 	cmd.Env = sanitizedEnv
@@ -227,7 +227,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	}
 
 	follower := follow.NewFollower(f.fs, logPath)
-	
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -280,7 +280,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 			n, err := src.Read(buf)
 			if n > 0 {
 				chunk := buf[:n]
-				
+
 				// Watchdog check
 				bytesMu.Lock()
 				bytesWritten += int64(len(chunk))

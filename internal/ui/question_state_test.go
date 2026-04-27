@@ -12,8 +12,8 @@ import (
 func qDisplaySingle() domain.QuestionDisplay {
 	return domain.NewQuestionDisplay([]domain.QuestionInfo{
 		{
-			Question: "Deploy where?",
-			Options:  []string{"Staging", "Prod"},
+			Question:    "Deploy where?",
+			Options:     []string{"Staging", "Prod"},
 			MultiSelect: false,
 		},
 	})
@@ -22,13 +22,13 @@ func qDisplaySingle() domain.QuestionDisplay {
 func qDisplayMultiTwoQuestions() domain.QuestionDisplay {
 	return domain.NewQuestionDisplay([]domain.QuestionInfo{
 		{
-			Question: "Pick colors",
-			Options:  []string{"Red", "Blue"},
+			Question:    "Pick colors",
+			Options:     []string{"Red", "Blue"},
 			MultiSelect: true,
 		},
 		{
-			Question: "Second?",
-			Options:  []string{"Yes", "No"},
+			Question:    "Second?",
+			Options:     []string{"Yes", "No"},
 			MultiSelect: false,
 		},
 	})
@@ -308,13 +308,13 @@ func TestHandleQuestionKey_AltEnterAndCtrlJInCustomInputAddNewline(t *testing.T)
 func TestHandleQuestionKey_SSubmitsEntireFormAfterTwoQuestions(t *testing.T) {
 	d := domain.NewQuestionDisplay([]domain.QuestionInfo{
 		{
-			Question: "Pick one",
-			Options:  []string{"A", "B"},
+			Question:    "Pick one",
+			Options:     []string{"A", "B"},
 			MultiSelect: false,
 		},
 		{
-			Question: "Pick many",
-			Options:  []string{"X", "Y"},
+			Question:    "Pick many",
+			Options:     []string{"X", "Y"},
 			MultiSelect: true,
 		},
 	})

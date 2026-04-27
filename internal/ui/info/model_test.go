@@ -31,7 +31,7 @@ func TestModel(t *testing.T) {
 
 		theme := ui.NewTheme(ui.ThemeConfig{})
 		m := NewModel(bus, theme)
-		
+
 		info := domain.InfoEvent{Model: "gpt-4"}
 		eventChan <- info
 
@@ -50,7 +50,7 @@ func TestModel(t *testing.T) {
 
 		theme := ui.NewTheme(ui.ThemeConfig{})
 		m := NewModel(bus, theme)
-		
+
 		_, cmd := m.Update(domain.DoneEvent{})
 
 		assert.Equal(t, tea.Quit(), cmd())
@@ -65,7 +65,7 @@ func TestModel(t *testing.T) {
 
 		theme := ui.NewTheme(ui.ThemeConfig{})
 		m := NewModel(bus, theme)
-		
+
 		cmd := m.pollBus()
 		// Should return a command that eventually calls Printf and Quit
 		assert.NotNil(t, cmd)

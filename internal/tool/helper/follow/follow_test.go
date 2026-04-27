@@ -39,8 +39,8 @@ func (m *mockFile) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (m *mockFile) Close() error               { return nil }
-func (m *mockFile) Stat() (os.FileInfo, error) { return nil, nil }
+func (m *mockFile) Close() error                                 { return nil }
+func (m *mockFile) Stat() (os.FileInfo, error)                   { return nil, nil }
 func (m *mockFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
 
 func TestFollower_PokeLatency(t *testing.T) {
@@ -76,4 +76,3 @@ func TestFollower_PokeLatency(t *testing.T) {
 	assert.Equal(t, 5, nAfter)
 	assert.Less(t, latency, 50*time.Millisecond, "Latency too high! Poke() might be blocked or polling.")
 }
-

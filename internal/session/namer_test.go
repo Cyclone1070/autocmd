@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -23,7 +24,7 @@ func (m *mockLLM) Model() model.ToolCallingChatModel {
 	return &mockEinoModelBridge{llm: m}
 }
 
-// mockEinoModelBridge adapts the old mockLLM.Stream for the new GenerateName
+// mockEinoModelBridge adapts the old mockLLM.Stream for the new GenerateName.
 type mockEinoModelBridge struct {
 	llm *mockLLM
 }
@@ -38,11 +39,11 @@ func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message
 	s := b.llm.streams[0]
 	b.llm.streams = b.llm.streams[1:]
 
-	var content string
+	var content strings.Builder
 	for _, chunk := range s.chunks {
-		content += chunk.text
+		content.WriteString(chunk.text)
 	}
-	return &schema.Message{Role: schema.Assistant, Content: content}, nil
+	return &schema.Message{Role: schema.Assistant, Content: content.String()}, nil
 }
 
 func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
@@ -54,6 +55,7 @@ func (b *mockEinoModelBridge) WithTools(tools []*schema.ToolInfo) (model.ToolCal
 }
 
 func (m *mockLLM) ID() string { return "test" }
+
 type mockChunk struct {
 	text string
 }
@@ -103,8 +105,8 @@ func TestGenerateName(t *testing.T) {
 		ms := &mockStream{
 			ctx: cancelCtx,
 			chunks: []mockChunk{
-				mockChunk{text: "Partial "},
-				mockChunk{text: "response"},
+				{text: "Partial "},
+				{text: "response"},
 			},
 		}
 		m := &mockLLM{
@@ -123,9 +125,9 @@ func TestGenerateName(t *testing.T) {
 			streams: []*mockStream{
 				{
 					chunks: []mockChunk{
-						mockChunk{text: "Fixing "},
-						mockChunk{text: "UI "},
-						mockChunk{text: "Bugs"},
+						{text: "Fixing "},
+						{text: "UI "},
+						{text: "Bugs"},
 					},
 				},
 			},
@@ -141,7 +143,7 @@ func TestGenerateName(t *testing.T) {
 			streams: []*mockStream{
 				{
 					chunks: []mockChunk{
-						mockChunk{text: "Summary of First"},
+						{text: "Summary of First"},
 					},
 				},
 			},

@@ -186,7 +186,7 @@ func TestBashTool_Stream(t *testing.T) {
 
 	params := `{"command": "echo test", "description": "test stream"}`
 	inv, _ := tool.Prepare(params)
-	
+
 	// Stream should be available BEFORE Execute
 	reader := inv.(domain.StreamableInvocation).Stream()
 	assert.NotNil(t, reader)
@@ -246,10 +246,10 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 		assert.Contains(t, bd.CapturedOutput, "(command is running in background")
 		assert.Equal(t, "/workspace", bd.Cwd)
 		assert.Less(t, duration, 150*time.Millisecond)
-		
+
 		<-mockTM.done // Ensure background goroutine finishes Wait() and sync.Once Unlock
 		mockExec.AssertExpectations(t)
-		mockTM.mockTaskManager.AssertExpectations(t)
+		mockTM.AssertExpectations(t)
 
 		mockTM.mu.Lock()
 		assert.Contains(t, mockTM.registeredCmds, "task1")
@@ -289,7 +289,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
 	taskMgr := &testStubTaskManager{}
-	
+
 	// Tool with 0 foreground timeout
 	tool := NewBashTool(fs, exec, resolver, taskMgr)
 
@@ -314,9 +314,9 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
 	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(command is running in background")
 	assert.Equal(t, "/tmp", display.(domain.BashDisplay).Cwd)
-	
+
 	exec.AssertExpectations(t)
-	close(waitCh) // Cleanup
+	close(waitCh)                     // Cleanup
 	time.Sleep(10 * time.Millisecond) // Give the goroutine a moment to finish
 }
 
@@ -340,7 +340,7 @@ func TestBashTool_DeadlineExceeded_TreatedAsFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
-	
+
 	// foreground timeout 1s, but we'll trigger a hard timeout via context or timeoutMS earlier (e.g. 100ms)
 	tool := NewBashTool(fs, exec, resolver, nil)
 
@@ -465,9 +465,3 @@ func TestBashTool_DeadlineExceeded_LargeOutput_TreatedAsFailure(t *testing.T) {
 	assert.Equal(t, "(Output too large, saved to /tmp/large.log)", display.(domain.BashDisplay).CapturedOutput)
 	assert.Equal(t, domain.ToolErrorFailed, display.GetError())
 }
-
-
-
-
-
-

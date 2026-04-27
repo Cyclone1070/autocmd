@@ -20,7 +20,8 @@ import (
 func TestGrep_RawRelative(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	// Mock existence of the search target
 	fs.On("Stat", "/workspace/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
@@ -44,15 +45,16 @@ func TestGrep_RawRelative(t *testing.T) {
 func TestGrep_OffloadedRaw(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
-			Stdout:   "", 
-			ExitCode: 0, 
-			LogPath:  "/tmp/offloaded.log", 
+			Stdout:   "",
+			ExitCode: 0,
+			LogPath:  "/tmp/offloaded.log",
 		}, nil)
 
 	// Mock file for analyzer
@@ -76,7 +78,8 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 func TestGrep_NoMatchesRaw(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
@@ -94,15 +97,16 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 func TestGrep_MalformedStats(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	fs.On("Stat", "/workspace").Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
 	exec.On("Run", mock.Anything, mock.Anything, "/workspace", true).
 		Return(&executor.Result{
-			Stdout:   "", 
-			ExitCode: 0, 
-			LogPath:  "/tmp/malformed.log", 
+			Stdout:   "",
+			ExitCode: 0,
+			LogPath:  "/tmp/malformed.log",
 		}, nil)
 
 	// Mock file with counts that will overflow a standard int
@@ -130,7 +134,8 @@ func TestGrep_MalformedStats(t *testing.T) {
 func TestGrep_RejectsRelativePath(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
-	pathResolver := &mockPathResolver{}; setupMockResolver(pathResolver)
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
 
 	tool := NewGrepTool(fs, exec, pathResolver)
 	req := &GrepRequest{Pattern: "pattern", Path: "relative/path"}
@@ -146,7 +151,7 @@ type mockFileSystem struct {
 }
 
 func (m *mockFileSystem) Stat(path string) (os.FileInfo, error) {
-	args := m.Mock.Called(path)
+	args := m.Called(path)
 	if len(args) > 0 {
 		if args.Get(0) == nil {
 			return nil, args.Error(1)
@@ -158,7 +163,7 @@ func (m *mockFileSystem) Stat(path string) (os.FileInfo, error) {
 }
 
 func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
-	args := m.Mock.Called(path)
+	args := m.Called(path)
 	if len(args) > 0 {
 		if args.Get(0) == nil {
 			return nil, args.Error(1)

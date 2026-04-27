@@ -23,10 +23,10 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	cfg := config.DefaultConfig().UI()
 	cfg.SetShortToolBlock(false) // Default tests to full mode
 	themeCfg := ThemeConfig{
-		PrimaryColor: ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor: ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:   ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:   ToAdaptiveColor(cfg.MutedColor()),
+		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
+		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
 	theme := NewTheme(themeCfg)
@@ -109,8 +109,8 @@ func TestRenderDiff_DiffBody_Alignment(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
 		Description: "Aligning logic",
-		Target:  "Edit align.go",
-		Diff:    "\n-line1\n+line2",
+		Target:      "Edit align.go",
+		Diff:        "\n-line1\n+line2",
 	}
 	got := tr.RenderDiff(diff, StatusRunning, "", "⣾")
 	assertGolden(t, "RenderDiff_DiffBody_Alignment", got)
@@ -120,10 +120,10 @@ func TestRenderDiff_SuccessWithStats(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
 		Description: "Updating stats",
-		Target:  "Edit file.go",
-		Added:   5,
-		Removed: 2,
-		Diff:    "-old\n+new",
+		Target:      "Edit file.go",
+		Added:       5,
+		Removed:     2,
+		Diff:        "-old\n+new",
 	}
 	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Success_WithStats", got)
@@ -133,7 +133,7 @@ func TestRenderDiff_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
 		Description: "Missing file",
-		Target:  "Edit file.go",
+		Target:      "Edit file.go",
 	}
 	got := tr.RenderDiff(diff, StatusError, "file not found", "✗")
 	assertGolden(t, "RenderDiff_Error", got)
@@ -143,10 +143,10 @@ func TestRenderDiff_ThreePartLayout(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	diff := domain.DiffDisplay{
 		Description: "Adding authentication middleware",
-		Target:  "Edit auth.go",
-		Added:   10,
-		Removed: 5,
-		Diff:    "+ new auth logic\n- old auth logic",
+		Target:      "Edit auth.go",
+		Added:       10,
+		Removed:     5,
+		Diff:        "+ new auth logic\n- old auth logic",
 	}
 	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_ThreePartLayout", got)
@@ -156,7 +156,7 @@ func TestRenderBash_Running_Command(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
 		Description: "List Files",
-		Command: "ls -la",
+		Command:     "ls -la",
 	}
 	got := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusRunning, "", "⣾")
 	assertGolden(t, "RenderBash_Running_Command", got)
@@ -166,7 +166,7 @@ func TestRenderBash_LongOutputTruncation(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
 		Description: "Log",
-		Command: "cat log.txt",
+		Command:     "cat log.txt",
 	}
 	longOutput := strings.Repeat("line\n", 15)
 	got := tr.RenderBash(display, longOutput, StatusSuccess, "", "✓")
@@ -212,7 +212,7 @@ func TestRenderBash_Error(t *testing.T) {
 	tr := newTestToolRenderer(t)
 	display := domain.BashDisplay{
 		Description: "List Files",
-		Command: "ls -la",
+		Command:     "ls -la",
 	}
 	got := tr.RenderBash(display, "", StatusError, "exit status 1", "✗")
 	assertGolden(t, "RenderBash_Error", got)
@@ -236,8 +236,8 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
 		Description: "Massive Change",
-		Target:  "Edit big.go",
-		Diff:    "line 1\nline 2\nline 3\nline 4\nline 5",
+		Target:      "Edit big.go",
+		Diff:        "line 1\nline 2\nline 3\nline 4\nline 5",
 	}
 	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 	assertGolden(t, "RenderDiff_Long_Diff_Truncation", got)
@@ -262,8 +262,8 @@ func TestRenderDiff_ShortMode(t *testing.T) {
 	tr.SetShortToolBlock(true)
 	diff := domain.DiffDisplay{
 		Description: "Massive Change",
-		Target:  "Edit big.go",
-		Diff:    "line 1\nline 2\nline 3",
+		Target:      "Edit big.go",
+		Diff:        "line 1\nline 2\nline 3",
 	}
 	output := tr.RenderDiff(diff, StatusSuccess, "", "✔")
 	assert.NotContains(t, output, "line 1")
@@ -276,7 +276,7 @@ func TestRenderBash_ShortMode(t *testing.T) {
 	tr.SetShortToolBlock(true)
 	display := domain.BashDisplay{
 		Description: "List Files",
-		Command: "ls -la",
+		Command:     "ls -la",
 	}
 	output := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
 	assert.NotContains(t, output, "file1.txt")

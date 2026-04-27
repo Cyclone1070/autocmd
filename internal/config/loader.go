@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	// ConfigDir is the directory name under ~/.config
+	// ConfigDir is the directory name under ~/.config.
 	ConfigDir = "iav"
-	// ConfigFile is the config file name
+	// ConfigFile is the config file name.
 	ConfigFile = "config.json"
 )
 
-// FileSystem abstracts file operations for testability
+// FileSystem abstracts file operations for testability.
 type FileSystem interface {
 	UserHomeDir() (string, error)
 	ReadFile(path string) ([]byte, error)
@@ -23,7 +23,7 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 }
 
-// ConfigFileReader implements FileSystem using the real OS for config loading
+// ConfigFileReader implements FileSystem using the real OS for config loading.
 type ConfigFileReader struct{}
 
 func (ConfigFileReader) UserHomeDir() (string, error) {
@@ -42,7 +42,7 @@ func (ConfigFileReader) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// Manager handles configuration loading with injected dependencies
+// Manager handles configuration loading with injected dependencies.
 type Manager struct {
 	fs FileSystem
 }
@@ -56,7 +56,7 @@ func copyStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-// NewManager creates a Manager with the provided filesystem
+// NewManager creates a Manager with the provided filesystem.
 func NewManager(fs FileSystem) *Manager {
 	if fs == nil {
 		panic("fs is required")

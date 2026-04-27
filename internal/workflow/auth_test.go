@@ -56,9 +56,9 @@ type mockAuthState struct {
 	mock.Mock
 }
 
-func (m *mockAuthState) Model() string { return m.Called().String(0) }
+func (m *mockAuthState) Model() string      { return m.Called().String(0) }
 func (m *mockAuthState) SetModel(id string) { m.Called(id) }
-func (m *mockAuthState) Save() error { return m.Called().Error(0) }
+func (m *mockAuthState) Save() error        { return m.Called().Error(0) }
 
 type mockProvider struct {
 	mock.Mock
@@ -75,8 +75,7 @@ func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, info
 }
 
 func TestRunAuth(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	registry := new(mockAuthRegistry)
 	authMgr := new(mockAuthManager)
@@ -294,8 +293,7 @@ func TestRunAuth(t *testing.T) {
 		registry.On("List", mock.Anything).Return([]domain.ProviderInfo{{ID: "github"}}, nil)
 		bus.On("SendUIUpdate", mock.AnythingOfType("domain.AuthProviderListEvent")).Return()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		done := RunAuth(ctx, &AuthDeps{
 			Bus:      bus,

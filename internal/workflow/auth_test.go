@@ -380,12 +380,22 @@ func TestRunAuth(t *testing.T) {
 		}).Return()
 
 		// OAuth run stays blocked until cancelled.
+		started := make(chan struct{})
 		oauthMgr.On("RunDeviceFlow", mock.Anything, githubOAuthMethod, mock.Anything).Return("", context.Canceled).Run(func(args mock.Arguments) {
+			close(started)
 			<-args.Get(0).(context.Context).Done()
 		})
 
 		actions <- domain.SelectProviderAction{ID: "github"}
 		actions <- domain.SelectAuthMethodAction{ID: "github_oauth"}
+
+		// Ensure it started before we send the next action that would cancel it.
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("oauth flow did not start")
+		}
+
 		actions <- domain.SelectProviderAction{ID: "google"}
 
 		// Stop workflow after asserting it kept progressing.

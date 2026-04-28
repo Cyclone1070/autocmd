@@ -202,7 +202,7 @@ func TestStreamingCmd_ID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sc.Wait()
+	defer func() { _, _ = sc.Wait() }()
 
 	id := sc.ID()
 	if id == "" {
@@ -230,7 +230,7 @@ func TestOSCommandExecutor_ProcessGroupKill(t *testing.T) {
 
 	// Trigger cancellation
 	cancel()
-	sc.Wait()
+	_, _ = sc.Wait()
 
 	// Verify that the killer was called with the NEGATIVE PID (group kill)
 	if killer.killedPid >= 0 {
@@ -239,8 +239,8 @@ func TestOSCommandExecutor_ProcessGroupKill(t *testing.T) {
 }
 
 func TestOSCommandExecutor_ShellResolution(t *testing.T) {
-	os.Setenv("SHELL", "/bin/custom_shell")
-	defer os.Unsetenv("SHELL")
+	_ = os.Setenv("SHELL", "/bin/custom_shell")
+	defer func() { _ = os.Unsetenv("SHELL") }()
 
 	fs := &mockFileSystem{}
 	commander := &mockCommandFactory{}
@@ -263,10 +263,10 @@ func TestOSCommandExecutor_ShellResolution(t *testing.T) {
 
 func TestOSCommandExecutor_EnvironmentSanitization(t *testing.T) {
 	// Setup a dirty environment
-	os.Setenv("SECRET_KEY", "highly_sensitive_data")
-	os.Setenv("PATH", "/usr/bin:/bin")
-	defer os.Unsetenv("SECRET_KEY")
-	defer os.Unsetenv("PATH")
+	_ = os.Setenv("SECRET_KEY", "highly_sensitive_data")
+	_ = os.Setenv("PATH", "/usr/bin:/bin")
+	defer func() { _ = os.Unsetenv("SECRET_KEY") }()
+	defer func() { _ = os.Unsetenv("PATH") }()
 
 	fs := &mockFileSystem{}
 	exec := NewOSCommandExecutor(fs)

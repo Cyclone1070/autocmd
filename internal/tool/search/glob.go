@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,7 +208,11 @@ func (i *globInvocation) countLines(path string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Error("failed to close file", "error", closeErr)
+		}
+	}()
 
 	count := 0
 	buf := make([]byte, 32*1024)

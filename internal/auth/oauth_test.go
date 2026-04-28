@@ -25,7 +25,7 @@ func TestOAuthManager_RunDeviceFlow(t *testing.T) {
 			"expires_in":       60,
 			"interval":         1,
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	// 2. Token Mock (Success on second poll)
@@ -35,10 +35,10 @@ func TestOAuthManager_RunDeviceFlow(t *testing.T) {
 		polls++
 		if polls < 2 {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": "authorization_pending"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "authorization_pending"})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"access_token": "gho_test_token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "gho_test_token"})
 	})
 
 	ts := httptest.NewServer(mux)

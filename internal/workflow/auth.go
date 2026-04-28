@@ -204,7 +204,10 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 							}
 
 							cred := domain.Credential{Type: v.ID, OAuthToken: res.token}
-							wf.authMgr.Set(selectedProvider.ID(), cred)
+							if err := wf.authMgr.Set(selectedProvider.ID(), cred); err != nil {
+								deps.Bus.SendUIUpdate(domain.AuthErrorEvent{Error: err.Error()})
+								continue
+							}
 							deps.Bus.SendUIUpdate(domain.DoneEvent{})
 							done <- nil
 							return

@@ -191,11 +191,12 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 	}
 
 	t.Run("Priority 1: Disk Over Env", func(t *testing.T) {
-		os.Setenv("TEST_API_KEY", "env-value")
-		defer os.Unsetenv("TEST_API_KEY")
+		_ = os.Setenv("TEST_API_KEY", "env-value")
+		defer func() { _ = os.Unsetenv("TEST_API_KEY") }()
 
 		// Save to disk
-		mgr.Set("test-provider", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "disk-value"})
+		err := mgr.Set("test-provider", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "disk-value"})
+		require.NoError(t, err)
 
 		got, err := mgr.GetWithFallback(provider)
 		assert.NoError(t, err)
@@ -204,11 +205,12 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 	})
 
 	t.Run("Priority 2: Fallback to Env", func(t *testing.T) {
-		os.Setenv("TEST_API_KEY", "env-value")
-		defer os.Unsetenv("TEST_API_KEY")
+		_ = os.Setenv("TEST_API_KEY", "env-value")
+		defer func() { _ = os.Unsetenv("TEST_API_KEY") }()
 
 		// Remove from disk
-		mgr.Remove("test-provider")
+		err := mgr.Remove("test-provider")
+		require.NoError(t, err)
 
 		got, err := mgr.GetWithFallback(provider)
 		assert.NoError(t, err)
@@ -252,8 +254,8 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 				},
 			},
 		}
-		os.Setenv("VAL1", "v1")
-		defer os.Unsetenv("VAL1")
+		_ = os.Setenv("VAL1", "v1")
+		defer func() { _ = os.Unsetenv("VAL1") }()
 
 		got, err := mgr.GetWithFallback(pComplex)
 		assert.NoError(t, err)
@@ -261,8 +263,9 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 	})
 
 	t.Run("Returns Nil if neither exists", func(t *testing.T) {
-		os.Unsetenv("TEST_API_KEY")
-		mgr.Remove("test-provider")
+		_ = os.Unsetenv("TEST_API_KEY")
+		err := mgr.Remove("test-provider")
+		require.NoError(t, err)
 
 		got, err := mgr.GetWithFallback(provider)
 		assert.NoError(t, err)

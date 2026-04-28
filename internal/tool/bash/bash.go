@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -342,7 +343,11 @@ func (i *bashInvocation) readTail(path string, size int64) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Error("failed to close file", "error", closeErr)
+		}
+	}()
 
 	info, err := f.Stat()
 	if err != nil {

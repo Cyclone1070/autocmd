@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -351,7 +352,11 @@ func (i *grepInvocation) analyzeLog(path string) (matches, files int, err error)
 	if err != nil {
 		return 0, 0, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Error("failed to close file", "error", closeErr)
+		}
+	}()
 
 	info, err := f.Stat()
 	if err != nil {

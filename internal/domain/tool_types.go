@@ -74,8 +74,13 @@ type StringDisplay struct {
 }
 
 func (StringDisplay) isToolDisplay()     {}
-func (s StringDisplay) Type() string     { return s.TypeField }
+// Type returns the unique identifier for the string display type.
+func (s StringDisplay) Type() string { return s.TypeField }
+
+// GetError returns the error message associated with the display, if any.
 func (s StringDisplay) GetError() string { return s.Error }
+
+// WithError returns a copy of the display with the specified error message.
 func (s StringDisplay) WithError(err string) ToolDisplay {
 	s.Error = err
 	return s
@@ -98,8 +103,13 @@ type DiffDisplay struct {
 }
 
 func (DiffDisplay) isToolDisplay()     {}
-func (d DiffDisplay) Type() string     { return d.TypeField }
+// Type returns the unique identifier for the diff display type.
+func (d DiffDisplay) Type() string { return d.TypeField }
+
+// GetError returns the error message associated with the display, if any.
 func (d DiffDisplay) GetError() string { return d.Error }
+
+// WithError returns a copy of the display with the specified error message.
 func (d DiffDisplay) WithError(err string) ToolDisplay {
 	d.Error = err
 	return d
@@ -128,8 +138,13 @@ type BashDisplay struct {
 }
 
 func (BashDisplay) isToolDisplay()     {}
-func (s BashDisplay) Type() string     { return s.TypeField }
+// Type returns the unique identifier for the bash display type.
+func (s BashDisplay) Type() string { return s.TypeField }
+
+// GetError returns the error message associated with the display, if any.
 func (s BashDisplay) GetError() string { return s.Error }
+
+// WithError returns a copy of the display with the specified error message.
 func (s BashDisplay) WithError(err string) ToolDisplay {
 	s.Error = err
 	return s
@@ -162,8 +177,13 @@ type QuestionDisplay struct {
 }
 
 func (QuestionDisplay) isToolDisplay()     {}
-func (d QuestionDisplay) Type() string     { return d.TypeField }
+// Type returns the unique identifier for the question display type.
+func (d QuestionDisplay) Type() string { return d.TypeField }
+
+// GetError returns the error message associated with the display, if any.
 func (d QuestionDisplay) GetError() string { return d.Error }
+
+// WithError returns a copy of the display with the specified error message.
 func (d QuestionDisplay) WithError(err string) ToolDisplay {
 	d.Error = err
 	return d
@@ -199,6 +219,7 @@ func (a PermissionDecisionAction) GetCallID() string { return a.CallID }
 // ToolDisplays is a helper type for polymorphic JSON unmarshaling of ToolDisplay maps.
 type ToolDisplays map[string]ToolDisplay
 
+// UnmarshalJSON implements custom JSON unmarshaling for the polymorphic ToolDisplays map.
 func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 	var raws map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raws); err != nil {

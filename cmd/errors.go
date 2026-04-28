@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	ErrBootstrap            = errors.New("bootstrap failure")
-	ErrWorkspaceUnavailable = errors.New("workspace unavailable")
-	ErrModelInitialization  = errors.New("model initialization failure")
-	ErrModelBackend         = errors.New("model backend failure")
-	ErrModelAuth            = errors.New("model authentication failure")
-	ErrUIRuntime            = errors.New("ui runtime failure")
-	ErrNoModelSelected      = errors.New("no model selected")
+	errBootstrap            = errors.New("bootstrap failure")
+	errWorkspaceUnavailable = errors.New("workspace unavailable")
+	errModelInitialization  = errors.New("model initialization failure")
+	errModelBackend         = errors.New("model backend failure")
+	errModelAuth            = errors.New("model authentication failure")
+	errUIRuntime            = errors.New("ui runtime failure")
+	errNoModelSelected      = errors.New("no model selected")
 )
 
 func wrapForUser(err error) error {
@@ -31,19 +31,19 @@ func mapUserFacingError(err error) string {
 		return ""
 	}
 	switch {
-	case errors.Is(err, ErrNoModelSelected):
+	case errors.Is(err, errNoModelSelected):
 		return "No model selected. Please run 'iav model' or 'iav auth' to get started"
-	case errors.Is(err, ErrBootstrap):
+	case errors.Is(err, errBootstrap):
 		return "Failed to load app configuration/state. Check config and retry."
-	case errors.Is(err, ErrWorkspaceUnavailable):
+	case errors.Is(err, errWorkspaceUnavailable):
 		return "Could not access current workspace. Verify directory exists and permissions."
-	case errors.Is(err, ErrModelInitialization):
+	case errors.Is(err, errModelInitialization):
 		return "Could not initialize selected model/provider. Run 'iav auth' or 'iav model'."
-	case errors.Is(err, ErrModelAuth), errors.Is(err, agent.ErrModelAuth):
+	case errors.Is(err, errModelAuth), errors.Is(err, agent.ErrModelAuth):
 		return "Authentication failed for the selected model (invalid/expired API key or token). Run 'iav auth' and try again."
-	case errors.Is(err, ErrModelBackend), errors.Is(err, agent.ErrModelBackend):
+	case errors.Is(err, errModelBackend), errors.Is(err, agent.ErrModelBackend):
 		return "Model backend error. Retry, or switch model with 'iav model'."
-	case errors.Is(err, ErrUIRuntime):
+	case errors.Is(err, errUIRuntime):
 		return "Terminal UI failed to start. Retry in a standard terminal session."
 	default:
 		return "Unexpected internal error. See log file for details."

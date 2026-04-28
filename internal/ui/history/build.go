@@ -1,3 +1,4 @@
+// Package history provides components for rendering the conversation history in the terminal.
 package history
 
 import (
@@ -72,25 +73,25 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 	return items
 }
 
-// HistoryBuilder renders session history using a markdown renderer, theme, and terminal width.
-type HistoryBuilder struct {
+// Builder renders session history using a markdown renderer, theme, and terminal width.
+type Builder struct {
 	Renderer         ui.Renderer
 	Theme            *ui.Theme
 	Width            int
 	BashOutputHeight int
 }
 
-// NewHistoryBuilder returns a HistoryBuilder. Width is the full chat column width (including gutter).
-func NewHistoryBuilder(renderer ui.Renderer, theme *ui.Theme, width int, bashOutputHeight int) *HistoryBuilder {
-	return &HistoryBuilder{Renderer: renderer, Theme: theme, Width: width, BashOutputHeight: bashOutputHeight}
+// NewBuilder returns a Builder. Width is the full chat column width (including gutter).
+func NewBuilder(renderer ui.Renderer, theme *ui.Theme, width int, bashOutputHeight int) *Builder {
+	return &Builder{Renderer: renderer, Theme: theme, Width: width, BashOutputHeight: bashOutputHeight}
 }
 
-func (h *HistoryBuilder) contentWidth() int {
+func (h *Builder) contentWidth() int {
 	return h.Width - gutterWidth
 }
 
 // BuildSession renders the full session transcript.
-func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
+func (h *Builder) BuildSession(session *domain.Session) string {
 	var sb strings.Builder
 	messages := session.Messages
 	displays := session.ToolDisplays
@@ -107,7 +108,7 @@ func (h *HistoryBuilder) BuildSession(session *domain.Session) string {
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) string {
+func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
@@ -116,7 +117,7 @@ func (h *HistoryBuilder) renderCoalescedAssistant(messages []*schema.Message, as
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) {
+func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -157,7 +158,7 @@ func (h *HistoryBuilder) renderAssistantSequence(sb *strings.Builder, messages [
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func (h *HistoryBuilder) RenderMessage(messages []*schema.Message, idx int, displays domain.ToolDisplays, includeLeadingNewline bool) string {
+func (h *Builder) RenderMessage(messages []*schema.Message, idx int, displays domain.ToolDisplays, _ bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -176,7 +177,7 @@ func (h *HistoryBuilder) RenderMessage(messages []*schema.Message, idx int, disp
 	return sb.String()
 }
 
-func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Message) {
+func (h *Builder) renderUserMessage(sb *strings.Builder, msg *schema.Message) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.PrimaryColor()).Bold(true)
 	roleLine := style.Render("U" + userGutterPipe)
 	contPrefix := style.Render(" " + userGutterPipe)
@@ -188,7 +189,7 @@ func (h *HistoryBuilder) renderUserMessage(sb *strings.Builder, msg *schema.Mess
 	writeFramedWithGutter(sb, roleLine, contPrefix, ui.NormalizeBlock(content))
 }
 
-func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
+func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -219,7 +220,7 @@ func (h *HistoryBuilder) renderAssistantMessage(sb *strings.Builder, am *schema.
 	h.writeAssistantFramedWithGutter(sb, body, false)
 }
 
-func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
+func (h *Builder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
 	display, ok := displays[tc.ID]
 	if !ok {
 		return ""
@@ -265,7 +266,7 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 // writeAssistantFramedWithGutter frames assistant content like writeFramedWithGutter, but when
 // assistantCancelled the bottom symmetric gutter line becomes a red ✘ in the role column (cancel
 // text stays in session messages for the model; history shows this marker only).
-func (h *HistoryBuilder) writeAssistantFramedWithGutter(sb *strings.Builder, body string, assistantCancelled bool) {
+func (h *Builder) writeAssistantFramedWithGutter(sb *strings.Builder, body string, assistantCancelled bool) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
@@ -300,7 +301,7 @@ func (h *HistoryBuilder) writeAssistantFramedWithGutter(sb *strings.Builder, bod
 	}
 }
 
-func (h *HistoryBuilder) assistantCancelGutterLine() string {
+func (h *Builder) assistantCancelGutterLine() string {
 	errSt := lipgloss.NewStyle().Foreground(h.Theme.ErrorColor()).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	return errSt.Render("✘") + muted.Render("│")

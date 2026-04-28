@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -52,8 +53,7 @@ func (m *OAuthManager) RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod
 	data := url.Values{}
 	data.Set("client_id", cfg.ClientID)
 	if len(cfg.Scopes) > 0 {
-		// GitHub expects space-separated scopes
-		// See: https://docs.github.com/en/apps/oauth-apps/maintaining-oauth-apps/scopes-for-oauth-apps
+		data.Set("scope", strings.Join(cfg.Scopes, " "))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", cfg.DeviceAuthURL, bytes.NewBufferString(data.Encode()))

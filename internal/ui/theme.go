@@ -13,8 +13,11 @@ import (
 type ToolStatus int
 
 const (
+	// StatusRunning indicates that a tool or process is currently active.
 	StatusRunning ToolStatus = iota
+	// StatusSuccess indicates that a tool or process completed successfully.
 	StatusSuccess
+	// StatusError indicates that a tool or process failed.
 	StatusError
 )
 
@@ -73,6 +76,7 @@ func (t *Theme) StatusPrefix(status ToolStatus, frame string) string {
 	}
 }
 
+// Success styles a string with the theme's success color.
 func (t *Theme) Success(s string) string {
 	return lipgloss.NewStyle().Foreground(t.success).Render(s)
 }
@@ -81,19 +85,23 @@ func (t *Theme) Error(s string) string {
 	return lipgloss.NewStyle().Foreground(t.err).Render(s)
 }
 
+// Muted styles a string with the theme's muted color.
 func (t *Theme) Muted(s string) string {
 	return lipgloss.NewStyle().Foreground(t.muted).Render(s)
 }
 
+// Primary styles a string with the theme's primary color.
 func (t *Theme) Primary(s string) string {
 	return lipgloss.NewStyle().Foreground(t.primary).Render(s)
 }
 
+// Separator returns a styled horizontal line.
 func (t *Theme) Separator(width int, status ToolStatus) string {
 	color := t.colorForStatus(status)
 	return lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("─", width))
 }
 
+// RenderToolBlock renders a tool execution block using the theme's status markers and colors.
 func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 	header := trimEmptyLines(spec.HeaderLines)
 	content := trimLeadingEmptyLines(spec.ContentLines)
@@ -133,6 +141,7 @@ func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 	return "\n\n" + strings.Join(out, "\n")
 }
 
+// ToolBlock renders a simple tool block with header and content.
 func (t *Theme) ToolBlock(content string, status ToolStatus, _ string) string {
 	content = strings.Trim(content, "\n")
 	if content == "" {
@@ -188,7 +197,14 @@ func trimEmptyLines(lines []string) []string {
 	return out
 }
 
+// PrimaryColor returns the theme's primary adaptive color.
 func (t *Theme) PrimaryColor() lipgloss.AdaptiveColor { return t.primary }
+
+// SuccessColor returns the theme's success adaptive color.
 func (t *Theme) SuccessColor() lipgloss.AdaptiveColor { return t.success }
-func (t *Theme) ErrorColor() lipgloss.AdaptiveColor   { return t.err }
-func (t *Theme) MutedColor() lipgloss.AdaptiveColor   { return t.muted }
+
+// ErrorColor returns the theme's error adaptive color.
+func (t *Theme) ErrorColor() lipgloss.AdaptiveColor { return t.err }
+
+// MutedColor returns the theme's muted adaptive color.
+func (t *Theme) MutedColor() lipgloss.AdaptiveColor { return t.muted }

@@ -1,3 +1,4 @@
+// Package actionrouter handles routing of user actions to their respective handlers.
 package actionrouter
 
 import (

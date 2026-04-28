@@ -50,6 +50,7 @@ type Picker struct {
 	selectableIndices []int
 }
 
+// NewPicker creates a new Picker with the given configuration.
 func NewPicker(cfg Config) *Picker {
 	var indices []int
 	for i := range cfg.Items {
@@ -65,10 +66,12 @@ func NewPicker(cfg Config) *Picker {
 	}
 }
 
+// Init initializes the picker model.
 func (m *Picker) Init() tea.Cmd {
 	return nil
 }
 
+// Update handles keyboard messages for navigation and selection.
 func (m *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -115,6 +118,7 @@ func (m *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the picker as a string.
 func (m *Picker) View() string {
 	if m.quit {
 		return ""
@@ -226,10 +230,12 @@ func (m *Picker) View() string {
 	return s.String()
 }
 
+// Selected returns the item that was selected by the user.
 func (m *Picker) Selected() (*Item, bool) {
 	return m.selected, m.selected != nil
 }
 
+// CursorItem returns the item currently under the cursor.
 func (m *Picker) CursorItem() (Item, bool) {
 	if len(m.selectableIndices) == 0 {
 		return Item{}, false

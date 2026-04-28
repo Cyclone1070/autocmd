@@ -19,37 +19,37 @@ func TestMapUserFacingError(t *testing.T) {
 	}{
 		{
 			name: "provider internal stream error",
-			err:  fmt.Errorf("%w: %w", ErrModelBackend, agent.ErrModelBackend),
+			err:  fmt.Errorf("%w: %w", errModelBackend, agent.ErrModelBackend),
 			want: "Model backend error. Retry, or switch model with 'iav model'.",
 		},
 		{
 			name: "provider auth error",
-			err:  fmt.Errorf("%w: %w", ErrModelAuth, agent.ErrModelAuth),
+			err:  fmt.Errorf("%w: %w", errModelAuth, agent.ErrModelAuth),
 			want: "Authentication failed for the selected model (invalid/expired API key or token). Run 'iav auth' and try again.",
 		},
 		{
 			name: "workspace root issue",
-			err:  fmt.Errorf("%w: invalid workspace root", ErrWorkspaceUnavailable),
+			err:  fmt.Errorf("%w: invalid workspace root", errWorkspaceUnavailable),
 			want: "Could not access current workspace. Verify directory exists and permissions.",
 		},
 		{
 			name: "config issue",
-			err:  fmt.Errorf("%w: parse failure", ErrBootstrap),
+			err:  fmt.Errorf("%w: parse failure", errBootstrap),
 			want: "Failed to load app configuration/state. Check config and retry.",
 		},
 		{
 			name: "auth model init issue",
-			err:  fmt.Errorf("%w: credential missing", ErrModelInitialization),
+			err:  fmt.Errorf("%w: credential missing", errModelInitialization),
 			want: "Could not initialize selected model/provider. Run 'iav auth' or 'iav model'.",
 		},
 		{
 			name: "ui startup issue",
-			err:  fmt.Errorf("%w: bad tty", ErrUIRuntime),
+			err:  fmt.Errorf("%w: bad tty", errUIRuntime),
 			want: "Terminal UI failed to start. Retry in a standard terminal session.",
 		},
 		{
 			name: "no model selected",
-			err:  ErrNoModelSelected,
+			err:  errNoModelSelected,
 			want: "No model selected. Please run 'iav model' or 'iav auth' to get started",
 		},
 		{

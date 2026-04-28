@@ -14,6 +14,7 @@ type TruncatingGater struct {
 	maxLines int
 }
 
+// Gate implements the gater interface by truncating lines from the top.
 func (g *TruncatingGater) Gate(lines []string) ([]string, int) {
 	if g.maxLines <= 0 || len(lines) == 0 {
 		return lines, 0
@@ -44,8 +45,10 @@ func NewTruncatingGater(maxLines int) *TruncatingGater {
 	return &TruncatingGater{maxLines: maxLines}
 }
 
+// NoOpGater implements a gater that performs no truncation.
 type NoOpGater struct{}
 
+// Gate returns the input lines as-is.
 func (g *NoOpGater) Gate(lines []string) ([]string, int) { return lines, 0 }
 
 // NewNoOpGater returns a gater that performs no truncation.
@@ -58,6 +61,7 @@ type ToolOutputGater struct {
 	maxLines int
 }
 
+// Gate implements the gater interface optimized for tool output.
 func (g *ToolOutputGater) Gate(lines []string) ([]string, int) {
 	if g.maxLines <= 0 || len(lines) == 0 {
 		return lines, 0

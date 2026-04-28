@@ -1,3 +1,4 @@
+// Package state handles persistent application state, such as the current session and selected model.
 package state
 
 import (
@@ -9,8 +10,8 @@ import (
 )
 
 const (
-	ConfigDir = "iav"
-	StateFile = "state.json"
+	configDir = "iav"
+	stateFile = "state.json"
 )
 
 // FileSystem abstracts file operations for testability.
@@ -91,7 +92,7 @@ func (m *Manager) Load() (*State, error) {
 		return s, nil
 	}
 
-	statePath := filepath.Join(homeDir, ".config", ConfigDir, StateFile)
+	statePath := filepath.Join(homeDir, ".config", configDir, stateFile)
 
 	data, err := m.fs.ReadFile(statePath)
 	if err != nil {
@@ -124,8 +125,8 @@ func (m *Manager) Save(s *State) error {
 		return fmt.Errorf("get home dir: %w", err)
 	}
 
-	configDir := filepath.Join(homeDir, ".config", ConfigDir)
-	statePath := filepath.Join(configDir, StateFile)
+	configDir := filepath.Join(homeDir, ".config", configDir)
+	statePath := filepath.Join(configDir, stateFile)
 
 	if err := m.fs.MkdirAll(configDir, domain.DefaultDirPerm); err != nil {
 		return fmt.Errorf("create config dir: %w", err)

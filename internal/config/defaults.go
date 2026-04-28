@@ -1,3 +1,4 @@
+// Package config handles application configuration loading and defaults.
 package config
 
 import (
@@ -7,15 +8,15 @@ import (
 )
 
 const (
-	DefaultChatWindowWidth  = 80
-	DefaultBashOutputHeight = 12
-	DefaultThinkingHeight   = 5
-	DefaultMaxFileSize      = 20 * 1024 * 1024
-	DefaultMaxIterations    = 50
+	defaultChatWindowWidth  = 80
+	defaultBashOutputHeight = 12
+	defaultThinkingHeight   = 5
+	defaultMaxFileSize      = 20 * 1024 * 1024
+	defaultMaxIterations    = 50
 
-	ContextWindow128k = 128000
-	ContextWindow256k = 256000
-	ContextWindow2M   = 2000000
+	contextWindow128k = 128000
+	contextWindow256k = 256000
+	contextWindow2M   = 2000000
 )
 
 // Config holds all application configuration values.
@@ -26,17 +27,24 @@ type Config struct {
 	providers ProviderConfig
 }
 
+// Tools returns the configuration for tools.
 func (c *Config) Tools() ToolsConfig        { return c.tools }
+// Session returns the configuration for sessions.
 func (c *Config) Session() SessionConfig    { return c.session }
+// UI returns the configuration for the terminal UI.
 func (c *Config) UI() UIConfig              { return c.ui }
+// Providers returns the configuration for AI providers.
 func (c *Config) Providers() ProviderConfig { return c.providers }
 
+// SessionConfig holds session-specific configuration.
 type SessionConfig struct {
 	storageDir string
 }
 
+// StorageDir returns the directory where session data is stored.
 func (c SessionConfig) StorageDir() string { return c.storageDir }
 
+// ToolsConfig holds tool-specific configuration.
 type ToolsConfig struct {
 	maxFileSize       int64
 	maxIterations     int
@@ -44,21 +52,27 @@ type ToolsConfig struct {
 	toolPermissions   map[string]string
 }
 
+// MaxFileSize returns the maximum file size allowed for tool operations.
 func (c ToolsConfig) MaxFileSize() int64        { return c.maxFileSize }
+// MaxIterations returns the maximum number of tool iterations per request.
 func (c ToolsConfig) MaxIterations() int        { return c.maxIterations }
+// PermissionDefault returns the default permission level for tools.
 func (c ToolsConfig) PermissionDefault() string { return c.permissionDefault }
+// ToolPermissions returns a copy of the tool-specific permission levels.
 func (c ToolsConfig) ToolPermissions() map[string]string {
 	out := make(map[string]string, len(c.toolPermissions))
 	maps.Copy(out, c.toolPermissions)
 	return out
 }
 
+// ModelConfig represents an AI model configuration.
 type ModelConfig struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	ContextWindow int    `json:"context_window"`
 }
 
+// ProviderConfig maps provider names to their available models.
 type ProviderConfig map[string][]ModelConfig
 
 // DTOs for JSON persistence.
@@ -88,8 +102,8 @@ type configDTO struct {
 func DefaultConfig() *Config {
 	return &Config{
 		tools: ToolsConfig{
-			maxFileSize:       DefaultMaxFileSize,
-			maxIterations:     DefaultMaxIterations,
+			maxFileSize:       defaultMaxFileSize,
+			maxIterations:     defaultMaxIterations,
 			permissionDefault: "ask",
 			toolPermissions:   map[string]string{},
 		},
@@ -101,22 +115,22 @@ func DefaultConfig() *Config {
 			successColor:     ColorConfig{light: "#43BF6D", dark: "#73F59F"},
 			errorColor:       ColorConfig{light: "#F05D5E", dark: "#FF6666"},
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
-			chatWindowWidth:  DefaultChatWindowWidth,
-			bashOutputHeight: DefaultBashOutputHeight,
-			thinkingHeight:   DefaultThinkingHeight,
+			chatWindowWidth:  defaultChatWindowWidth,
+			bashOutputHeight: defaultBashOutputHeight,
+			thinkingHeight:   defaultThinkingHeight,
 			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{
 			"google": {
-				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: ContextWindow256k},
-				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: ContextWindow256k},
-				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: ContextWindow2M},
-				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: ContextWindow2M},
+				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: contextWindow256k},
+				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: contextWindow256k},
+				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: contextWindow2M},
+				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: contextWindow2M},
 			},
 			"github": {
-				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: ContextWindow128k},
-				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: ContextWindow2M},
-				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: ContextWindow128k},
+				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: contextWindow128k},
+				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: contextWindow2M},
+				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: contextWindow128k},
 			},
 		},
 	}

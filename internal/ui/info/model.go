@@ -1,3 +1,4 @@
+// Package info provides UI components for displaying system information and settings.
 package info
 
 import (
@@ -16,6 +17,7 @@ type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 }
 
+// Model is the bubbletea model for displaying system information.
 type Model struct {
 	bus   bus
 	theme *ui.Theme
@@ -29,10 +31,12 @@ func NewModel(b bus, th *ui.Theme) *Model {
 	}
 }
 
+// Init initializes the model and starts polling for updates.
 func (m *Model) Init() tea.Cmd {
 	return m.pollBus()
 }
 
+// Update handles UI updates and incoming information events.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok && key.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -54,6 +58,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the model (returns empty as info is printed via tea.Printf).
 func (m *Model) View() string {
 	return ""
 }

@@ -1,3 +1,4 @@
+// Package search provides tools for finding files and searching their content.
 package search
 
 import (
@@ -22,13 +23,13 @@ const (
 	// Prevents base64/minified files from blowing up context.
 	defaultMaxColumns = 500
 
-	OutputModeContent          = "content"
-	OutputModeFilesWithMatches = "files_with_matches"
-	OutputModeCount            = "count"
+	outputModeContent          = "content"
+	outputModeFilesWithMatches = "files_with_matches"
+	outputModeCount            = "count"
 
-	defaultOutputMode = OutputModeFilesWithMatches
+	defaultOutputMode = outputModeFilesWithMatches
 
-	DefaultGrepTimeout = 20 * time.Second
+	defaultGrepTimeout = 20 * time.Second
 	logTailSize        = 1024
 )
 
@@ -80,10 +81,12 @@ func NewGrepTool(
 	}
 }
 
+// Name returns the unique identifier for the grep tool.
 func (t *GrepTool) Name() string {
 	return "grep"
 }
 
+// IsConcurrentSafe indicates if the grep tool can be run concurrently.
 func (t *GrepTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
@@ -119,8 +122,8 @@ Usage:
 			},
 			"output_mode": {
 				Type: schema.String,
-				Enum: []string{OutputModeContent, OutputModeFilesWithMatches, OutputModeCount},
-				Desc: fmt.Sprintf("Output mode: \"%s\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"%s\" shows file paths (supports head_limit), \"%s\" shows match counts (supports head_limit). Defaults to \"%s\".", OutputModeContent, OutputModeFilesWithMatches, OutputModeCount, OutputModeFilesWithMatches),
+				Enum: []string{outputModeContent, outputModeFilesWithMatches, outputModeCount},
+				Desc: fmt.Sprintf("Output mode: \"%s\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"%s\" shows file paths (supports head_limit), \"%s\" shows match counts (supports head_limit). Defaults to \"%s\".", outputModeContent, outputModeFilesWithMatches, outputModeCount, outputModeFilesWithMatches),
 			},
 			"-B": {
 				Type: schema.Integer,
@@ -158,6 +161,7 @@ Usage:
 	}
 }
 
+// Prepare parses the grep parameters and returns an invocation.
 func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 	req := &GrepRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
@@ -241,7 +245,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	cmdStr := i.prepareGrepCommand()
 	workDir := i.pathResolver.Root()
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultGrepTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultGrepTimeout)
 	defer cancel()
 
 	res, err := i.commandExecutor.Run(ctx, cmdStr, workDir, true)
@@ -293,11 +297,11 @@ func (i *grepInvocation) prepareGrepCommand() string {
 	args = append(args, "--max-columns", strconv.Itoa(defaultMaxColumns))
 
 	switch mode {
-	case OutputModeFilesWithMatches:
+	case outputModeFilesWithMatches:
 		args = append(args, "-l")
-	case OutputModeCount:
+	case outputModeCount:
 		args = append(args, "-c", "--with-filename")
-	case OutputModeContent:
+	case outputModeContent:
 		args = append(args, "--with-filename")
 		if i.req.ShowLineNumbers == nil || *i.req.ShowLineNumbers {
 			args = append(args, "-n")

@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	// ConfigDir is the directory name under ~/.config.
-	ConfigDir = "iav"
-	// ConfigFile is the config file name.
-	ConfigFile = "config.json"
+	configDir = "iav"
+	configFile = "config.json"
 )
 
 // FileSystem abstracts file operations for testability.
@@ -23,22 +21,26 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 }
 
-// ConfigFileReader implements FileSystem using the real OS for config loading.
-type ConfigFileReader struct{}
+// FileReader implements FileSystem using the real OS for config loading.
+type FileReader struct{}
 
-func (ConfigFileReader) UserHomeDir() (string, error) {
+// UserHomeDir returns the current user's home directory.
+func (FileReader) UserHomeDir() (string, error) {
 	return os.UserHomeDir()
 }
 
-func (ConfigFileReader) ReadFile(path string) ([]byte, error) {
+// ReadFile reads the file named by path and returns the contents.
+func (FileReader) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func (ConfigFileReader) WriteFile(path string, data []byte, perm os.FileMode) error {
+// WriteFile writes data to a file named by path.
+func (FileReader) WriteFile(path string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(path, data, perm)
 }
 
-func (ConfigFileReader) MkdirAll(path string, perm os.FileMode) error {
+// MkdirAll creates a directory named path, along with any necessary parents.
+func (FileReader) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
@@ -139,7 +141,7 @@ func (m *Manager) Load() (*Config, error) {
 
 	homeDir, err := m.fs.UserHomeDir()
 	if err == nil {
-		configPath := filepath.Join(homeDir, ".config", ConfigDir, ConfigFile)
+		configPath := filepath.Join(homeDir, ".config", configDir, configFile)
 		data, err := m.fs.ReadFile(configPath)
 		if err == nil {
 			if err := json.Unmarshal(data, &dto); err != nil {

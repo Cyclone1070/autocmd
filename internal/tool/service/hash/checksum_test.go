@@ -34,7 +34,7 @@ func TestChecksumManager(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 10 {
 		wg.Add(1)
-		go func(i int) {
+		go func(_ int) {
 			defer wg.Done()
 			manager.Update(path, checksum)
 			manager.Get(path)

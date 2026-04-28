@@ -1,3 +1,4 @@
+// Package file provides tools for reading, writing, and editing files.
 package file
 
 import (
@@ -68,10 +69,12 @@ func NewEditFileTool(
 	}
 }
 
+// Name returns the unique identifier for the edit file tool.
 func (t *EditFileTool) Name() string {
 	return "edit_file"
 }
 
+// IsConcurrentSafe indicates if the edit file tool can be run concurrently.
 func (t *EditFileTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.

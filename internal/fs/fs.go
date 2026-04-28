@@ -1,3 +1,4 @@
+// Package fs provides filesystem abstractions and implementations.
 package fs
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
 )
 
+// FileSystem defines the interface for local filesystem operations.
 type FileSystem interface {
 	ReadFile(path string) ([]byte, error)
 	WriteFile(path string, data []byte, perm os.FileMode) error

@@ -16,7 +16,7 @@ type mockFS struct {
 	content string
 }
 
-func (m *mockFS) Open(path string) (domain.File, error) {
+func (m *mockFS) Open(_ string) (domain.File, error) {
 	return &mockFile{fs: m, offset: 0}, nil
 }
 
@@ -41,7 +41,7 @@ func (m *mockFile) Read(p []byte) (int, error) {
 
 func (m *mockFile) Close() error                                 { return nil }
 func (m *mockFile) Stat() (os.FileInfo, error)                   { return nil, nil }
-func (m *mockFile) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+func (m *mockFile) Seek(_ int64, _ int) (int64, error) { return 0, nil }
 
 func TestFollower_PokeLatency(t *testing.T) {
 	fs := &mockFS{content: "initial"}

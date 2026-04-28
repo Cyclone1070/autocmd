@@ -17,7 +17,7 @@ type mockLLM struct {
 	streams []*mockStream
 }
 
-func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
+func (m *mockLLM) ComputeTokens(_ context.Context, _ []*schema.Message) (int, error) {
 	return 0, nil
 }
 func (m *mockLLM) Model() model.ToolCallingChatModel {
@@ -29,7 +29,7 @@ type mockEinoModelBridge struct {
 	llm *mockLLM
 }
 
-func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+func (b *mockEinoModelBridge) Generate(ctx context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -46,11 +46,11 @@ func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message
 	return &schema.Message{Role: schema.Assistant, Content: content.String()}, nil
 }
 
-func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+func (b *mockEinoModelBridge) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	return nil, nil
 }
 
-func (b *mockEinoModelBridge) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+func (b *mockEinoModelBridge) WithTools(_ []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	return b, nil
 }
 

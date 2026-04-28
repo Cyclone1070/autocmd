@@ -1,3 +1,4 @@
+// Package executor provides functionality for running OS commands with streaming output.
 package executor
 
 import (
@@ -20,9 +21,9 @@ import (
 
 const (
 	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
-	DefaultSmartDrainThreshold = 16 * 1024         // 16KB
-	DefaultBinarySampleSize    = 8000              // 8KB sample for binary detection
-	DefaultBufferSize          = 4096              // 4KB standard buffer
+	defaultSmartDrainThreshold = 16 * 1024         // 16KB
+	defaultBinarySampleSize    = 8000              // 8KB sample for binary detection
+	defaultBufferSize          = 4096              // 4KB standard buffer
 	maxIDRetries               = 5
 	numPipes                   = 2 // stdout, stderr
 	hexRatio                   = 2
@@ -72,6 +73,7 @@ type StreamingCmd struct {
 	lastActivityAt time.Time
 }
 
+// NewStreamingCmd creates a new StreamingCmd instance.
 func NewStreamingCmd(id string, output io.Reader, wait func() (*Result, error), logPath string) *StreamingCmd {
 	return &StreamingCmd{
 		id:      id,
@@ -81,18 +83,22 @@ func NewStreamingCmd(id string, output io.Reader, wait func() (*Result, error), 
 	}
 }
 
+// ID returns the unique identifier for the command.
 func (s *StreamingCmd) ID() string {
 	return s.id
 }
 
+// Output returns a reader for the command's streaming output.
 func (s *StreamingCmd) Output() io.Reader {
 	return s.output
 }
 
+// LogPath returns the path to the file where output is being logged.
 func (s *StreamingCmd) LogPath() string {
 	return s.logPath
 }
 
+// Wait blocks until the command completes and returns the result.
 func (s *StreamingCmd) Wait() (*Result, error) {
 	s.once.Do(func() {
 		s.result, s.err = s.wait()
@@ -100,12 +106,14 @@ func (s *StreamingCmd) Wait() (*Result, error) {
 	return s.result, s.err
 }
 
+// LastActivityAt returns the time of the most recent output from the command.
 func (s *StreamingCmd) LastActivityAt() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastActivityAt
 }
 
+// UpdateActivity updates the last activity timestamp to the current time.
 func (s *StreamingCmd) UpdateActivity() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -120,6 +128,7 @@ type fileSystem interface {
 	Open(path string) (domain.File, error)
 }
 
+// OSCommandExecutor implements the command execution service using the OS shell.
 type OSCommandExecutor struct {
 	fs            fileSystem
 	maxOutputSize int64
@@ -130,16 +139,18 @@ type OSCommandExecutor struct {
 	commander           commandFactory
 }
 
+// NewOSCommandExecutor creates a new OSCommandExecutor with the provided filesystem.
 func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 	return &OSCommandExecutor{
 		fs:                  fs,
 		maxOutputSize:       defaultMaxOutputSize,
-		SmartDrainThreshold: DefaultSmartDrainThreshold,
+		SmartDrainThreshold: defaultSmartDrainThreshold,
 		killer:              &osSignalKiller{},
 		commander:           &osCommandFactory{},
 	}
 }
 
+// Run executes a command and waits for its completion.
 func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, enableLogging bool) (*Result, error) {
 	s, err := f.RunStreaming(ctx, command, dir, enableLogging)
 	if err != nil {
@@ -148,6 +159,7 @@ func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string,
 	return s.Wait()
 }
 
+// RunStreaming starts a command and returns a StreamingCmd for real-time output.
 func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, dir string, enableLogging bool) (sc *StreamingCmd, err error) {
 	// Fallback timeout if no deadline is set in context (None by default now)
 	var cancel context.CancelFunc
@@ -279,7 +291,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	var bytesMu sync.Mutex
 	copyStream := func(src io.Reader) {
 		defer wg.Done()
-		buf := make([]byte, DefaultBufferSize)
+		buf := make([]byte, defaultBufferSize)
 		for {
 			n, err := src.Read(buf)
 			if n > 0 {

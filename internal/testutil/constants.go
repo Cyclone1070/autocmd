@@ -1,3 +1,4 @@
+// Package testutil provides common constants and utilities for application tests.
 package testutil
 
 const (

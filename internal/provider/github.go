@@ -1,3 +1,4 @@
+// Package provider implements various LLM providers (Google, GitHub) for the application.
 package provider
 
 import (
@@ -22,10 +23,12 @@ func NewGitHubProvider(models []domain.LLMInfo) *GitHubProvider {
 	return &GitHubProvider{models: models}
 }
 
+// ID returns the unique identifier for the GitHub provider.
 func (p *GitHubProvider) ID() string {
 	return domain.ProviderGitHub
 }
 
+// SupportedAuthMethods returns the list of authentication methods supported by GitHub.
 func (p *GitHubProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return []domain.AuthMethod{
 		domain.OAuthMethod{
@@ -39,10 +42,12 @@ func (p *GitHubProvider) SupportedAuthMethods() []domain.AuthMethod {
 	}
 }
 
+// List returns the available models provided by GitHub.
 func (p *GitHubProvider) List() []domain.LLMInfo {
 	return p.models
 }
 
+// GetLLM initializes and returns a GitHub-backed LLM instance.
 func (p *GitHubProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
 	tokenSource := NewTokenSource(cred.OAuthToken, "")
 

@@ -1,3 +1,4 @@
+// Package git provides git-related services, such as gitignore matching.
 package git
 
 import (
@@ -112,6 +113,6 @@ func splitPath(path string) []string {
 type NoOpMatcher struct{}
 
 // ShouldIgnore always returns false for NoOpMatcher.
-func (m *NoOpMatcher) ShouldIgnore(relativePath string) bool {
+func (m *NoOpMatcher) ShouldIgnore(_ string) bool {
 	return false
 }

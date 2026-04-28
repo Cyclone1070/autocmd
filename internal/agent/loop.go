@@ -91,6 +91,7 @@ func appendConcatenatedAssistantMessage(session *domain.Session, chunks []*schem
 	return nil
 }
 
+// NewLoop creates a new agent interaction loop.
 func NewLoop(
 	llm domain.LLM,
 	toolExecutor *ToolExecutor,

@@ -1,3 +1,4 @@
+// Package model_picker provides UI components for selecting LLM models.
 package model_picker
 
 import (
@@ -11,8 +12,8 @@ type bus interface {
 	SendAction(domain.Action)
 }
 
-// model is a domain-specific UI model for selecting LLM models.
-type model struct {
+// Model is a domain-specific UI Model for selecting LLM models.
+type Model struct {
 	picker          *ui.Picker
 	bus             bus
 	theme           *ui.Theme
@@ -22,20 +23,20 @@ type model struct {
 	cancelRequested bool
 }
 
-// NewModel creates a new model picker UI model with a bus and theme.
-func NewModel(b bus, theme *ui.Theme) *model {
-	return &model{
+// NewModel creates a new Model picker UI Model with a bus and theme.
+func NewModel(b bus, theme *ui.Theme) *Model {
+	return &Model{
 		bus:   b,
 		theme: theme,
 	}
 }
 
 // Init initializes the model by starting the bus polling.
-func (m *model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return m.pollBus()
 }
 
-func (m *model) pollBus() tea.Cmd {
+func (m *Model) pollBus() tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-m.bus.UIUpdates()
 		if !ok {
@@ -49,7 +50,7 @@ func (m *model) pollBus() tea.Cmd {
 }
 
 // Update handles UI messages.
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.cancelRequested {
 		switch msg.(type) {
 		case domain.DoneEvent:
@@ -108,7 +109,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) initializePicker(data *domain.ModelListEvent) {
+func (m *Model) initializePicker(data *domain.ModelListEvent) {
 	var items []ui.Item
 	for _, m := range data.Models {
 		items = append(items, ui.Item{
@@ -128,7 +129,7 @@ func (m *model) initializePicker(data *domain.ModelListEvent) {
 }
 
 // View returns the string representation of the UI.
-func (m *model) View() string {
+func (m *Model) View() string {
 	if m.quitting || m.err != nil {
 		return ""
 	}
@@ -139,6 +140,6 @@ func (m *model) View() string {
 }
 
 // Err returns any error encountered during the selection process.
-func (m *model) Err() error {
+func (m *Model) Err() error {
 	return m.err
 }

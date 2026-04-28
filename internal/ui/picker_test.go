@@ -14,7 +14,7 @@ func TestPicker_Actions_Quit(t *testing.T) {
 		{
 			Key:  "n",
 			Quit: true,
-			Fn: func(item Item) tea.Cmd {
+			Fn: func(_ Item) tea.Cmd {
 				return nil
 			},
 		},
@@ -35,7 +35,7 @@ func TestPicker_RegularAction_DoesNotQuit(t *testing.T) {
 	actions := []Action{
 		{
 			Key: "r",
-			Fn: func(item Item) tea.Cmd {
+			Fn: func(_ Item) tea.Cmd {
 				return nil
 			},
 		},

@@ -1,3 +1,4 @@
+// Package prompt provides the main interactive prompt and tool execution UI.
 package prompt
 
 import (
@@ -12,7 +13,7 @@ const (
 
 // animationTick returns a Cmd that fires after the specified interval.
 func animationTick(d time.Duration) tea.Cmd {
-	return tea.Tick(d, func(t time.Time) tea.Msg {
+	return tea.Tick(d, func(_ time.Time) tea.Msg {
 		return tickMsg{}
 	})
 }

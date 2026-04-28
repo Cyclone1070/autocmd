@@ -1,3 +1,4 @@
+// Package prompt provides the main interactive prompt and tool execution UI.
 package prompt
 
 import (
@@ -61,6 +62,7 @@ type toolSlot struct {
 	questionState ui.QuestionUIState
 }
 
+// Model is the main bubbletea model for the interactive prompt.
 type Model struct {
 	state  uiState
 	bus    bus
@@ -85,20 +87,24 @@ type Model struct {
 	cancelRequested bool
 }
 
+// Option is a functional option for configuring the prompt Model.
 type Option func(*Model)
 
+// WithTheme sets the visual theme for the prompt.
 func WithTheme(th *ui.Theme) Option {
 	return func(m *Model) {
 		m.theme = th
 	}
 }
 
+// WithFlush sets a custom flush function for rendering final content.
 func WithFlush(fn func(content string) tea.Cmd) Option {
 	return func(m *Model) {
 		m.flushFn = fn
 	}
 }
 
+// NewModel creates a new prompt Model with the specified dependencies.
 func NewModel(
 	b bus,
 	tr thinkingRenderer,
@@ -128,11 +134,13 @@ func NewModel(
 	return m
 }
 
+// Init initializes the prompt model.
 func (m *Model) Init() tea.Cmd {
 	m.isPolling = true
 	return tea.Batch(animationTick(tickHighDelay), m.pollBus())
 }
 
+// Update handles incoming messages from the bus and user input.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -378,6 +386,7 @@ func (m *Model) nextTick() tea.Cmd {
 	return animationTick(tickHighDelay)
 }
 
+// View renders the current state of the prompt.
 func (m *Model) View() string {
 	var content string
 	switch m.state {

@@ -1,3 +1,4 @@
+// Package logging handles application-level error and debug logging to the local filesystem.
 package logging
 
 import (
@@ -20,12 +21,18 @@ const (
 	maxLogAge           = 14 * 24 * time.Hour
 )
 
+// Options configures the logging system initialization.
 type Options struct {
-	Debug   bool
+	// Debug enables verbose debug logging to a separate file.
+	Debug bool
+	// HomeDir is the base directory for log storage. Defaults to user home if empty.
 	HomeDir string
-	Now     func() time.Time
+	// Now is an optional time provider for rotation and cleanup logic (useful for testing).
+	Now func() time.Time
 }
 
+// Init initializes the application logger based on the provided options.
+// It returns the logger instance, the absolute path to the active log file, and any error encountered.
 func Init(opts Options) (*slog.Logger, string, error) {
 	home := opts.HomeDir
 	if home == "" {

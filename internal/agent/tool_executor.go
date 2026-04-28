@@ -14,6 +14,7 @@ import (
 
 const streamingBufferSize = 1024 * 1024 // 1MB
 
+// ToolExecutor manages the lifecycle and execution of tool calls requested by the LLM.
 type ToolExecutor struct {
 	registry           toolRegistry
 	waiter             actionWaiter

@@ -44,7 +44,7 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps, err := Wire()
 		if err != nil {
-			return wrapForUser(withCategory(ErrBootstrap, err))
+			return wrapForUser(withCategory(errBootstrap, err))
 		}
 
 		if len(args) == 0 {
@@ -60,6 +60,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, fmt.Sprintf("Enable debug logging to ~/%s/%s/debug.log", domain.ConfigBaseDir, domain.AppName))
 }
 
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -68,12 +70,12 @@ func Execute() {
 
 func runAgent(ctx context.Context, deps *Deps, input string) error {
 	if deps.State.Model() == "" {
-		return ErrNoModelSelected
+		return errNoModelSelected
 	}
 
 	pathResolver, err := buildPathResolver()
 	if err != nil {
-		return withCategory(ErrWorkspaceUnavailable, err)
+		return withCategory(errWorkspaceUnavailable, err)
 	}
 
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
@@ -98,7 +100,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())
 	if err != nil {
-		return withCategory(ErrModelInitialization, err)
+		return withCategory(errModelInitialization, err)
 	}
 
 	// Wiring
@@ -164,16 +166,16 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {
-		return withCategory(ErrUIRuntime, err)
+		return withCategory(errUIRuntime, err)
 	}
 
 	agentErr := <-done
 	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
 		if errors.Is(agentErr, agent.ErrModelAuth) {
-			return withCategory(ErrModelAuth, agentErr)
+			return withCategory(errModelAuth, agentErr)
 		}
 		if errors.Is(agentErr, agent.ErrModelBackend) {
-			return withCategory(ErrModelBackend, agentErr)
+			return withCategory(errModelBackend, agentErr)
 		}
 		return agentErr
 	}

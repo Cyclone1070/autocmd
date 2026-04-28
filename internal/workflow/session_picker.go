@@ -25,6 +25,7 @@ type sessionPickerBus interface {
 	WorkflowActions() <-chan domain.Action
 }
 
+// SessionPickerDeps contains the dependencies for the session selection workflow.
 type SessionPickerDeps struct {
 	Bus   sessionPickerBus
 	Store sessionPickerStore

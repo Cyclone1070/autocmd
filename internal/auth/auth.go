@@ -1,3 +1,4 @@
+// Package auth provides functionality for managing authentication credentials.
 package auth
 
 import (

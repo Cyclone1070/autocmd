@@ -17,8 +17,11 @@ type gater interface {
 }
 
 const (
+	// ToolInsetPrefix is the standard horizontal padding for tool execution blocks.
 	ToolInsetPrefix              = "    "
+	// ToolFirstContentGutterPrefix is the prefix used for the first line of tool output.
 	ToolFirstContentGutterPrefix = "   ⎿ "
+	// ToolContentGutterPrefix is the prefix used for subsequent lines of tool output.
 	ToolContentGutterPrefix      = "     "
 )
 
@@ -32,13 +35,15 @@ type ToolBlockSpec struct {
 	Frame        string
 }
 
+// ContentTruncateMode defines how large tool outputs should be truncated for display.
 type ContentTruncateMode int
 
 const (
-	TruncateNone ContentTruncateMode = iota
-	TruncateTailKeepLatest
+	truncateNone ContentTruncateMode = iota
+	truncateTailKeepLatest
 )
 
+// RenderSpecOptions configures the behavior of the tool rendering pipeline.
 type RenderSpecOptions struct {
 	TruncateMode             ContentTruncateMode
 	TruncateFromContentIndex int
@@ -60,6 +65,7 @@ func NewToolRenderer(theme *Theme, width int, g gater) *ToolRenderer {
 	}
 }
 
+// SetShortToolBlock toggles the theme's short tool block mode.
 func (r *ToolRenderer) SetShortToolBlock(b bool) {
 	r.Theme.ShortToolBlock = b
 }
@@ -128,7 +134,7 @@ func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, e
 	if !ok {
 		return ""
 	}
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateNone, TruncateFromContentIndex: 0})
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateNone, TruncateFromContentIndex: 0})
 }
 
 func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
@@ -164,7 +170,7 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 // RenderDiff renders DiffDisplay.
 func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, frame string) string {
 	spec := r.buildDiffSpec(d, status, err, frame)
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateTailKeepLatest, TruncateFromContentIndex: 1})
 }
 
 func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) ToolBlockSpec {
@@ -226,7 +232,7 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 // RenderBash renders BashDisplay.
 func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) string {
 	spec := r.buildBashSpec(d, output, status, err, frame)
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateTailKeepLatest, TruncateFromContentIndex: 1})
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateTailKeepLatest, TruncateFromContentIndex: 1})
 }
 
 func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) ToolBlockSpec {
@@ -272,7 +278,7 @@ func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUI
 	if !ok {
 		return ""
 	}
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: TruncateNone, TruncateFromContentIndex: 0})
+	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateNone, TruncateFromContentIndex: 0})
 }
 
 func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
@@ -541,7 +547,7 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 	footerWidth := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
 
 	spec.HeaderLines = r.wrapLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
-	if opts.TruncateMode == TruncateTailKeepLatest && len(spec.ContentLines) > 0 {
+	if opts.TruncateMode == truncateTailKeepLatest && len(spec.ContentLines) > 0 {
 		start := min(max(opts.TruncateFromContentIndex, 0), len(spec.ContentLines))
 
 		// Preserve/truncate boundary is defined on logical lines first.

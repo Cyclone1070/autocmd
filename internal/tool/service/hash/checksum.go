@@ -1,3 +1,4 @@
+// Package hash provides utilities for computing and managing file checksums.
 package hash
 
 import (

@@ -1,3 +1,4 @@
+// Package bash provides tools for executing shell commands.
 package bash
 
 import (
@@ -39,6 +40,7 @@ type fileSystem interface {
 	CreateAtomic(path string) (io.WriteCloser, error)
 }
 
+// BashTool is a tool that allows executing shell commands with background task support.
 type BashTool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
@@ -65,12 +67,15 @@ func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pa
 	}
 }
 
+// Name returns the unique identifier for the bash tool.
 func (t *BashTool) Name() string {
 	return "bash"
 }
 
+// IsConcurrentSafe indicates if the bash tool can be run concurrently.
 func (t *BashTool) IsConcurrentSafe() bool { return true }
 
+// Definition returns the Eino tool definition for the bash tool.
 func (t *BashTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "bash",
@@ -133,6 +138,7 @@ EOF
 	}
 }
 
+// Prepare parses the bash parameters and returns an invocation.
 func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		Command         string `json:"command"`

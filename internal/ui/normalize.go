@@ -1,3 +1,4 @@
+// Package ui provides shared UI components and utilities for the IAV terminal interface.
 package ui
 
 import (

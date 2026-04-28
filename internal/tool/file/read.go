@@ -1,3 +1,4 @@
+// Package file provides tools for reading, writing, and editing files.
 package file
 
 import (
@@ -59,10 +60,12 @@ func NewReadFileTool(
 	}
 }
 
+// Name returns the unique identifier for the read file tool.
 func (t *ReadFileTool) Name() string {
 	return "read_file"
 }
 
+// IsConcurrentSafe indicates if the read file tool can be run concurrently.
 func (t *ReadFileTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.

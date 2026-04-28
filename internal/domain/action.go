@@ -1,3 +1,4 @@
+// Package domain defines the core domain models and interfaces for the IAV system.
 package domain
 
 // User actions: Action marker and StopAction.

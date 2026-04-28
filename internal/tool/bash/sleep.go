@@ -15,22 +15,27 @@ type completionNotifier interface {
 	HasPending() bool
 }
 
+// SleepTool provides a way for the LLM to wait for a specific duration or for background tasks to complete.
 type SleepTool struct {
 	notifier completionNotifier
 }
 
+// NewSleepTool creates a new SleepTool with the provided notifier.
 func NewSleepTool(notifier completionNotifier) *SleepTool {
 	return &SleepTool{
 		notifier: notifier,
 	}
 }
 
+// Name returns the name of the tool.
 func (t *SleepTool) Name() string {
 	return "sleep"
 }
 
+// IsConcurrentSafe returns true as sleep is safe to run concurrently.
 func (t *SleepTool) IsConcurrentSafe() bool { return true }
 
+// Definition returns the JSON schema for the sleep tool.
 func (t *SleepTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "sleep",
@@ -55,6 +60,7 @@ Usage:
 	}
 }
 
+// Prepare validates the sleep request and returns an invocation.
 func (t *SleepTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		DurationMS int `json:"duration_ms"`

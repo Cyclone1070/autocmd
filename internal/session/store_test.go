@@ -54,7 +54,7 @@ func newMockFileSystem() *mockFileSystem {
 	}
 }
 
-func (m *mockFileSystem) WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
+func (m *mockFileSystem) WriteFileAtomic(path string, content []byte, _ os.FileMode) error {
 	m.writeCallCount++
 	if m.failWriteAfter > 0 && m.writeCallCount > m.failWriteAfter {
 		return errors.New("write failed")
@@ -66,7 +66,7 @@ func (m *mockFileSystem) WriteFileAtomic(path string, content []byte, perm os.Fi
 	return nil
 }
 
-func (m *mockFileSystem) EnsureDirs(path string) error {
+func (m *mockFileSystem) EnsureDirs(_ string) error {
 	if m.ensureErr != nil {
 		return m.ensureErr
 	}

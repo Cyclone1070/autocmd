@@ -36,6 +36,7 @@ type InfoWorkflow struct {
 	store            infoSessionStore
 }
 
+// InfoDeps contains the dependencies for the system information workflow.
 type InfoDeps struct {
 	Bus              infoBus
 	ProviderRegistry infoProviderRegistry

@@ -1,3 +1,4 @@
+// Package question provides a tool for asking the user interactive questions.
 package question
 
 import (
@@ -10,18 +11,23 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+// QuestionTool is a tool that allows the LLM to ask the user interactive questions.
 type QuestionTool struct{}
 
+// NewQuestionTool creates a new QuestionTool.
 func NewQuestionTool() *QuestionTool {
 	return &QuestionTool{}
 }
 
+// Name returns the unique identifier for the question tool.
 func (t *QuestionTool) Name() string {
 	return "ask_question"
 }
 
+// IsConcurrentSafe indicates if the tool can be run concurrently (false for interactive tools).
 func (t *QuestionTool) IsConcurrentSafe() bool { return false }
 
+// Definition returns the Eino tool definition for the question tool.
 func (t *QuestionTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
@@ -73,23 +79,29 @@ type toolParams struct {
 	Questions []domain.QuestionInfo `json:"questions"`
 }
 
+// Prepare parses the tool parameters and returns an invocation.
 func (t *QuestionTool) Prepare(params string) (domain.Invocation, error) {
 	var p toolParams
 	if err := json.Unmarshal([]byte(params), &p); err != nil {
 		return nil, fmt.Errorf("failed to parse question params: %w", err)
 	}
 
-	return &QuestionInvocation{questions: p.Questions}, nil
+	return &QuestionInvocation{
+		questions: p.Questions,
+	}, nil
 }
 
+// QuestionInvocation represents a single execution of the question tool.
 type QuestionInvocation struct {
 	questions []domain.QuestionInfo
 }
 
+// Display returns the UI representation of the questions.
 func (i *QuestionInvocation) Display() domain.ToolDisplay {
 	return domain.NewQuestionDisplay(i.questions)
 }
 
+// Resolve handles the user's answers and returns the final LLM content and display.
 func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
 	if ctx.Err() != nil {
 		display := domain.NewStringDisplay("Question attempted", "")

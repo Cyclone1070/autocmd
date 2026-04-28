@@ -32,7 +32,7 @@ func TestWriteFile(t *testing.T) {
 		require.NoError(t, err)
 
 		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-		assert.Contains(t, out, "File created successfully at: " + testWorkspaceRoot + "/new.txt")
+		assert.Contains(t, out, "file " + testWorkspaceRoot + "/new.txt created successfully")
 		assert.Equal(t, "hello", string(fs.files[testWorkspaceRoot + "/new.txt"]))
 
 		display := inv.Display().(domain.StringDisplay)
@@ -82,7 +82,7 @@ func TestWriteFile(t *testing.T) {
 		params, _ := json.Marshal(req)
 		_, err := tool.Prepare(string(params))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "File has not been read yet")
+		assert.Contains(t, err.Error(), "file has not been read yet")
 	})
 
 	t.Run("Rejects write if stale (mismatch checksum)", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestWriteFile(t *testing.T) {
 		params, _ := json.Marshal(req)
 		_, err := tool.Prepare(string(params))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "File has been modified since read")
+		assert.Contains(t, err.Error(), "file has been modified since read")
 	})
 
 	t.Run("Normalizes line endings to LF", func(t *testing.T) {

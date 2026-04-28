@@ -21,10 +21,12 @@ func NewGoogleProvider(models []domain.LLMInfo) *GoogleProvider {
 	return &GoogleProvider{models: models}
 }
 
+// ID returns the unique identifier for the Google provider.
 func (p *GoogleProvider) ID() string {
 	return domain.ProviderGoogle
 }
 
+// SupportedAuthMethods returns the list of authentication methods supported by Google.
 func (p *GoogleProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return []domain.AuthMethod{
 		domain.APIKeyAuthMethod{
@@ -59,10 +61,12 @@ func (p *GoogleProvider) newClient(ctx context.Context, cred *domain.Credential)
 	return genai.NewClient(ctx, cfg)
 }
 
+// List returns the available models provided by Google.
 func (p *GoogleProvider) List() []domain.LLMInfo {
 	return p.models
 }
 
+// GetLLM initializes and returns a Google-backed LLM instance.
 func (p *GoogleProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
 	client, err := p.newClient(ctx, cred)
 	if err != nil {

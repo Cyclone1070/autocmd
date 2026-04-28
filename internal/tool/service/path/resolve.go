@@ -1,3 +1,4 @@
+// Package path provides path resolution and normalization utilities.
 package path
 
 import (
@@ -40,8 +41,13 @@ type FileSystem interface {
 // OSFileSystem implements FileSystem using the real OS.
 type OSFileSystem struct{}
 
+// Abs returns the absolute representation of path.
 func (OSFileSystem) Abs(path string) (string, error)          { return filepath.Abs(path) }
+
+// EvalSymlinks returns the path after the evaluation of any symbolic links.
 func (OSFileSystem) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
+
+// Stat returns a FileInfo describing the named file.
 func (OSFileSystem) Stat(path string) (os.FileInfo, error)    { return os.Stat(path) }
 
 // CanonicaliseRoot canonicalises a workspace root path by making it absolute and resolving symlinks.

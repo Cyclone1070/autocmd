@@ -103,6 +103,7 @@ func (g *GlamourRenderer) Render(markdown string) string {
 // PassthroughRenderer is a no-op renderer that returns markdown as-is.
 type PassthroughRenderer struct{}
 
+// Render returns the original markdown without modification.
 func (p *PassthroughRenderer) Render(markdown string) string {
 	return markdown
 }

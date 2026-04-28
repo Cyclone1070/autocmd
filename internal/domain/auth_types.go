@@ -32,6 +32,7 @@ type APIKeyAuthMethod struct {
 	Fields []AuthField
 }
 
+// IsAuthMethod marks APIKeyAuthMethod as an implementation of the AuthMethod interface.
 func (APIKeyAuthMethod) IsAuthMethod() {}
 
 // EnvVarAuthMethod represents an authentication method that relies purely on environment variables.
@@ -41,6 +42,7 @@ type EnvVarAuthMethod struct {
 	EnvVars []string
 }
 
+// IsAuthMethod marks EnvVarAuthMethod as an implementation of the AuthMethod interface.
 func (EnvVarAuthMethod) IsAuthMethod() {}
 
 // OAuthMethod represents an authentication method that follows the OAuth Device Flow.
@@ -53,4 +55,5 @@ type OAuthMethod struct {
 	Scopes        []string
 }
 
+// IsAuthMethod marks OAuthMethod as an implementation of the AuthMethod interface.
 func (OAuthMethod) IsAuthMethod() {}

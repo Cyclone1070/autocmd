@@ -1,3 +1,4 @@
+// Package bash provides tools for executing shell commands.
 package bash
 
 import (
@@ -13,22 +14,27 @@ type taskStopper interface {
 	Stop(id string) error
 }
 
+// TaskStopTool is a tool for terminating background tasks.
 type TaskStopTool struct {
 	manager taskStopper
 }
 
+// NewTaskStopTool creates a new TaskStopTool.
 func NewTaskStopTool(manager taskStopper) *TaskStopTool {
 	return &TaskStopTool{
 		manager: manager,
 	}
 }
 
+// Name returns the unique identifier for the task stop tool.
 func (t *TaskStopTool) Name() string {
 	return "task_stop"
 }
 
+// IsConcurrentSafe indicates if the task stop tool can be run concurrently.
 func (t *TaskStopTool) IsConcurrentSafe() bool { return true }
 
+// Definition returns the Eino tool definition for the task stop tool.
 func (t *TaskStopTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "task_stop",
@@ -48,6 +54,7 @@ Usage:
 	}
 }
 
+// Prepare parses the task stop parameters and returns an invocation.
 func (t *TaskStopTool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		TaskID string `json:"task_id"`

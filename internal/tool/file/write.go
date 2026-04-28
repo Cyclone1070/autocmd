@@ -1,3 +1,4 @@
+// Package file provides tools for reading, writing, and editing files.
 package file
 
 import (
@@ -60,10 +61,12 @@ func NewWriteFileTool(
 	}
 }
 
+// Name returns the unique identifier for the write file tool.
 func (t *WriteFileTool) Name() string {
 	return "write_file"
 }
 
+// IsConcurrentSafe indicates if the write file tool can be run concurrently.
 func (t *WriteFileTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
@@ -106,6 +109,7 @@ type WriteFileRequest struct {
 	Description string `json:"description"`
 }
 
+// Prepare parses the write file parameters and returns an invocation.
 func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 	req := &WriteFileRequest{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
@@ -140,7 +144,7 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 		// Read-before-write staleness check
 		cachedChecksum, ok := t.checksumManager.Get(abs)
 		if !ok {
-			return nil, fmt.Errorf("File has not been read yet. Read it first before writing to it.")
+			return nil, fmt.Errorf("file has not been read yet; read it first before writing to it")
 		}
 
 		data, err := t.fileOps.ReadFile(abs)
@@ -148,7 +152,7 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 			normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
 			currentChecksum := t.checksumManager.Compute([]byte(normalized))
 			if currentChecksum != cachedChecksum {
-				return nil, fmt.Errorf("File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.")
+				return nil, fmt.Errorf("file has been modified since read, either by the user or by a linter; read it again before attempting to write it")
 			}
 		}
 	}
@@ -213,5 +217,5 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	if i.exists {
 		return fmt.Sprintf("The file %s has been updated successfully.", i.absPath), d
 	}
-	return fmt.Sprintf("File created successfully at: %s", i.absPath), d
+	return fmt.Sprintf("file %s created successfully", i.absPath), d
 }

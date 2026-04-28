@@ -1,3 +1,4 @@
+// Package workflow implements the core business logic and state transitions for various system operations.
 package workflow
 
 import (

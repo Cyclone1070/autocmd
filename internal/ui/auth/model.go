@@ -1,3 +1,4 @@
+// Package authui provides the UI components for the authentication workflow.
 package authui
 
 import (

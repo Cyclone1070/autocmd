@@ -1,3 +1,4 @@
+// Package follow provides utilities for following real-time updates to a file.
 package follow
 
 import (
@@ -26,6 +27,7 @@ type Follower struct {
 	file domain.File
 }
 
+// NewFollower creates a new Follower for the given path.
 func NewFollower(fs fileSystem, path string) *Follower {
 	return &Follower{
 		fs:       fs,

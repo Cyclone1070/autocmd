@@ -23,7 +23,7 @@ type mockFileSystem struct {
 	createdPaths []string
 }
 
-func (m *mockFileSystem) MkdirAll(path string, perm os.FileMode) error {
+func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 	return nil
 }
 

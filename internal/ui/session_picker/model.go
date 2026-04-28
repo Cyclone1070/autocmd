@@ -1,3 +1,4 @@
+// Package session_picker provides UI components for selecting and managing chat sessions.
 package session_picker
 
 import (
@@ -16,8 +17,8 @@ type bus interface {
 	SendAction(domain.Action)
 }
 
-// model is an autonomous UI component for managing chat sessions.
-type model struct {
+// Model is an autonomous UI component for managing chat sessions.
+type Model struct {
 	picker          *ui.Picker
 	textInput       textinput.Model
 	bus             bus
@@ -31,12 +32,12 @@ type model struct {
 	selectedName    string
 }
 
-// NewModel creates a new session picker UI with a bus and theme.
-func NewModel(b bus, theme *ui.Theme) *model {
+// NewModel creates a new session picker UI Model with a bus and theme.
+func NewModel(b bus, theme *ui.Theme) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
 
-	return &model{
+	return &Model{
 		bus:       b,
 		theme:     theme,
 		textInput: ti,
@@ -44,11 +45,11 @@ func NewModel(b bus, theme *ui.Theme) *model {
 }
 
 // Init starts the session loading process.
-func (m *model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return m.pollBus()
 }
 
-func (m *model) pollBus() tea.Cmd {
+func (m *Model) pollBus() tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-m.bus.UIUpdates()
 		if !ok {
@@ -62,7 +63,7 @@ func (m *model) pollBus() tea.Cmd {
 }
 
 // Update handles UI interactions and translates them into workflow calls.
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.cancelRequested {
 		switch msg.(type) {
 		case domain.DoneEvent:
@@ -164,7 +165,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) initializePicker(data *domain.SessionListEvent) {
+func (m *Model) initializePicker(data *domain.SessionListEvent) {
 	var items []ui.Item
 	for _, s := range data.Sessions {
 		name := s.Name
@@ -218,7 +219,7 @@ func getDateGroup(t time.Time) string {
 }
 
 // View determines what content to display based on the internal state.
-func (m *model) View() string {
+func (m *Model) View() string {
 	if m.quitting || m.err != nil {
 		return ""
 	}
@@ -232,11 +233,11 @@ func (m *model) View() string {
 }
 
 // Err returns any error encountered during session management.
-func (m *model) Err() error {
+func (m *Model) Err() error {
 	return m.err
 }
 
 // SelectedID returns the ID of the chosen session if any.
-func (m *model) SelectedID() string {
+func (m *Model) SelectedID() string {
 	return m.selectedID
 }

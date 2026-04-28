@@ -1,3 +1,4 @@
+// Package content provides utilities for analyzing and manipulating file content.
 package content
 
 // binarySampleSize defines the number of bytes to scan for null bytes when detecting binary content.

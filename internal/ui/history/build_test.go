@@ -26,7 +26,7 @@ type fixedRenderer struct {
 
 func (r *fixedRenderer) Render(_ string) string { return r.out }
 
-// testHistoryWidth matches common test layout; use one HistoryBuilder per test when deps are fixed.
+// testHistoryWidth matches common test layout; use one Builder per test when deps are fixed.
 const testHistoryWidth = 80
 
 func newTestTheme() *ui.Theme {
@@ -44,7 +44,7 @@ func newTestTheme() *ui.Theme {
 
 func TestBashHistory_UseCapturedOutput(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 	captured := "output line 1\noutput line 2"
 
 	messages := []*schema.Message{
@@ -80,7 +80,7 @@ func TestBashHistory_UseCapturedOutput(t *testing.T) {
 
 func TestBashHistory_EmptyStdout_NoExitCode(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	messages := []*schema.Message{
 		{
@@ -111,7 +111,7 @@ func TestBashHistory_EmptyStdout_NoExitCode(t *testing.T) {
 
 func TestBashHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	messages := []*schema.Message{
 		{
@@ -142,7 +142,7 @@ func TestBashHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 
 func TestBashHistory_ErrorStatus(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	messages := []*schema.Message{
 		{
@@ -224,7 +224,7 @@ func TestRenderMessage_SymmetryAndSpacing_Invariants_Combinations(t *testing.T) 
 			msgs := []*schema.Message{tc.msg}
 
 			r := &fixedRenderer{out: tc.render}
-			b := NewHistoryBuilder(r, theme, width, 12)
+			b := NewBuilder(r, theme, width, 12)
 			out := stripANSI(b.RenderMessage(msgs, 0, nil, false))
 
 			// Exactly one unguttered blank line before and after.
@@ -275,7 +275,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		}
 	}
 
-	b := NewHistoryBuilder(nil, theme, width, 12)
+	b := NewBuilder(nil, theme, width, 12)
 	for _, seq := range sequences {
 		nameParts := make([]string, 0, len(seq))
 		var msgs []*schema.Message
@@ -318,7 +318,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width, 12)
+	b := NewBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{
@@ -350,7 +350,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width, 12)
+	b := NewBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "part1"},
@@ -367,7 +367,7 @@ func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width, 12)
+	b := NewBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "part1"},
@@ -389,7 +389,7 @@ func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testi
 
 func TestBuildHistory_CancelledAssistantShowsGutterMarkerNotCancelText(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "last assistant response"},
@@ -437,7 +437,7 @@ func TestDivider_Color(t *testing.T) {
 		{Role: schema.Assistant, Content: "assistant content"},
 	}
 
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 	// Render USER message
 	renderedUser := b.RenderMessage(messages, 0, nil, false)
 	assert.Contains(t, renderedUser, expectedUserPrefix, "USER gutter should use primary color + bold")
@@ -449,7 +449,7 @@ func TestDivider_Color(t *testing.T) {
 
 func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 	messages := []*schema.Message{
 		{Role: schema.User, Content: "one"},
 		// Tool messages should not contribute spacing in history view.
@@ -470,7 +470,7 @@ func TestIssue_History_ToolBlockHeaderAppearsInline(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
-	b := NewHistoryBuilder(renderer, theme, width, 12)
+	b := NewBuilder(renderer, theme, width, 12)
 
 	msg := &schema.Message{
 		Role:    schema.Assistant,
@@ -498,7 +498,7 @@ func TestHistory_ToolBlocks_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
 	renderer := ui.NewGlamourRenderer(width, true)
-	b := NewHistoryBuilder(renderer, theme, width, 12)
+	b := NewBuilder(renderer, theme, width, 12)
 
 	msg := &schema.Message{
 		Role: schema.Assistant,
@@ -534,7 +534,7 @@ func TestMessageHeaders(t *testing.T) {
 		{Role: schema.Assistant, Content: "hi"},
 	}
 
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	t.Run("User Message Formatting", func(t *testing.T) {
 		theme := newTestTheme()
@@ -544,7 +544,7 @@ func TestMessageHeaders(t *testing.T) {
 			{Role: schema.User, Content: "Hello World"},
 		}
 
-		ub := NewHistoryBuilder(renderer, theme, width, 12)
+		ub := NewBuilder(renderer, theme, width, 12)
 		rendered := ub.RenderMessage(messages, 0, nil, false)
 
 		style := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)
@@ -556,7 +556,7 @@ func TestMessageHeaders(t *testing.T) {
 	t.Run("Assistant Message Spacing", func(t *testing.T) {
 		theme := newTestTheme()
 		width := 80
-		ab := NewHistoryBuilder(nil, theme, width, 12)
+		ab := NewBuilder(nil, theme, width, 12)
 		tcID := "tc-1"
 		messages := []*schema.Message{
 			{
@@ -593,7 +593,7 @@ func TestMessageHeaders(t *testing.T) {
 
 func TestUserGutter_UsesThickVerticalBar(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 	messages := []*schema.Message{{Role: schema.User, Content: "hello"}}
 	out := stripANSI(b.RenderMessage(messages, 0, nil, false))
 	assert.Contains(t, out, "U┃", "user role line should use heavy vertical bar")
@@ -609,7 +609,7 @@ func (m *mockRenderer) Render(s string) string {
 }
 func TestHistory_TaskNotification_IsNotRendered(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	messages := []*schema.Message{
 		{
@@ -626,7 +626,7 @@ func TestHistory_TaskNotification_IsNotRendered(t *testing.T) {
 
 func TestHistory_TaskNotification_OmittedFromMixedConversation(t *testing.T) {
 	theme := newTestTheme()
-	b := NewHistoryBuilder(nil, theme, testHistoryWidth, 12)
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	messages := []*schema.Message{
 		{Role: schema.User, Content: "real user prompt"},

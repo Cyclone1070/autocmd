@@ -1,3 +1,4 @@
+// Package bash provides tools for executing shell commands.
 package bash
 
 import (
@@ -16,22 +17,27 @@ type taskLister interface {
 	List() []TaskInfo
 }
 
+// TaskListTool is a tool for listing active background tasks.
 type TaskListTool struct {
 	manager taskLister
 }
 
+// NewTaskListTool creates a new TaskListTool.
 func NewTaskListTool(manager taskLister) *TaskListTool {
 	return &TaskListTool{
 		manager: manager,
 	}
 }
 
+// Name returns the unique identifier for the task list tool.
 func (t *TaskListTool) Name() string {
 	return "task_list"
 }
 
+// IsConcurrentSafe indicates if the task list tool can be run concurrently.
 func (t *TaskListTool) IsConcurrentSafe() bool { return true }
 
+// Definition returns the Eino tool definition for the task list tool.
 func (t *TaskListTool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "task_list",
@@ -52,6 +58,7 @@ Returns a summary of each task:
 	}
 }
 
+// Prepare returns an invocation for the task list tool.
 func (t *TaskListTool) Prepare(params string) (domain.Invocation, error) {
 	return &taskListInvocation{
 		manager: t.manager,

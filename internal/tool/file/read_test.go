@@ -509,7 +509,7 @@ func (m *mockFileOps) Stat(path string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockFileOps) WriteFileAtomic(path string, content []byte, perm os.FileMode) error {
+func (m *mockFileOps) WriteFileAtomic(path string, content []byte, _ os.FileMode) error {
 	m.files[path] = content
 	return nil
 }

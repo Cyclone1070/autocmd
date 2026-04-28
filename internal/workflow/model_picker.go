@@ -23,6 +23,7 @@ type modelPickerBus interface {
 	WorkflowActions() <-chan domain.Action
 }
 
+// ModelPickerDeps contains the dependencies for the model selection workflow.
 type ModelPickerDeps struct {
 	Bus      modelPickerBus
 	Registry modelLLMRegistry

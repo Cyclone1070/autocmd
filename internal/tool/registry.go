@@ -1,3 +1,4 @@
+// Package tool provides the tool registry and core tool implementations.
 package tool
 
 import (

@@ -1,12 +1,16 @@
+// Package permission provides a mechanism for authorizing tool executions based on user-defined policies.
 package permission
 
 // Mode is the effective policy decision for a tool call.
 type Mode string
 
 const (
-	ModeAsk   Mode = "ask"
+	// ModeAsk requires explicit user approval before each tool execution.
+	ModeAsk Mode = "ask"
+	// ModeAllow permits tool execution without further prompts.
 	ModeAllow Mode = "allow"
-	ModeDeny  Mode = "deny"
+	// ModeDeny blocks tool execution unconditionally.
+	ModeDeny Mode = "deny"
 )
 
 // Resolver returns effective permission mode for tools.
@@ -28,6 +32,7 @@ func NewResolver(defaultMode string, byTool map[string]string) *Resolver {
 	return resolver
 }
 
+// Resolve returns the effective permission mode for a specific tool.
 func (r *Resolver) Resolve(toolName string) Mode {
 	if r == nil {
 		return ModeAllow

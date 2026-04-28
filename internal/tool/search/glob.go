@@ -1,3 +1,4 @@
+// Package search provides tools for finding files and searching their content.
 package search
 
 import (
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	DefaultGlobTimeout = 20 * time.Second
+	defaultGlobTimeout = 20 * time.Second
 	readBufferSize     = 32 * 1024
 )
 
@@ -61,6 +62,7 @@ func (t *GlobTool) Name() string {
 	return "glob"
 }
 
+// IsConcurrentSafe indicates if the glob tool can be run concurrently.
 func (t *GlobTool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the JSON schema for the tool.
@@ -161,7 +163,7 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	args := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden", i.absPath}
 	cmdStr := joinArgs(args)
 
-	ctx, cancel := context.WithTimeout(ctx, DefaultGlobTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultGlobTimeout)
 	defer cancel()
 
 	res, err := i.tool.commandExecutor.Run(ctx, cmdStr, workDir, true)

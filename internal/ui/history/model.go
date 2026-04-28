@@ -20,15 +20,15 @@ type bus interface {
 	SendAction(domain.Action)
 }
 
-// model is the bubbletea model for the history viewer.
-type model struct {
+// Model is the bubbletea model for the history viewer.
+type Model struct {
 	messages         []*schema.Message
 	chatWindowWidth  int
 	theme            *ui.Theme
 	width            int
 	height           int
 	renderer         ui.Renderer
-	builder          *HistoryBuilder
+	builder          *Builder
 	viewport         viewport.Model
 	displays         domain.ToolDisplays
 	items            []renderItem
@@ -45,26 +45,26 @@ type model struct {
 	isDark           bool
 }
 
-// Option is a functional option for configuring the model.
-type Option func(*model)
+// Option is a functional option for configuring the Model.
+type Option func(*Model)
 
-// WithRenderer sets the renderer for the model.
+// WithRenderer sets the renderer for the Model.
 func WithRenderer(r ui.Renderer) Option {
-	return func(m *model) {
+	return func(m *Model) {
 		m.renderer = r
 	}
 }
 
-// WithIsDark sets the dark mode flag for the model.
+// WithIsDark sets the dark mode flag for the Model.
 func WithIsDark(isDark bool) Option {
-	return func(m *model) {
+	return func(m *Model) {
 		m.isDark = isDark
 	}
 }
 
-// NewModel creates a new history model.
-func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int, width, height int, opts ...Option) *model {
-	m := &model{
+// NewModel creates a new history Model.
+func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int, width, height int, opts ...Option) *Model {
+	m := &Model{
 		bus:              b,
 		theme:            theme,
 		chatWindowWidth:  chatWindowWidth,
@@ -99,11 +99,11 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int,
 	return m
 }
 
-func (m *model) syncBuilder() {
-	m.builder = NewHistoryBuilder(m.renderer, m.theme, m.width, m.bashOutputHeight)
+func (m *Model) syncBuilder() {
+	m.builder = NewBuilder(m.renderer, m.theme, m.width, m.bashOutputHeight)
 }
 
-func (m *model) initializeContent() {
+func (m *Model) initializeContent() {
 	m.items = buildRenderItems(m.messages)
 	if len(m.items) == 0 {
 		m.reachedTop = true
@@ -140,7 +140,7 @@ func (m *model) initializeContent() {
 	m.viewport.GotoBottom()
 }
 
-func (m *model) renderMessage(idx int) string {
+func (m *Model) renderMessage(idx int) string {
 	if r, ok := m.renderedMessages[idx]; ok {
 		return r
 	}
@@ -155,7 +155,7 @@ func (m *model) renderMessage(idx int) string {
 	return rendered
 }
 
-func (m *model) refreshViewport() {
+func (m *Model) refreshViewport() {
 	if !m.loaded {
 		return
 	}
@@ -176,7 +176,7 @@ func (m *model) refreshViewport() {
 	}
 }
 
-func (m *model) calculateWidth(termWidth int) int {
+func (m *Model) calculateWidth(termWidth int) int {
 	w := m.chatWindowWidth
 	if termWidth > 0 && termWidth < w {
 		w = termWidth
@@ -184,11 +184,12 @@ func (m *model) calculateWidth(termWidth int) int {
 	return w
 }
 
-func (m *model) Init() tea.Cmd {
+// Init initializes the history model.
+func (m *Model) Init() tea.Cmd {
 	return m.pollBus()
 }
 
-func (m *model) pollBus() tea.Cmd {
+func (m *Model) pollBus() tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-m.bus.UIUpdates()
 		if !ok {
@@ -198,7 +199,8 @@ func (m *model) pollBus() tea.Cmd {
 	}
 }
 
-func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+// Update handles messages for scrolling and viewport updates.
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
@@ -251,7 +253,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *model) View() string {
+// View renders the history viewport.
+func (m *Model) View() string {
 	if !m.loaded && len(m.messages) == 0 {
 		return ""
 	}

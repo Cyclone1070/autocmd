@@ -1,3 +1,4 @@
+// Package eventbus provides a central message hub for application events and updates.
 package eventbus
 
 import (

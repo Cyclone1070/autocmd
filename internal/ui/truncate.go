@@ -21,13 +21,13 @@ func (g *TruncatingGater) Gate(lines []string) ([]string, int) {
 	}
 
 	if g.maxLines == 1 {
-		return []string{fmt.Sprintf("    ▲ [%d lines truncated]", len(lines))}, 1
+		return []string{fmt.Sprintf("  ▲ [%d lines truncated]", len(lines))}, 1
 	}
 
 	// We need 2 lines for the indicator header (one empty line, one text line)
 	maxContentLines := g.maxLines - 2
 	overflow := len(lines) - maxContentLines
-	header := fmt.Sprintf("    ▲ [%d lines truncated]", overflow)
+	header := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
 
 	if maxContentLines == 0 {
 		return []string{"", header}, 2

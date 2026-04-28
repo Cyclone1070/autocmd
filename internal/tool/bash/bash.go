@@ -19,6 +19,7 @@ import (
 
 const (
 	defaultWaitDuration = 10 * time.Second
+	tailPreviewSize     = 2048
 )
 
 type commandExecutor interface {
@@ -320,7 +321,7 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	llmOutput := res.Stdout
 	uiOutput := res.Stdout
 	if res.LogPath != "" {
-		preview := i.readTail(res.LogPath, 2048)
+		preview := i.readTail(res.LogPath, tailPreviewSize)
 		llmOutput = fmt.Sprintf("Output too large. Full output saved to %s. Use `read_file` tool to read full output.\n\nPreview output (last 2KB):\n%s", res.LogPath, preview)
 		uiOutput = fmt.Sprintf("(Output too large, saved to %s)", res.LogPath)
 	}

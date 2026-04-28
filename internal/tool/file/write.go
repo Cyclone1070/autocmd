@@ -196,7 +196,7 @@ func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolD
 	contentToWrite := []byte(normalizedContent)
 
 	// Write file atomically
-	perm := os.FileMode(0o644)
+	perm := os.FileMode(domain.DefaultFilePerm)
 	if err := i.fileOps.WriteFileAtomic(i.absPath, contentToWrite, perm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled

@@ -144,7 +144,7 @@ func (st *Store) Save(s *domain.Session) error {
 	if err != nil {
 		return fmt.Errorf("marshal session info: %w", err)
 	}
-	if err := st.fs.WriteFileAtomic(infoPath, infoData, 0644); err != nil {
+	if err := st.fs.WriteFileAtomic(infoPath, infoData, domain.DefaultFilePerm); err != nil {
 		return fmt.Errorf("write session info: %w", err)
 	}
 
@@ -158,7 +158,7 @@ func (st *Store) Save(s *domain.Session) error {
 	if err != nil {
 		return fmt.Errorf("marshal session messages: %w", err)
 	}
-	if err := st.fs.WriteFileAtomic(messagesPath, messagesData, 0644); err != nil {
+	if err := st.fs.WriteFileAtomic(messagesPath, messagesData, domain.DefaultFilePerm); err != nil {
 		return fmt.Errorf("write session messages: %w", err)
 	}
 

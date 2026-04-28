@@ -88,7 +88,7 @@ func TestEditFile(t *testing.T) {
 		params, _ := json.Marshal(req)
 		_, err := tool.Prepare(string(params))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Found 2 matches of the string to replace, but replace_all is false")
+		assert.Contains(t, err.Error(), "found 2 matches of the string to replace, but replace_all is false")
 	})
 
 	t.Run("Create new file via empty old_string", func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestEditFile(t *testing.T) {
 		params, _ := json.Marshal(req)
 		_, err := tool.Prepare(string(params))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "Cannot create new file - file already exists")
+		assert.Contains(t, err.Error(), "cannot create new file - file already exists")
 	})
 
 	t.Run("Edit with curly quotes match", func(t *testing.T) {

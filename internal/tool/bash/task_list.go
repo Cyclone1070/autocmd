@@ -10,6 +10,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const stalledThresholdSeconds = 30
+
 type taskLister interface {
 	List() []TaskInfo
 }
@@ -81,7 +83,7 @@ func (i *taskListInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	sbLLM.WriteString("active background bash tasks:\n")
 	for _, t := range tasks {
 		status := "running"
-		if t.SecondsSinceActivity > 30 {
+		if t.SecondsSinceActivity > stalledThresholdSeconds {
 			status = "POTENTIALLY STALLED"
 		}
 

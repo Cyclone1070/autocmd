@@ -9,8 +9,13 @@ import (
 const (
 	DefaultChatWindowWidth  = 80
 	DefaultBashOutputHeight = 12
+	DefaultThinkingHeight   = 5
 	DefaultMaxFileSize      = 20 * 1024 * 1024
 	DefaultMaxIterations    = 50
+
+	ContextWindow128k = 128000
+	ContextWindow256k = 256000
+	ContextWindow2M   = 2000000
 )
 
 // Config holds all application configuration values.
@@ -98,19 +103,20 @@ func DefaultConfig() *Config {
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
 			chatWindowWidth:  DefaultChatWindowWidth,
 			bashOutputHeight: DefaultBashOutputHeight,
+			thinkingHeight:   DefaultThinkingHeight,
 			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{
 			"google": {
-				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: 256000},
-				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: 256000},
-				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: 2097152},
-				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: 2097152},
+				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: ContextWindow256k},
+				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: ContextWindow256k},
+				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: ContextWindow2M},
+				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: ContextWindow2M},
 			},
 			"github": {
-				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: 128000},
-				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: 2097152},
-				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: 128000},
+				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: ContextWindow128k},
+				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: ContextWindow2M},
+				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: ContextWindow128k},
 			},
 		},
 	}

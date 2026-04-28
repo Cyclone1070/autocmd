@@ -12,6 +12,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const streamingBufferSize = 1024 * 1024 // 1MB
+
 type ToolExecutor struct {
 	registry           toolRegistry
 	waiter             actionWaiter
@@ -220,7 +222,7 @@ func (e *ToolExecutor) executeTool(ctx context.Context, tc *schema.ToolCall, inv
 			stream := si.Stream()
 			if stream != nil {
 				streamWG.Go(func() {
-					buf := make([]byte, 1024*1024)
+					buf := make([]byte, streamingBufferSize)
 					for {
 						n, readErr := stream.Read(buf)
 						if n > 0 {

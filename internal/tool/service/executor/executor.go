@@ -23,6 +23,10 @@ const (
 	DefaultSmartDrainThreshold = 16 * 1024         // 16KB
 	DefaultBinarySampleSize    = 8000              // 8KB sample for binary detection
 	DefaultBufferSize          = 4096              // 4KB standard buffer
+	maxIDRetries               = 5
+	numPipes                   = 2 // stdout, stderr
+	hexRatio                   = 2
+	kvParts                    = 2
 )
 
 type signalKiller interface {
@@ -208,9 +212,9 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 		logDir = os.TempDir()
 	}
 
-	_ = f.fs.MkdirAll(logDir, 0o755)
+	_ = f.fs.MkdirAll(logDir, domain.DefaultDirPerm)
 	const idLen = 8
-	for range 5 {
+	for range maxIDRetries {
 		tmpID := randomShortID(idLen)
 		tmpPath := filepath.Join(logDir, tmpID+".output.log")
 		fl, err := f.fs.CreateAtomic(tmpPath)
@@ -229,7 +233,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	follower := follow.NewFollower(f.fs, logPath)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(numPipes)
 
 	waitFn := func() (*Result, error) {
 		if cancel != nil {
@@ -275,7 +279,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	var bytesMu sync.Mutex
 	copyStream := func(src io.Reader) {
 		defer wg.Done()
-		buf := make([]byte, 4096)
+		buf := make([]byte, DefaultBufferSize)
 		for {
 			n, err := src.Read(buf)
 			if n > 0 {
@@ -323,7 +327,7 @@ func (f *OSCommandExecutor) getExitCode(err error) int {
 }
 
 func randomShortID(length int) string {
-	bytes := make([]byte, length/2)
+	bytes := make([]byte, length/hexRatio)
 	if _, err := rand.Read(bytes); err != nil {
 		panic(fmt.Sprintf("failed to generate random ID: %v", err))
 	}
@@ -345,8 +349,8 @@ func sanitizeEnv() map[string]string {
 	// Use a map for deduplication and easy override
 	envMap := make(map[string]string)
 	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 {
+		parts := strings.SplitN(e, "=", kvParts)
+		if len(parts) == kvParts {
 			if envWhitelist[parts[0]] {
 				envMap[parts[0]] = parts[1]
 			}

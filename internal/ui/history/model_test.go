@@ -29,7 +29,7 @@ func TestModel_EventFlow(t *testing.T) {
 	bus := new(mockBus)
 
 	t.Run("Snapshot received -> Renders content", func(t *testing.T) {
-		m := NewModel(bus, theme, 80, 80, 40)
+		m := NewModel(bus, theme, 80, 12, 80, 40)
 
 		ev := domain.HistoryEvent{
 			Messages: []*schema.Message{{Role: schema.User, Content: "snapshot message"}},
@@ -44,7 +44,7 @@ func TestModel_EventFlow(t *testing.T) {
 	})
 
 	t.Run("DoneEvent stops polling", func(t *testing.T) {
-		m := NewModel(bus, theme, 80, 80, 40)
+		m := NewModel(bus, theme, 80, 12, 80, 40)
 		m.Update(domain.DoneEvent{})
 
 		// This is hard to test purely with mock assertions unless we check if pollBus returned a cmd
@@ -56,7 +56,7 @@ func TestModel_EventFlow(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.StopAction{}).Once()
 
-		m := NewModel(bus, theme, 80, 80, 40)
+		m := NewModel(bus, theme, 80, 12, 80, 40)
 		msg := tea.KeyMsg{Type: tea.KeyCtrlC}
 		m.Update(msg)
 

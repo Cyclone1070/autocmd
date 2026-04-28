@@ -18,6 +18,7 @@ import (
 
 const (
 	DefaultGlobTimeout = 20 * time.Second
+	readBufferSize     = 32 * 1024
 )
 
 // GlobRequest represents the parameters for a glob operation.
@@ -215,7 +216,7 @@ func (i *globInvocation) countLines(path string) (int, error) {
 	}()
 
 	count := 0
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, readBufferSize)
 	for {
 		n, err := f.Read(buf)
 		if n > 0 {

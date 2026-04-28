@@ -13,6 +13,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const (
+	defaultPollInterval = 5 * time.Second
+	slowDownPenalty     = 5 * time.Second
+)
+
 // OAuthManager handles the RFC 8628 Device Authorization Flow.
 type OAuthManager struct {
 	client *http.Client
@@ -83,7 +88,7 @@ func (m *OAuthManager) RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod
 	// 3. Poll for Token
 	interval := time.Duration(dcr.Interval) * time.Second
 	if interval == 0 {
-		interval = 5 * time.Second
+		interval = defaultPollInterval
 	}
 
 	timer := time.NewTimer(0)
@@ -112,7 +117,7 @@ func (m *OAuthManager) RunDeviceFlow(ctx context.Context, cfg domain.OAuthMethod
 			case "authorization_pending":
 				// Continue polling
 			case "slow_down":
-				interval += 5 * time.Second
+				interval += slowDownPenalty
 			case "expired_token":
 				return "", fmt.Errorf("session expired, please try again")
 			case "access_denied":

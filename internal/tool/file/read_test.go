@@ -409,7 +409,7 @@ func TestReadFile(t *testing.T) {
 		_, finalDisplay := inv.(domain.ExecutableInvocation).Execute(context.Background())
 		typed, ok := finalDisplay.(domain.StringDisplay)
 		require.True(t, ok)
-		assert.Equal(t, "Read \"/workspace/subdir/test.txt\" L0-2", typed.Description)
+		assert.Equal(t, "Read \"/workspace/subdir/test.txt\" Lines 0-2", typed.Description)
 	})
 
 	t.Run("empty file returns system reminder", func(t *testing.T) {

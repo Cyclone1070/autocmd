@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 const (
@@ -126,7 +127,7 @@ func (m *Manager) Save(s *State) error {
 	configDir := filepath.Join(homeDir, ".config", ConfigDir)
 	statePath := filepath.Join(configDir, StateFile)
 
-	if err := m.fs.MkdirAll(configDir, 0o755); err != nil {
+	if err := m.fs.MkdirAll(configDir, domain.DefaultDirPerm); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
@@ -140,7 +141,7 @@ func (m *Manager) Save(s *State) error {
 		return fmt.Errorf("marshal state: %w", err)
 	}
 
-	if err := m.fs.WriteFile(statePath, data, 0644); err != nil {
+	if err := m.fs.WriteFile(statePath, data, domain.DefaultFilePerm); err != nil {
 		return fmt.Errorf("write state file: %w", err)
 	}
 

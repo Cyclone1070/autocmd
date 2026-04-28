@@ -136,7 +136,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	theme := ui.NewTheme(themeCfg)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().ThinkingHeight()))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().BashOutputHeight()))
 
 	uiModel := prompt.NewModel(

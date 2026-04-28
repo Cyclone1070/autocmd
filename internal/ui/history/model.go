@@ -13,6 +13,8 @@ import (
 	"golang.org/x/term"
 )
 
+const preloadFactor = 2
+
 type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 	SendAction(domain.Action)
@@ -87,7 +89,7 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int,
 	}
 
 	if m.renderer == nil {
-		renderWidth := max(m.width-gutterWidth, 10)
+		renderWidth := m.width - gutterWidth
 		m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 	}
 
@@ -114,7 +116,7 @@ func (m *model) initializeContent() {
 
 	var renderedParts []string
 	var currentHeight int
-	limit := m.height * 2
+	limit := m.height * preloadFactor
 
 	for m.topIdx >= 0 {
 		rendered := m.renderMessage(m.topIdx)
@@ -228,7 +230,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if newWidth != m.width {
 			m.width = newWidth
-			renderWidth := max(m.width-gutterWidth, 10)
+			renderWidth := m.width - gutterWidth
 			m.renderer = ui.NewGlamourRenderer(renderWidth, m.isDark)
 			m.syncBuilder()
 			m.renderedMessages = make(map[int]string)

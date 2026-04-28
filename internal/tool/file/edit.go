@@ -269,7 +269,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	diff, added, removed := computeUnifiedDiff(oldContent, content)
 
-	perm := os.FileMode(0o644)
+	perm := os.FileMode(domain.DefaultFilePerm)
 	if info != nil {
 		perm = info.Mode()
 	}

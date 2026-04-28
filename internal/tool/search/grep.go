@@ -29,6 +29,7 @@ const (
 	defaultOutputMode = OutputModeFilesWithMatches
 
 	DefaultGrepTimeout = 20 * time.Second
+	logTailSize        = 1024
 )
 
 var vcsExclusions = []string{".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
@@ -363,7 +364,7 @@ func (i *grepInvocation) analyzeLog(path string) (matches, files int, err error)
 		return 0, 0, err
 	}
 
-	offset := max(info.Size()-1024, 0)
+	offset := max(info.Size()-int64(logTailSize), 0)
 
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return 0, 0, err

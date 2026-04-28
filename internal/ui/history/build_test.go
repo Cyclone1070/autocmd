@@ -318,7 +318,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width)
+	b := NewHistoryBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{
@@ -350,7 +350,7 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width)
+	b := NewHistoryBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "part1"},
@@ -367,7 +367,7 @@ func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
-	b := NewHistoryBuilder(nil, theme, width)
+	b := NewHistoryBuilder(nil, theme, width, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "part1"},

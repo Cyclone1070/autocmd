@@ -17,6 +17,7 @@ type UIConfig struct {
 	mutedColor       ColorConfig
 	chatWindowWidth  int
 	bashOutputHeight int
+	thinkingHeight   int
 	shortToolBlock   bool
 }
 
@@ -26,6 +27,7 @@ func (c UIConfig) ErrorColor() ColorConfig   { return c.errorColor }
 func (c UIConfig) MutedColor() ColorConfig   { return c.mutedColor }
 func (c UIConfig) ChatWindowWidth() int      { return c.chatWindowWidth }
 func (c UIConfig) BashOutputHeight() int     { return c.bashOutputHeight }
+func (c UIConfig) ThinkingHeight() int       { return c.thinkingHeight }
 func (c UIConfig) ShortToolBlock() bool      { return c.shortToolBlock }
 
 // Setters for testing
@@ -46,5 +48,6 @@ type uiDTO struct {
 	MutedColor       colorDTO `json:"muted_color"`
 	ChatWindowWidth  int      `json:"chat_window_width"`
 	BashOutputHeight int      `json:"bash_output_height"`
+	ThinkingHeight   int      `json:"thinking_height"`
 	ShortToolBlock   bool     `json:"short_tool_block"`
 }

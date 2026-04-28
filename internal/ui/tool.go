@@ -390,11 +390,7 @@ func (r *ToolRenderer) renderQuestionReviewBlock(st QuestionUIState) string {
 // the same continuation content width as tool block wrapping so footer/separator
 // lines don't overflow and wrap unexpectedly.
 func (r *ToolRenderer) questionInnerWidth() int {
-	inner := r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
-	if inner < 12 {
-		return 12
-	}
-	return inner
+	return r.Width - lipgloss.Width(ToolInsetPrefix+ToolContentGutterPrefix)
 }
 
 func (r *ToolRenderer) renderQuestionFooter() string {

@@ -20,18 +20,19 @@ type bus interface {
 
 // model is the bubbletea model for the history viewer.
 type model struct {
-	messages        []*schema.Message
-	chatWindowWidth int
-	theme           *ui.Theme
-	width           int
-	height          int
-	renderer        ui.Renderer
-	builder         *HistoryBuilder
-	viewport        viewport.Model
-	displays        domain.ToolDisplays
-	items           []renderItem
-	bus             bus
-	loaded          bool
+	messages         []*schema.Message
+	chatWindowWidth  int
+	theme            *ui.Theme
+	width            int
+	height           int
+	renderer         ui.Renderer
+	builder          *HistoryBuilder
+	viewport         viewport.Model
+	displays         domain.ToolDisplays
+	items            []renderItem
+	bus              bus
+	loaded           bool
+	bashOutputHeight int
 
 	// Cache for lazy rendering
 	renderedMessages map[int]string
@@ -60,11 +61,12 @@ func WithIsDark(isDark bool) Option {
 }
 
 // NewModel creates a new history model.
-func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, width, height int, opts ...Option) *model {
+func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int, width, height int, opts ...Option) *model {
 	m := &model{
 		bus:              b,
 		theme:            theme,
 		chatWindowWidth:  chatWindowWidth,
+		bashOutputHeight: bashOutputHeight,
 		height:           height,
 		renderedMessages: make(map[int]string),
 		topIdx:           0,
@@ -96,7 +98,7 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, width, height int, op
 }
 
 func (m *model) syncBuilder() {
-	m.builder = NewHistoryBuilder(m.renderer, m.theme, m.width)
+	m.builder = NewHistoryBuilder(m.renderer, m.theme, m.width, m.bashOutputHeight)
 }
 
 func (m *model) initializeContent() {

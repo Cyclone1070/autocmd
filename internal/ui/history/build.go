@@ -74,22 +74,19 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 
 // HistoryBuilder renders session history using a markdown renderer, theme, and terminal width.
 type HistoryBuilder struct {
-	Renderer ui.Renderer
-	Theme    *ui.Theme
-	Width    int
+	Renderer         ui.Renderer
+	Theme            *ui.Theme
+	Width            int
+	BashOutputHeight int
 }
 
 // NewHistoryBuilder returns a HistoryBuilder. Width is the full chat column width (including gutter).
-func NewHistoryBuilder(renderer ui.Renderer, theme *ui.Theme, width int) *HistoryBuilder {
-	return &HistoryBuilder{Renderer: renderer, Theme: theme, Width: width}
+func NewHistoryBuilder(renderer ui.Renderer, theme *ui.Theme, width int, bashOutputHeight int) *HistoryBuilder {
+	return &HistoryBuilder{Renderer: renderer, Theme: theme, Width: width, BashOutputHeight: bashOutputHeight}
 }
 
 func (h *HistoryBuilder) contentWidth() int {
-	cw := h.Width - gutterWidth
-	if cw < 10 {
-		return 10
-	}
-	return cw
+	return h.Width - gutterWidth
 }
 
 // BuildSession renders the full session transcript.
@@ -231,7 +228,7 @@ func (h *HistoryBuilder) renderToolCall(tc *schema.ToolCall, displays domain.Too
 	status := ui.StatusSuccess
 	var toolErr string
 
-	tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(12))
+	tooling := ui.NewToolRenderer(h.Theme, contentWidth, ui.NewToolOutputGater(h.BashOutputHeight))
 	frame := ""
 	var rendered string
 

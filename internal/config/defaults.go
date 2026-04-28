@@ -6,6 +6,13 @@ import (
 	"path/filepath"
 )
 
+const (
+	DefaultChatWindowWidth  = 80
+	DefaultBashOutputHeight = 12
+	DefaultMaxFileSize      = 20 * 1024 * 1024
+	DefaultMaxIterations    = 50
+)
+
 // Config holds all application configuration values.
 type Config struct {
 	tools     ToolsConfig
@@ -76,8 +83,8 @@ type configDTO struct {
 func DefaultConfig() *Config {
 	return &Config{
 		tools: ToolsConfig{
-			maxFileSize:       20 * 1024 * 1024,
-			maxIterations:     50,
+			maxFileSize:       DefaultMaxFileSize,
+			maxIterations:     DefaultMaxIterations,
 			permissionDefault: "ask",
 			toolPermissions:   map[string]string{},
 		},
@@ -89,8 +96,8 @@ func DefaultConfig() *Config {
 			successColor:     ColorConfig{light: "#43BF6D", dark: "#73F59F"},
 			errorColor:       ColorConfig{light: "#F05D5E", dark: "#FF6666"},
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
-			chatWindowWidth:  80,
-			bashOutputHeight: 12,
+			chatWindowWidth:  DefaultChatWindowWidth,
+			bashOutputHeight: DefaultBashOutputHeight,
 			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{

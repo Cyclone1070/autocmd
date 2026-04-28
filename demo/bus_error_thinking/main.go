@@ -13,6 +13,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	chatWidth      = 80
+	thinkingHeight = 5
+	demoDelay      = 500 * time.Millisecond
+	thinkingDelay  = 2 * time.Second
+)
+
 func main() {
 	bus := eventbus.New()
 	theme := ui.NewTheme(ui.ThemeConfig{
@@ -22,11 +29,10 @@ func main() {
 		MutedColor:   lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#888888"},
 	})
 
-	chatWidth := 80
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewNoOpGater())
 
 	uiModel := prompt.NewModel(
@@ -41,9 +47,9 @@ func main() {
 	)
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(demoDelay)
 		bus.SendUIUpdate(domain.ThinkingEvent{})
-		time.Sleep(2 * time.Second)
+		time.Sleep(thinkingDelay)
 		bus.Close()
 	}()
 

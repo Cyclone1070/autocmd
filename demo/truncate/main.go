@@ -22,11 +22,21 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	defaultChatWidth    = 80
+	thinkingHeight      = 5
+	toolingHeight       = 12
+	demoTokenLimit      = 1000
+	truncateLoopLimit   = 40
+	initialDelay        = 350 * time.Millisecond
+	loopDelay           = 300 * time.Millisecond
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(80)
+	cfg.SetChatWindowWidth(defaultChatWidth)
 
 	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
@@ -47,8 +57,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(toolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -93,10 +103,10 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(350 * time.Millisecond):
+	case <-time.After(initialDelay):
 	}
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "This is a test of the truncation feature. The following lines should be truncated if they exceed the terminal width.\n\n"})
-	for i := 1; i <= 40; i++ {
+	for i := 1; i <= truncateLoopLimit; i++ {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -106,7 +116,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(loopDelay):
 		}
 	}
 	return nil
@@ -125,7 +135,7 @@ type mockLLM struct{}
 
 func (l *mockLLM) ID() string                        { return "mock" }
 func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int                { return 1000 }
+func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {

@@ -23,6 +23,26 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	thinkingHeight = 5
+	toolingHeight  = 12
+	demoTokenLimit = 1000
+
+	// Delays
+	initDelay    = 650 * time.Millisecond
+	introGap     = 95 * time.Millisecond
+	scanDelay    = 900 * time.Millisecond
+	logGap       = 250 * time.Millisecond
+	deployGap    = 90 * time.Millisecond
+	deployDelay  = 800 * time.Millisecond
+	middleGap    = 300 * time.Millisecond
+	narrativeGap = 85 * time.Millisecond
+	timeDelay    = 950 * time.Millisecond
+	wrapGap      = 95 * time.Millisecond
+	rollbackDelay = 850 * time.Millisecond
+	finalGap     = 90 * time.Millisecond
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
@@ -46,8 +66,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(toolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -112,7 +132,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	a.bus.SendUIUpdate(domain.ThinkingEvent{})
-	if err := sleep(650 * time.Millisecond); err != nil {
+	if err := sleep(initDelay); err != nil {
 		return err
 	}
 
@@ -127,13 +147,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"I can already see a spike around 09:13 UTC",
 		", with most failures clustered in one region.\n",
 	}
-	if err := sendChunks(intro, 95*time.Millisecond); err != nil {
+	if err := sendChunks(intro, introGap); err != nil {
 		return err
 	}
 
 	scanDisplay := domain.NewStringDisplay("bash", "rg -n \"authentication failed|token expired\" logs/prod/*.log | head -n 40")
 	tt.Start("tool-logs-1", scanDisplay)
-	if err := sleep(900 * time.Millisecond); err != nil {
+	if err := sleep(scanDelay); err != nil {
 		return err
 	}
 	tt.End("tool-logs-1", domain.NewStringDisplay("bash",
@@ -141,7 +161,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			"09:13:11 payment webhook: signature mismatch for 214 retries\n"+
 			"09:13:15 edge gateway: clock skew detected (+93s)\n"))
 
-	if err := sleep(250 * time.Millisecond); err != nil {
+	if err := sleep(logGap); err != nil {
 		return err
 	}
 
@@ -159,13 +179,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"elating Deploys\n",
 		"Next I will check infra changes around the same minute.\n",
 	}
-	if err := sendChunks(afterLogs, 90*time.Millisecond); err != nil {
+	if err := sendChunks(afterLogs, deployGap); err != nil {
 		return err
 	}
 
 	deployDisplay := domain.NewStringDisplay("bash", "git log --oneline --decorate --since=\"3 hours ago\" infra/ deploy/")
 	tt.Start("tool-deploy-1", deployDisplay)
-	if err := sleep(800 * time.Millisecond); err != nil {
+	if err := sleep(deployDelay); err != nil {
 		return err
 	}
 	tt.End("tool-deploy-1", domain.NewStringDisplay("bash",
@@ -173,7 +193,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			"76cf8d1 infra(time): tighten drift threshold from 120s to 45s\n"+
 			"44ed203 ci: update healthcheck timeout\n"))
 
-	if err := sleep(300 * time.Millisecond); err != nil {
+	if err := sleep(middleGap); err != nil {
 		return err
 	}
 
@@ -192,13 +212,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"```\n\n",
 		"I'll now verify with a direct node-time sample so we avoid guesswork.\n",
 	}
-	if err := sendChunks(middleNarrative, 85*time.Millisecond); err != nil {
+	if err := sendChunks(middleNarrative, narrativeGap); err != nil {
 		return err
 	}
 
 	timeDisplay := domain.NewStringDisplay("bash", "for n in edge-a edge-b edge-c; do ssh $n 'date -u'; done")
 	tt.Start("tool-time-1", timeDisplay)
-	if err := sleep(950 * time.Millisecond); err != nil {
+	if err := sleep(timeDelay); err != nil {
 		return err
 	}
 	tt.End("tool-time-1", domain.NewStringDisplay("bash",
@@ -223,13 +243,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"3. Replay failed webhooks from dead-letter queue after clock sync.\n",
 		"4. Add drift alerting so this never goes silent again.\n",
 	}
-	if err := sendChunks(longWrapSection, 95*time.Millisecond); err != nil {
+	if err := sendChunks(longWrapSection, wrapGap); err != nil {
 		return err
 	}
 
 	rollbackDisplay := domain.NewStringDisplay("bash", "kubectl rollout undo ds/ntp-sidecar -n edge --to-revision=41")
 	tt.Start("tool-rollback-1", rollbackDisplay)
-	if err := sleep(850 * time.Millisecond); err != nil {
+	if err := sleep(rollbackDelay); err != nil {
 		return err
 	}
 	tt.End("tool-rollback-1", domain.NewStringDisplay("bash",
@@ -250,7 +270,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"kubectl logs -n edge ds/ntp-sidecar --since=15m | rg -n \"drift|sync|offset\"\n",
 		"```\n",
 	}
-	if err := sendChunks(final, 90*time.Millisecond); err != nil {
+	if err := sendChunks(final, finalGap); err != nil {
 		return err
 	}
 
@@ -270,7 +290,7 @@ type mockLLM struct{}
 
 func (l *mockLLM) ID() string                        { return "mock" }
 func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int                { return 1000 }
+func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil

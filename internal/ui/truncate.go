@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+const indicatorHeight = 2
+
 // TruncatingGater implements viewport-style truncation.
 type TruncatingGater struct {
 	maxLines int
@@ -25,16 +27,16 @@ func (g *TruncatingGater) Gate(lines []string) ([]string, int) {
 	}
 
 	// We need 2 lines for the indicator header (one empty line, one text line)
-	maxContentLines := g.maxLines - 2
+	maxContentLines := g.maxLines - indicatorHeight
 	overflow := len(lines) - maxContentLines
 	header := fmt.Sprintf("  ▲ [%d lines truncated]", overflow)
 
 	if maxContentLines == 0 {
-		return []string{"", header}, 2
+		return []string{"", header}, indicatorHeight
 	}
 
 	visible := lines[overflow:]
-	return append([]string{"", header}, visible...), 2
+	return append([]string{"", header}, visible...), indicatorHeight
 }
 
 // NewTruncatingGater creates a gater that truncates content after maxLines.

@@ -35,11 +35,21 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	defaultChatWidth    = 80
+	thinkingHeight      = 5
+	toolingHeight       = 12
+	demoTokenLimit      = 1000
+	maxFileSize         = 1024 * 1024
+	agentIterations     = 20
+	turnDelay           = 450 * time.Millisecond
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(80)
+	cfg.SetChatWindowWidth(defaultChatWidth)
 
 	chatWidth := cfg.ChatWindowWidth()
 	termHeight := 0
@@ -59,8 +69,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(toolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -80,14 +90,14 @@ func main() {
 	// Real Tool Setup
 	cwd, _ := os.Getwd()
 	pathResolver := path.NewResolver(cwd)
-	fileSystem := fs.NewOSFileSystem(1024 * 1024)
+	fileSystem := fs.NewOSFileSystem(maxFileSize)
 	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
 	checksumManager := hash.NewChecksumManager()
 
 	taskMgr := bash.NewTaskManager(fileSystem)
 	tools := []domain.Tool{
-		file.NewWriteFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
-		file.NewEditFileTool(fileSystem, checksumManager, pathResolver, 1024*1024),
+		file.NewWriteFileTool(fileSystem, checksumManager, pathResolver, maxFileSize),
+		file.NewEditFileTool(fileSystem, checksumManager, pathResolver, maxFileSize),
 		file.NewReadFileTool(fileSystem, checksumManager, pathResolver),
 		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
 		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
@@ -109,7 +119,7 @@ func main() {
 
 	// NEW: Use the real agent.Loop with a stateful MockLLM
 	mockLLM := &statefulMockLLM{}
-	agentLoop := agent.NewLoop(mockLLM, toolExecutor, 20, bus, taskMgr)
+	agentLoop := agent.NewLoop(mockLLM, toolExecutor, agentIterations, bus, taskMgr)
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},
@@ -141,7 +151,7 @@ type statefulMockLLM struct {
 
 func (l *statefulMockLLM) ID() string                        { return "all-tool-mock" }
 func (l *statefulMockLLM) DisplayName() string               { return "All Tool Mock" }
-func (l *statefulMockLLM) ContextWindow() int                { return 1000 }
+func (l *statefulMockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *statefulMockLLM) Model() model.ToolCallingChatModel { return l }
 
 func (l *statefulMockLLM) Generate(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.Message, error) {
@@ -153,7 +163,7 @@ func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, op
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(450 * time.Millisecond):
+	case <-time.After(turnDelay):
 	}
 
 	cwd, _ := os.Getwd()

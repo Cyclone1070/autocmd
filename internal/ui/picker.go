@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const groupLeftMargin = 2
+
 // Item is a single selectable row.
 type Item struct {
 	ID     string
@@ -143,7 +145,7 @@ func (m *Picker) View() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(primary).MarginBottom(1)
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(primary)
 	descStyle := lipgloss.NewStyle().Foreground(muted)
-	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(muted).Margin(1, 0, 0, 2)
+	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(muted).Margin(1, 0, 0, groupLeftMargin)
 
 	activeStyle := lipgloss.NewStyle().Foreground(active)
 	cursorStyle := lipgloss.NewStyle().Foreground(primary).Bold(true)

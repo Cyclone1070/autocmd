@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const gapThreshold = 2
+
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // NormalizeBlock ensures a block has at least one leading newline and no trailing newlines.
@@ -27,7 +29,7 @@ func NormalizeBlock(s string) string {
 	// we subtract 1 to account for the tea.Printf addition (or the Join("\n") in history),
 	// preserving the extra gap.
 	prepend := 1
-	if leading > 2 {
+	if leading > gapThreshold {
 		prepend = leading - 1
 	}
 

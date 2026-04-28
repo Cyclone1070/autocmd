@@ -9,6 +9,8 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
+const minNodesForSplit = 2
+
 // Stream handles buffering and safe block separation for streaming markdown.
 type Stream struct {
 	buffer        string
@@ -128,7 +130,7 @@ func (s *Stream) findSafeSplit() int {
 		return 0
 	}
 
-	if count >= 2 {
+	if count >= minNodesForSplit {
 		// Find the second to last node to determine where the previous block ends.
 		var prev ast.Node
 		curr := doc.FirstChild()

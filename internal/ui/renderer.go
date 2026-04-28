@@ -13,6 +13,7 @@ import (
 const (
 	codeStartMarker = "_IAV_CODE_START_"
 	codeEndMarker   = "_IAV_CODE_END_"
+	expectedGroups  = 4
 )
 
 // Renderer renders markdown to ANSI strings. Failure should be handled internally.
@@ -49,7 +50,7 @@ func (g *GlamourRenderer) Render(markdown string) string {
 
 	out := re.ReplaceAllStringFunc(rendered, func(match string) string {
 		sub := re.FindStringSubmatch(match)
-		if len(sub) < 4 {
+		if len(sub) < expectedGroups {
 			return match
 		}
 		prefix := sub[1]

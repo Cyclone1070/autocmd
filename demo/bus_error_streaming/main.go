@@ -13,6 +13,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const (
+	chatWidth      = 80
+	thinkingHeight = 5
+	demoDelay      = 500 * time.Millisecond
+)
+
 func main() {
 	bus := eventbus.New()
 	theme := ui.NewTheme(ui.ThemeConfig{
@@ -22,11 +28,10 @@ func main() {
 		MutedColor:   lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#888888"},
 	})
 
-	chatWidth := 80
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewNoOpGater())
 
 	uiModel := prompt.NewModel(
@@ -41,7 +46,7 @@ func main() {
 	)
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(demoDelay)
 		longText := "This is a long piece of text that will be streamed and animated. It contains enough content to ensure the animator is still active when the bus is closed suddenly in the middle of our communication pipe."
 		bus.SendUIUpdate(domain.TextEvent{Text: longText})
 		time.Sleep(1 * time.Second)

@@ -10,6 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const percentMultiplier = 100.0
+
 type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 }
@@ -92,7 +94,7 @@ func (m *Model) renderInfo(data *domain.InfoEvent) string {
 	// Usage Section (only if model and context window are present)
 	if data.Model != "" && data.ContextWindow > 0 {
 		if data.SessionTokens > 0 {
-			usagePct := float64(data.SessionTokens) / float64(data.ContextWindow) * 100
+			usagePct := float64(data.SessionTokens) / float64(data.ContextWindow) * percentMultiplier
 			usage := fmt.Sprintf("%d tokens (%.1f%% of %d context)", data.SessionTokens, usagePct, data.ContextWindow)
 			sb.WriteString(formatLine("Session Usage:", usage))
 		} else {

@@ -23,11 +23,29 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	defaultChatWidth    = 80
+	defaultThinkingHeight = 5
+	defaultToolingHeight = 12
+	demoTokenLimit      = 1000
+
+	// Delays
+	fastDelay   = 500 * time.Millisecond
+	mediumDelay = 1000 * time.Millisecond
+	slowDelay   = 1500 * time.Millisecond
+	streamDelay = 300 * time.Millisecond
+
+	// Loop limits
+	streamIterations = 20
+	fastThreshold    = 15
+	medThreshold     = 18
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetChatWindowWidth(80)
+	cfg.SetChatWindowWidth(defaultChatWidth)
 
 	// Calculate width and height capping at terminal size
 	chatWidth := cfg.ChatWindowWidth()
@@ -48,8 +66,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(defaultThinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(defaultToolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -127,21 +145,21 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(500 * time.Millisecond):
+			case <-time.After(fastDelay):
 				tt.End(name+"-1", display1)
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(1000 * time.Millisecond):
+			case <-time.After(mediumDelay):
 				tt.End(name+"-3", toolDisplayWithError(display3, "operation failed: middle tool error"))
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(1500 * time.Millisecond):
+			case <-time.After(slowDelay):
 				tt.End(name+"-2", display2)
 			}
 		} else {
@@ -149,21 +167,21 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(500 * time.Millisecond):
+			case <-time.After(fastDelay):
 				tt.End(name+"-2", display2)
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(1000 * time.Millisecond):
+			case <-time.After(mediumDelay):
 				tt.End(name+"-3", toolDisplayWithError(display3, "operation failed: middle tool error"))
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(1500 * time.Millisecond):
+			case <-time.After(slowDelay):
 				tt.End(name+"-1", display1)
 			}
 		}
@@ -195,18 +213,18 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	tt.Start("SHELL-3", domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", ""))
 
 	// Heavy streaming
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= streamIterations; i++ {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
-			if i <= 15 {
+		case <-time.After(streamDelay):
+			if i <= fastThreshold {
 				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-2", Chunk: fmt.Sprintf("Fast output line %d - working quickly...\n", i)})
 			}
-			if i <= 20 {
+			if i <= streamIterations {
 				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-1", Chunk: fmt.Sprintf("Slow output line %d - taking its time................................................................................................\n", i)})
 			}
-			if i <= 18 {
+			if i <= medThreshold {
 				a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "SHELL-3", Chunk: fmt.Sprintf("Med output line %d - about to crash...n", i)})
 			}
 		}
@@ -217,7 +235,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(1000 * time.Millisecond):
+	case <-time.After(mediumDelay):
 		bash3 := domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", "")
 		bash3.Error = "exit status 1: middle tool error"
 		tt.End("SHELL-3", bash3) // Medium/Fail
@@ -226,7 +244,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(1000 * time.Millisecond):
+	case <-time.After(mediumDelay):
 		tt.End("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", "")) // Slow
 	}
 
@@ -246,7 +264,7 @@ type mockLLM struct{}
 
 func (l *mockLLM) ID() string                        { return "mock" }
 func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int                { return 1000 }
+func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {

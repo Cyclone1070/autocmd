@@ -34,6 +34,13 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	thinkingHeight = 5
+	demoTokenLimit = 8192
+	chatWidth      = 80
+	searchRadius   = 24
+)
+
 func main() {
 	// Match normal app behavior unless --debug is used.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
@@ -95,7 +102,7 @@ func main() {
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(uiCfg.BashOutputHeight()))
 
 	uiModel := prompt.NewModel(
@@ -143,7 +150,7 @@ type reproLLM struct{}
 
 func (m *reproLLM) ID() string          { return "repro-llm" }
 func (m *reproLLM) DisplayName() string { return "Repro LLM" }
-func (m *reproLLM) ContextWindow() int  { return 8192 }
+func (m *reproLLM) ContextWindow() int  { return demoTokenLimit }
 func (m *reproLLM) Model() model.ToolCallingChatModel {
 	return m
 }
@@ -182,8 +189,9 @@ func findReproChunks(markdown string) []string {
 	}
 
 	// Prefer deterministic boundary that *actually* reproduces the gap in streaming.
-	start := max(markerIdx-24, 1)
-	end := min(markerIdx+24, len(markdown)-2)
+	start := max(markerIdx-searchRadius, 1)
+	const edgeMargin = 2
+	end := min(markerIdx+searchRadius, len(markdown)-edgeMargin)
 	for i := start; i <= end; i++ {
 		chunks := []string{
 			markdown[:i],
@@ -201,7 +209,7 @@ func findReproChunks(markdown string) []string {
 }
 
 func reproducesGap(markdown string, chunks []string) bool {
-	renderer := ui.NewGlamourRenderer(80, true)
+	renderer := ui.NewGlamourRenderer(chatWidth, true)
 	oneShot := stripANSI(renderer.Render(markdown))
 	streamed := stripANSI(simulateStream(renderer, chunks))
 	gapPattern := regexp.MustCompile(`(?s)Aurora Borealis.*?\n\s*\n\s*• The Concept of Stoicism`)

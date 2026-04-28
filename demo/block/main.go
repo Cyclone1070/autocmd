@@ -21,6 +21,13 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	thinkingHeight = 5
+	toolingHeight  = 12
+	demoTokenLimit = 1000
+	blockDelay     = 300 * time.Millisecond
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
@@ -45,8 +52,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	stream := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(toolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -106,7 +113,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(blockDelay):
 			a.bus.SendUIUpdate(domain.TextEvent{Text: b})
 		}
 	}
@@ -127,7 +134,7 @@ type mockLLM struct{}
 
 func (l *mockLLM) ID() string          { return "mock" }
 func (l *mockLLM) DisplayName() string { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int  { return 1000 }
+func (l *mockLLM) ContextWindow() int  { return demoTokenLimit }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }

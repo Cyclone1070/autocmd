@@ -6,6 +6,11 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const (
+	busBufferSize = 100
+	numWorkers    = 2
+)
+
 // EventBus facilitates bi-directional communication between the UI and Workflow.
 // It buffers updates to the UI and actions to the workflow.
 type EventBus struct {
@@ -24,13 +29,13 @@ type EventBus struct {
 // New creates and starts a new EventBus.
 func New() *EventBus {
 	b := &EventBus{
-		uiIn:        make(chan domain.UIUpdate, 100),
-		uiOut:       make(chan domain.UIUpdate, 100),
-		workflowIn:  make(chan domain.Action, 100),
-		workflowOut: make(chan domain.Action, 100),
+		uiIn:        make(chan domain.UIUpdate, busBufferSize),
+		uiOut:       make(chan domain.UIUpdate, busBufferSize),
+		workflowIn:  make(chan domain.Action, busBufferSize),
+		workflowOut: make(chan domain.Action, busBufferSize),
 		done:        make(chan struct{}),
 	}
-	b.wg.Add(2)
+	b.wg.Add(numWorkers)
 	go b.runUIUpdates()
 	go b.runWorkflowActions()
 	return b

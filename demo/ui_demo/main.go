@@ -23,6 +23,18 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	thinkingHeight = 5
+	toolingHeight  = 12
+	demoTokenLimit = 1000
+
+	// Delays
+	shortDelay  = 200 * time.Millisecond
+	mediumDelay = 400 * time.Millisecond
+	longDelay   = 600 * time.Millisecond
+	extraLongDelay = 1000 * time.Millisecond
+)
+
 func main() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
@@ -47,8 +59,8 @@ func main() {
 	}
 	theme := ui.NewTheme(themeCfg)
 	s := prompt.NewStream(ui.NewGlamourRenderer(chatWidth, true))
-	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(5))
-	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(12))
+	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(thinkingHeight))
+	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(toolingHeight))
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 
 	m := prompt.NewModel(
@@ -99,7 +111,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 
 	// 2. Thinking + Hidden Thoughts (Simulating a Leak)
@@ -116,7 +128,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(600 * time.Millisecond):
+		case <-time.After(longDelay):
 		}
 	}
 
@@ -127,7 +139,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(1 * time.Second):
+	case <-time.After(extraLongDelay):
 	}
 	tt.End("tool-0", tool0Disp)
 
@@ -135,7 +147,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 
 	// 3. Parallel Tool Calls (3 tools)
@@ -144,7 +156,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 
 	tool2Disp := domain.NewBashDisplay("Finish first", "eslint .", "/workspace/web", "")
@@ -152,14 +164,14 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(shortDelay):
 		a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"})
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 
 	tool3Disp := domain.NewBashDisplay("Finish second", "go test ./...", "/workspace/api", "")
@@ -167,7 +179,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 
 	// 3a. Tool 2 finishes first (blocked)
@@ -175,13 +187,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 	tt.End("tool-2", tool2Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(1 * time.Second):
+	case <-time.After(extraLongDelay):
 	}
 
 	// 3b. Tool 3 finishes second (blocked)
@@ -189,13 +201,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 	tt.End("tool-3", tool3Disp)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(1 * time.Second):
+	case <-time.After(extraLongDelay):
 	}
 
 	// 3c. Tool 1 finishes last (triggers cascading flush)
@@ -203,7 +215,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-time.After(400 * time.Millisecond):
+	case <-time.After(mediumDelay):
 	}
 	tt.End("tool-1", tool1Disp)
 
@@ -226,7 +238,7 @@ type mockLLM struct{}
 
 func (l *mockLLM) ID() string                        { return "mock" }
 func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int                { return 1000 }
+func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {

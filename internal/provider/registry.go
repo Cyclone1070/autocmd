@@ -9,6 +9,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const modelIDParts = 2
+
 // CredentialStore defines the interface for active credential resolution.
 type CredentialStore interface {
 	GetWithFallback(p domain.Provider) (*domain.Credential, error)
@@ -83,8 +85,8 @@ func NewLLMRegistry(authManager CredentialStore, providers *ProviderRegistry) *L
 
 // Get resolves "google/gemini-2.5-flash" to an LLM instance.
 func (r *LLMRegistry) Get(ctx context.Context, id string) (domain.LLM, error) {
-	parts := strings.SplitN(id, domain.ModelIDSeparator, 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(id, domain.ModelIDSeparator, modelIDParts)
+	if len(parts) != modelIDParts {
 		return nil, fmt.Errorf("invalid LLM ID format: %s (expected provider/model)", id)
 	}
 

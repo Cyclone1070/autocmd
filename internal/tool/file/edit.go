@@ -161,7 +161,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 
 		if req.OldString == "" {
 			if strings.TrimSpace(rawContent) != "" {
-				return nil, fmt.Errorf("Cannot create new file - file already exists.")
+				return nil, fmt.Errorf("cannot create new file - file already exists")
 			}
 		}
 	}
@@ -227,21 +227,21 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 				if start != -1 {
 					actualOldString = string(runes[start : start+len(normedBeforeRunes)])
 				} else {
-					return nil, fmt.Errorf("String to replace not found in file (normalization failed).\nString: %s", req.OldString)
+					return nil, fmt.Errorf("string to replace not found in file (normalization failed).\nString: %s", req.OldString)
 				}
 			} else {
-				return nil, fmt.Errorf("String to replace not found in file.\nString: %s", req.OldString)
+				return nil, fmt.Errorf("string to replace not found in file.\nString: %s", req.OldString)
 			}
 		}
 
 		matches = strings.Count(oldContent, actualOldString)
 		if matches == 0 {
 			// Should not happen if we found it above, but safe guard
-			return nil, fmt.Errorf("String to replace not found in file.\nString: %s", req.OldString)
+			return nil, fmt.Errorf("string to replace not found in file.\nString: %s", req.OldString)
 		}
 
 		if matches > 1 && !req.ReplaceAll {
-			return nil, fmt.Errorf("Found %d matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: %s", matches, req.OldString)
+			return nil, fmt.Errorf("found %d matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: %s", matches, req.OldString)
 		}
 
 		// Preserve curly quote style in the replacement if the original match had them

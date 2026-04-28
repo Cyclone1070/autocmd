@@ -136,9 +136,9 @@ func lastRowIndex(q domain.QuestionInfo, st QuestionPerState) int {
 }
 
 func clampQuestionCursor(q domain.QuestionInfo, st *QuestionPerState) {
-	max := lastRowIndex(q, *st)
-	if st.Cursor > max {
-		st.Cursor = max
+	limit := lastRowIndex(q, *st)
+	if st.Cursor > limit {
+		st.Cursor = limit
 	}
 	if st.Cursor < 0 {
 		st.Cursor = 0

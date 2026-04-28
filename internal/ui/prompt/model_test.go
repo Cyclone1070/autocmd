@@ -48,13 +48,13 @@ func (s *mockStream) ClearBuffer()    { s.clearCalls++ }
 
 type mockThinkingRenderer struct{}
 
-func (t *mockThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
+func (t *mockThinkingRenderer) RenderThinking(_ ui.ToolStatus, _ time.Time, _ int, _ string, _ spinnerProvider) string {
 	return "thinking_rendered"
 }
 
 type mockThinkingRendererWithLeadingGap struct{}
 
-func (t *mockThinkingRendererWithLeadingGap) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
+func (t *mockThinkingRendererWithLeadingGap) RenderThinking(_ ui.ToolStatus, _ time.Time, _ int, _ string, _ spinnerProvider) string {
 	return "\n\n    thinking_rendered"
 }
 
@@ -64,7 +64,7 @@ type mockThinkingRecorder struct {
 	lastThoughtText string
 }
 
-func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, start time.Time, tick int, thoughtText string, sp spinnerProvider) string {
+func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, _ time.Time, _ int, thoughtText string, _ spinnerProvider) string {
 	t.lastStatus = status
 	t.lastThoughtText = thoughtText
 	return "thinking_rendered"
@@ -282,7 +282,7 @@ func TestModel_NoTruncationIfHeightZero(t *testing.T) {
 func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	// Logical check: doFlush must use tea.Sequence to ensure order
 	m := &Model{}
-	m.flushFn = func(c string) tea.Cmd { return nil }
+	m.flushFn = func(_ string) tea.Cmd { return nil }
 	_, cmd := m.doFlush([]string{"b1", "b2"}, stateIdle)
 
 	// Verified in code: return m, tea.Sequence(cmds...)

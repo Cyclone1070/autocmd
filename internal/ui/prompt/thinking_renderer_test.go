@@ -12,7 +12,7 @@ import (
 
 type mockSpinner struct{}
 
-func (m *mockSpinner) Frame(tick int) string { return "*" }
+func (m *mockSpinner) Frame(_ int) string { return "*" }
 
 type passThroughGater struct{}
 
@@ -22,7 +22,7 @@ type truncatingMockGater struct {
 	called bool
 }
 
-func (g *truncatingMockGater) Gate(lines []string) ([]string, int) {
+func (g *truncatingMockGater) Gate(_ []string) ([]string, int) {
 	g.called = true
 	return []string{"  ▲ [2 lines truncated]", "kept line"}, 1
 }

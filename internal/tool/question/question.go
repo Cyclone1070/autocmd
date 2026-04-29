@@ -11,24 +11,24 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// QuestionTool is a tool that allows the LLM to ask the user interactive questions.
-type QuestionTool struct{}
+// Tool is a tool that allows the LLM to ask the user interactive questions.
+type Tool struct{}
 
-// NewQuestionTool creates a new QuestionTool.
-func NewQuestionTool() *QuestionTool {
-	return &QuestionTool{}
+// NewTool creates a new Tool.
+func NewTool() *Tool {
+	return &Tool{}
 }
 
 // Name returns the unique identifier for the question tool.
-func (t *QuestionTool) Name() string {
+func (t *Tool) Name() string {
 	return "ask_question"
 }
 
 // IsConcurrentSafe indicates if the tool can be run concurrently (false for interactive tools).
-func (t *QuestionTool) IsConcurrentSafe() bool { return false }
+func (t *Tool) IsConcurrentSafe() bool { return false }
 
 // Definition returns the Eino tool definition for the question tool.
-func (t *QuestionTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
 		Desc: `Asks the user one or more multiple choice questions to gather information, clarify ambiguity, understand preferences, make decisions or offer them choices.
@@ -80,29 +80,29 @@ type toolParams struct {
 }
 
 // Prepare parses the tool parameters and returns an invocation.
-func (t *QuestionTool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 	var p toolParams
 	if err := json.Unmarshal([]byte(params), &p); err != nil {
 		return nil, fmt.Errorf("failed to parse question params: %w", err)
 	}
 
-	return &QuestionInvocation{
+	return &invocation{
 		questions: p.Questions,
 	}, nil
 }
 
-// QuestionInvocation represents a single execution of the question tool.
-type QuestionInvocation struct {
+// invocation represents a single execution of the question tool.
+type invocation struct {
 	questions []domain.QuestionInfo
 }
 
 // Display returns the UI representation of the questions.
-func (i *QuestionInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return domain.NewQuestionDisplay(i.questions)
 }
 
 // Resolve handles the user's answers and returns the final LLM content and display.
-func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
+func (i *invocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
 	if ctx.Err() != nil {
 		display := domain.NewStringDisplay("Question attempted", "")
 		display.Error = domain.ToolErrorCancelled
@@ -111,7 +111,7 @@ func (i *QuestionInvocation) Resolve(ctx context.Context, action domain.Action) 
 
 	qa, ok := action.(domain.QuestionAnswerAction)
 	if !ok {
-		panic(fmt.Sprintf("QuestionInvocation.Resolve: expected QuestionAnswerAction, got %T", action))
+		panic(fmt.Sprintf("invocation.Resolve: expected QuestionAnswerAction, got %T", action))
 	}
 
 	summary := formatAnswerSummary(i.questions, qa.Answers)

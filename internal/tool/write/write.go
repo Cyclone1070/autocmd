@@ -1,5 +1,5 @@
-// Package file provides tools for reading, writing, and editing files.
-package file
+// Package write provides tools for reading, writing, and editing files.
+package write
 
 import (
 	"context"
@@ -29,21 +29,21 @@ type checksumUpdater interface {
 	Get(path string) (string, bool)
 }
 
-// WriteFileTool handles file writing operations.
-type WriteFileTool struct {
+// Tool handles file writing operations.
+type Tool struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
 	maxFileSize     int64
 	pathResolver    pathResolver
 }
 
-// NewWriteFileTool creates a new WriteFileTool with injected dependencies.
-func NewWriteFileTool(
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(
 	fileOps fileWriter,
 	checksumManager checksumUpdater,
 	pathResolver pathResolver,
 	maxFileSize int64,
-) *WriteFileTool {
+) *Tool {
 	if fileOps == nil {
 		panic("fileOps is required")
 	}
@@ -53,7 +53,7 @@ func NewWriteFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &WriteFileTool{
+	return &Tool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
 		pathResolver:    pathResolver,
@@ -62,15 +62,15 @@ func NewWriteFileTool(
 }
 
 // Name returns the unique identifier for the write file tool.
-func (t *WriteFileTool) Name() string {
+func (t *Tool) Name() string {
 	return "write_file"
 }
 
 // IsConcurrentSafe indicates if the write file tool can be run concurrently.
-func (t *WriteFileTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
-func (t *WriteFileTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "write_file",
 		Desc: `Write a file to the local filesystem.
@@ -102,16 +102,16 @@ Usage:
 	}
 }
 
-// WriteFileRequest is the input for WriteFileTool.
-type WriteFileRequest struct {
+// Request is the input for Tool.
+type Request struct {
 	FilePath    string `json:"file_path"`
 	Content     string `json:"content"`
 	Description string `json:"description"`
 }
 
 // Prepare parses the write file parameters and returns an invocation.
-func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
-	req := &WriteFileRequest{}
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -164,7 +164,7 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(abs)
 
-	return &writeFileInvocation{
+	return &invocation{
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
@@ -174,7 +174,7 @@ func (t *WriteFileTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-type writeFileInvocation struct {
+type invocation struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
 	absPath         string
@@ -183,11 +183,11 @@ type writeFileInvocation struct {
 	display         domain.StringDisplay
 }
 
-func (i *writeFileInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *writeFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {

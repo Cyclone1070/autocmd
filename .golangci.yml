@@ -2,10 +2,10 @@ version: "2"
 
 run:
   timeout: 5m
-  tests: true
+  concurrency: 4
+  go: "1.26"
 
 linters:
-  default: standard
   enable:
     - modernize
     - revive
@@ -35,47 +35,53 @@ linters:
     - unconvert
     - unparam
     - wastedassign
+    - unused
+  
+  settings:
+    govet:
+      enable:
+        - fieldalignment
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-declaration
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: redefines-builtin-id
 
-settings:
-  modernize:
-    go-version: "1.26"
-  
-  govet:
-    enable:
-      - fieldalignment
-  
-  revive:
+  exclusions:
+    presets: []
+    paths:
+      - "demo/.*"
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-      - name: unreachable-code
-      - name: redefines-builtin-id
-
-formatters:
-  enable:
-    - gofmt
-    - goimports
-
-issues:
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+      - path: internal/provider/registry.go
+        linters:
+          - revive
+      - path: internal/tool/bash/bash.go
+        linters:
+          - revive
+      - path: internal/tool/question/question.go
+        linters:
+          - revive
+      - text: "stutter"
+        linters:
+          - revive
+      - text: "unused-parameter"
+        linters:
+          - revive

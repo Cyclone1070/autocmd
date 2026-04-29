@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQuestionTool(t *testing.T) {
-	tool := NewQuestionTool()
+func TestTool(t *testing.T) {
+	tool := NewTool()
 
 	t.Run("Name and Definition", func(t *testing.T) {
 		assert.Equal(t, "ask_question", tool.Name())
@@ -124,8 +124,8 @@ func TestQuestionTool(t *testing.T) {
 	})
 }
 
-func TestQuestionTool_Resolve_PanicsOnUnexpectedAction(t *testing.T) {
-	tool := NewQuestionTool()
+func TestTool_Resolve_PanicsOnUnexpectedAction(t *testing.T) {
+	tool := NewTool()
 	params := `{"questions": [{"question": "Q"}]}`
 	inv, _ := tool.Prepare(params)
 	ii, _ := inv.(domain.InteractiveInvocation)

@@ -1,4 +1,4 @@
-package search
+package grep
 
 import (
 	"strings"

@@ -21,7 +21,7 @@ var historyCmd = &cobra.Command{
 	Use:   "history",
 	Short: "View chat history for the current session",
 	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		deps, err := Wire()
 		if err != nil {
 			return err
@@ -52,10 +52,6 @@ var historyCmd = &cobra.Command{
 			return fmt.Errorf("failed to run history viewer: %w", err)
 		}
 
-		if err := <-done; err != nil {
-			return err
-		}
-
-		return nil
+		return <-done
 	},
 }

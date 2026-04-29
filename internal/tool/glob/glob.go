@@ -1,5 +1,5 @@
-// Package search provides tools for finding files and searching their content.
-package search
+// Package glob provides tools for finding files and searching their content.
+package glob
 
 import (
 	"context"
@@ -22,25 +22,25 @@ const (
 	readBufferSize     = 32 * 1024
 )
 
-// GlobRequest represents the parameters for a glob operation.
-type GlobRequest struct {
+// Request represents the parameters for a glob operation.
+type Request struct {
 	Pattern string `json:"pattern"`
 	Path    string `json:"path"`
 }
 
-// GlobTool handles file finding operations via glob patterns.
-type GlobTool struct {
+// Tool handles file finding operations via glob patterns.
+type Tool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 }
 
-// NewGlobTool creates a new GlobTool with injected dependencies.
-func NewGlobTool(
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
 	pathResolver pathResolver,
-) *GlobTool {
+) *Tool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -50,7 +50,7 @@ func NewGlobTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &GlobTool{
+	return &Tool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
@@ -58,15 +58,15 @@ func NewGlobTool(
 }
 
 // Name returns the name of the tool.
-func (t *GlobTool) Name() string {
+func (t *Tool) Name() string {
 	return "glob"
 }
 
 // IsConcurrentSafe indicates if the glob tool can be run concurrently.
-func (t *GlobTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the JSON schema for the tool.
-func (t *GlobTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: t.Name(),
 		Desc: `Fast file pattern matching tool that works with any codebase size.
@@ -91,8 +91,8 @@ Usage:
 }
 
 // Prepare validates input and resolves path.
-func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
-	req := &GlobRequest{}
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -130,7 +130,7 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(absPath)
 
-	return &globInvocation{
+	return &invocation{
 		tool:    t,
 		absPath: absPath,
 		pattern: req.Pattern,
@@ -138,18 +138,18 @@ func (t *GlobTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-type globInvocation struct {
-	tool    *GlobTool
+type invocation struct {
+	tool    *Tool
 	pattern string
 	absPath string
 	display domain.StringDisplay
 }
 
-func (i *globInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {
@@ -206,7 +206,7 @@ func (i *globInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	return strings.TrimSpace(output), d
 }
 
-func (i *globInvocation) countLines(path string) (int, error) {
+func (i *invocation) countLines(path string) (int, error) {
 	f, err := i.tool.fs.Open(path)
 	if err != nil {
 		return 0, err

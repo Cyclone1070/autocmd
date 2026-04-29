@@ -325,6 +325,7 @@ func TestStream_InductiveIdentity(t *testing.T) {
 }
 
 func TestStream_RenderConsistency(t *testing.T) {
+	t.Parallel()
 	for _, gap := range testGaps {
 		t.Run(fmt.Sprintf("Giant_Stream_Gap_%q", gap), func(t *testing.T) {
 			t.Parallel()

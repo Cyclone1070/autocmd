@@ -1,5 +1,5 @@
-// Package search provides tools for finding files and searching their content.
-package search
+// Package grep provides tools for finding files and searching their content.
+package grep
 
 import (
 	"context"
@@ -35,8 +35,8 @@ const (
 
 var vcsExclusions = []string{".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
 
-// GrepRequest matches Claude Code's input schema.
-type GrepRequest struct {
+// Request matches Claude Code's input schema.
+type Request struct {
 	Pattern         string `json:"pattern"`
 	Path            string `json:"path"`
 	Glob            string `json:"glob,omitempty"`
@@ -52,19 +52,19 @@ type GrepRequest struct {
 	Type            string `json:"type,omitempty"`
 }
 
-// GrepTool handles content searching operations.
-type GrepTool struct {
+// Tool handles content searching operations.
+type Tool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 }
 
-// NewGrepTool creates a new GrepTool with injected dependencies.
-func NewGrepTool(
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(
 	fs fileSystem,
 	commandExecutor commandExecutor,
 	pathResolver pathResolver,
-) *GrepTool {
+) *Tool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -74,7 +74,7 @@ func NewGrepTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &GrepTool{
+	return &Tool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
@@ -82,15 +82,15 @@ func NewGrepTool(
 }
 
 // Name returns the unique identifier for the grep tool.
-func (t *GrepTool) Name() string {
+func (t *Tool) Name() string {
 	return "grep"
 }
 
 // IsConcurrentSafe indicates if the grep tool can be run concurrently.
-func (t *GrepTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
-func (t *GrepTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "grep",
 		Desc: `A powerful search tool built on ripgrep.
@@ -162,8 +162,8 @@ Usage:
 }
 
 // Prepare parses the grep parameters and returns an invocation.
-func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
-	req := &GrepRequest{}
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -211,7 +211,7 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(absSearchPath)
 
-	return &grepInvocation{
+	return &invocation{
 		fs:              t.fs,
 		commandExecutor: t.commandExecutor,
 		pathResolver:    t.pathResolver,
@@ -221,20 +221,20 @@ func (t *GrepTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-type grepInvocation struct {
+type invocation struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 	absPath         string
-	req             *GrepRequest
+	req             *Request
 	display         domain.StringDisplay
 }
 
-func (i *grepInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 
 	if ctx.Err() != nil {
@@ -242,7 +242,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		return domain.ToolErrorCancelled, d
 	}
 
-	cmdStr := i.prepareGrepCommand()
+	cmdStr := i.prepareCommand()
 	workDir := i.pathResolver.Root()
 
 	ctx, cancel := context.WithTimeout(ctx, defaultGrepTimeout)
@@ -288,7 +288,7 @@ func (i *grepInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	return output, d
 }
 
-func (i *grepInvocation) prepareGrepCommand() string {
+func (i *invocation) prepareCommand() string {
 	mode := i.req.OutputMode
 	args := []string{"rg", "--hidden", "--stats"}
 	for _, excl := range vcsExclusions {
@@ -352,7 +352,7 @@ func (i *grepInvocation) prepareGrepCommand() string {
 	return joinArgs(args)
 }
 
-func (i *grepInvocation) analyzeLog(path string) (matches, files int, err error) {
+func (i *invocation) analyzeLog(path string) (matches, files int, err error) {
 	f, err := i.fs.Open(path)
 	if err != nil {
 		return 0, 0, err

@@ -1,4 +1,4 @@
-package search
+package grep
 
 import (
 	"context"
@@ -32,8 +32,8 @@ func TestGrep_RawRelative(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
-	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot + "/internal"}
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: testutil.TestWorkspaceRoot + "/internal"}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -66,8 +66,8 @@ func TestGrep_OffloadedRaw(t *testing.T) {
 	mf.On("Close").Return(nil)
 	fs.On("Open", "/tmp/offloaded.log").Return(mf, nil)
 
-	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -87,8 +87,8 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: "", ExitCode: 1}, nil)
 
-	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -122,8 +122,8 @@ func TestGrep_MalformedStats(t *testing.T) {
 	mf.On("Close").Return(nil)
 	fs.On("Open", "/tmp/malformed.log").Return(mf, nil)
 
-	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
@@ -138,8 +138,8 @@ func TestGrep_RejectsRelativePath(t *testing.T) {
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	tool := NewGrepTool(fs, exec, pathResolver)
-	req := &GrepRequest{Pattern: "pattern", Path: "relative/path"}
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: "relative/path"}
 
 	_, err := executeSearch(t, tool, req)
 	assert.Error(t, err)
@@ -275,7 +275,7 @@ func (m *toolMockFileInfo) ModTime() time.Time { return m.modTime }
 func (m *toolMockFileInfo) IsDir() bool        { return m.isDir }
 func (m *toolMockFileInfo) Sys() any           { return nil }
 
-func executeSearch(t *testing.T, tool *GrepTool, req *GrepRequest) (string, error) {
+func executeSearch(t *testing.T, tool *Tool, req *Request) (string, error) {
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
@@ -288,15 +288,3 @@ func executeSearch(t *testing.T, tool *GrepTool, req *GrepRequest) (string, erro
 	return out, nil
 }
 
-func executeFind(t *testing.T, tool *GlobTool, req *GlobRequest) (string, error) {
-	params, err := json.Marshal(req)
-	require.NoError(t, err)
-
-	invocation, err := tool.Prepare(string(params))
-	if err != nil {
-		return "", err
-	}
-
-	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
-	return out, nil
-}

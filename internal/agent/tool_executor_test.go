@@ -181,10 +181,10 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 
 	mt := &mockTool{
 		name: "ask",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInteractiveInvocation{
 				display: qd,
-				resolve: func(ctx context.Context, act domain.Action) (string, domain.ToolDisplay) {
+				resolve: func(_ context.Context, act domain.Action) (string, domain.ToolDisplay) {
 					assert.Equal(t, action, act)
 					return "User answered ans", domain.NewStringDisplay("Done", "")
 				},
@@ -193,7 +193,7 @@ func TestExecute_InteractiveInvocation_HappyPath(t *testing.T) {
 	}
 
 	waiter := &mockActionWaiter{
-		wait: func(ctx context.Context, cid string) (domain.Action, error) {
+		wait: func(_ context.Context, cid string) (domain.Action, error) {
 			assert.Equal(t, callID, cid)
 			return action, nil
 		},
@@ -268,7 +268,7 @@ func TestExecute_PermissionDenied_ReturnsErrorAndSkipsPrepare(t *testing.T) {
 	prepareCalled := false
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			prepareCalled = true
 			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("", "")}, nil
 		},
@@ -301,12 +301,12 @@ func TestExecute_PermissionDenied_ReturnsErrorAndSkipsPrepare(t *testing.T) {
 func TestExecute_PermissionAsk_Approve_ExecutesPreparedInvocation(t *testing.T) {
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("Run bash", "preview")}, nil
 		},
 	}
 	waiter := &mockActionWaiter{
-		wait: func(ctx context.Context, callID string) (domain.Action, error) {
+		wait: func(_ context.Context, callID string) (domain.Action, error) {
 			return domain.PermissionDecisionAction{CallID: callID, Approved: true}, nil
 		},
 	}
@@ -338,13 +338,13 @@ func TestExecute_PermissionAsk_Deny_ReturnsDenied(t *testing.T) {
 	prepareCalled := false
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			prepareCalled = true
 			return &mockInvocation{content: "ok", display: domain.NewStringDisplay("Run bash", "preview")}, nil
 		},
 	}
 	waiter := &mockActionWaiter{
-		wait: func(ctx context.Context, callID string) (domain.Action, error) {
+		wait: func(_ context.Context, callID string) (domain.Action, error) {
 			return domain.PermissionDecisionAction{CallID: callID, Approved: false}, nil
 		},
 	}
@@ -389,10 +389,10 @@ func TestExecute_InteractiveInvocation_SkipsPermissionApprovalGate(t *testing.T)
 
 	mt := &mockTool{
 		name: "ask_question",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInteractiveInvocation{
 				display: qd,
-				resolve: func(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
+				resolve: func(_ context.Context, action domain.Action) (string, domain.ToolDisplay) {
 					assert.Equal(t, questionAnswer, action)
 					return "answered", domain.NewStringDisplay("Question answered", "Yes")
 				},
@@ -400,7 +400,7 @@ func TestExecute_InteractiveInvocation_SkipsPermissionApprovalGate(t *testing.T)
 		},
 	}
 	waiter := &mockActionWaiter{
-		wait: func(ctx context.Context, gotCallID string) (domain.Action, error) {
+		wait: func(_ context.Context, gotCallID string) (domain.Action, error) {
 			assert.Equal(t, callID, gotCallID)
 			return questionAnswer, nil
 		},
@@ -440,7 +440,7 @@ func (mockDisplayOnlyInvocation) Display() domain.ToolDisplay {
 func TestExecute_NonExecutableInvocation_Panics(t *testing.T) {
 	mt := &mockTool{
 		name: "weird",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return mockDisplayOnlyInvocation{}, nil
 		},
 	}
@@ -482,7 +482,7 @@ func TestExecute_ValidJSON_ParsesCorrectly(t *testing.T) {
 func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return nil, fmt.Errorf("bad params")
 		},
 	}
@@ -519,7 +519,7 @@ func TestExecute_PrepareFail_ReturnsMessageToLLM(t *testing.T) {
 func TestExecute_EmitsToolEvents(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "result",
 				display: domain.NewStringDisplay("", "display output"),
@@ -557,7 +557,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 	registry := newMockToolRegistry([]domain.Tool{
 		&mockTool{
 			name: "read_file",
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return nil, fmt.Errorf("failed to prepare")
 			},
 		},
@@ -591,7 +591,7 @@ func TestExecute_Failures_ReturnsDisplay(t *testing.T) {
 func TestExecute_Bash_StreamsAndEnds(t *testing.T) {
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				content: "Command finished",
 				stream:  strings.NewReader("file1\nfile2\n"),
@@ -636,7 +636,7 @@ loop:
 func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 	mt := &mockTool{
 		name: "test",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "infra failure",
 				display: domain.NewStringDisplay("", "preview").WithError(domain.ToolErrorFailed),
@@ -661,7 +661,7 @@ func TestExecute_UsesFinalDisplayFromExecute(t *testing.T) {
 func TestExecute_ExecuteFail_EmitsErrorEvent(t *testing.T) {
 	mt := &mockTool{
 		name: "fail",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				content: "Detailed error in content",
 				display: domain.NewStringDisplay("", "").WithError(domain.ToolErrorFailed),
@@ -700,7 +700,7 @@ func TestIssue6_DoubleEndEvent_Regression(t *testing.T) {
 
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				stream:  output,
 				display: domain.NewBashDisplay("Header", "cmd", "", "").WithError(domain.ToolErrorFailed),
@@ -793,7 +793,7 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 		name:          "t1",
 		concurrent:    true,
 		setConcurrent: true,
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
@@ -801,7 +801,7 @@ func TestExecuteBatch_ContextCancelled_PopulatesAllToolResponsesOnFatalError(t *
 		name:          "t2",
 		concurrent:    true,
 		setConcurrent: true,
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
@@ -836,10 +836,10 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 		name:          "t1",
 		concurrent:    false,
 		setConcurrent: true, // force non-concurrent safe barrier
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					cancel()
 					disp := domain.NewStringDisplay("", "")
 					disp.Error = domain.ToolErrorCancelled
@@ -855,10 +855,10 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 		// concurrently safe would be executed in parallel with other safe tools,
 		// but executeBatch should stop after mt1's fatal error and bake cancellation.
 		setConcurrent: true,
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					close(executed2)
 					disp := domain.NewStringDisplay("", "")
 					disp.Error = domain.ToolErrorCancelled
@@ -899,10 +899,10 @@ func TestExecuteBatch_FatalErrorStillBakesRemainingPreflightedCalls(t *testing.T
 func TestExecuteBatch_PanicsWhenPreparedInvocationDisplayIsNil(t *testing.T) {
 	mt := &mockTool{
 		name: "bad",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: nil,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					return "ok", domain.NewStringDisplay("", "ok")
 				},
 			}, nil
@@ -923,7 +923,7 @@ func TestExecuteBatch_PreservesInputOrder_WithPreflightFailure(t *testing.T) {
 			name:          "ok",
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{content: "ok-result", display: domain.NewStringDisplay("", "ok")}, nil
 			},
 		},
@@ -955,10 +955,10 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			name:          testFast1,
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", testFast1),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						startedFast1 <- struct{}{}
 						<-doneFast1
 						return testFast1, domain.NewStringDisplay("", testFast1)
@@ -970,10 +970,10 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			name:          "exclusive",
 			concurrent:    false,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "exclusive"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						startedExclusive <- struct{}{}
 						<-doneExclusive
 						return "exclusive", domain.NewStringDisplay("", "exclusive")
@@ -985,10 +985,10 @@ func TestExecuteBatch_NonConcurrentSafeActsAsBarrier(t *testing.T) {
 			name:          testFast2,
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", testFast2),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						startedFast2 <- struct{}{}
 						return testFast2, domain.NewStringDisplay("", testFast2)
 					},
@@ -1051,10 +1051,10 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			name:          "fast1",
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast1"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						<-doneFast1
 						return "fast1", domain.NewStringDisplay("", "fast1")
 					},
@@ -1065,10 +1065,10 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			name:          "exclusive",
 			concurrent:    false,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "exclusive"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						<-doneExclusive
 						return "exclusive", domain.NewStringDisplay("", "exclusive")
 					},
@@ -1079,10 +1079,10 @@ func TestExecuteBatch_StartEventsRespectBarrierTiming(t *testing.T) {
 			name:          "fast2",
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast2"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						<-doneFast2
 						return "fast2", domain.NewStringDisplay("", "fast2")
 					},
@@ -1154,10 +1154,10 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 			name:          "fast1",
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast1"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						<-doneFast1
 						return "fast1", domain.NewStringDisplay("", "fast1")
 					},
@@ -1168,10 +1168,10 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 			name:          "fast2",
 			concurrent:    true,
 			setConcurrent: true,
-			prepare: func(params string) (domain.Invocation, error) {
+			prepare: func(_ string) (domain.Invocation, error) {
 				return &mockInvocation{
 					display: domain.NewStringDisplay("", "fast2"),
-					execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+					execute: func(_ context.Context) (string, domain.ToolDisplay) {
 						<-doneFast2
 						return "fast2", domain.NewStringDisplay("", "fast2")
 					},
@@ -1209,10 +1209,10 @@ func TestExecuteBatch_EmitsStartEventsInInputOrder_ForConcurrentCalls(t *testing
 func TestExecute_PanicsWhenFinalDisplayIsNil(t *testing.T) {
 	mt := &mockTool{
 		name: "bad",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", "preview"),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					return "", nil
 				},
 			}, nil
@@ -1237,7 +1237,7 @@ func TestToolExecutor_Throughput_Batching(t *testing.T) {
 
 	mt := &mockTool{
 		name: "throughput-test",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockStreamInvocation{
 				content: "done",
 				stream:  strings.NewReader(data),
@@ -1320,7 +1320,7 @@ func TestToolExecutor_LogDirInjection(t *testing.T) {
 	// Create a mock invocation that is LogAware
 	mt := &mockTool{
 		name: "loggy",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockLogAwareInvocation{
 				display: domain.NewStringDisplay("", "loggy"),
 			}, nil
@@ -1347,7 +1347,7 @@ type mockLogAwareInvocation struct {
 
 func (m *mockLogAwareInvocation) Display() domain.ToolDisplay { return m.display }
 func (m *mockLogAwareInvocation) SetLogDir(path string)       { m.capturedLogDir = path }
-func (m *mockLogAwareInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (m *mockLogAwareInvocation) Execute(_ context.Context) (string, domain.ToolDisplay) {
 	if m.capturedLogDir == "" {
 		return "fail: log dir not set", m.display.WithError("Log dir not set")
 	}

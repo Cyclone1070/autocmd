@@ -59,7 +59,7 @@ Returns a summary of each task:
 }
 
 // Prepare returns an invocation for the task list tool.
-func (t *TaskListTool) Prepare(params string) (domain.Invocation, error) {
+func (t *TaskListTool) Prepare(_ string) (domain.Invocation, error) {
 	return &taskListInvocation{
 		manager: t.manager,
 		display: domain.NewStringDisplay("List active background bash tasks", ""),

@@ -20,7 +20,7 @@ var authCmd = &cobra.Command{
 	Use:          "auth",
 	Short:        "Manage authentication for LLM providers",
 	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		deps, err := Wire()
 		if err != nil {
 			return err
@@ -53,10 +53,6 @@ var authCmd = &cobra.Command{
 			return fmt.Errorf("auth manager failed: %w", err)
 		}
 
-		if err := <-done; err != nil {
-			return err
-		}
-
-		return nil
+		return <-done
 	},
 }

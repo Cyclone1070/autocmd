@@ -58,9 +58,5 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		return fmt.Errorf("picker failed: %w", err)
 	}
 
-	if err := <-done; err != nil {
-		return err
-	}
-
-	return nil
+	return <-done
 }

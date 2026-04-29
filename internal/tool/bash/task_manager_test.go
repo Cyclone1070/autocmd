@@ -139,7 +139,7 @@ type mockBashFileSystem struct {
 	files map[string][]byte
 }
 
-func (m *mockBashFileSystem) Open(path string) (domain.File, error) {
+func (m *mockBashFileSystem) Open(_ string) (domain.File, error) {
 	return nil, nil // Not used in this test
 }
 

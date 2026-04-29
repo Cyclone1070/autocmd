@@ -20,7 +20,7 @@ type Deps struct {
 	AuthManager      *auth.Manager
 	OAuthManager     *auth.OAuthManager
 	LLMRegistry      *provider.LLMRegistry
-	ProviderRegistry *provider.ProviderRegistry
+	ProviderRegistry *provider.Registry
 	BootstrapFS      fs.FileSystem
 }
 

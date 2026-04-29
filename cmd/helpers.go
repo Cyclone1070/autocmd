@@ -27,11 +27,11 @@ func buildSessionStore(cfg *config.Config, filesystem fs.FileSystem) *session.St
 }
 
 // buildRegistries creates the Provider and LLM registries with injected model lists.
-func buildRegistries(cfg *config.Config, authMgr *auth.Manager) (*provider.LLMRegistry, *provider.ProviderRegistry) {
+func buildRegistries(cfg *config.Config, authMgr *auth.Manager) (*provider.LLMRegistry, *provider.Registry) {
 	googleModels := toDomainModels(cfg.Providers()["google"])
 	githubModels := toDomainModels(cfg.Providers()["github"])
 
-	providerRegistry := provider.NewProviderRegistry(
+	providerRegistry := provider.NewRegistry(
 		authMgr,
 		provider.NewGoogleProvider(googleModels),
 		provider.NewGitHubProvider(githubModels),

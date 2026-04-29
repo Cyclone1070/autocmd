@@ -1,5 +1,5 @@
-// Package file provides tools for reading, writing, and editing files.
-package file
+// Package edit provides tools for reading, writing, and editing files.
+package edit
 
 import (
 	"context"
@@ -28,8 +28,8 @@ type checksumManager interface {
 	Update(path string, checksum string)
 }
 
-// EditFileRequest is the input for EditFileTool.
-type EditFileRequest struct {
+// Request is the input for Tool.
+type Request struct {
 	FilePath    string `json:"file_path"`
 	Description string `json:"description"`
 	OldString   string `json:"old_string"`
@@ -37,21 +37,21 @@ type EditFileRequest struct {
 	ReplaceAll  bool   `json:"replace_all"`
 }
 
-// EditFileTool handles file editing operations.
-type EditFileTool struct {
+// Tool handles file editing operations.
+type Tool struct {
 	fileOps         fileEditor
 	checksumManager checksumManager
 	maxFileSize     int64
 	pathResolver    pathResolver
 }
 
-// NewEditFileTool creates a new EditFileTool with injected dependencies.
-func NewEditFileTool(
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(
 	fileOps fileEditor,
 	checksumManager checksumManager,
 	pathResolver pathResolver,
 	maxFileSize int64,
-) *EditFileTool {
+) *Tool {
 	if fileOps == nil {
 		panic("fileOps is required")
 	}
@@ -61,7 +61,7 @@ func NewEditFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &EditFileTool{
+	return &Tool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
 		maxFileSize:     maxFileSize,
@@ -70,15 +70,15 @@ func NewEditFileTool(
 }
 
 // Name returns the unique identifier for the edit file tool.
-func (t *EditFileTool) Name() string {
+func (t *Tool) Name() string {
 	return "edit_file"
 }
 
 // IsConcurrentSafe indicates if the edit file tool can be run concurrently.
-func (t *EditFileTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
-func (t *EditFileTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "edit_file",
 		Desc: `Performs exact string replacements in files.
@@ -121,8 +121,8 @@ Usage:
 }
 
 // Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
-func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
-	req := &EditFileRequest{}
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -270,7 +270,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", abs, len(newContentBytes), t.maxFileSize)
 	}
 
-	diff, added, removed := computeUnifiedDiff(oldContent, content)
+	diff, added, removed := computeDiff(oldContent, content)
 
 	perm := os.FileMode(domain.DefaultFilePerm)
 	if info != nil {
@@ -279,7 +279,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(abs)
 
-	return &editFileInvocation{
+	return &invocation{
 		fileOps:          t.fileOps,
 		checksumManager:  t.checksumManager,
 		absPath:          abs,
@@ -297,7 +297,7 @@ func (t *EditFileTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-type editFileInvocation struct {
+type invocation struct {
 	fileOps          fileEditor
 	checksumManager  checksumManager
 	absPath          string
@@ -308,11 +308,11 @@ type editFileInvocation struct {
 	display          domain.DiffDisplay
 }
 
-func (i *editFileInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *editFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
@@ -458,7 +458,7 @@ func applyCurlySingleQuotes(s string) string {
 	return string(result)
 }
 
-func computeUnifiedDiff(oldContent, newContent string) (diff string, added, removed int) {
+func computeDiff(oldContent, newContent string) (diff string, added, removed int) {
 	rawDiff := udiff.Unified("", "", oldContent, newContent)
 
 	var lines []string

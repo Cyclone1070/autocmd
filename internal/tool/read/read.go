@@ -1,5 +1,5 @@
-// Package file provides tools for reading, writing, and editing files.
-package file
+// Package read provides tools for reading, writing, and editing files.
+package read
 
 import (
 	"context"
@@ -31,19 +31,19 @@ type checksumComputer interface {
 	Update(path string, checksum string)
 }
 
-// ReadFileTool handles file reading operations.
-type ReadFileTool struct {
+// Tool handles file reading operations.
+type Tool struct {
 	fileOps         fileReader
 	checksumManager checksumComputer
 	pathResolver    pathResolver
 }
 
-// NewReadFileTool creates a new ReadFileTool with injected dependencies.
-func NewReadFileTool(
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(
 	fileOps fileReader,
 	checksumManager checksumComputer,
 	pathResolver pathResolver,
-) *ReadFileTool {
+) *Tool {
 	if fileOps == nil {
 		panic("fileOps is required")
 	}
@@ -53,7 +53,7 @@ func NewReadFileTool(
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &ReadFileTool{
+	return &Tool{
 		fileOps:         fileOps,
 		checksumManager: checksumManager,
 		pathResolver:    pathResolver,
@@ -61,15 +61,15 @@ func NewReadFileTool(
 }
 
 // Name returns the unique identifier for the read file tool.
-func (t *ReadFileTool) Name() string {
+func (t *Tool) Name() string {
 	return "read_file"
 }
 
 // IsConcurrentSafe indicates if the read file tool can be run concurrently.
-func (t *ReadFileTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the tool's schema for the LLM using eino schema.
-func (t *ReadFileTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "read_file",
 		Desc: `Read a file from the local filesystem.
@@ -100,16 +100,16 @@ Usage:
 	}
 }
 
-// ReadFileRequest is the input for ReadFileTool.
-type ReadFileRequest struct {
+// Request is the input for Tool.
+type Request struct {
 	FilePath string `json:"file_path"`
 	Offset   int    `json:"offset,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 }
 
 // Prepare validates the request and returns an Invocation.
-func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
-	req := &ReadFileRequest{}
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -140,7 +140,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(abs)
 
-	return &readFileInvocation{
+	return &invocation{
 		fileOps:         t.fileOps,
 		checksumManager: t.checksumManager,
 		absPath:         abs,
@@ -151,7 +151,7 @@ func (t *ReadFileTool) Prepare(params string) (domain.Invocation, error) {
 	}, nil
 }
 
-type readFileInvocation struct {
+type invocation struct {
 	fileOps         fileReader
 	checksumManager checksumComputer
 	absPath         string
@@ -161,11 +161,11 @@ type readFileInvocation struct {
 	display         domain.StringDisplay
 }
 
-func (i *readFileInvocation) Display() domain.ToolDisplay {
+func (i *invocation) Display() domain.ToolDisplay {
 	return i.display
 }
 
-func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	d := i.display
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
@@ -200,10 +200,10 @@ func (i *readFileInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 	}
 	d.Description = fmt.Sprintf("Read \"%s\" Lines %d-%d", i.displayPath, offset, offset+len(paginatedLines))
 
-	return formatFileContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d
+	return formatContent(paginatedLines, startLine, endLine, pagRes.TotalCount), d
 }
 
-func formatFileContent(lines []string, startLine, endLine, totalLines int) string {
+func formatContent(lines []string, startLine, endLine, totalLines int) string {
 	if totalLines == 0 {
 		return "<system-reminder>Warning: the file exists but the contents are empty.</system-reminder>"
 	}

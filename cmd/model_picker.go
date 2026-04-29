@@ -18,7 +18,7 @@ func init() {
 var modelCmd = &cobra.Command{
 	Use:   "model",
 	Short: "Choose the default LLM model",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		deps, err := Wire()
 		if err != nil {
 			return err
@@ -49,10 +49,6 @@ var modelCmd = &cobra.Command{
 			return fmt.Errorf("picker failed: %w", err)
 		}
 
-		if err := <-done; err != nil {
-			return err
-		}
-
-		return nil
+		return <-done
 	},
 }

@@ -16,15 +16,15 @@ type CredentialStore interface {
 	GetWithFallback(p domain.Provider) (*domain.Credential, error)
 }
 
-// ProviderRegistry manages the set of available LLM providers.
-type ProviderRegistry struct {
+// Registry manages the set of available LLM providers.
+type Registry struct {
 	providers   map[string]domain.Provider
 	authManager CredentialStore
 }
 
-// NewProviderRegistry creates a ProviderRegistry from providers and an optional auth manager.
-func NewProviderRegistry(authManager CredentialStore, providers ...domain.Provider) *ProviderRegistry {
-	r := &ProviderRegistry{
+// NewRegistry creates a Registry from providers and an optional auth manager.
+func NewRegistry(authManager CredentialStore, providers ...domain.Provider) *Registry {
+	r := &Registry{
 		providers:   make(map[string]domain.Provider),
 		authManager: authManager,
 	}
@@ -37,13 +37,13 @@ func NewProviderRegistry(authManager CredentialStore, providers ...domain.Provid
 }
 
 // Get returns a provider by its ID.
-func (r *ProviderRegistry) Get(id string) (domain.Provider, bool) {
+func (r *Registry) Get(id string) (domain.Provider, bool) {
 	p, ok := r.providers[id]
 	return p, ok
 }
 
 // List returns information about all registered providers, including resolved credentials.
-func (r *ProviderRegistry) List(ctx context.Context) ([]domain.ProviderInfo, error) {
+func (r *Registry) List(_ context.Context) ([]domain.ProviderInfo, error) {
 	var infos []domain.ProviderInfo
 	for _, id := range r.sortedProviderIDs() {
 		p := r.providers[id]
@@ -60,7 +60,7 @@ func (r *ProviderRegistry) List(ctx context.Context) ([]domain.ProviderInfo, err
 	return infos, nil
 }
 
-func (r *ProviderRegistry) sortedProviderIDs() []string {
+func (r *Registry) sortedProviderIDs() []string {
 	ids := make([]string, 0, len(r.providers))
 	for id := range r.providers {
 		ids = append(ids, id)
@@ -69,14 +69,14 @@ func (r *ProviderRegistry) sortedProviderIDs() []string {
 	return ids
 }
 
-// LLMRegistry orchestrates model resolution using a ProviderRegistry and credentials.
+// LLMRegistry orchestrates model resolution using a Registry and credentials.
 type LLMRegistry struct {
-	providers   *ProviderRegistry
+	providers   *Registry
 	authManager CredentialStore
 }
 
 // NewLLMRegistry creates an LLMRegistry.
-func NewLLMRegistry(authManager CredentialStore, providers *ProviderRegistry) *LLMRegistry {
+func NewLLMRegistry(authManager CredentialStore, providers *Registry) *LLMRegistry {
 	return &LLMRegistry{
 		providers:   providers,
 		authManager: authManager,
@@ -129,7 +129,7 @@ func (r *LLMRegistry) Get(ctx context.Context, id string) (domain.LLM, error) {
 }
 
 // List returns all LLMs from all providers.
-func (r *LLMRegistry) List(ctx context.Context) ([]domain.LLMInfo, error) {
+func (r *LLMRegistry) List(_ context.Context) ([]domain.LLMInfo, error) {
 	var all []domain.LLMInfo
 	for _, id := range r.providers.sortedProviderIDs() {
 		p, _ := r.providers.Get(id)

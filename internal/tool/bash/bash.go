@@ -40,16 +40,16 @@ type fileSystem interface {
 	CreateAtomic(path string) (io.WriteCloser, error)
 }
 
-// BashTool is a tool that allows executing shell commands with background task support.
-type BashTool struct {
+// Tool is a tool that allows executing shell commands with background task support.
+type Tool struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	pathResolver    pathResolver
 	taskManager     backgroundRegistrar
 }
 
-// NewBashTool creates a new BashTool with injected dependencies.
-func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pathResolver, taskManager backgroundRegistrar) *BashTool {
+// NewTool creates a new Tool with injected dependencies.
+func NewTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pathResolver, taskManager backgroundRegistrar) *Tool {
 	if fs == nil {
 		panic("fs is required")
 	}
@@ -59,7 +59,7 @@ func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pa
 	if pathResolver == nil {
 		panic("pathResolver is required")
 	}
-	return &BashTool{
+	return &Tool{
 		fs:              fs,
 		commandExecutor: commandExecutor,
 		pathResolver:    pathResolver,
@@ -68,15 +68,15 @@ func NewBashTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pa
 }
 
 // Name returns the unique identifier for the bash tool.
-func (t *BashTool) Name() string {
+func (t *Tool) Name() string {
 	return "bash"
 }
 
 // IsConcurrentSafe indicates if the bash tool can be run concurrently.
-func (t *BashTool) IsConcurrentSafe() bool { return true }
+func (t *Tool) IsConcurrentSafe() bool { return true }
 
 // Definition returns the Eino tool definition for the bash tool.
-func (t *BashTool) Definition() *schema.ToolInfo {
+func (t *Tool) Definition() *schema.ToolInfo {
 	return &schema.ToolInfo{
 		Name: "bash",
 		Desc: `Execute a bash command on the local machine.
@@ -139,7 +139,7 @@ EOF
 }
 
 // Prepare parses the bash parameters and returns an invocation.
-func (t *BashTool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 	var req struct {
 		Command         string `json:"command"`
 		Description     string `json:"description"`

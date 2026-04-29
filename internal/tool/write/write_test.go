@@ -1,9 +1,13 @@
-package file
+package write
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
@@ -19,9 +23,9 @@ func TestWriteFile(t *testing.T) {
 	t.Run("Create new file successfully", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath:    testWorkspaceRoot + "/new.txt",
 			Content:     "hello",
 			Description: "creating new file",
@@ -46,9 +50,9 @@ func TestWriteFile(t *testing.T) {
 		// Simulate read
 		checksumManager.Update(testWorkspaceRoot + "/exists.txt", checksumManager.Compute([]byte("old")))
 
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath:    testWorkspaceRoot + "/exists.txt",
 			Content:     "new",
 			Description: "overwriting file",
@@ -72,9 +76,9 @@ func TestWriteFile(t *testing.T) {
 		fs.files[testWorkspaceRoot + "/exists.txt"] = []byte("old")
 		// NO checksumManager.Update here
 
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath: testWorkspaceRoot + "/exists.txt",
 			Content:  "new",
 		}
@@ -92,9 +96,9 @@ func TestWriteFile(t *testing.T) {
 		// Cache has "old"
 		checksumManager.Update(testWorkspaceRoot + "/exists.txt", checksumManager.Compute([]byte("old")))
 
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath: testWorkspaceRoot + "/exists.txt",
 			Content:  "new",
 		}
@@ -108,9 +112,9 @@ func TestWriteFile(t *testing.T) {
 	t.Run("Normalizes line endings to LF", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath:    testWorkspaceRoot + "/crlf.txt",
 			Content:     "line1\r\nline2",
 			Description: "testing normalization",
@@ -127,9 +131,9 @@ func TestWriteFile(t *testing.T) {
 	t.Run("Rejects relative path", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		tool := NewWriteFileTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
-		req := &WriteFileRequest{
+		req := &Request{
 			FilePath: "relative.txt",
 			Content:  "content",
 		}
@@ -139,4 +143,103 @@ func TestWriteFile(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "absolute path required")
 	})
+}
+
+// Shared mocks used by file package tests.
+type mockPathResolver struct {
+	workspaceRoot string
+}
+
+func (m *mockPathResolver) Abs(p string) (string, error) {
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("absolute path required, but got: %q", p)
+	}
+	return filepath.Clean(p), nil
+}
+
+func (m *mockPathResolver) DisplayPath(p string) string {
+	return p
+}
+
+func (m *mockPathResolver) Root() string {
+	return m.workspaceRoot
+}
+
+type toolMockFileInfo struct {
+	name  string
+	size  int64
+	isDir bool
+}
+
+func (m toolMockFileInfo) Name() string       { return m.name }
+func (m toolMockFileInfo) Size() int64        { return m.size }
+func (m toolMockFileInfo) Mode() os.FileMode  { return 0o644 }
+func (m toolMockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m toolMockFileInfo) IsDir() bool        { return m.isDir }
+func (m toolMockFileInfo) Sys() any           { return nil }
+
+type mockFileOps struct {
+	files map[string][]byte
+	dirs  map[string]bool
+}
+
+func newMockFileOps() *mockFileOps {
+	return &mockFileOps{
+		files: make(map[string][]byte),
+		dirs:  make(map[string]bool),
+	}
+}
+
+func (m *mockFileOps) ReadFile(path string) ([]byte, error) {
+	if m.dirs[path] {
+		return nil, fmt.Errorf("is a directory")
+	}
+	if c, ok := m.files[path]; ok {
+		return c, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func (m *mockFileOps) Stat(path string) (os.FileInfo, error) {
+	if m.dirs[path] {
+		return toolMockFileInfo{name: path, isDir: true}, nil
+	}
+	if c, ok := m.files[path]; ok {
+		return toolMockFileInfo{name: path, size: int64(len(c)), isDir: false}, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func (m *mockFileOps) WriteFileAtomic(path string, content []byte, _ os.FileMode) error {
+	m.files[path] = content
+	return nil
+}
+
+func (m *mockFileOps) EnsureDirs(path string) error {
+	dir := filepath.Dir(path)
+	m.dirs[dir] = true
+	return nil
+}
+
+type mockChecksumManagerShared struct {
+	checksums map[string]string
+}
+
+func newMockChecksumManagerShared() *mockChecksumManagerShared {
+	return &mockChecksumManagerShared{
+		checksums: make(map[string]string),
+	}
+}
+
+func (m *mockChecksumManagerShared) Compute(data []byte) string {
+	return fmt.Sprintf("checksum-%d", len(data))
+}
+
+func (m *mockChecksumManagerShared) Get(path string) (string, bool) {
+	c, ok := m.checksums[path]
+	return c, ok
+}
+
+func (m *mockChecksumManagerShared) Update(path string, checksum string) {
+	m.checksums[path] = checksum
 }

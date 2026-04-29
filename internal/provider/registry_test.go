@@ -17,7 +17,7 @@ func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod { return nil }
 func (m *mockProvider) List() []domain.LLMInfo {
 	return []domain.LLMInfo{{ID: m.id + "/" + "model", DisplayName: "Model"}}
 }
-func (m *mockProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
+func (m *mockProvider) GetLLM(_ context.Context, _ *domain.Credential, _ domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }
 
@@ -35,7 +35,7 @@ func (s *mockStore) GetWithFallback(p domain.Provider) (*domain.Credential, erro
 func TestRegistry(t *testing.T) {
 	p := &mockProvider{id: "mock"}
 	store := &mockStore{creds: make(map[string]*domain.Credential)}
-	pr := NewProviderRegistry(store, p)
+	pr := NewRegistry(store, p)
 	r := NewLLMRegistry(store, pr)
 
 	t.Run("List", func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestRegistry(t *testing.T) {
 		pA := &mockProvider{id: "a-provider"}
 		pB := &mockProvider{id: "b-provider"}
 		pC := &mockProvider{id: "c-provider"}
-		prSorted := NewProviderRegistry(store, pC, pA, pB)
+		prSorted := NewRegistry(store, pC, pA, pB)
 
 		// Run multiple times to ensure order is stable and sorted.
 		for range 20 {

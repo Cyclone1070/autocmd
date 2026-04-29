@@ -19,7 +19,7 @@ func init() {
 var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Show information about the current configuration and state",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		deps, err := Wire()
 		if err != nil {
 			return err

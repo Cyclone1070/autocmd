@@ -18,9 +18,12 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/tool/file"
+	"github.com/Cyclone1070/iav/internal/tool/read"
+	"github.com/Cyclone1070/iav/internal/tool/edit"
+	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/question"
-	"github.com/Cyclone1070/iav/internal/tool/search"
+	"github.com/Cyclone1070/iav/internal/tool/grep"
+	"github.com/Cyclone1070/iav/internal/tool/glob"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -69,16 +72,16 @@ func main() {
 	taskMgr := bash.NewTaskManager(fileSystem)
 
 	tools := []domain.Tool{
-		file.NewReadFileTool(fileSystem, checksumMgr, pathResolver),
-		file.NewEditFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
-		file.NewWriteFileTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
-		search.NewGlobTool(fileSystem, cmdExecutor, pathResolver),
-		search.NewGrepTool(fileSystem, cmdExecutor, pathResolver),
-		bash.NewBashTool(fileSystem, cmdExecutor, pathResolver, taskMgr),
+		read.NewTool(fileSystem, checksumMgr, pathResolver),
+		edit.NewTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
+		write.NewTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
+		glob.NewTool(fileSystem, cmdExecutor, pathResolver),
+		grep.NewTool(fileSystem, cmdExecutor, pathResolver),
+		bash.NewTool(fileSystem, cmdExecutor, pathResolver, taskMgr),
 		bash.NewSleepTool(taskMgr),
 		bash.NewTaskListTool(taskMgr),
 		bash.NewTaskStopTool(taskMgr),
-		question.NewQuestionTool(),
+		question.NewTool(),
 	}
 	toolRegistry := tool.NewRegistry(tools)
 

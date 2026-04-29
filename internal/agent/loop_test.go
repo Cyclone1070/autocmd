@@ -27,7 +27,7 @@ func (m *mockLLM) ID() string          { return m.id }
 func (m *mockLLM) DisplayName() string { return m.displayName }
 func (m *mockLLM) ContextWindow() int  { return m.contextWindow }
 
-func (m *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
+func (m *mockLLM) ComputeTokens(_ context.Context, _ []*schema.Message) (int, error) {
 	return 100, nil
 }
 
@@ -40,11 +40,11 @@ type mockEinoModelBridge struct {
 	llm *mockLLM
 }
 
-func (b *mockEinoModelBridge) Generate(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+func (b *mockEinoModelBridge) Generate(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
 	return nil, nil
 }
 
-func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+func (b *mockEinoModelBridge) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	if b.llm.streamErr != nil && len(b.llm.streams) == 0 {
 		return nil, b.llm.streamErr
 	}
@@ -77,7 +77,7 @@ func (b *mockEinoModelBridge) Stream(ctx context.Context, in []*schema.Message, 
 	return sr, nil
 }
 
-func (b *mockEinoModelBridge) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+func (b *mockEinoModelBridge) WithTools(_ []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	return b, nil
 }
 
@@ -222,7 +222,7 @@ func TestRun_SingleToolCall(t *testing.T) {
 
 	mt := &mockTool{
 		name: "get_weather",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{content: "Sunny", display: domain.NewStringDisplay("", "weather")}, nil
 		},
 	}
@@ -253,10 +253,10 @@ func TestRun_ToolStreaming_Events(t *testing.T) {
 
 	mt := &mockTool{
 		name: "bash",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewBashDisplay("Run Bash", "echo chunk", "", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					return "done", domain.NewBashDisplay("Run Bash", "echo chunk", "", "")
 				},
 			}, nil
@@ -306,7 +306,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 
 	mt := &mockTool{
 		name: "infinite",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{content: "kept going", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
@@ -391,10 +391,10 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					close(t1Started)
 					<-canFinish
 					return "R1", domain.NewStringDisplay("", "")
@@ -404,10 +404,10 @@ func TestRun_ParallelToolCalls(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{
 				display: domain.NewStringDisplay("", ""),
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					close(t2Started)
 					<-canFinish
 					return "R2", domain.NewStringDisplay("", "")
@@ -460,12 +460,12 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			cancelDisp := domain.NewStringDisplay("", "")
 			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
 				display: cancelDisp,
-				execute: func(ctx context.Context) (string, domain.ToolDisplay) {
+				execute: func(_ context.Context) (string, domain.ToolDisplay) {
 					time.Sleep(50 * time.Millisecond)
 					cancel()
 					return domain.ToolErrorCancelled, cancelDisp
@@ -475,7 +475,7 @@ func TestRun_ParallelToolCalls_Cancelled_RecordsAll(t *testing.T) {
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			cancelDisp := domain.NewStringDisplay("", "")
 			cancelDisp.Error = domain.ToolErrorCancelled
 			return &mockInvocation{
@@ -527,13 +527,13 @@ func TestRun_ParallelToolCalls_CollidingIndices(t *testing.T) {
 
 	mt1 := &mockTool{
 		name: "t1",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R1", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}
 	mt2 := &mockTool{
 		name: "t2",
-		prepare: func(params string) (domain.Invocation, error) {
+		prepare: func(_ string) (domain.Invocation, error) {
 			return &mockInvocation{content: "R2", display: domain.NewStringDisplay("", "")}, nil
 		},
 	}

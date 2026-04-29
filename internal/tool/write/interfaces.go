@@ -1,4 +1,4 @@
-package file
+package write
 
 // pathResolver defines workspace path resolution operations.
 type pathResolver interface {

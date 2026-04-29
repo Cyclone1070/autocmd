@@ -28,12 +28,12 @@ func (m *MockFS) ReadFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func (m *MockFS) WriteFile(path string, data []byte, perm os.FileMode) error {
+func (m *MockFS) WriteFile(path string, data []byte, _ os.FileMode) error {
 	m.Files[path] = data
 	return nil
 }
 
-func (m *MockFS) MkdirAll(path string, perm os.FileMode) error {
+func (m *MockFS) MkdirAll(path string, _ os.FileMode) error {
 	m.Dirs = append(m.Dirs, path)
 	return nil
 }

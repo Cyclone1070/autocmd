@@ -241,11 +241,11 @@ func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
 func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
 func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 
-func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
+func (l *mockLLM) ComputeTokens(_ context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }
 
 type mockRegistry struct{}
 
 func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }
+func (r *mockRegistry) Get(_ string) (domain.Tool, bool) { return nil, false }

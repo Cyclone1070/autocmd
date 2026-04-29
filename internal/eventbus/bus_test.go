@@ -79,7 +79,7 @@ func TestEventBus_Shutdown_NoHang(t *testing.T) {
 	// to prevent deadlocks.
 }
 
-func TestEventBus_Concurrent_Safe(t *testing.T) {
+func TestEventBus_Concurrent_Safe(_ *testing.T) {
 	bus := New()
 	defer bus.Close()
 

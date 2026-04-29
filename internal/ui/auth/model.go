@@ -80,18 +80,23 @@ func (m *model) pollBus() tea.Cmd {
 
 // Update handles UI interactions and translates them into workflow actions.
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	if m.cancelRequested {
-		switch msg.(type) {
-		case domain.DoneEvent:
-			// handled below
-		default:
-			// Keep polling until workflow terminates.
+		if _, ok := msg.(domain.DoneEvent); !ok {
 			return m, m.pollBus()
 		}
 	}
 
+	switch msg := msg.(type) {
+	case domain.UIUpdate:
+		return m.handleDomainEvent(msg)
+	case tea.KeyMsg:
+		return m.handleKeyMsg(msg)
+	default:
+		return m, nil
+	}
+}
+
+func (m *model) handleDomainEvent(msg domain.UIUpdate) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case domain.DoneEvent:
 		m.quitting = true
@@ -130,7 +135,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case domain.AuthErrorEvent:
 		m.err = fmt.Errorf("%s", msg.Error)
-		// Don't quit! Show the error and keep polling.
 		return m, m.pollBus()
 
 	case domain.EnvVarInstructionEvent:
@@ -140,97 +144,105 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.Printf("%s", text),
 			tea.Quit,
 		)
+	}
+	return m, nil
+}
 
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
+func (m *model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.cancelRequested = true
+		m.providerID = ""
+		m.bus.SendAction(domain.StopAction{})
+		return m, m.pollBus()
+	case "esc":
+		if m.handleBackKey(msg) {
+			return m, nil
+		}
+		return m, nil
+	case "q":
+		if m.state != stateFieldCollection {
 			m.cancelRequested = true
 			m.providerID = ""
 			m.bus.SendAction(domain.StopAction{})
 			return m, m.pollBus()
-		case "esc":
-			if m.handleBackKey(msg) {
-				return m, nil
-			}
-			// Esc is stealth back. If no back transition exists in the current state, ignore it.
-			return m, nil
-		case "q":
-			if m.state != stateFieldCollection {
-				m.cancelRequested = true
-				m.providerID = ""
-				m.bus.SendAction(domain.StopAction{})
-				return m, m.pollBus()
-			}
-		}
-
-		if m.handleBackKey(msg) {
-			return m, nil
-		}
-
-		switch m.state {
-		case stateProviderSelection:
-			if msg.String() == "d" {
-				if item, ok := m.picker.CursorItem(); ok {
-					m.bus.SendAction(domain.RemoveAuthAction{ProviderID: item.ID})
-					return m, nil
-				}
-			}
-			newPicker, cmd := m.picker.Update(msg)
-			m.picker = newPicker.(*ui.Picker)
-			if item, ok := m.picker.Selected(); ok {
-				m.bus.SendAction(domain.SelectProviderAction{ID: item.ID})
-				return m, nil
-			}
-			return m, cmd
-
-		case stateMethodSelection:
-			newPicker, cmd := m.picker.Update(msg)
-			m.picker = newPicker.(*ui.Picker)
-			if item, ok := m.picker.Selected(); ok {
-				m.bus.SendAction(domain.SelectAuthMethodAction{ID: item.ID})
-				return m, nil
-			}
-			return m, cmd
-
-		case stateFieldCollection:
-			if msg.Type == tea.KeyEnter {
-				val := strings.TrimSpace(m.textInput.Value())
-				// Local validation
-				if val == "" {
-					return m, nil // Don't submit empty fields?
-				}
-
-				apiKeyMeth, ok := m.method.(domain.APIKeyAuthMethod)
-				if !ok {
-					return m, nil
-				}
-				field := apiKeyMeth.Fields[m.fieldIndex]
-				m.values[field.ID] = val
-
-				if m.fieldIndex+1 >= len(apiKeyMeth.Fields) {
-					// All fields collected, save auth
-					cred := domain.Credential{Type: apiKeyMeth.ID}
-					if apiKeyMeth.ID == domain.AuthMethodAPIKey {
-						cred.APIKey = m.values[domain.AuthFieldAPIKey]
-					}
-					m.bus.SendAction(domain.SubmitCredentialAction{Credential: cred})
-					return m, nil
-				}
-
-				// Master Rule: Workflow drives next field.
-				m.bus.SendAction(domain.SubmitFieldAction{Value: val})
-				return m, nil
-			}
-			if msg.Type == tea.KeySpace {
-				// In text-input mode, space must remain a literal character, not a picker shortcut.
-				msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
-			}
-			m.textInput, cmd = m.textInput.Update(msg)
-			return m, cmd
 		}
 	}
 
+	if m.handleBackKey(msg) {
+		return m, nil
+	}
+
+	switch m.state {
+	case stateProviderSelection:
+		return m.handleProviderSelectionKey(msg)
+	case stateMethodSelection:
+		return m.handleMethodSelectionKey(msg)
+	case stateFieldCollection:
+		return m.handleFieldCollectionKey(msg)
+	}
+
 	return m, nil
+}
+
+func (m *model) handleProviderSelectionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "d" {
+		if item, ok := m.picker.CursorItem(); ok {
+			m.bus.SendAction(domain.RemoveAuthAction{ProviderID: item.ID})
+			return m, nil
+		}
+	}
+	newPicker, cmd := m.picker.Update(msg)
+	m.picker = newPicker.(*ui.Picker)
+	if item, ok := m.picker.Selected(); ok {
+		m.bus.SendAction(domain.SelectProviderAction{ID: item.ID})
+		return m, nil
+	}
+	return m, cmd
+}
+
+func (m *model) handleMethodSelectionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	newPicker, cmd := m.picker.Update(msg)
+	m.picker = newPicker.(*ui.Picker)
+	if item, ok := m.picker.Selected(); ok {
+		m.bus.SendAction(domain.SelectAuthMethodAction{ID: item.ID})
+		return m, nil
+	}
+	return m, cmd
+}
+
+func (m *model) handleFieldCollectionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyEnter {
+		val := strings.TrimSpace(m.textInput.Value())
+		if val == "" {
+			return m, nil
+		}
+
+		apiKeyMeth, ok := m.method.(domain.APIKeyAuthMethod)
+		if !ok {
+			return m, nil
+		}
+		field := apiKeyMeth.Fields[m.fieldIndex]
+		m.values[field.ID] = val
+
+		if m.fieldIndex+1 >= len(apiKeyMeth.Fields) {
+			cred := domain.Credential{Type: apiKeyMeth.ID}
+			if apiKeyMeth.ID == domain.AuthMethodAPIKey {
+				cred.APIKey = m.values[domain.AuthFieldAPIKey]
+			}
+			m.bus.SendAction(domain.SubmitCredentialAction{Credential: cred})
+			return m, nil
+		}
+
+		m.bus.SendAction(domain.SubmitFieldAction{Value: val})
+		return m, nil
+	}
+	if msg.Type == tea.KeySpace {
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
+	}
+	var cmd tea.Cmd
+	m.textInput, cmd = m.textInput.Update(msg)
+	return m, cmd
 }
 
 func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {

@@ -310,19 +310,68 @@ func HandleQuestionKey(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyM
 		panic("HandleQuestionKey: QuestionUIState.Per out of range for Active")
 	}
 
+	if key.Type == tea.KeyRunes {
+		return handleQuestionRunes(d, s, key)
+	}
+	return handleQuestionSpecial(d, s, key)
+}
+
+func handleQuestionRunes(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyMsg) (QuestionUIState, QuestionOutcome) {
 	q := d.Questions[s.Active]
 	st := &s.Per[s.Active]
 	customIx := customRowIndex(q)
 
-	if key.Type == tea.KeyRunes && st.CustomInputFocused {
+	if st.CustomInputFocused {
 		for _, r := range key.Runes {
-			if !unicode.IsPrint(r) {
-				continue
+			if unicode.IsPrint(r) {
+				st.CustomBuffer += string(r)
 			}
-			st.CustomBuffer += string(r)
 		}
 		return s, QuestionOutcome{}
 	}
+
+	if len(key.Runes) != 1 {
+		return s, QuestionOutcome{}
+	}
+
+	switch key.Runes[0] {
+	case 'j':
+		return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyDown})
+	case 'k':
+		return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyUp})
+	case 'h':
+		return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyLeft})
+	case 'l':
+		return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRight})
+	case 'q':
+		s.Submitted = true
+		return s, QuestionOutcome{Cancelled: true}
+	case 's':
+		s.Submitted = true
+		return s, buildSubmitOutcome(d, s)
+	case 'd':
+		if st.Cursor == customIx && !st.CustomInputFocused && customRowVisible(*st) {
+			st.CustomBuffer = ""
+			st.CustomSelected = false
+			if len(q.Options) > 0 {
+				st.Cursor = len(q.Options) - 1
+			} else {
+				st.Cursor = 0
+			}
+			clampQuestionCursor(q, st)
+		}
+		return s, QuestionOutcome{}
+	case 'c', 'i', 'o':
+		st.Cursor = customIx
+		st.CustomInputFocused = true
+		return s, QuestionOutcome{}
+	}
+	return s, QuestionOutcome{}
+}
+
+func handleQuestionSpecial(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyMsg) (QuestionUIState, QuestionOutcome) {
+	q := d.Questions[s.Active]
+	st := &s.Per[s.Active]
 
 	switch key.Type {
 	case tea.KeyEsc:
@@ -332,32 +381,54 @@ func HandleQuestionKey(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyM
 		}
 		s.Submitted = true
 		return s, QuestionOutcome{Cancelled: true}
+
 	case tea.KeyCtrlJ:
-		// Line feed (some terminals send this for modified Enter); use as newline in custom input.
 		if st.CustomInputFocused {
 			st.CustomBuffer += "\n"
-			return s, QuestionOutcome{}
 		}
 		return s, QuestionOutcome{}
+
 	case tea.KeyEnter:
-		// Alt+Enter is a newline surrogate (many terminals cannot distinguish Shift+Enter).
 		if st.CustomInputFocused && key.Alt {
 			st.CustomBuffer += "\n"
 			return s, QuestionOutcome{}
 		}
 		return questionPrimaryAction(d, s)
-	case tea.KeyLeft:
+
+	case tea.KeySpace:
 		if st.CustomInputFocused {
+			st.CustomBuffer += " "
 			return s, QuestionOutcome{}
 		}
+		return questionPrimaryAction(d, s)
+
+	case tea.KeyBackspace:
+		if st.CustomInputFocused && len(st.CustomBuffer) > 0 {
+			st.CustomBuffer = st.CustomBuffer[:len(st.CustomBuffer)-1]
+		}
+		return s, QuestionOutcome{}
+
+	case tea.KeyLeft, tea.KeyRight, tea.KeyUp, tea.KeyDown, tea.KeyTab, tea.KeyShiftTab, tea.KeyCtrlP, tea.KeyCtrlN:
+		return handleQuestionNavigation(d, s, key)
+	}
+
+	return s, QuestionOutcome{}
+}
+
+func handleQuestionNavigation(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyMsg) (QuestionUIState, QuestionOutcome) {
+	q := d.Questions[s.Active]
+	st := &s.Per[s.Active]
+
+	if st.CustomInputFocused {
+		return s, QuestionOutcome{}
+	}
+
+	switch key.Type {
+	case tea.KeyLeft:
 		if s.Active > 0 {
 			s.Active--
 		}
-		return s, QuestionOutcome{}
 	case tea.KeyRight:
-		if st.CustomInputFocused {
-			return s, QuestionOutcome{}
-		}
 		n := len(d.Questions)
 		if s.Active < n-1 {
 			s.Active++
@@ -365,85 +436,22 @@ func HandleQuestionKey(d domain.QuestionDisplay, s QuestionUIState, key tea.KeyM
 			s.Active = n
 			s.ReviewCursor = 0
 		}
-		return s, QuestionOutcome{}
 	case tea.KeyCtrlP, tea.KeyUp, tea.KeyShiftTab:
-		if st.CustomInputFocused {
-			return s, QuestionOutcome{}
-		}
 		maxC := lastRowIndex(q, *st)
 		if st.Cursor > 0 {
 			st.Cursor--
 		} else {
 			st.Cursor = maxC
 		}
-		return s, QuestionOutcome{}
 	case tea.KeyCtrlN, tea.KeyDown, tea.KeyTab:
-		if st.CustomInputFocused {
-			return s, QuestionOutcome{}
-		}
 		maxC := lastRowIndex(q, *st)
 		if st.Cursor < maxC {
 			st.Cursor++
 		} else {
 			st.Cursor = 0
 		}
-		return s, QuestionOutcome{}
-	case tea.KeySpace:
-		if st.CustomInputFocused {
-			st.CustomBuffer += " "
-			return s, QuestionOutcome{}
-		}
-		return questionPrimaryAction(d, s)
-	case tea.KeyBackspace:
-		if !st.CustomInputFocused {
-			return s, QuestionOutcome{}
-		}
-		if len(st.CustomBuffer) > 0 {
-			st.CustomBuffer = st.CustomBuffer[:len(st.CustomBuffer)-1]
-		}
-		return s, QuestionOutcome{}
-	default:
-		if st.CustomInputFocused {
-			return s, QuestionOutcome{}
-		}
-		if key.Type != tea.KeyRunes || len(key.Runes) != 1 {
-			return s, QuestionOutcome{}
-		}
-		switch key.Runes[0] {
-		case 'j':
-			return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyDown})
-		case 'k':
-			return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyUp})
-		case 'h':
-			return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyLeft})
-		case 'l':
-			return HandleQuestionKey(d, s, tea.KeyMsg{Type: tea.KeyRight})
-		case 'q':
-			s.Submitted = true
-			return s, QuestionOutcome{Cancelled: true}
-		case 's':
-			s.Submitted = true
-			return s, buildSubmitOutcome(d, s)
-		case 'd':
-			if st.Cursor == customIx && !st.CustomInputFocused && customRowVisible(*st) {
-				st.CustomBuffer = ""
-				st.CustomSelected = false
-				if len(q.Options) > 0 {
-					st.Cursor = len(q.Options) - 1
-				} else {
-					st.Cursor = 0
-				}
-				clampQuestionCursor(q, st)
-				return s, QuestionOutcome{}
-			}
-			return s, QuestionOutcome{}
-		case 'c', 'i', 'o':
-			st.Cursor = customIx
-			st.CustomInputFocused = true
-			return s, QuestionOutcome{}
-		}
-		return s, QuestionOutcome{}
 	}
+	return s, QuestionOutcome{}
 }
 
 func buildSubmitOutcome(d domain.QuestionDisplay, s QuestionUIState) QuestionOutcome {

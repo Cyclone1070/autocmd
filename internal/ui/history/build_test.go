@@ -265,7 +265,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 	}
 
 	// Test all pairs and triples.
-	sequences := [][]elem{}
+	sequences := make([][]elem, 0, (1+len(elems))*len(elems)*len(elems))
 	for _, e1 := range elems {
 		for _, e2 := range elems {
 			sequences = append(sequences, []elem{e1, e2})

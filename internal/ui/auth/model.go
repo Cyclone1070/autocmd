@@ -234,7 +234,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {
-	var items []ui.Item
+	items := make([]ui.Item, 0, len(providers))
 	for _, p := range providers {
 		detail := ""
 		if p.Authorized {
@@ -258,7 +258,7 @@ func (m *model) initializeProviderPicker(providers []domain.ProviderSummary) {
 }
 
 func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthMethod) {
-	var items []ui.Item
+	items := make([]ui.Item, 0, len(methods))
 	for _, meth := range methods {
 		var id, name string
 		switch v := meth.(type) {

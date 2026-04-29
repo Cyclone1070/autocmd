@@ -544,7 +544,7 @@ func TestList_SortsByUpdatedDesc(t *testing.T) {
 		{id: "newest", updated: now},
 	}
 
-	var entries []os.DirEntry
+	entries := make([]os.DirEntry, 0, len(sessions))
 	for _, s := range sessions {
 		infoDTO := sessionInfoDTO{
 			ID:           s.id,

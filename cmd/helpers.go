@@ -43,7 +43,7 @@ func buildRegistries(cfg *config.Config, authMgr *auth.Manager) (*provider.LLMRe
 }
 
 func toDomainModels(configs []config.ModelConfig) []domain.LLMInfo {
-	var models []domain.LLMInfo
+	models := make([]domain.LLMInfo, 0, len(configs))
 	for _, m := range configs {
 		models = append(models, domain.LLMInfo{
 			ID:            m.ID,

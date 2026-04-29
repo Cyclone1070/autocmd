@@ -135,7 +135,7 @@ func newMockToolRegistry(tools []domain.Tool) *mockToolRegistry {
 }
 
 func (m *mockToolRegistry) Definitions() []*schema.ToolInfo {
-	var defs []*schema.ToolInfo
+	defs := make([]*schema.ToolInfo, 0, len(m.tools))
 	for _, t := range m.tools {
 		defs = append(defs, t.Definition())
 	}

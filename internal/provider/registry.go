@@ -44,7 +44,7 @@ func (r *Registry) Get(id string) (domain.Provider, bool) {
 
 // List returns information about all registered providers, including resolved credentials.
 func (r *Registry) List(_ context.Context) ([]domain.ProviderInfo, error) {
-	var infos []domain.ProviderInfo
+	infos := make([]domain.ProviderInfo, 0, len(r.sortedProviderIDs()))
 	for _, id := range r.sortedProviderIDs() {
 		p := r.providers[id]
 		cred := (*domain.Credential)(nil)

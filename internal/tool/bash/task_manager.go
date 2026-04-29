@@ -88,11 +88,12 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 	status := "execution completed"
 	var errDetails error
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
 			status = domain.ToolErrorTimedOut
-		} else if errors.Is(err, context.Canceled) {
+		case errors.Is(err, context.Canceled):
 			status = domain.ToolErrorCancelled
-		} else {
+		default:
 			status = domain.ToolErrorFailed
 			errDetails = err
 		}
@@ -182,7 +183,7 @@ func (m *TaskManager) List() []TaskInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var tasks []TaskInfo
+	tasks := make([]TaskInfo, 0, len(m.tasks))
 	for id, t := range m.tasks {
 		lastActivity := t.cmd.LastActivityAt()
 		secondsSince := -1

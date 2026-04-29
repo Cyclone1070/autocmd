@@ -86,8 +86,7 @@ func (m *Manager) GetWithFallback(p domain.Provider) (*domain.Credential, error)
 				}
 
 				found = true
-				switch field.ID {
-				case domain.AuthFieldAPIKey:
+				if field.ID == domain.AuthFieldAPIKey {
 					fallback.APIKey = val
 				}
 			}

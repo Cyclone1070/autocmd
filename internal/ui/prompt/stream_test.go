@@ -152,7 +152,7 @@ func TestStream_Split(t *testing.T) {
 		t.Helper()
 		s := NewStream(mockRenderer{})
 
-		var blocks []string
+		blocks := make([]string, 0, len(types))
 		for i, k := range types {
 			blocks = append(blocks, makeBlock(k, i))
 		}
@@ -333,14 +333,14 @@ func TestStream_RenderConsistency(t *testing.T) {
 			renderer := ui.NewGlamourRenderer(80, lipgloss.HasDarkBackground())
 			s := NewStream(renderer)
 
-			var types []string
+			types := make([]string, 0, 2*len(testKeys)*len(testKeys))
 			for _, k1 := range testKeys {
 				for _, k2 := range testKeys {
 					types = append(types, k1, k2)
 				}
 			}
 
-			var blocks []string
+			blocks := make([]string, 0, len(types))
 			for i, k := range types {
 				blocks = append(blocks, makeBlock(k, i))
 			}

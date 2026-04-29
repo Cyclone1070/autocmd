@@ -374,7 +374,7 @@ func sanitizeEnv() map[string]string {
 }
 
 func envMapToSlice(envMap map[string]string) []string {
-	var env []string
+	env := make([]string, 0, len(envMap))
 	for k, v := range envMap {
 		env = append(env, k+"="+v)
 	}

@@ -218,11 +218,12 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 func (r *ToolRenderer) colorizeDiff(diff string) string {
 	lines := strings.Split(diff, "\n")
 	for i, line := range lines {
-		if strings.HasPrefix(line, "+") {
+		switch {
+		case strings.HasPrefix(line, "+"):
 			lines[i] = r.Theme.Success(line)
-		} else if strings.HasPrefix(line, "-") {
+		case strings.HasPrefix(line, "-"):
 			lines[i] = r.Theme.Error(line)
-		} else {
+		default:
 			lines[i] = r.Theme.Muted(line)
 		}
 	}
@@ -322,11 +323,12 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 		}
 
 		var summary string
-		if status == StatusError && err != "" {
+		switch {
+		case status == StatusError && err != "":
 			summary = r.formatError(plainSummary, err)
-		} else if answered == n {
+		case answered == n:
 			summary = r.Theme.Success("All questions answered")
-		} else {
+		default:
 			summary = r.Theme.Error(plainSummary)
 		}
 		body := summary + "\n\n" + r.renderQuestionReviewBlock(stRender)
@@ -353,7 +355,8 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 		header = r.formatError(baseHeader, err)
 	}
 
-	parts := []string{header}
+	parts := make([]string, 0, 3)
+	parts = append(parts, header)
 	parts = append(parts, q.Question)
 	parts = append(parts, r.renderQuestionOptionBlock(q, st))
 
@@ -375,7 +378,7 @@ func (r *ToolRenderer) renderQuestionReviewBlock(st QuestionUIState) string {
 	opts := []string{"Submit", "Go back"}
 	defFG := lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
 	numColW := 2
-	var lines []string
+	lines := make([]string, 0, len(opts))
 	for i, opt := range opts {
 		rawNum := fmt.Sprintf("%d.", i+1)
 		num := r.Theme.Muted(fmt.Sprintf("%*s", numColW, rawNum))
@@ -567,7 +570,8 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 			for i := 0; i < indicatorLines && i < len(gatedLines); i++ {
 				gatedLines[i] = r.Theme.Muted(gatedLines[i])
 			}
-			spec.ContentLines = append(preservedWrapped, gatedLines...)
+			preservedWrapped = append(preservedWrapped, gatedLines...)
+			spec.ContentLines = preservedWrapped
 		}
 	} else {
 		spec.ContentLines = r.wrapLines(spec.ContentLines, contentFirstWidth, contentContinuationWidth)

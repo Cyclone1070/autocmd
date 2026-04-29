@@ -166,7 +166,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) initializePicker(data *domain.SessionListEvent) {
-	var items []ui.Item
+	items := make([]ui.Item, 0, len(data.Sessions))
 	for _, s := range data.Sessions {
 		name := s.Name
 		if name == "" {

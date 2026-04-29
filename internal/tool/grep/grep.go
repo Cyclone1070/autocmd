@@ -251,12 +251,13 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	res, err := i.commandExecutor.Run(ctx, cmdStr, workDir, true)
 	timedOut := false
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
 			timedOut = true
-		} else if ctx.Err() != nil {
+		case errors.Is(err, context.Canceled):
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
-		} else {
+		default:
 			d.Error = domain.ToolErrorFailed
 			return fmt.Sprintf("Error: rg failed: %v", err), d
 		}

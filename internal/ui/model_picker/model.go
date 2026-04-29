@@ -110,7 +110,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) initializePicker(data *domain.ModelListEvent) {
-	var items []ui.Item
+	items := make([]ui.Item, 0, len(data.Models))
 	for _, m := range data.Models {
 		items = append(items, ui.Item{
 			ID:     m.ID,

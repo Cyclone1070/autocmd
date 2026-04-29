@@ -202,7 +202,7 @@ func (m *Model) pollBus() tea.Cmd {
 // Update handles messages for scrolling and viewport updates.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	var cmds []tea.Cmd
+	cmds := make([]tea.Cmd, 0, 1)
 
 	switch msg := msg.(type) {
 	case domain.HistoryEvent:

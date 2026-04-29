@@ -61,11 +61,12 @@ func (b *mockEinoModelBridge) Stream(_ context.Context, _ []*schema.Message, _ .
 			msg := &schema.Message{
 				Role: schema.Assistant,
 			}
-			if chunk.toolCall != nil {
+			switch {
+			case chunk.toolCall != nil:
 				msg.ToolCalls = []schema.ToolCall{*chunk.toolCall}
-			} else if chunk.isThought {
+			case chunk.isThought:
 				msg.ReasoningContent = chunk.text
-			} else {
+			default:
 				msg.Content = chunk.text
 			}
 			sw.Send(msg, nil)

@@ -51,7 +51,7 @@ type Picker struct {
 
 // NewPicker creates a new Picker with the given configuration.
 func NewPicker(cfg Config) *Picker {
-	var indices []int
+	indices := make([]int, 0, len(cfg.Items))
 	for i := range cfg.Items {
 		indices = append(indices, i)
 	}
@@ -72,8 +72,7 @@ func (m *Picker) Init() tea.Cmd {
 
 // Update handles keyboard messages for navigation and selection.
 func (m *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
 			m.quit = true
@@ -247,7 +246,7 @@ func (m *Picker) CursorItem() (Item, bool) {
 func (m *Picker) RefreshItems(items []Item) {
 	m.items = items
 	// Re-calculate selectable indices
-	var indices []int
+	indices := make([]int, 0, len(items))
 	for i := range items {
 		indices = append(indices, i)
 	}

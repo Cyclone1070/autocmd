@@ -5,7 +5,7 @@ import (
 )
 
 func joinArgs(args []string) string {
-	var quoted []string
+	quoted := make([]string, 0, len(args))
 	for _, arg := range args {
 		quoted = append(quoted, quote(arg))
 	}

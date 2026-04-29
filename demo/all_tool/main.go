@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,12 +20,12 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/edit"
-	"github.com/Cyclone1070/iav/internal/tool/write"
-	"github.com/Cyclone1070/iav/internal/tool/question"
-	"github.com/Cyclone1070/iav/internal/tool/grep"
 	"github.com/Cyclone1070/iav/internal/tool/glob"
+	"github.com/Cyclone1070/iav/internal/tool/grep"
+	"github.com/Cyclone1070/iav/internal/tool/question"
+	"github.com/Cyclone1070/iav/internal/tool/read"
+	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -39,16 +40,23 @@ import (
 )
 
 const (
-	defaultChatWidth    = 80
-	thinkingHeight      = 5
-	toolingHeight       = 12
-	demoTokenLimit      = 1000
-	maxFileSize         = 1024 * 1024
-	agentIterations     = 20
-	turnDelay           = 450 * time.Millisecond
+	defaultChatWidth = 80
+	thinkingHeight   = 5
+	toolingHeight    = 12
+	demoTokenLimit   = 1000
+	maxFileSize      = 1024 * 1024
+	agentIterations  = 20
+	turnDelay        = 450 * time.Millisecond
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
@@ -56,11 +64,14 @@ func main() {
 
 	chatWidth := cfg.ChatWindowWidth()
 	termHeight := 0
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -90,7 +101,7 @@ func main() {
 	router := actionrouter.New()
 	defer router.Close()
 
-	// Real Tool Setup
+	// Real Tool Setup.
 	cwd, _ := os.Getwd()
 	pathResolver := path.NewResolver(cwd)
 	fileSystem := fs.NewOSFileSystem(maxFileSize)
@@ -120,7 +131,7 @@ func main() {
 	)
 	toolExecutor := agent.NewToolExecutor(registry, router, permissionResolver)
 
-	// NEW: Use the real agent.Loop with a stateful MockLLM
+	// NEW: Use the real agent.Loop with a stateful MockLLM.
 	mockLLM := &statefulMockLLM{}
 	agentLoop := agent.NewLoop(mockLLM, toolExecutor, agentIterations, bus, taskMgr)
 
@@ -138,14 +149,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type statefulMockLLM struct {
@@ -186,7 +196,7 @@ func (l *statefulMockLLM) Stream(ctx context.Context, msgs []*schema.Message, op
 
 	var msg *schema.Message
 	if l.turn >= len(steps) {
-		// End of demo
+		// End of demo.
 		msg = &schema.Message{Role: schema.Assistant, Content: "\n\n### Demo Complete\n'temp.md' has been cleaned up."}
 	} else {
 		s := steps[l.turn]

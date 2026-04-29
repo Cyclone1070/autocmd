@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -24,37 +25,47 @@ import (
 )
 
 const (
-	defaultChatWidth    = 80
+	defaultChatWidth      = 80
 	defaultThinkingHeight = 5
-	defaultToolingHeight = 12
-	demoTokenLimit      = 1000
+	defaultToolingHeight  = 12
+	demoTokenLimit        = 1000
 
-	// Delays
+	// Delays.
 	fastDelay   = 500 * time.Millisecond
 	mediumDelay = 1000 * time.Millisecond
 	slowDelay   = 1500 * time.Millisecond
 	streamDelay = 300 * time.Millisecond
 
-	// Loop limits
+	// Loop limits.
 	streamIterations = 20
 	fastThreshold    = 15
 	medThreshold     = 18
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(defaultChatWidth)
 
-	// Calculate width and height capping at terminal size
+	// Calculate width and height capping at terminal size.
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	termHeight := 0 // Fallback.
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -94,14 +105,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockAgent struct {
@@ -132,7 +142,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	runSuite := func(name string, display1, display2, display3 domain.ToolDisplay) error {
 		a.bus.SendUIUpdate(domain.TextEvent{Text: fmt.Sprintf("### SUITE: %s\n\n", name)})
 
-		// Start all three
+		// Start all three.
 		tt.Start(name+"-1", display1)
 		tt.Start(name+"-2", display2)
 		tt.Start(name+"-3", display3)
@@ -141,7 +151,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		//   2 (0.5s), 3 (1.5s, error), 1 (3s).
 		// For DIFF suite, make 1 finish first, 3 error second, 2 last.
 		if name == "DIFF" {
-			// 1 (0.5s), 3 (1.5s, error), 2 (3s)
+			// 1 (0.5s), 3 (1.5s, error), 2 (3s).
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -163,7 +173,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 				tt.End(name+"-2", display2)
 			}
 		} else {
-			// Default: 2 (0.5s), 3 (1.5s, error), 1 (3s)
+			// Default: 2 (0.5s), 3 (1.5s, error), 1 (3s).
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -190,7 +200,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Starting Test Program This Is Some Filler Lines Just To Make It A Lil Bit Longer\n\n"})
 
-	// 1. String Suite
+	// 1. String Suite.
 	if err := runSuite("STRING",
 		domain.NewStringDisplay("Analyzing codebase", "String 1 (Slow)"),
 		domain.NewStringDisplay("", "String 2 (Fast)"),
@@ -198,7 +208,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return err
 	}
 
-	// 2. Diff Suite
+	// 2. Diff Suite.
 	if err := runSuite("DIFF",
 		domain.NewDiffDisplay("Updating \"file.txt\"", "EDIT \"file.txt\"", 1, 1, "- old\n+ new"),
 		domain.NewDiffDisplay("Fixing \"fast.txt\"", "EDIT \"fast.txt\"", 1, 1, "- fast\n+ gone"),
@@ -206,13 +216,13 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return err
 	}
 
-	// 3. Shell Suite (with more streaming)
+	// 3. Shell Suite (with more streaming).
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "### SUITE: SHELL (Heavy Streaming)\n\n"})
 	tt.Start("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", ""))
 	tt.Start("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", ""))
 	tt.Start("SHELL-3", domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", ""))
 
-	// Heavy streaming
+	// Heavy streaming.
 	for i := 1; i <= streamIterations; i++ {
 		select {
 		case <-ctx.Done():
@@ -230,22 +240,22 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		}
 	}
 
-	// Finishes
-	tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", "")) // Fast
+	// Finishes.
+	tt.End("SHELL-2", domain.NewBashDisplay("Fast Shell", "fast-cmd", "", "")) // Fast.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(mediumDelay):
 		bash3 := domain.NewBashDisplay("Medium Shell (Fail)", "med-cmd", "", "")
 		bash3.Error = "exit status 1: middle tool error"
-		tt.End("SHELL-3", bash3) // Medium/Fail
+		tt.End("SHELL-3", bash3) // Medium/Fail.
 	}
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-time.After(mediumDelay):
-		tt.End("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", "")) // Slow
+		tt.End("SHELL-1", domain.NewBashDisplay("Slow Shell", "slow-cmd", "", "")) // Slow.
 	}
 
 	return nil

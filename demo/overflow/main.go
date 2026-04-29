@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,12 +20,12 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/edit"
-	"github.com/Cyclone1070/iav/internal/tool/write"
-	"github.com/Cyclone1070/iav/internal/tool/question"
-	"github.com/Cyclone1070/iav/internal/tool/grep"
 	"github.com/Cyclone1070/iav/internal/tool/glob"
+	"github.com/Cyclone1070/iav/internal/tool/grep"
+	"github.com/Cyclone1070/iav/internal/tool/question"
+	"github.com/Cyclone1070/iav/internal/tool/read"
+	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -39,33 +40,43 @@ import (
 )
 
 const (
-	defaultChatWidth    = 80
-	thinkingHeight      = 5
-	toolingHeight       = 12
-	demoTokenLimit      = 1000
-	maxFileSize         = 1024 * 1024
-	agentIterations     = 20
-	overflowLinesCount  = 15
+	defaultChatWidth   = 80
+	thinkingHeight     = 5
+	toolingHeight      = 12
+	demoTokenLimit     = 1000
+	maxFileSize        = 1024 * 1024
+	agentIterations    = 20
+	overflowLinesCount = 15
 
-	// Delays
-	demoDelay           = 500 * time.Millisecond
-	finishedDelay       = 200 * time.Millisecond
+	// Delays.
+	demoDelay     = 500 * time.Millisecond
+	finishedDelay = 200 * time.Millisecond
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(defaultChatWidth)
 
-	// Calculate width and height capping at terminal size
+	// Calculate width and height capping at terminal size.
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	termHeight := 0 // Fallback.
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -134,14 +145,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockStore struct{}

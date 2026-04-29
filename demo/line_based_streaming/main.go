@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -28,33 +29,43 @@ const (
 	toolingHeight  = 12
 	demoTokenLimit = 1000
 
-	// Delays
-	initDelay    = 650 * time.Millisecond
-	introGap     = 95 * time.Millisecond
-	scanDelay    = 900 * time.Millisecond
-	logGap       = 250 * time.Millisecond
-	deployGap    = 90 * time.Millisecond
-	deployDelay  = 800 * time.Millisecond
-	middleGap    = 300 * time.Millisecond
-	narrativeGap = 85 * time.Millisecond
-	timeDelay    = 950 * time.Millisecond
-	wrapGap      = 95 * time.Millisecond
+	// Delays.
+	initDelay     = 650 * time.Millisecond
+	introGap      = 95 * time.Millisecond
+	scanDelay     = 900 * time.Millisecond
+	logGap        = 250 * time.Millisecond
+	deployGap     = 90 * time.Millisecond
+	deployDelay   = 800 * time.Millisecond
+	middleGap     = 300 * time.Millisecond
+	narrativeGap  = 85 * time.Millisecond
+	timeDelay     = 950 * time.Millisecond
+	wrapGap       = 95 * time.Millisecond
 	rollbackDelay = 850 * time.Millisecond
-	finalGap     = 90 * time.Millisecond
+	finalGap      = 90 * time.Millisecond
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 
 	chatWidth := cfg.ChatWindowWidth()
 	termHeight := 0
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -94,14 +105,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockAgent struct {
@@ -270,11 +280,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"kubectl logs -n edge ds/ntp-sidecar --since=15m | rg -n \"drift|sync|offset\"\n",
 		"```\n",
 	}
-	if err := sendChunks(final, finalGap); err != nil {
-		return err
-	}
-
-	return nil
+	return sendChunks(final, finalGap)
 }
 
 type mockStore struct{}

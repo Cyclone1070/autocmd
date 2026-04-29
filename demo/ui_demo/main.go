@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -28,26 +29,36 @@ const (
 	toolingHeight  = 12
 	demoTokenLimit = 1000
 
-	// Delays
-	shortDelay  = 200 * time.Millisecond
-	mediumDelay = 400 * time.Millisecond
-	longDelay   = 600 * time.Millisecond
+	// Delays.
+	shortDelay     = 200 * time.Millisecond
+	mediumDelay    = 400 * time.Millisecond
+	longDelay      = 600 * time.Millisecond
 	extraLongDelay = 1000 * time.Millisecond
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 
-	// Calculate width and height capping at terminal size
+	// Calculate width and height capping at terminal size.
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	termHeight := 0 // Fallback.
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -87,14 +98,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockAgent struct {
@@ -105,7 +115,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	tt := demoutil.NewToolTracker(a.bus)
 	defer tt.FlushOpenCancelled()
 
-	// 1. Text Stream
+	// 1. Text Stream.
 	markdown := "# UI Demo\n\nThis is a demo of the **smooth streaming** logic. It breaks down text into small chunks to simulate a real-time LLM response."
 	a.bus.SendUIUpdate(domain.TextEvent{Text: markdown})
 	select {
@@ -114,7 +124,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(mediumDelay):
 	}
 
-	// 2. Thinking + Hidden Thoughts (Simulating a Leak)
+	// 2. Thinking + Hidden Thoughts (Simulating a Leak).
 	a.bus.SendUIUpdate(domain.ThinkingEvent{})
 
 	thoughts := []string{
@@ -150,7 +160,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(mediumDelay):
 	}
 
-	// 3. Parallel Tool Calls (3 tools)
+	// 3. Parallel Tool Calls (3 tools).
 	tool1Disp := domain.NewBashDisplay("Finish last", "npm list --depth=0", "/workspace/web", "")
 	tt.Start("tool-1", tool1Disp)
 	select {
@@ -182,7 +192,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(mediumDelay):
 	}
 
-	// 3a. Tool 2 finishes first (blocked)
+	// 3a. Tool 2 finishes first (blocked).
 	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-2", Chunk: "All files passed linting.\n"})
 	select {
 	case <-ctx.Done():
@@ -196,7 +206,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(extraLongDelay):
 	}
 
-	// 3b. Tool 3 finishes second (blocked)
+	// 3b. Tool 3 finishes second (blocked).
 	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-3", Chunk: "Running tests...\nPASS\n"})
 	select {
 	case <-ctx.Done():
@@ -210,7 +220,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	case <-time.After(extraLongDelay):
 	}
 
-	// 3c. Tool 1 finishes last (triggers cascading flush)
+	// 3c. Tool 1 finishes last (triggers cascading flush).
 	a.bus.SendUIUpdate(domain.ToolStreamEvent{CallID: "tool-1", Chunk: "Found 45 dependencies.\n"})
 	select {
 	case <-ctx.Done():
@@ -219,7 +229,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 	tt.End("tool-1", tool1Disp)
 
-	// 6. Final text
+	// 6. Final text.
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "Refactoring complete! The UI is looking great. ✨"})
 
 	return nil

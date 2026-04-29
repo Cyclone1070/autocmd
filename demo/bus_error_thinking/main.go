@@ -21,6 +21,13 @@ const (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	bus := eventbus.New()
 	theme := ui.NewTheme(ui.ThemeConfig{
 		PrimaryColor: lipgloss.AdaptiveColor{Light: "#0EA5E9", Dark: "#38BDF8"},
@@ -55,7 +62,7 @@ func main() {
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running program: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running program: %w", err)
 	}
+	return nil
 }

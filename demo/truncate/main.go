@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -23,29 +24,39 @@ import (
 )
 
 const (
-	defaultChatWidth    = 80
-	thinkingHeight      = 5
-	toolingHeight       = 12
-	demoTokenLimit      = 1000
-	truncateLoopLimit   = 40
-	initialDelay        = 350 * time.Millisecond
-	loopDelay           = 300 * time.Millisecond
+	defaultChatWidth  = 80
+	thinkingHeight    = 5
+	toolingHeight     = 12
+	demoTokenLimit    = 1000
+	truncateLoopLimit = 40
+	initialDelay      = 350 * time.Millisecond
+	loopDelay         = 300 * time.Millisecond
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 	cfg.SetChatWindowWidth(defaultChatWidth)
 
-	// Calculate width and height capping at terminal size
+	// Calculate width and height capping at terminal size.
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	termHeight := 0 // Fallback.
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -85,14 +96,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockAgent struct {

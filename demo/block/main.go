@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"time"
 
@@ -29,18 +31,28 @@ const (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	bus := eventbus.New()
 	cfg := config.DefaultConfig().UI()
 
-	// Calculate width and height capping at terminal size
+	// Calculate width and height capping at terminal size.
 	chatWidth := cfg.ChatWindowWidth()
-	termHeight := 0 // Fallback
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	termHeight := 0 // Fallback.
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -80,14 +92,13 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running UI: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running UI: %w", err)
 	}
 
-	if err := <-done; err != nil {
-		fmt.Printf("Error running workflow: %v\n", err)
-		os.Exit(1)
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("error running workflow: %w", err)
 	}
+	return nil
 }
 
 type mockAgent struct {
@@ -104,7 +115,7 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		"1. Ordered item 1\n2. Ordered item 2\n\n",
 		"> This is a blockquote.\n> It can have multiple lines. It can also be very long. Sometimes it can be 2 or 3 lines even.\n\n",
 		"```go\nfunc hello() {\n    fmt.Println(\"Hello, World!\")\n}\n```\n\n",
-		"---\n\n", // HR
+		"---\n\n", // HR.
 		"| Table | Header |\n|-------|--------|\n| Row 1 | Cell 1 |\n| Row 2 | Cell 2 |\n\n",
 		"Task list:\n- [x] Done\n- [ ] Todo",
 	}
@@ -132,15 +143,12 @@ func (s *mockStore) GenerateName(ctx context.Context, llm domain.LLM, target str
 
 type mockLLM struct{}
 
-func (l *mockLLM) ID() string          { return "mock" }
-func (l *mockLLM) DisplayName() string { return "Mock LLM" }
-func (l *mockLLM) ContextWindow() int  { return demoTokenLimit }
+func (l *mockLLM) ID() string                        { return "mock" }
+func (l *mockLLM) DisplayName() string               { return "Mock LLM" }
+func (l *mockLLM) ContextWindow() int                { return demoTokenLimit }
+func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
-}
-
-func (l *mockLLM) Model() model.ToolCallingChatModel {
-	return nil
 }
 
 type mockRegistry struct{}

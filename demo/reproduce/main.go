@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -18,12 +19,12 @@ import (
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/tool"
 	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/edit"
-	"github.com/Cyclone1070/iav/internal/tool/write"
-	"github.com/Cyclone1070/iav/internal/tool/question"
-	"github.com/Cyclone1070/iav/internal/tool/grep"
 	"github.com/Cyclone1070/iav/internal/tool/glob"
+	"github.com/Cyclone1070/iav/internal/tool/grep"
+	"github.com/Cyclone1070/iav/internal/tool/question"
+	"github.com/Cyclone1070/iav/internal/tool/read"
+	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/hash"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
@@ -40,11 +41,18 @@ import (
 const (
 	thinkingHeight = 5
 	demoTokenLimit = 8192
-	chatWidth      = 80
+	chatWidthFixed = 80
 	searchRadius   = 24
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Printf("Fatal error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Match normal app behavior unless --debug is used.
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 
@@ -53,17 +61,19 @@ func main() {
 
 	chatWidth := uiCfg.ChatWindowWidth()
 	termHeight := 0
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	fd := os.Stdout.Fd()
+	if fd <= math.MaxInt {
+		if width, height, err := term.GetSize(int(fd)); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	pathResolver, err := buildPathResolver()
 	if err != nil {
-		fmt.Printf("path resolver error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("path resolver error: %w", err)
 	}
 
 	fileSystem := fs.NewOSFileSystem(cfg.Tools().MaxFileSize())
@@ -132,13 +142,12 @@ func main() {
 	done := workflow.RunPrompt(context.Background(), "repro list spacing", deps)
 	p := tea.NewProgram(uiModel, tea.WithInput(nil), tea.WithOutput(os.Stdout))
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("UI failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("UI failed: %w", err)
 	}
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		fmt.Printf("workflow failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("workflow failed: %w", err)
 	}
+	return nil
 }
 
 func buildPathResolver() (*path.Resolver, error) {
@@ -178,7 +187,7 @@ func (m *reproLLM) Stream(ctx context.Context, msgs []*schema.Message, opts ...m
 	go func() {
 		defer sw.Close()
 		for _, c := range chunks {
-			sw.Send(&schema.Message{Role: schema.Assistant, Content: c}, nil)
+			_ = sw.Send(&schema.Message{Role: schema.Assistant, Content: c}, nil)
 		}
 	}()
 	return sr, nil
@@ -212,7 +221,7 @@ func findReproChunks(markdown string) []string {
 }
 
 func reproducesGap(markdown string, chunks []string) bool {
-	renderer := ui.NewGlamourRenderer(chatWidth, true)
+	renderer := ui.NewGlamourRenderer(chatWidthFixed, true)
 	oneShot := stripANSI(renderer.Render(markdown))
 	streamed := stripANSI(simulateStream(renderer, chunks))
 	gapPattern := regexp.MustCompile(`(?s)Aurora Borealis.*?\n\s*\n\s*• The Concept of Stoicism`)

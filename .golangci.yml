@@ -1,14 +1,9 @@
 version: "2"
-
 run:
-  timeout: 5m
   concurrency: 4
   go: "1.26"
-
 linters:
   enable:
-    - modernize
-    - revive
     - asciicheck
     - bodyclose
     - dogsled
@@ -19,23 +14,23 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    - mnd
     - goprintffuncname
     - gosec
     - misspell
+    - mnd
+    - modernize
     - nakedret
     - nilerr
     - noctx
     - nolintlint
     - prealloc
     - predeclared
+    - revive
     - sqlclosecheck
     - tparallel
     - unconvert
     - unparam
     - wastedassign
-    - unused
-  
   settings:
     govet:
       enable:
@@ -63,24 +58,39 @@ linters:
         - name: superfluous-else
         - name: unused-parameter
         - name: redefines-builtin-id
-
   exclusions:
-    presets: []
-    paths:
-      - "demo/.*"
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - path: internal/provider/registry.go
-        linters:
+      - path: demo/.*
+        linters: ["*"]
+      - linters:
           - revive
-      - path: internal/tool/bash/bash.go
-        linters:
+        path: internal/provider/registry.go
+      - linters:
           - revive
-      - path: internal/tool/question/question.go
-        linters:
+        path: internal/tool/bash/bash.go
+      - linters:
           - revive
-      - text: "stutter"
-        linters:
+        path: internal/tool/question/question.go
+      - linters:
           - revive
-      - text: "unused-parameter"
-        linters:
+        text: stutter
+      - linters:
           - revive
+        text: unused-parameter
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

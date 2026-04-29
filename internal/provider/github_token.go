@@ -53,6 +53,7 @@ func (s *TokenSource) Get(ctx context.Context) (string, error) {
 	}
 
 	// 2. Exchange
+	// #nosec G704
 	req, err := http.NewRequestWithContext(ctx, "GET", s.exchangeURL, nil)
 	if err != nil {
 		return "", err
@@ -63,6 +64,7 @@ func (s *TokenSource) Get(ctx context.Context) (string, error) {
 	req.Header.Set("Editor-Version", "vscode/1.85.1")
 	req.Header.Set("Editor-Plugin-Version", "copilot/1.155.0")
 
+	// #nosec G704
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return "", err

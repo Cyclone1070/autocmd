@@ -132,12 +132,13 @@ func TestPrompt_GoldenCombinations(t *testing.T) {
 
 	goldenPath := filepath.Join("testdata", "prompt_combos.golden")
 	if *update {
-		err := os.MkdirAll("testdata", 0755)
+		err := os.MkdirAll("testdata", 0750)
 		assert.NoError(t, err)
-		err = os.WriteFile(goldenPath, goldenOutput.Bytes(), 0644)
+		err = os.WriteFile(goldenPath, goldenOutput.Bytes(), 0600)
 		assert.NoError(t, err)
 		t.Logf("Updated golden file: %s", goldenPath)
 	} else {
+		// #nosec G304
 		expected, err := os.ReadFile(goldenPath)
 		if err != nil {
 			t.Fatalf("Failed to read golden file: %v. Run with -update to create it.", err)

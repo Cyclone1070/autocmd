@@ -34,7 +34,7 @@ func (p *GitHubProvider) SupportedAuthMethods() []domain.AuthMethod {
 		domain.OAuthMethod{
 			ID:            "github_oauth",
 			Name:          "GitHub OAuth",
-			ClientID:      "Iv1.b507a08c87ecfe98", // GitHub Copilot OAuth App ID
+			ClientID:      "Iv1.b507a08c87ecfe98", // #nosec G101 - Public GitHub Copilot OAuth App ID
 			DeviceAuthURL: "https://github.com/login/device/code",
 			TokenURL:      "https://github.com/login/oauth/access_token",
 			Scopes:        []string{"read:user"},

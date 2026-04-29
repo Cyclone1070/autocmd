@@ -87,8 +87,8 @@ func Default() *State {
 func (m *Manager) Load() (*State, error) {
 	s := Default()
 
-	homeDir, err := m.fs.UserHomeDir()
-	if err != nil {
+	homeDir, _ := m.fs.UserHomeDir()
+	if homeDir == "" {
 		return s, nil
 	}
 

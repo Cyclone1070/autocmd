@@ -75,11 +75,12 @@ func assertGolden(t *testing.T, name string, actual string) {
 	goldenFile := filepath.Join("testdata", name+".golden")
 
 	if os.Getenv("UPDATE_GOLDEN") == "true" {
-		err := os.WriteFile(goldenFile, []byte(actual), 0o644)
+		err := os.WriteFile(goldenFile, []byte(actual), 0o600)
 		require.NoError(t, err, "failed to update golden file")
 		return
 	}
 
+	// #nosec G304
 	expected, err := os.ReadFile(goldenFile)
 	if os.IsNotExist(err) {
 		if os.Getenv("UPDATE_GOLDEN") != "true" {

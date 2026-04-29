@@ -230,6 +230,7 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 		creds := map[string]domain.Credential{
 			"github": {Type: "github_oauth", OAuthToken: "gho_test"},
 		}
+		// #nosec G117
 		data, _ := json.Marshal(creds)
 		fs.files[storePath] = data
 

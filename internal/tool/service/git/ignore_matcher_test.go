@@ -22,8 +22,8 @@ func newMockFileSystem() *mockFileSystem {
 	}
 }
 
-func (m *mockFileSystem) createFile(path string, content []byte) {
-	m.files[path] = content
+func (m *mockFileSystem) createFile(_ string, content []byte) {
+	m.files[testWorkspaceRoot + "/.gitignore"] = content
 }
 
 func (m *mockFileSystem) Stat(path string) (os.FileInfo, error) {

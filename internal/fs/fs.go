@@ -40,6 +40,7 @@ func NewOSFileSystem(maxFileSize int64) *OSFileSystem {
 // ReadFile reads the entire content of a file with safety limits.
 // It checks for MaxFileSize and binary content.
 func (fs *OSFileSystem) ReadFile(path string) ([]byte, error) {
+	// #nosec G304 - File system tool opening arbitrary path
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -151,7 +152,8 @@ func (fs *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) er
 
 // CreateAtomic creates a new file, failing if it already exists (O_EXCL).
 func (fs *OSFileSystem) CreateAtomic(name string) (io.WriteCloser, error) {
-	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0644)
+	// #nosec G304
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 }
 
 // Remove deletes a file or empty directory.
@@ -166,5 +168,6 @@ func (fs *OSFileSystem) RemoveAll(path string) error {
 
 // Open opens a file for reading.
 func (fs *OSFileSystem) Open(path string) (domain.File, error) {
+	// #nosec G304
 	return os.Open(path)
 }

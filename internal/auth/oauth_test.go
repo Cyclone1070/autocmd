@@ -38,7 +38,7 @@ func TestOAuthManager_RunDeviceFlow(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "authorization_pending"})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "gho_test_token"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "gho_test_token"}) // #nosec G101
 	})
 
 	ts := httptest.NewServer(mux)

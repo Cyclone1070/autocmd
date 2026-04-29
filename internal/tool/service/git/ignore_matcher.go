@@ -45,8 +45,7 @@ func NewIgnoreMatcher(workspaceRoot string, fs fileSystem) (*IgnoreMatcher, erro
 	gitignorePath := filepath.Join(workspaceRoot, ".gitignore")
 
 	// Check if .gitignore exists
-	_, err := fs.Stat(gitignorePath)
-	if err != nil {
+	if info, _ := fs.Stat(gitignorePath); info == nil {
 		// .gitignore doesn't exist - return a matcher that never ignores
 		return &IgnoreMatcher{matcher: nil}, nil
 	}

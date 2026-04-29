@@ -263,6 +263,7 @@ func TestRunAuth(t *testing.T) {
 			UserCode:        "CODE-123",
 		}).Return()
 
+		// #nosec G101
 		authMgr.On("Set", "github", domain.Credential{Type: "github_oauth", OAuthToken: "gho_test_token"}).Return(nil)
 		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
 

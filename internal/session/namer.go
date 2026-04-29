@@ -13,7 +13,6 @@ import (
 // GenerateName creates a short title for a session based on the provided text.
 // It uses the provided LLM to generate the title.
 func GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
-
 	prompt := fmt.Sprintf("Summarize this in 3-5 words as a conversation title. Your response must only be the title and nothing else: %s", target)
 
 	messages := []*schema.Message{
@@ -21,11 +20,11 @@ func GenerateName(ctx context.Context, llm domain.LLM, target string) (string, e
 	}
 
 	resp, err := llm.Model().Generate(ctx, messages)
-	if err != nil || resp == nil {
-		return fallbackName(target), nil
+	var name string
+	if err == nil && resp != nil {
+		name = strings.TrimSpace(resp.Content)
 	}
 
-	name := strings.TrimSpace(resp.Content)
 	if name == "" {
 		return fallbackName(target), nil
 	}

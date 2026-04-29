@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 
@@ -128,11 +129,14 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	// Calculate width and height capping at terminal size
 	chatWidth := deps.Config.UI().ChatWindowWidth()
 	termHeight := 0 // Fallback (0 disables global truncation)
-	if width, height, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		if chatWidth <= 0 || width < chatWidth {
-			chatWidth = width
+	fd, err := toIntSafe(os.Stdout.Fd())
+	if err == nil && term.IsTerminal(fd) {
+		if width, height, err := term.GetSize(fd); err == nil && width > 0 {
+			if chatWidth <= 0 || width < chatWidth {
+				chatWidth = width
+			}
+			termHeight = height
 		}
-		termHeight = height
 	}
 
 	// Loop UI Wiring
@@ -196,4 +200,11 @@ func setupLogging() {
 	}
 	slog.SetDefault(logger)
 	slog.Debug("logging initialized", "path", logPath, "debug", debug)
+}
+
+func toIntSafe(n uintptr) (int, error) {
+	if uint64(n) > uint64(math.MaxInt) {
+		return 0, fmt.Errorf("value %d overflows int", n)
+	}
+	return int(n), nil
 }

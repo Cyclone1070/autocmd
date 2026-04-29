@@ -210,6 +210,7 @@ func (m *Manager) saveAll(all map[string]domain.Credential) error {
 		return fmt.Errorf("create auth dir: %w", err)
 	}
 
+	// #nosec G117
 	data, err := json.MarshalIndent(all, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal auth: %w", err)

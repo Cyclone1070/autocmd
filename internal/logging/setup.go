@@ -67,6 +67,7 @@ func Init(opts Options) (*slog.Logger, string, error) {
 		return nil, "", fmt.Errorf("cleanup logs: %w", err)
 	}
 
+	// #nosec G304 - Intentional log file opening
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, domain.DefaultFilePerm)
 	if err != nil {
 		return nil, "", fmt.Errorf("open log file: %w", err)

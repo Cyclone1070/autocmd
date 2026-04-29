@@ -47,6 +47,7 @@ type commandFactory interface {
 type osCommandFactory struct{}
 
 func (f *osCommandFactory) Command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	// #nosec G204, G702 - Intentional subprocess execution for tool service
 	return exec.CommandContext(ctx, name, args...)
 }
 

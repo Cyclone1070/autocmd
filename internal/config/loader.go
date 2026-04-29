@@ -31,6 +31,7 @@ func (FileReader) UserHomeDir() (string, error) {
 
 // ReadFile reads the file named by path and returns the contents.
 func (FileReader) ReadFile(path string) ([]byte, error) {
+	// #nosec G304 - Intentional file loading from path
 	return os.ReadFile(path)
 }
 

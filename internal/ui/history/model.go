@@ -1,6 +1,8 @@
 package history
 
 import (
+	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -83,7 +85,7 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int,
 	}
 
 	if !m.isDark && m.renderer == nil {
-		if term.IsTerminal(int(os.Stdout.Fd())) {
+		if fd, err := toIntSafe(os.Stdout.Fd()); err == nil && term.IsTerminal(fd) {
 			m.isDark = lipgloss.HasDarkBackground()
 		}
 	}
@@ -259,4 +261,11 @@ func (m *Model) View() string {
 		return ""
 	}
 	return m.viewport.View()
+}
+
+func toIntSafe(n uintptr) (int, error) {
+	if uint64(n) > uint64(math.MaxInt) {
+		return 0, fmt.Errorf("value %d overflows int", n)
+	}
+	return int(n), nil
 }

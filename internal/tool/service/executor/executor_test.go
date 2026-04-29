@@ -83,6 +83,7 @@ func (m *mockCommandFactory) Command(ctx context.Context, name string, args ...s
 	m.gotName = name
 	m.gotArgs = args
 	// We still return a real Cmd so Start/Wait don't panic, but we don't care about its execution
+	// #nosec G702 - Intentional in test mock
 	return exec.CommandContext(ctx, "true")
 }
 

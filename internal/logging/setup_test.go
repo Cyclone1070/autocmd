@@ -19,8 +19,8 @@ func TestCleanupLogs_RemovesExpiredFiles(t *testing.T) {
 	old := filepath.Join(dir, "old.log")
 	newer := filepath.Join(dir, "new.log")
 
-	require.NoError(t, os.WriteFile(old, []byte("old"), 0o644))
-	require.NoError(t, os.WriteFile(newer, []byte("new"), 0o644))
+	require.NoError(t, os.WriteFile(old, []byte("old"), 0o600))
+	require.NoError(t, os.WriteFile(newer, []byte("new"), 0o600))
 	require.NoError(t, os.Chtimes(old, now.Add(-30*24*time.Hour), now.Add(-30*24*time.Hour)))
 
 	require.NoError(t, cleanupLogs(dir, now, 14*24*time.Hour, 100*1024*1024))
@@ -38,7 +38,7 @@ func TestRotateIfNeeded_RenamesWhenOverLimit(t *testing.T) {
 	logPath := filepath.Join(dir, "error.log")
 
 	limit := int64(10)
-	require.NoError(t, os.WriteFile(logPath, []byte("0123456789abc"), 0o644))
+	require.NoError(t, os.WriteFile(logPath, []byte("0123456789abc"), 0o600))
 	require.NoError(t, rotateIfNeeded(logPath, limit, 5))
 
 	_, err := os.Stat(filepath.Join(dir, "error.log.1"))

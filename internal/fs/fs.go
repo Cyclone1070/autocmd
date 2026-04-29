@@ -153,7 +153,7 @@ func (fs *OSFileSystem) WriteFile(name string, data []byte, perm os.FileMode) er
 // CreateAtomic creates a new file, failing if it already exists (O_EXCL).
 func (fs *OSFileSystem) CreateAtomic(name string) (io.WriteCloser, error) {
 	// #nosec G304
-	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_EXCL, domain.PrivateFilePerm)
 }
 
 // Remove deletes a file or empty directory.

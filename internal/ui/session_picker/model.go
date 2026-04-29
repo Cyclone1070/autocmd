@@ -12,6 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const keyEsc = "esc"
+
 type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
 	SendAction(domain.Action)
@@ -102,7 +104,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.renaming = false
 				return m, nil
-			case "esc":
+			case keyEsc:
 				m.renaming = false
 				return m, nil
 			}

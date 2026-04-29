@@ -12,6 +12,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const questionPartsCount = 3
+
 type gater interface {
 	Gate(lines []string) ([]string, int)
 }
@@ -355,7 +357,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 		header = r.formatError(baseHeader, err)
 	}
 
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, questionPartsCount)
 	parts = append(parts, header)
 	parts = append(parts, q.Question)
 	parts = append(parts, r.renderQuestionOptionBlock(q, st))

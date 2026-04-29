@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testWorkspaceRoot = "/workspace"
+
 // Local mocks for read tests
 
 type mockFileSystemForRead struct {
@@ -115,11 +117,11 @@ func executeRead(t *testing.T, rtool *Tool, req *Request) (string, error) {
 }
 
 func TestReadFile(t *testing.T) {
-	workspaceRoot := "/workspace"
+	workspaceRoot := testWorkspaceRoot
 
 	t.Run("Execute cancelled returns ToolErrorCancelled display", func(t *testing.T) {
 		fs := newMockFileSystemForRead()
-		fs.createDir("/workspace")
+		fs.createDir(testWorkspaceRoot)
 		fs.createFile("/workspace/a.txt", []byte("hello"))
 
 		checksumManager := newMockChecksumManagerForRead()
@@ -374,7 +376,7 @@ func TestReadFile(t *testing.T) {
 	t.Run("absolute path in request is normalized for display", func(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
-		workspaceRoot := "/workspace"
+		workspaceRoot := testWorkspaceRoot
 		absFile := "/workspace/subdir/test.txt"
 		fs.createFile(absFile, []byte("content"))
 
@@ -396,7 +398,7 @@ func TestReadFile(t *testing.T) {
 	t.Run("execute includes read range in display", func(t *testing.T) {
 		fs := newMockFileSystemForRead()
 		checksumManager := newMockChecksumManagerForRead()
-		workspaceRoot := "/workspace"
+		workspaceRoot := testWorkspaceRoot
 		absFile := "/workspace/subdir/test.txt"
 		fs.createFile(absFile, []byte("line1\nline2\nline3"))
 

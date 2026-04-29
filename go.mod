@@ -1,6 +1,6 @@
 module github.com/Cyclone1070/iav
 
-go 1.26.0
+go 1.26.2
 
 require (
 	github.com/aymanbagabas/go-udiff v0.3.1
@@ -9,11 +9,12 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cloudwego/eino v0.8.5
+	github.com/cloudwego/eino-ext/components/model/gemini v0.1.29
+	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/google/uuid v1.6.0
 	github.com/mstrYoda/go-arctest v0.0.0-20250422073853-ff9fe79f31d7
 	github.com/muesli/termenv v0.16.0
-	github.com/openai/openai-go/v3 v3.29.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/yuin/goldmark v1.7.16
@@ -43,8 +44,6 @@ require (
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/eino-ext/components/model/gemini v0.1.29 // indirect
-	github.com/cloudwego/eino-ext/components/model/openai v0.1.10 // indirect
 	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.14 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
@@ -59,7 +58,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
@@ -90,10 +88,6 @@ require (
 	github.com/slongfield/pyfmt v0.0.0-20220222012616-ea85ff4c361f // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
-	github.com/tidwall/match v1.1.1 // indirect
-	github.com/tidwall/pretty v1.2.1 // indirect
-	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

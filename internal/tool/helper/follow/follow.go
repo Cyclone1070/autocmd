@@ -17,14 +17,12 @@ type fileSystem interface {
 // It is thread-safe and can be stopped gracefully.
 type Follower struct {
 	fs       fileSystem
+	file     domain.File
 	stopChan chan struct{}
 	pokeChan chan struct{}
-
-	once sync.Once
-	path string
-
-	mu   sync.Mutex
-	file domain.File
+	path     string
+	once     sync.Once
+	mu       sync.Mutex
 }
 
 // NewFollower creates a new Follower for the given path.

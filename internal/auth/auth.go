@@ -22,9 +22,9 @@ type FileSystem interface {
 // Manager handles persistent storage of authentication credentials.
 type Manager struct {
 	fs        FileSystem
+	cache     map[string]domain.Credential
 	storePath string
 	mu        sync.RWMutex
-	cache     map[string]domain.Credential
 }
 
 // NewManager creates a new Manager with the given filesystem and storage path.

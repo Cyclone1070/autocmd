@@ -30,21 +30,16 @@ func (m *mockDirEntry) Info() (os.FileInfo, error) { return nil, errors.New("not
 
 // mockFileSystem implements fileSystem interface for testing.
 type mockFileSystem struct {
-	files map[string][]byte
-	dirs  map[string][]os.DirEntry
-
-	// Configurable errors
-	readErr   error
-	writeErr  error
-	removeErr error
-	dirErr    error
-	ensureErr error
-
-	// Write call tracking
-	writeCallCount int
-	failWriteAfter int // Fail after N writes (0 = never fail)
-
+	readErr         error
+	writeErr        error
+	removeErr       error
+	dirErr          error
+	ensureErr       error
+	files           map[string][]byte
+	dirs            map[string][]os.DirEntry
 	lastRemovedPath string
+	writeCallCount  int
+	failWriteAfter  int
 }
 
 func newMockFileSystem() *mockFileSystem {
@@ -541,12 +536,12 @@ func TestList_SortsByUpdatedDesc(t *testing.T) {
 
 	now := time.Now()
 	sessions := []struct {
-		id      string
 		updated time.Time
+		id      string
 	}{
-		{"oldest", now.Add(-3 * time.Hour)},
-		{"middle", now.Add(-1 * time.Hour)},
-		{"newest", now},
+		{id: "oldest", updated: now.Add(-3 * time.Hour)},
+		{id: "middle", updated: now.Add(-1 * time.Hour)},
+		{id: "newest", updated: now},
 	}
 
 	var entries []os.DirEntry

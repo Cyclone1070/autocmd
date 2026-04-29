@@ -22,17 +22,20 @@ const (
 // Config holds all application configuration values.
 type Config struct {
 	tools     ToolsConfig
+	providers ProviderConfig
 	session   SessionConfig
 	ui        UIConfig
-	providers ProviderConfig
 }
 
 // Tools returns the configuration for tools.
-func (c *Config) Tools() ToolsConfig        { return c.tools }
+func (c *Config) Tools() ToolsConfig { return c.tools }
+
 // Session returns the configuration for sessions.
-func (c *Config) Session() SessionConfig    { return c.session }
+func (c *Config) Session() SessionConfig { return c.session }
+
 // UI returns the configuration for the terminal UI.
-func (c *Config) UI() UIConfig              { return c.ui }
+func (c *Config) UI() UIConfig { return c.ui }
+
 // Providers returns the configuration for AI providers.
 func (c *Config) Providers() ProviderConfig { return c.providers }
 
@@ -46,18 +49,21 @@ func (c SessionConfig) StorageDir() string { return c.storageDir }
 
 // ToolsConfig holds tool-specific configuration.
 type ToolsConfig struct {
+	toolPermissions   map[string]string
+	permissionDefault string
 	maxFileSize       int64
 	maxIterations     int
-	permissionDefault string
-	toolPermissions   map[string]string
 }
 
 // MaxFileSize returns the maximum file size allowed for tool operations.
-func (c ToolsConfig) MaxFileSize() int64        { return c.maxFileSize }
+func (c ToolsConfig) MaxFileSize() int64 { return c.maxFileSize }
+
 // MaxIterations returns the maximum number of tool iterations per request.
-func (c ToolsConfig) MaxIterations() int        { return c.maxIterations }
+func (c ToolsConfig) MaxIterations() int { return c.maxIterations }
+
 // PermissionDefault returns the default permission level for tools.
 func (c ToolsConfig) PermissionDefault() string { return c.permissionDefault }
+
 // ToolPermissions returns a copy of the tool-specific permission levels.
 func (c ToolsConfig) ToolPermissions() map[string]string {
 	out := make(map[string]string, len(c.toolPermissions))
@@ -81,21 +87,21 @@ type sessionDTO struct {
 }
 
 type toolsDTO struct {
+	Permissions   permissionsDTO `json:"permissions"`
 	MaxFileSize   int64          `json:"max_file_size"`
 	MaxIterations int            `json:"max_iterations"`
-	Permissions   permissionsDTO `json:"permissions"`
 }
 
 type permissionsDTO struct {
-	Default string            `json:"default"`
 	ByTool  map[string]string `json:"by_tool"`
+	Default string            `json:"default"`
 }
 
 type configDTO struct {
 	Tools     toolsDTO       `json:"tools"`
+	Providers ProviderConfig `json:"providers,omitempty"`
 	Session   sessionDTO     `json:"session"`
 	UI        uiDTO          `json:"ui"`
-	Providers ProviderConfig `json:"providers,omitempty"`
 }
 
 // DefaultConfig returns the default configuration.

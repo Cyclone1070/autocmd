@@ -21,11 +21,11 @@ type TaskInfo struct {
 
 // TaskManager manages background processes promoted from BashTool.
 type TaskManager struct {
-	mu         sync.Mutex
 	fs         fileSystem
 	tasks      map[string]*bashTask
-	doneQueue  []string
 	notifyChan chan struct{}
+	doneQueue  []string
+	mu         sync.Mutex
 }
 
 // bashTask tracks an individual background process.

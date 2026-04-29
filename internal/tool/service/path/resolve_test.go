@@ -15,8 +15,8 @@ func TestAbs(t *testing.T) {
 		name      string
 		input     string
 		expected  string
-		wantError bool
 		errorMsg  string
+		wantError bool
 	}{
 		{
 			name:      "relative path rejection",

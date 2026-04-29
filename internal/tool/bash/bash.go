@@ -234,13 +234,13 @@ type bashInvocation struct {
 	fs              fileSystem
 	commandExecutor commandExecutor
 	taskManager     backgroundRegistrar
+	proxy           *proxyReader
 	wd              string
 	wdDisplay       string
 	command         string
 	description     string
 	timeoutMS       int
 	runInBackground bool
-	proxy           *proxyReader
 }
 
 func (i *bashInvocation) tryPromoteToBackground(streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {
@@ -379,10 +379,10 @@ func (i *bashInvocation) readTail(path string, size int64) string {
 
 type proxyReader struct {
 	r     io.Reader
-	mu    sync.Mutex
 	ch    chan io.Reader
 	close chan struct{}
 	once  sync.Once
+	mu    sync.Mutex
 }
 
 func newProxyReader() *proxyReader {

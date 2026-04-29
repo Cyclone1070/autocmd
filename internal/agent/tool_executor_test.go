@@ -26,11 +26,11 @@ const (
 // --- Mocks ---
 
 type mockTool struct {
+	prepare       func(params string) (domain.Invocation, error)
 	name          string
 	description   string
 	concurrent    bool
 	setConcurrent bool
-	prepare       func(params string) (domain.Invocation, error)
 }
 
 func (mt *mockTool) Name() string { return mt.name }
@@ -53,10 +53,10 @@ func (mt *mockTool) Prepare(params string) (domain.Invocation, error) {
 }
 
 type mockInvocation struct {
-	content string
 	err     error
 	display domain.ToolDisplay
 	execute func(ctx context.Context) (string, domain.ToolDisplay)
+	content string
 }
 
 func (m *mockInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
@@ -100,8 +100,8 @@ func withToolError(d domain.ToolDisplay, msg string) domain.ToolDisplay {
 type mockStreamInvocation struct {
 	stream  io.Reader
 	display domain.ToolDisplay
-	content string
 	err     error
+	content string
 }
 
 func (m *mockStreamInvocation) Stream() io.Reader           { return m.stream }

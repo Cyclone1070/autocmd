@@ -154,11 +154,11 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 type invocation struct {
 	fileOps         fileReader
 	checksumManager checksumComputer
+	display         domain.StringDisplay
 	absPath         string
 	displayPath     string
 	offset          int
 	limit           int
-	display         domain.StringDisplay
 }
 
 func (i *invocation) Display() domain.ToolDisplay {

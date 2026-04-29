@@ -18,21 +18,21 @@ type gater interface {
 
 const (
 	// ToolInsetPrefix is the standard horizontal padding for tool execution blocks.
-	ToolInsetPrefix              = "    "
+	ToolInsetPrefix = "    "
 	// ToolFirstContentGutterPrefix is the prefix used for the first line of tool output.
 	ToolFirstContentGutterPrefix = "   ⎿ "
 	// ToolContentGutterPrefix is the prefix used for subsequent lines of tool output.
-	ToolContentGutterPrefix      = "     "
+	ToolContentGutterPrefix = "     "
 )
 
 // ToolBlockSpec is the semantic rendering contract passed from ToolRenderer to Theme.
 // Theme consumes this structure for placement and styling only.
 type ToolBlockSpec struct {
+	Frame        string
 	HeaderLines  []string
 	ContentLines []string
 	FooterLines  []string
 	Status       ToolStatus
-	Frame        string
 }
 
 // ContentTruncateMode defines how large tool outputs should be truncated for display.
@@ -51,9 +51,9 @@ type RenderSpecOptions struct {
 
 // ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, BashDisplay).
 type ToolRenderer struct {
+	gater gater
 	Theme *Theme
 	Width int
-	gater gater
 }
 
 // NewToolRenderer creates a new ToolRenderer.

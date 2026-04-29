@@ -22,8 +22,8 @@ type ToolExecutor struct {
 }
 
 type batchResult struct {
-	Responses []*schema.Message
 	Displays  map[string]domain.ToolDisplay
+	Responses []*schema.Message
 }
 
 // NewToolExecutor creates a new ToolExecutor with its dependencies.

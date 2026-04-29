@@ -10,15 +10,14 @@ import (
 // ToolTracker is a tiny demo helper that ensures every ToolStartEvent
 // is eventually paired with a ToolEndEvent, even when the demo is cancelled.
 type ToolTracker struct {
-	bus *eventbus.EventBus
-
-	mu   sync.Mutex
+	bus  *eventbus.EventBus
 	open map[string]trackedTool
+	mu   sync.Mutex
 }
 
 type trackedTool struct {
-	callID  string
 	display domain.ToolDisplay
+	callID  string
 }
 
 func NewToolTracker(bus *eventbus.EventBus) *ToolTracker {

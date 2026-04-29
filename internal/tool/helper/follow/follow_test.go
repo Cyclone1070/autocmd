@@ -12,8 +12,8 @@ import (
 )
 
 type mockFS struct {
-	mu      sync.Mutex
 	content string
+	mu      sync.Mutex
 }
 
 func (m *mockFS) Open(_ string) (domain.File, error) {
@@ -39,8 +39,8 @@ func (m *mockFile) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (m *mockFile) Close() error                                 { return nil }
-func (m *mockFile) Stat() (os.FileInfo, error)                   { return nil, nil }
+func (m *mockFile) Close() error                       { return nil }
+func (m *mockFile) Stat() (os.FileInfo, error)         { return nil, nil }
 func (m *mockFile) Seek(_ int64, _ int) (int64, error) { return 0, nil }
 
 func TestFollower_PokeLatency(t *testing.T) {

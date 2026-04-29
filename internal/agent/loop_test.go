@@ -16,11 +16,11 @@ import (
 // --- Mocks ---
 
 type mockLLM struct {
+	streamErr     error
 	id            string
 	displayName   string
-	contextWindow int
 	streams       []*mockStream
-	streamErr     error
+	contextWindow int
 }
 
 func (m *mockLLM) ID() string          { return m.id }
@@ -82,14 +82,14 @@ func (b *mockEinoModelBridge) WithTools(_ []*schema.ToolInfo) (model.ToolCalling
 }
 
 type mockChunk struct {
+	toolCall  *schema.ToolCall
 	text      string
 	isThought bool
-	toolCall  *schema.ToolCall
 }
 
 type mockStream struct {
-	chunks []mockChunk
 	err    error
+	chunks []mockChunk
 	index  int
 }
 

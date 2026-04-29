@@ -83,8 +83,8 @@ func (t *SleepTool) Prepare(params string) (domain.Invocation, error) {
 
 type sleepInvocation struct {
 	notifier   completionNotifier
-	durationMS int
 	display    domain.StringDisplay
+	durationMS int
 }
 
 func (i *sleepInvocation) Display() domain.ToolDisplay {

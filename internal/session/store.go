@@ -35,14 +35,14 @@ type sessionInfoDTO struct {
 
 // sessionMessagesDTO is used for the .messages.json file.
 type sessionMessagesDTO struct {
-	Messages []*schema.Message   `json:"messages"`
 	Displays domain.ToolDisplays `json:"displays,omitempty"`
+	Messages []*schema.Message   `json:"messages"`
 }
 
 // Store manages session creation, loading, saving, and listing.
 type Store struct {
-	storageDir string
 	fs         fileSystem
+	storageDir string
 }
 
 // NewStore creates a new session store.

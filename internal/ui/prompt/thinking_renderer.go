@@ -15,9 +15,9 @@ type thoughtContentGater interface {
 
 // ThinkingRenderer handles the "Thinking" state rendering.
 type ThinkingRenderer struct {
+	gater thoughtContentGater
 	Theme *ui.Theme
 	Width int
-	gater thoughtContentGater
 }
 
 // NewThinkingRenderer creates a new ThinkingRenderer.

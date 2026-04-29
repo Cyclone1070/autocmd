@@ -41,8 +41,8 @@ type Request struct {
 type Tool struct {
 	fileOps         fileEditor
 	checksumManager checksumManager
-	maxFileSize     int64
 	pathResolver    pathResolver
+	maxFileSize     int64
 }
 
 // NewTool creates a new Tool with injected dependencies.
@@ -298,14 +298,14 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 }
 
 type invocation struct {
+	newContent       []byte
+	absPath          string
+	expectedChecksum string
 	fileOps          fileEditor
 	checksumManager  checksumManager
-	absPath          string
-	newContent       []byte
-	originalPerm     os.FileMode
-	expectedChecksum string
-	replaceAll       bool
 	display          domain.DiffDisplay
+	originalPerm     os.FileMode
+	replaceAll       bool
 }
 
 func (i *invocation) Display() domain.ToolDisplay {

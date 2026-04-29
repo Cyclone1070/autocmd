@@ -4,9 +4,9 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"os"
 	"path/filepath"
-	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 const (
@@ -37,9 +37,9 @@ func NewManager(fs FileSystem) *Manager {
 
 // State holds application persistent state.
 type State struct {
+	saveFn           func() error
 	currentSessionID string
 	model            string
-	saveFn           func() error
 }
 
 // Model returns the current model.

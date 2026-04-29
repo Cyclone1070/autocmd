@@ -11,22 +11,22 @@ import (
 // Session represents a conversation session with message history.
 // Session is a pure data object - use Store for persistence operations.
 type Session struct {
-	ID           string
-	Name         string
 	Created      time.Time
 	Updated      time.Time
-	Messages     []*schema.Message
 	ToolDisplays ToolDisplays
+	ID           string
+	Name         string
+	Messages     []*schema.Message
 }
 
 // SessionSummary contains metadata about a session without messages.
 // Returned by List() for efficient browsing without loading full sessions.
 type SessionSummary struct {
+	Created      time.Time
+	Updated      time.Time
 	ID           string
 	Name         string
 	MessageCount int
-	Created      time.Time
-	Updated      time.Time
 }
 
 // TotalTokens returns the factual total tokens in the session as of the last model response.

@@ -4,8 +4,8 @@ package domain
 
 // ToolStartEvent is emitted after Prepare succeeds.
 type ToolStartEvent struct {
-	CallID  string      // Unique ID from domain.ToolCall.ID
-	Display ToolDisplay // Rich display computed during Prepare
+	Display ToolDisplay
+	CallID  string
 }
 
 func (ToolStartEvent) isUIUpdate() {}
@@ -20,8 +20,8 @@ func (ToolStreamEvent) isUIUpdate() {}
 
 // ToolEndEvent is emitted when tool execution completes with the final baked ToolDisplay.
 type ToolEndEvent struct {
+	Display ToolDisplay
 	CallID  string
-	Display ToolDisplay // Final state for UI (use GetError() for failure vs success)
 }
 
 func (ToolEndEvent) isUIUpdate() {}

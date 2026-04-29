@@ -13,10 +13,10 @@ import (
 )
 
 type fakeHistoryStore struct {
-	sessions  map[string]*domain.Session
-	summaries []domain.SessionSummary
 	listErr   error
 	getErr    error
+	sessions  map[string]*domain.Session
+	summaries []domain.SessionSummary
 }
 
 func (f *fakeHistoryStore) Get(id string) (*domain.Session, error) {

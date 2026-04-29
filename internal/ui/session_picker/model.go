@@ -19,17 +19,17 @@ type bus interface {
 
 // Model is an autonomous UI component for managing chat sessions.
 type Model struct {
-	picker          *ui.Picker
-	textInput       textinput.Model
 	bus             bus
-	theme           *ui.Theme
-	renaming        bool
-	renameItemID    string
-	quitting        bool
-	cancelRequested bool
 	err             error
+	picker          *ui.Picker
+	theme           *ui.Theme
+	renameItemID    string
 	selectedID      string
 	selectedName    string
+	textInput       textinput.Model
+	renaming        bool
+	quitting        bool
+	cancelRequested bool
 }
 
 // NewModel creates a new session picker UI Model with a bus and theme.

@@ -23,10 +23,10 @@ func (m *mockBus) SendAction(a domain.Action)        { m.actions = append(m.acti
 
 type mockStream struct {
 	p             string
-	appendCalls   int
 	lastAppend    string
 	appendReturns []string
 	flushReturns  []string
+	appendCalls   int
 	flushCalls    int
 	clearCalls    int
 }
@@ -60,8 +60,8 @@ func (t *mockThinkingRendererWithLeadingGap) RenderThinking(_ ui.ToolStatus, _ t
 
 // mockThinkingRecorder records the last status passed to RenderThinking (for cancel / bus-driven flush tests).
 type mockThinkingRecorder struct {
-	lastStatus      ui.ToolStatus
 	lastThoughtText string
+	lastStatus      ui.ToolStatus
 }
 
 func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, _ time.Time, _ int, thoughtText string, _ spinnerProvider) string {

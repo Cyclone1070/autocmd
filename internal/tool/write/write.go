@@ -33,8 +33,8 @@ type checksumUpdater interface {
 type Tool struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
-	maxFileSize     int64
 	pathResolver    pathResolver
+	maxFileSize     int64
 }
 
 // NewTool creates a new Tool with injected dependencies.
@@ -177,10 +177,10 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 type invocation struct {
 	fileOps         fileWriter
 	checksumManager checksumUpdater
-	absPath         string
-	exists          bool
-	content         []byte
 	display         domain.StringDisplay
+	absPath         string
+	content         []byte
+	exists          bool
 }
 
 func (i *invocation) Display() domain.ToolDisplay {

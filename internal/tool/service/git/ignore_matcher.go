@@ -13,8 +13,8 @@ import (
 
 // GitignoreReadError is returned when .gitignore cannot be read.
 type GitignoreReadError struct {
-	Path  string
 	Cause error
+	Path  string
 }
 
 func (e *GitignoreReadError) Error() string {

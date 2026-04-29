@@ -15,8 +15,8 @@ const (
 
 // Resolver returns effective permission mode for tools.
 type Resolver struct {
-	defaultMode Mode
 	byTool      map[string]Mode
+	defaultMode Mode
 }
 
 // NewResolver builds a resolver from config values.

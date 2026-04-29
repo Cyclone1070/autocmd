@@ -73,7 +73,8 @@ type StringDisplay struct {
 	Error       string `json:"error,omitempty"`
 }
 
-func (StringDisplay) isToolDisplay()     {}
+func (StringDisplay) isToolDisplay() {}
+
 // Type returns the unique identifier for the string display type.
 func (s StringDisplay) Type() string { return s.TypeField }
 
@@ -94,15 +95,16 @@ func NewStringDisplay(description, content string) StringDisplay {
 // DiffDisplay is for file edit operations with unified diff content.
 type DiffDisplay struct {
 	TypeField   string `json:"type"`
-	Description string `json:"description"` // User-friendly description (e.g. "Updating auth")
-	Target      string `json:"target"`      // Technical action (e.g. "Edit auth.go")
-	Added       int    `json:"added"`       // Lines added
-	Removed     int    `json:"removed"`     // Lines removed
-	Diff        string `json:"diff"`        // Unified diff content
+	Description string `json:"description"`
+	Target      string `json:"target"`
+	Diff        string `json:"diff"`
 	Error       string `json:"error,omitempty"`
+	Added       int    `json:"added"`
+	Removed     int    `json:"removed"`
 }
 
-func (DiffDisplay) isToolDisplay()     {}
+func (DiffDisplay) isToolDisplay() {}
+
 // Type returns the unique identifier for the diff display type.
 func (d DiffDisplay) Type() string { return d.TypeField }
 
@@ -137,7 +139,8 @@ type BashDisplay struct {
 	Error          string `json:"error,omitempty"`
 }
 
-func (BashDisplay) isToolDisplay()     {}
+func (BashDisplay) isToolDisplay() {}
+
 // Type returns the unique identifier for the bash display type.
 func (s BashDisplay) Type() string { return s.TypeField }
 
@@ -172,11 +175,12 @@ type QuestionInfo struct {
 // QuestionDisplay is the tool UI payload for the question tool (preview and final baked state).
 type QuestionDisplay struct {
 	TypeField string         `json:"type"`
-	Questions []QuestionInfo `json:"questions"`
 	Error     string         `json:"error,omitempty"`
+	Questions []QuestionInfo `json:"questions"`
 }
 
-func (QuestionDisplay) isToolDisplay()     {}
+func (QuestionDisplay) isToolDisplay() {}
+
 // Type returns the unique identifier for the question display type.
 func (d QuestionDisplay) Type() string { return d.TypeField }
 

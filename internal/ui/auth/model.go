@@ -33,22 +33,21 @@ type oauthInfo struct {
 
 // model is an autonomous UI component for managing authentication.
 type model struct {
-	bus        bus
-	theme      *ui.Theme
-	state      uiState
-	providers  []domain.ProviderSummary
-	methods    []domain.AuthMethod
-	providerID string
-	method     domain.AuthMethod
-	values     map[string]string
-	fieldIndex int
-
+	method          domain.AuthMethod
+	err             error
+	bus             bus
 	picker          *ui.Picker
-	textInput       textinput.Model
+	values          map[string]string
+	theme           *ui.Theme
 	oauth           oauthInfo
+	providerID      string
+	methods         []domain.AuthMethod
+	providers       []domain.ProviderSummary
+	textInput       textinput.Model
+	fieldIndex      int
+	state           uiState
 	quitting        bool
 	cancelRequested bool
-	err             error
 }
 
 // NewModel creates a new auth UI model.

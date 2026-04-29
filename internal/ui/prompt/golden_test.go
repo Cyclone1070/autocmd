@@ -21,8 +21,8 @@ var update = flag.Bool("update", false, "update golden files")
 
 type PromptElement struct {
 	ID     string
-	Events []domain.UIUpdate
 	Desc   string
+	Events []domain.UIUpdate
 }
 
 func getPromptElements() []PromptElement {

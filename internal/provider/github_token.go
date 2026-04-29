@@ -15,13 +15,12 @@ const defaultExchangeURL = "https://api.github.com/copilot_internal/v2/token"
 // TokenSource manages the exchange of a long-lived GitHub OAuth token
 // for short-lived Copilot session tokens.
 type TokenSource struct {
-	oauthToken  string
-	exchangeURL string
-	client      *http.Client
-
-	mu           sync.Mutex
-	sessionToken string
 	expiresAt    time.Time
+	client       *http.Client
+	oauthToken   string
+	exchangeURL  string
+	sessionToken string
+	mu           sync.Mutex
 }
 
 // NewTokenSource creates a new token source.

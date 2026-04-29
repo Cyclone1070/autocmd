@@ -276,10 +276,10 @@ func setupMockResolver(m *mockPathResolver) {
 }
 
 type toolMockFileInfo struct {
-	name    string
-	isDir   bool
-	size    int64
 	modTime time.Time
+	name    string
+	size    int64
+	isDir   bool
 }
 
 func (m *toolMockFileInfo) Name() string       { return m.name }

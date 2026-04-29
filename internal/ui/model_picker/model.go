@@ -14,11 +14,11 @@ type bus interface {
 
 // Model is a domain-specific UI Model for selecting LLM models.
 type Model struct {
-	picker          *ui.Picker
 	bus             bus
+	err             error
+	picker          *ui.Picker
 	theme           *ui.Theme
 	selectedName    string
-	err             error
 	quitting        bool
 	cancelRequested bool
 }

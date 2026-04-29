@@ -13,12 +13,12 @@ const minNodesForSplit = 2
 
 // Stream handles buffering and safe block separation for streaming markdown.
 type Stream struct {
-	buffer        string
-	lastBlock     string // Raw markdown of the last successfully flushed block
-	lastBlockANSI string // Cached ANSI rendering of lastBlock stripped of doc margins
-	lastMargin    string // Trailing newlines stripped from the last render
 	parser        goldmark.Markdown
 	renderer      ui.Renderer
+	buffer        string
+	lastBlock     string
+	lastBlockANSI string
+	lastMargin    string
 }
 
 // NewStream creates a new Stream.

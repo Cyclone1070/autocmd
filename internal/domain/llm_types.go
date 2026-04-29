@@ -34,6 +34,6 @@ type Provider interface {
 
 // ProviderInfo contains a provider's ID and its resolved credential (if any).
 type ProviderInfo struct {
-	ID         string
 	Credential *Credential
+	ID         string
 }

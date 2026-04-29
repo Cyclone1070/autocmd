@@ -52,39 +52,34 @@ const (
 )
 
 type toolSlot struct {
-	callID           string
 	display          domain.ToolDisplay
-	status           ui.ToolStatus
+	callID           string
 	errorMsg         string
 	streamOutput     string
+	questionState    ui.QuestionUIState
+	status           ui.ToolStatus
 	awaitingApproval bool
-	// questionState is used when display is QuestionDisplay (interactive toolbox).
-	questionState ui.QuestionUIState
 }
 
 // Model is the main bubbletea model for the interactive prompt.
 type Model struct {
-	state  uiState
-	bus    bus
-	stream stream
-	tools  []toolSlot
-
+	thinkingStart    time.Time
+	gater            viewportGater
+	bus              bus
+	stream           stream
 	thinkingRenderer thinkingRenderer
 	toolRenderer     toolRenderer
 	spinnerProvider  spinnerProvider
-
-	width         int
-	gater         viewportGater
-	theme         *ui.Theme
-	flushFn       func(content string) tea.Cmd
-	thinkingStart time.Time
-	thoughtText   string
-	spinnerFrame  int
-	nextState     uiState
-	// isPolling is true while a pollBus goroutine is blocked waiting on the bus.
-	isPolling bool
-	// cancelRequested is set on first Ctrl+C; workflow continues until DoneEvent (StopAction already sent).
-	cancelRequested bool
+	flushFn          func(content string) tea.Cmd
+	theme            *ui.Theme
+	thoughtText      string
+	tools            []toolSlot
+	state            uiState
+	width            int
+	spinnerFrame     int
+	nextState        uiState
+	isPolling        bool
+	cancelRequested  bool
 }
 
 // Option is a functional option for configuring the prompt Model.

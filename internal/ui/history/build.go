@@ -16,9 +16,9 @@ const gutterWidth = 2 // "A│" / "U┃" / " │" (assistant) or " ┃" (user)
 const userGutterPipe = "┃"
 
 type renderItem struct {
-	idx                int
 	assistantIndices   []int
-	assistantCancelled bool // session was cancelled after this assistant block; show gutter marker only (no cancel text).
+	idx                int
+	assistantCancelled bool
 }
 
 func buildRenderItems(messages []*schema.Message) []renderItem {

@@ -25,7 +25,7 @@ func TestGrep_RawRelative(t *testing.T) {
 	setupMockResolver(pathResolver)
 
 	// Mock existence of the search target
-	fs.On("Stat", testutil.TestWorkspaceRoot + "/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
+	fs.On("Stat", testutil.TestWorkspaceRoot+"/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
 
 	// Ripgrep is run with absolute path and returns absolute paths.
 	output := testutil.TestWorkspaceRoot + "/internal/file.txt:1:match\n"
@@ -262,10 +262,10 @@ func setupMockResolver(m *mockPathResolver) {
 }
 
 type toolMockFileInfo struct {
-	name    string
-	isDir   bool
-	size    int64
 	modTime time.Time
+	name    string
+	size    int64
+	isDir   bool
 }
 
 func (m *toolMockFileInfo) Name() string       { return m.name }
@@ -287,4 +287,3 @@ func executeSearch(t *testing.T, tool *Tool, req *Request) (string, error) {
 	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, nil
 }
-

@@ -8,25 +8,25 @@ import "github.com/cloudwego/eino/schema"
 type InfoEvent struct {
 	Model          string
 	SessionDisplay string
+	Authorized     []string
 	SessionTokens  int
 	ContextWindow  int
-	Authorized     []string
 }
 
 func (InfoEvent) isUIUpdate() {}
 
 // ModelListEvent contains the data needed for model selection UI.
 type ModelListEvent struct {
-	Models        []LLMInfo
 	ActiveModelID string
+	Models        []LLMInfo
 }
 
 func (ModelListEvent) isUIUpdate() {}
 
 // SessionListEvent contains the data needed for session selection UI.
 type SessionListEvent struct {
-	Sessions         []SessionSummary
 	CurrentSessionID string
+	Sessions         []SessionSummary
 }
 
 func (SessionListEvent) isUIUpdate() {}
@@ -41,14 +41,14 @@ func (AuthProviderListEvent) isUIUpdate() {}
 // ProviderSummary provides a snapshot of a provider's auth status.
 type ProviderSummary struct {
 	ID         string
-	Authorized bool
 	AuthMethod string
+	Authorized bool
 }
 
 // HistoryEvent contains the full conversation history for a session.
 type HistoryEvent struct {
-	Messages     []*schema.Message
 	ToolDisplays ToolDisplays
+	Messages     []*schema.Message
 }
 
 func (HistoryEvent) isUIUpdate() {}

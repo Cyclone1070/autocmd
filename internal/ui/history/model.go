@@ -24,26 +24,24 @@ type bus interface {
 
 // Model is the bubbletea model for the history viewer.
 type Model struct {
-	messages         []*schema.Message
-	chatWindowWidth  int
-	theme            *ui.Theme
-	width            int
-	height           int
-	renderer         ui.Renderer
-	builder          *Builder
-	viewport         viewport.Model
-	displays         domain.ToolDisplays
-	items            []renderItem
 	bus              bus
-	loaded           bool
-	bashOutputHeight int
-
-	// Cache for lazy rendering
+	renderer         ui.Renderer
+	theme            *ui.Theme
 	renderedMessages map[int]string
+	builder          *Builder
+	displays         domain.ToolDisplays
+	renderedBlock    string
+	messages         []*schema.Message
+	items            []renderItem
+	viewport         viewport.Model
+	height           int
+	bashOutputHeight int
+	width            int
 	topIdx           int
 	bottomIdx        int
+	chatWindowWidth  int
+	loaded           bool
 	reachedTop       bool
-	renderedBlock    string
 	isDark           bool
 }
 

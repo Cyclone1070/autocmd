@@ -10,8 +10,8 @@ import (
 // ChecksumManager is a thread-safe checksum manager.
 // It uses SHA-256 for checksum computation and stores checksums in an in-memory map.
 type ChecksumManager struct {
-	mu    sync.RWMutex
 	store map[string]string
+	mu    sync.RWMutex
 }
 
 // NewChecksumManager creates a new thread-safe checksum manager instance.

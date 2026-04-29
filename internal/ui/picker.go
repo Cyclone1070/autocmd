@@ -13,17 +13,17 @@ const groupLeftMargin = 2
 // Item is a single selectable row.
 type Item struct {
 	ID     string
-	Label  string // primary text
-	Detail string // secondary info
-	Active bool   // shows bullet indicator
-	Group  string // group header
+	Label  string
+	Detail string
+	Group  string
+	Active bool
 }
 
 // Action defines a keybinding the caller can register.
 type Action struct {
+	Fn    func(item Item) tea.Cmd
 	Key   string
 	Label string
-	Fn    func(item Item) tea.Cmd
 	Quit  bool
 }
 
@@ -39,15 +39,14 @@ type Config struct {
 
 // Picker is a reusable grouped list selection model.
 type Picker struct {
-	title    string
-	items    []Item
-	actions  []Action
-	theme    *Theme
-	cursor   int
-	selected *Item
-	quit     bool
-	// Internal calculated indices for navigation
+	theme             *Theme
+	selected          *Item
+	title             string
+	items             []Item
+	actions           []Action
 	selectableIndices []int
+	cursor            int
+	quit              bool
 }
 
 // NewPicker creates a new Picker with the given configuration.

@@ -158,8 +158,8 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 						oauthCtx, cancel := context.WithCancel(ctx)
 						oauthCancel = cancel
 						resultCh := make(chan struct {
-							token string
 							err   error
+							token string
 						}, 1)
 
 						go func() {
@@ -170,8 +170,8 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 								})
 							})
 							resultCh <- struct {
-								token string
 								err   error
+								token string
 							}{token: token, err: err}
 						}()
 

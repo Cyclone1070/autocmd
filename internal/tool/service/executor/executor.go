@@ -54,24 +54,22 @@ func (f *osCommandFactory) Command(ctx context.Context, name string, args ...str
 // Result represents the outcome of a command execution.
 type Result struct {
 	Stdout    string
-	ExitCode  int
 	LogPath   string
+	ExitCode  int
 	Truncated bool
 }
 
 // StreamingCmd represents a running command with real-time output streaming.
 type StreamingCmd struct {
-	output io.Reader
-
-	once    sync.Once
-	result  *Result
-	err     error
-	wait    func() (*Result, error)
-	logPath string
-	id      string
-
-	mu             sync.Mutex
 	lastActivityAt time.Time
+	output         io.Reader
+	err            error
+	result         *Result
+	wait           func() (*Result, error)
+	logPath        string
+	id             string
+	once           sync.Once
+	mu             sync.Mutex
 }
 
 // NewStreamingCmd creates a new StreamingCmd instance.
@@ -131,13 +129,12 @@ type fileSystem interface {
 
 // OSCommandExecutor implements the command execution service using the OS shell.
 type OSCommandExecutor struct {
-	fs            fileSystem
-	maxOutputSize int64
-
-	SmartDrainThreshold int64
-	DefaultTimeout      time.Duration
+	fs                  fileSystem
 	killer              signalKiller
 	commander           commandFactory
+	maxOutputSize       int64
+	SmartDrainThreshold int64
+	DefaultTimeout      time.Duration
 }
 
 // NewOSCommandExecutor creates a new OSCommandExecutor with the provided filesystem.

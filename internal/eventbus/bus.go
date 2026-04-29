@@ -15,16 +15,14 @@ const (
 // EventBus facilitates bi-directional communication between the UI and Workflow.
 // It buffers updates to the UI and actions to the workflow.
 type EventBus struct {
-	uiIn  chan domain.UIUpdate
-	uiOut chan domain.UIUpdate
-
+	uiIn        chan domain.UIUpdate
+	uiOut       chan domain.UIUpdate
 	workflowIn  chan domain.Action
 	workflowOut chan domain.Action
-
-	mu       sync.RWMutex
-	isClosed bool
-	done     chan struct{}
-	wg       sync.WaitGroup
+	done        chan struct{}
+	wg          sync.WaitGroup
+	mu          sync.RWMutex
+	isClosed    bool
 }
 
 // New creates and starts a new EventBus.

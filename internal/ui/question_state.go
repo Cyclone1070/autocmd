@@ -10,34 +10,27 @@ import (
 
 // QuestionUIState is interactive UI state for QuestionDisplay (prompt-owned; lives in ui to avoid import cycles with ToolRenderer).
 type QuestionUIState struct {
-	// Active is 0..len(Questions)-1 for each real question, or len(Questions) when len(Questions)>1 for the review step.
-	Active int
-	Per    []QuestionPerState
-
-	// ReviewCursor is the row on the synthetic review step (0 = Submit, 1 = Go back).
-	// Only used when len(Questions) > 1 and Active == len(Questions).
+	Per          []QuestionPerState
+	Active       int
 	ReviewCursor int
-
-	// Submitted locks the question interaction after the user submits, cancels (Esc/q), etc.
-	// Until the tool ends, we ignore subsequent keypresses to avoid duplicate actions.
-	Submitted bool
+	Submitted    bool
 }
 
 // QuestionPerState is state for one question in the toolbox.
 type QuestionPerState struct {
-	Cursor             int
-	MultiSelected      []bool
 	CustomBuffer       string
-	CustomInputFocused bool
+	MultiSelected      []bool
+	Cursor             int
 	SingleSelected     int
+	CustomInputFocused bool
 	CustomSelected     bool
 }
 
 // QuestionOutcome is the reducer result when the user submits or cancels.
 type QuestionOutcome struct {
+	Answers   [][]string
 	Done      bool
 	Cancelled bool
-	Answers   [][]string
 }
 
 // NewQuestionUIState initializes state for d.Questions (one QuestionPerState each).

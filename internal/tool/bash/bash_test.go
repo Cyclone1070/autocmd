@@ -258,10 +258,10 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 }
 
 type syncTM struct {
-	mockTaskManager
 	done           chan struct{}
 	registeredCmds map[string]*executor.StreamingCmd
-	mu             sync.Mutex
+	mockTaskManager
+	mu sync.Mutex
 }
 
 func (m *syncTM) Register(id string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string) error {

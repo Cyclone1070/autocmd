@@ -23,12 +23,9 @@ const (
 
 // Options configures the logging system initialization.
 type Options struct {
-	// Debug enables verbose debug logging to a separate file.
-	Debug bool
-	// HomeDir is the base directory for log storage. Defaults to user home if empty.
+	Now     func() time.Time
 	HomeDir string
-	// Now is an optional time provider for rotation and cleanup logic (useful for testing).
-	Now func() time.Time
+	Debug   bool
 }
 
 // Init initializes the application logger based on the provided options.
@@ -110,9 +107,9 @@ func cleanupLogs(logDir string, now time.Time, maxAge time.Duration, maxTotalByt
 	}
 
 	type fileInfo struct {
+		mod  time.Time
 		path string
 		size int64
-		mod  time.Time
 	}
 	files := make([]fileInfo, 0, len(entries))
 

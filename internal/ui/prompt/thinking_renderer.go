@@ -10,7 +10,7 @@ import (
 )
 
 type thoughtContentGater interface {
-	Gate(lines []string) ([]string, int)
+	Gate(lines []string, scrollOffset int, scrollable bool, theme *ui.Theme) (gated []string, maxScroll int)
 }
 
 // ThinkingRenderer handles the "Thinking" state rendering.
@@ -61,11 +61,8 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 		contentFirstWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix+ui.ToolFirstContentGutterPrefix)
 		contentContinuationWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix+ui.ToolContentGutterPrefix)
 		wrappedContent := completedVisualThoughtLines(thoughtText, contentFirstWidth, contentContinuationWidth)
-		wrappedContent, indicatorLines := r.gater.Gate(wrappedContent)
+		wrappedContent, _ = r.gater.Gate(wrappedContent, 0, false, r.Theme)
 		for i := range wrappedContent {
-			wrappedContent[i] = r.Theme.Muted(wrappedContent[i])
-		}
-		for i := 0; i < indicatorLines && i < len(wrappedContent); i++ {
 			wrappedContent[i] = r.Theme.Muted(wrappedContent[i])
 		}
 		spec.ContentLines = wrappedContent

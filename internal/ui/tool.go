@@ -15,7 +15,7 @@ import (
 const questionPartsCount = 3
 
 type gater interface {
-	Gate(lines []string) ([]string, int)
+	Gate(lines []string, scrollOffset int, scrollable bool, theme *Theme) (gated []string, maxScroll int)
 }
 
 const (
@@ -49,6 +49,7 @@ const (
 type RenderSpecOptions struct {
 	TruncateMode             ContentTruncateMode
 	TruncateFromContentIndex int
+	Scrollable               bool
 }
 
 // ToolRenderer provides rendering for tool outputs (StringDisplay, DiffDisplay, BashDisplay).
@@ -89,7 +90,7 @@ func (r *ToolRenderer) mutedLines(lines []string) []string {
 
 func (r *ToolRenderer) statusColor(status ToolStatus, s string) string {
 	switch status {
-	case StatusRunning:
+	case StatusRunning, StatusAwaitingApproval:
 		return r.Theme.Primary(s)
 	case StatusSuccess:
 		return r.Theme.Success(s)
@@ -136,7 +137,12 @@ func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, e
 	if !ok {
 		return ""
 	}
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateNone, TruncateFromContentIndex: 0})
+	opts := RenderSpecOptions{
+		TruncateMode:             truncateNone,
+		TruncateFromContentIndex: 0,
+		Scrollable:               status == StatusAwaitingApproval,
+	}
+	return r.renderSpec(spec, opts)
 }
 
 func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
@@ -159,7 +165,7 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 	if d.Content != "" {
 		spec.ContentLines = r.mutedLines(strings.Split(d.Content, "\n"))
 	}
-	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+	if status == StatusAwaitingApproval {
 		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
 
@@ -172,7 +178,15 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 // RenderDiff renders DiffDisplay.
 func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err string, frame string) string {
 	spec := r.buildDiffSpec(d, status, err, frame)
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateTailKeepLatest, TruncateFromContentIndex: 1})
+	opts := RenderSpecOptions{
+		TruncateMode:             truncateTailKeepLatest,
+		TruncateFromContentIndex: 1,
+		Scrollable:               status == StatusAwaitingApproval,
+	}
+	if status == StatusAwaitingApproval {
+		opts.TruncateMode = truncateNone
+	}
+	return r.renderSpec(spec, opts)
 }
 
 func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) ToolBlockSpec {
@@ -188,9 +202,6 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 		spec.HeaderLines[0] = r.formatError(header, err)
 		if target != "" {
 			spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
-		}
-		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
-			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 		}
 		return spec
 	}
@@ -208,10 +219,10 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 	if target != "" {
 		spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
 	}
-	if diffContent != "" && !r.Theme.ShortToolBlock {
+	if diffContent != "" && (!r.Theme.ShortToolBlock || status == StatusAwaitingApproval) {
 		spec.ContentLines = append(spec.ContentLines, strings.Split(diffContent, "\n")...)
 	}
-	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+	if status == StatusAwaitingApproval {
 		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
 	return spec
@@ -235,7 +246,15 @@ func (r *ToolRenderer) colorizeDiff(diff string) string {
 // RenderBash renders BashDisplay.
 func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) string {
 	spec := r.buildBashSpec(d, output, status, err, frame)
-	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateTailKeepLatest, TruncateFromContentIndex: 1})
+	opts := RenderSpecOptions{
+		TruncateMode:             truncateTailKeepLatest,
+		TruncateFromContentIndex: 1,
+		Scrollable:               status == StatusAwaitingApproval,
+	}
+	if status == StatusAwaitingApproval {
+		opts.TruncateMode = truncateNone
+	}
+	return r.renderSpec(spec, opts)
 }
 
 func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) ToolBlockSpec {
@@ -248,9 +267,6 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	if status == StatusError {
 		spec.HeaderLines[0] = r.formatError(header, err)
 		spec.ContentLines = []string{r.Theme.Muted(fmt.Sprintf("%s$ %s", d.Cwd, d.Command))}
-		if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
-			spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
-		}
 		return spec
 	}
 	bashOutput := strings.TrimRight(output, "\n")
@@ -259,15 +275,12 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	if bashOutput != "" && !r.Theme.ShortToolBlock {
 		spec.ContentLines = append(spec.ContentLines, r.mutedLines(strings.Split(bashOutput, "\n"))...)
 	}
-	if status == StatusRunning && r.isAwaitingApprovalDisplay(d) {
+	if status == StatusAwaitingApproval {
 		spec.FooterLines = append(spec.FooterLines, r.renderApprovalFooter())
 	}
 	return spec
 }
 
-func (r *ToolRenderer) isAwaitingApprovalDisplay(d domain.ToolDisplay) bool {
-	return strings.Contains(strings.ToLower(d.GetError()), domain.ToolErrorPermissionDenied)
-}
 
 func (r *ToolRenderer) renderApprovalFooter() string {
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(r.Theme.PrimaryColor())
@@ -568,10 +581,7 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 				truncFirstWidth = contentFirstWidth
 			}
 			truncWrapped := r.wrapLines(truncatableLogical, truncFirstWidth, contentContinuationWidth)
-			gatedLines, indicatorLines := r.gater.Gate(truncWrapped)
-			for i := 0; i < indicatorLines && i < len(gatedLines); i++ {
-				gatedLines[i] = r.Theme.Muted(gatedLines[i])
-			}
+			gatedLines, _ := r.gater.Gate(truncWrapped, 0, opts.Scrollable, r.Theme)
 			preservedWrapped = append(preservedWrapped, gatedLines...)
 			spec.ContentLines = preservedWrapped
 		}

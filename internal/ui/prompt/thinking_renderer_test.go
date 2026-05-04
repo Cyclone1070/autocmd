@@ -16,15 +16,15 @@ func (m *mockSpinner) Frame(_ int) string { return "*" }
 
 type passThroughGater struct{}
 
-func (g *passThroughGater) Gate(lines []string) ([]string, int) { return lines, 0 }
+func (g *passThroughGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) { return lines, 0 }
 
 type truncatingMockGater struct {
 	called bool
 }
 
-func (g *truncatingMockGater) Gate(_ []string) ([]string, int) {
+func (g *truncatingMockGater) Gate(_ []string, _ int, _ bool, _ *ui.Theme) ([]string, int) {
 	g.called = true
-	return []string{"  ▲ [2 lines truncated]", "kept line"}, 1
+	return []string{"  ▲ [2 lines above]", "kept line"}, 0
 }
 
 type mockColor struct {
@@ -77,7 +77,7 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 		veryLong := strings.Repeat("this thought line keeps growing and should be truncated by tool output gater ", 20) + "\n"
 		withRealGater := NewThinkingRenderer(theme, 80, ui.NewToolOutputGater(5))
 		got := withRealGater.RenderThinking(ui.StatusRunning, time.Now(), 0, veryLong, sp)
-		assert.Contains(t, got, "lines truncated", "long thought content should show truncation indicator from ToolOutputGater")
+		assert.Contains(t, got, "lines above", "long thought content should show truncation indicator from ToolOutputGater")
 	})
 
 	t.Run("RunningThoughtWrapsToWidth", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 		renderer := NewThinkingRenderer(theme, 80, g)
 		got := renderer.RenderThinking(ui.StatusRunning, time.Now(), 0, strings.Repeat("text ", 40)+"\n", sp)
 		assert.True(t, g.called, "thinking renderer should call injected gater")
-		assert.Contains(t, got, "lines truncated")
+		assert.Contains(t, got, "lines above")
 	})
 
 	t.Run("RunningThoughtRendersOnlyCompletedLines", func(t *testing.T) {

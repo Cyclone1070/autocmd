@@ -15,6 +15,8 @@ type ToolStatus int
 const (
 	// StatusRunning indicates that a tool or process is currently active.
 	StatusRunning ToolStatus = iota
+	// StatusAwaitingApproval indicates that a tool is blocked waiting for user consent.
+	StatusAwaitingApproval
 	// StatusSuccess indicates that a tool or process completed successfully.
 	StatusSuccess
 	// StatusError indicates that a tool or process failed.
@@ -65,7 +67,7 @@ func NewTheme(cfg ThemeConfig) *Theme {
 // StatusPrefix returns a styled icon with a trailing space.
 func (t *Theme) StatusPrefix(status ToolStatus, frame string) string {
 	switch status {
-	case StatusRunning:
+	case StatusRunning, StatusAwaitingApproval:
 		return t.Primary(frame) + " "
 	case StatusSuccess:
 		return t.Success("✔") + " "
@@ -76,22 +78,33 @@ func (t *Theme) StatusPrefix(status ToolStatus, frame string) string {
 	}
 }
 
-// Success styles a string with the theme's success color.
 func (t *Theme) Success(s string) string {
+	if s == "" {
+		return ""
+	}
 	return lipgloss.NewStyle().Foreground(t.success).Render(s)
 }
 
 func (t *Theme) Error(s string) string {
+	if s == "" {
+		return ""
+	}
 	return lipgloss.NewStyle().Foreground(t.err).Render(s)
 }
 
 // Muted styles a string with the theme's muted color.
 func (t *Theme) Muted(s string) string {
+	if s == "" {
+		return ""
+	}
 	return lipgloss.NewStyle().Foreground(t.muted).Render(s)
 }
 
 // Primary styles a string with the theme's primary color.
 func (t *Theme) Primary(s string) string {
+	if s == "" {
+		return ""
+	}
 	return lipgloss.NewStyle().Foreground(t.primary).Render(s)
 }
 
@@ -104,7 +117,7 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 // RenderToolBlock renders a tool execution block using the theme's status markers and colors.
 func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 	header := trimEmptyLines(spec.HeaderLines)
-	content := trimLeadingEmptyLines(spec.ContentLines)
+	content := trimEmptyLines(spec.ContentLines)
 	footer := trimEmptyLines(spec.FooterLines)
 	if len(header) == 0 && len(content) == 0 && len(footer) == 0 {
 		return ""
@@ -167,7 +180,7 @@ func (t *Theme) Box(content string, _ int, status ToolStatus) string {
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	switch status {
-	case StatusRunning:
+	case StatusRunning, StatusAwaitingApproval:
 		return t.primary
 	case StatusSuccess:
 		return t.success

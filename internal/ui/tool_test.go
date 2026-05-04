@@ -16,7 +16,7 @@ type mockGater struct {
 	gateFunc func([]string) ([]string, int)
 }
 
-func (m *mockGater) Gate(lines []string) ([]string, int) { return m.gateFunc(lines) }
+func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *Theme) ([]string, int) { return m.gateFunc(lines) }
 
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
@@ -204,7 +204,7 @@ func TestRenderBash_TruncationIndicatorIsMutedInToolContent(t *testing.T) {
 	}
 
 	got := tr.RenderBash(display, strings.Repeat("line\n", 5), StatusSuccess, "", "✓")
-	expectedMutedIndicator := theme.Muted("  ▲ [3 lines truncated]")
+	expectedMutedIndicator := theme.Muted("  ▲ [3 lines above]")
 
 	assert.Contains(t, got, expectedMutedIndicator, "truncate indicator should be muted inside tool content")
 }
@@ -379,4 +379,19 @@ func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
 	got := tr.RenderQuestion(d, s, StatusRunning, "", "⣾")
 	assert.Contains(t, got, "[ ]")
 	assert.Contains(t, got, "x")
+}
+func TestToolRenderer_DiffNoTruncateDuringPermission(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	// Gater with very small budget
+	g := NewTruncatingGater(3)
+	r := NewToolRenderer(theme, 80, g)
+
+	diff := "line1\nline2\nline3\nline4\nline5"
+	d := domain.DiffDisplay{Description: "Edit", Diff: diff, Target: "file.go"}
+
+	got := r.RenderDiff(d, StatusAwaitingApproval, "", "*")
+	// Should NOT contain truncation indicators because truncation is disabled
+	assert.NotContains(t, got, "truncated")
+	assert.Contains(t, got, "line1")
+	assert.Contains(t, got, "line5")
 }

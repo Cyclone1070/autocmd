@@ -268,14 +268,45 @@ func TestModel_ViewportTruncation(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(3), 80)
 	v := m.View()
-	assert.Contains(t, v, "truncated", "View should be truncated with indicator")
+	assert.Contains(t, v, "above", "View should be truncated with indicator")
+}
+
+func TestModel_ScrollBoundaries(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	sp := &mockSpinner{}
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	// 10 lines of content
+	content := "LINE_01\nLINE_02\nLINE_03\nLINE_04\nLINE_05\nLINE_06\nLINE_07\nLINE_08\nLINE_09\nLINE_10"
+	// Budget 7. Indicators take 4 lines. Content window is 3 lines.
+	m := NewModel(nil, nil, tr, sp, theme, nil, ui.NewTruncatingGater(7), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{{status: ui.StatusAwaitingApproval, display: domain.StringDisplay{Content: content}}}
+
+	// Initial View to trigger maxScroll update
+	m.View()
+
+	// Scroll up past limit
+	for i := 0; i < 100; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
+	}
+	
+	// Should be clamped to maxScroll
+	assert.Equal(t, m.maxScroll, m.scrollOffset, "scrollOffset should be clamped to maxScroll")
+	
+	// Should be at the top
+	vTop := m.View()
+	assert.Contains(t, vTop, "LINE_01")
+	
+	// Scroll down ONCE.
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	assert.Equal(t, m.maxScroll-1, m.scrollOffset, "scrollOffset should decrease immediately")
 }
 
 func TestModel_NoTruncationIfHeightZero(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(0), 80)
 	v := m.View()
-	assert.NotContains(t, v, "truncated", "View should not be truncated when height is 0")
+	assert.NotContains(t, v, "above", "View should not be truncated when height is 0")
 	assert.Contains(t, v, "L5", "Full content should be visible")
 }
 
@@ -299,7 +330,7 @@ type mockGater struct {
 	gateFunc func([]string) ([]string, int)
 }
 
-func (m *mockGater) Gate(lines []string) ([]string, int) { return m.gateFunc(lines) }
+func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) { return m.gateFunc(lines) }
 
 func TestModel_ViewUsesGater(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
@@ -543,10 +574,9 @@ func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
 	m.state = stateTooling
 	m.tools = []toolSlot{
 		{
-			callID:           "call-1",
-			display:          domain.NewStringDisplay("Read file", "preview"),
-			status:           ui.StatusRunning,
-			awaitingApproval: true,
+			callID:  "call-1",
+			display: domain.NewStringDisplay("Read file", "preview"),
+			status:  ui.StatusAwaitingApproval,
 		},
 	}
 
@@ -577,7 +607,7 @@ func TestModel_ToolApprovalRequestEvent_MarksRunningTool(t *testing.T) {
 	res, _ := m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "call-1"})
 	m2 := res.(*Model)
 	require.Len(t, m2.tools, 1)
-	assert.True(t, m2.tools[0].awaitingApproval)
+	assert.Equal(t, ui.StatusAwaitingApproval, m2.tools[0].status)
 }
 
 func TestModel_PermissionApproval_UsesFirstAwaitingApprovalNotFirstSlot(t *testing.T) {
@@ -592,13 +622,11 @@ func TestModel_PermissionApproval_UsesFirstAwaitingApprovalNotFirstSlot(t *testi
 			callID:           "done-slot",
 			display:          domain.NewStringDisplay("Done", ""),
 			status:           ui.StatusSuccess,
-			awaitingApproval: false,
 		},
 		{
-			callID:           "await-slot",
-			display:          domain.NewStringDisplay("Run grep", "preview"),
-			status:           ui.StatusRunning,
-			awaitingApproval: true,
+			callID:  "await-slot",
+			display: domain.NewStringDisplay("Run grep", "preview"),
+			status:  ui.StatusAwaitingApproval,
 		},
 	}
 

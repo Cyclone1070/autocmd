@@ -286,7 +286,7 @@ func TestModel_ScrollBoundaries(t *testing.T) {
 	m.View()
 
 	// Scroll up past limit
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
 	}
 	

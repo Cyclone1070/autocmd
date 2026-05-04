@@ -7,7 +7,10 @@ import (
 	"fmt"
 )
 
-const indicatorHeight = 1
+const (
+	indicatorHeight  = 1
+	indicatorMargins = 2 // Top and bottom indicators
+)
 
 // TruncatingGater implements viewport-style truncation.
 type TruncatingGater struct {
@@ -23,13 +26,13 @@ func (g *TruncatingGater) Gate(lines []string, scrollOffset int, scrollable bool
 		return lines, 0
 	}
 
-	// We reserve 4 lines for indicators (top + bottom).
+	// We reserve lines for indicators (top + bottom).
 	// If the budget is too small, fallback to simple truncation.
-	if g.maxLines <= indicatorHeight*2 {
+	if g.maxLines <= indicatorHeight*indicatorMargins {
 		return lines[len(lines)-g.maxLines:], 0
 	}
 
-	maxContentLines := g.maxLines - indicatorHeight*2
+	maxContentLines := g.maxLines - indicatorHeight*indicatorMargins
 	maxScroll := len(lines) - maxContentLines
 
 	clampedOffset := max(min(scrollOffset, maxScroll), 0)

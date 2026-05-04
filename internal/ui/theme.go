@@ -191,14 +191,6 @@ func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	}
 }
 
-func trimLeadingEmptyLines(lines []string) []string {
-	out := append([]string(nil), lines...)
-	for len(out) > 0 && strings.TrimSpace(out[0]) == "" {
-		out = out[1:]
-	}
-	return out
-}
-
 func trimEmptyLines(lines []string) []string {
 	out := append([]string(nil), lines...)
 	for len(out) > 0 && strings.TrimSpace(out[0]) == "" {

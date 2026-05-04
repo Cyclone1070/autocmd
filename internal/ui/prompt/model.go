@@ -484,7 +484,7 @@ func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
 		default:
 			return false
 		}
-	case tea.KeyEnter:
+	case tea.KeyEnter, tea.KeySpace:
 		sendDecision(true)
 		return true
 	case tea.KeyEsc:

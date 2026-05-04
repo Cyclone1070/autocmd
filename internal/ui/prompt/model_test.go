@@ -589,6 +589,30 @@ func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
 	assert.True(t, act.Approved)
 }
 
+func TestModel_PermissionApproval_SpaceKeySendsApproveAction(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateTooling
+	m.tools = []toolSlot{
+		{
+			callID:  "call-1",
+			display: domain.NewStringDisplay("Read file", "preview"),
+			status:  ui.StatusAwaitingApproval,
+		},
+	}
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+
+	require.Len(t, bus.actions, 1)
+	act, ok := bus.actions[0].(domain.PermissionDecisionAction)
+	require.True(t, ok)
+	assert.Equal(t, "call-1", act.CallID)
+	assert.True(t, act.Approved)
+}
+
 func TestModel_ToolApprovalRequestEvent_MarksRunningTool(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})

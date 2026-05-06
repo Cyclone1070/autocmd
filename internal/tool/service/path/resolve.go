@@ -33,7 +33,7 @@ func (r *Resolver) Root() string {
 
 // FileSystem abstracts filesystem operations for path resolution.
 type FileSystem interface {
-	Abs(path string) (string, error)
+	ValidateAbs(path string) (string, error)
 	EvalSymlinks(path string) (string, error)
 	Stat(path string) (os.FileInfo, error)
 }
@@ -41,19 +41,19 @@ type FileSystem interface {
 // OSFileSystem implements FileSystem using the real OS.
 type OSFileSystem struct{}
 
-// Abs returns the absolute representation of path.
-func (OSFileSystem) Abs(path string) (string, error)          { return filepath.Abs(path) }
+// ValidateAbs returns the absolute representation of path.
+func (OSFileSystem) ValidateAbs(path string) (string, error) { return filepath.Abs(path) }
 
 // EvalSymlinks returns the path after the evaluation of any symbolic links.
 func (OSFileSystem) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }
 
 // Stat returns a FileInfo describing the named file.
-func (OSFileSystem) Stat(path string) (os.FileInfo, error)    { return os.Stat(path) }
+func (OSFileSystem) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
 
 // CanonicaliseRoot canonicalises a workspace root path by making it absolute and resolving symlinks.
 // Returns an error if the path doesn't exist or isn't a directory.
 func CanonicaliseRoot(fs FileSystem, root string) (string, error) {
-	absRoot, err := fs.Abs(root)
+	absRoot, err := fs.ValidateAbs(root)
 	if err != nil {
 		return "", fmt.Errorf("invalid workspace root %s: %w", root, err)
 	}
@@ -74,9 +74,9 @@ func CanonicaliseRoot(fs FileSystem, root string) (string, error) {
 	return resolved, nil
 }
 
-// Abs ensures a path is absolute and returns its cleaned version.
+// ValidateAbs ensures a path is absolute and returns its cleaned version.
 // It returns an error if the path is relative.
-func (r *Resolver) Abs(path string) (string, error) {
+func (r *Resolver) ValidateAbs(path string) (string, error) {
 	if r.workspaceRoot == "" {
 		return "", fmt.Errorf("workspace root not set")
 	}
@@ -88,16 +88,23 @@ func (r *Resolver) Abs(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-// DisplayPath formats an absolute path for display purposes.
+// DisplayPath formats an absolute or workspace relative path for display purposes.
 // It prioritizes collapsing the home directory to ~, matching the UI design choice.
 func (r *Resolver) DisplayPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Clean(filepath.Join(r.workspaceRoot, path))
+	}
+
 	// 1. Try home-relative (collapsing home to ~)
 	if r.homeDir != "" {
 		if path == r.homeDir {
-			return "~"
+			return filepath.ToSlash("~")
 		}
 		if strings.HasPrefix(path, r.homeDir+string(os.PathSeparator)) {
-			return "~" + path[len(r.homeDir):]
+			return filepath.ToSlash("~" + path[len(r.homeDir):])
 		}
 	}
 
@@ -105,11 +112,11 @@ func (r *Resolver) DisplayPath(path string) string {
 	rel, err := filepath.Rel(r.workspaceRoot, path)
 	if err == nil && !strings.HasPrefix(rel, "..") {
 		if rel == "." {
-			return "."
+			return filepath.ToSlash(".")
 		}
-		return rel
+		return filepath.ToSlash(rel)
 	}
 
 	// 3. Fallback to absolute
-	return path
+	return filepath.ToSlash(path)
 }

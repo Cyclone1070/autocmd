@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -27,8 +30,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the tool can be run concurrently (false for interactive tools).
 func (t *Tool) IsConcurrentSafe() bool { return false }
 
-// Definition returns the Eino tool definition for the question tool.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: t.Name(),
 		Desc: `Asks the user one or more multiple choice questions to gather information, clarify ambiguity, understand preferences, make decisions or offer them choices.
@@ -72,37 +74,59 @@ Usage notes:
 				Required: true,
 			},
 		}),
+	}, nil
+}
+
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	questions, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
 	}
+	waiter, ok := runtimectx.ActionWaiterFrom(ctx)
+	if !ok || waiter == nil {
+		return "", fmt.Errorf("question tool requires action waiter")
+	}
+	action, err := waiter.Wait(ctx, compose.GetToolCallID(ctx))
+	if err != nil {
+		return "", err
+	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := resolveQuestions(ctx, questions, action)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	var p toolParams
+	if err := json.Unmarshal([]byte(input.Arguments), &p); err != nil {
+		return domain.NewQuestionDisplay(nil)
+	}
+	return domain.NewQuestionDisplay(p.Questions)
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
 }
 
 type toolParams struct {
 	Questions []domain.QuestionInfo `json:"questions"`
 }
 
-// Prepare parses the tool parameters and returns an invocation.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) validate(params string) ([]domain.QuestionInfo, error) {
 	var p toolParams
 	if err := json.Unmarshal([]byte(params), &p); err != nil {
 		return nil, fmt.Errorf("failed to parse question params: %w", err)
 	}
-
-	return &invocation{
-		questions: p.Questions,
-	}, nil
+	return p.Questions, nil
 }
 
-// invocation represents a single execution of the question tool.
-type invocation struct {
-	questions []domain.QuestionInfo
-}
-
-// Display returns the UI representation of the questions.
-func (i *invocation) Display() domain.ToolDisplay {
-	return domain.NewQuestionDisplay(i.questions)
-}
-
-// Resolve handles the user's answers and returns the final LLM content and display.
-func (i *invocation) Resolve(ctx context.Context, action domain.Action) (string, domain.ToolDisplay) {
+func resolveQuestions(ctx context.Context, questions []domain.QuestionInfo, action domain.Action) (string, domain.ToolDisplay) {
 	if ctx.Err() != nil {
 		display := domain.NewStringDisplay("Question attempted", "")
 		display.Error = domain.ToolErrorCancelled
@@ -114,8 +138,8 @@ func (i *invocation) Resolve(ctx context.Context, action domain.Action) (string,
 		panic(fmt.Sprintf("invocation.Resolve: expected QuestionAnswerAction, got %T", action))
 	}
 
-	summary := formatAnswerSummary(i.questions, qa.Answers)
-	skipped := countSkippedQuestions(i.questions, qa.Answers)
+	summary := formatAnswerSummary(questions, qa.Answers)
+	skipped := countSkippedQuestions(questions, qa.Answers)
 	if summary == "" {
 		return "User has skipped all questions.", domain.NewStringDisplay("Questions skipped", "")
 	}

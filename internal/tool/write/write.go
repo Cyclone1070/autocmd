@@ -10,7 +10,10 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	"github.com/Cyclone1070/iav/internal/tool/helper/content"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -69,8 +72,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the write file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the tool's schema for the LLM using eino schema.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "write_file",
 		Desc: `Write a file to the local filesystem.
@@ -99,7 +101,37 @@ Usage:
 				Required: true,
 			},
 		}),
+	}, nil
+}
+
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
 	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeWrite(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	displayPath := t.pathResolver.DisplayPath(req.FilePath)
+	return domain.NewStringDisplay(req.Description, fmt.Sprintf("Write \"%s\"", displayPath))
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
 }
 
 // Request is the input for Tool.
@@ -109,8 +141,14 @@ type Request struct {
 	Description string `json:"description"`
 }
 
-// Prepare parses the write file parameters and returns an invocation.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+type validatedRequest struct {
+	absPath string
+	exists  bool
+	content []byte
+	reqDesc string
+}
+
+func (t *Tool) validate(params string) (*validatedRequest, error) {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -125,7 +163,7 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 			len(req.Content), t.maxFileSize)
 	}
 
-	abs, err := t.pathResolver.Abs(req.FilePath)
+	abs, err := t.pathResolver.ValidateAbs(req.FilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -162,33 +200,17 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("cannot write binary content to: %s", req.FilePath)
 	}
 
-	displayPath := t.pathResolver.DisplayPath(abs)
-
-	return &invocation{
-		fileOps:         t.fileOps,
-		checksumManager: t.checksumManager,
-		absPath:         abs,
-		exists:          exists,
-		content:         contentBytes,
-		display:         domain.NewStringDisplay(req.Description, fmt.Sprintf("Write \"%s\"", filepath.ToSlash(displayPath))),
+	return &validatedRequest{
+		absPath: abs,
+		exists:  exists,
+		content: contentBytes,
+		reqDesc: req.Description,
 	}, nil
 }
 
-type invocation struct {
-	fileOps         fileWriter
-	checksumManager checksumUpdater
-	display         domain.StringDisplay
-	absPath         string
-	content         []byte
-	exists          bool
-}
-
-func (i *invocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
-	d := i.display
+func (t *Tool) executeWrite(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
+	displayPath := t.pathResolver.DisplayPath(req.absPath)
+	d := domain.NewStringDisplay(req.reqDesc, fmt.Sprintf("Write \"%s\"", filepath.ToSlash(displayPath)))
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
@@ -196,12 +218,12 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	}
 
 	// Normalise line endings to LF before write
-	normalizedContent := strings.ReplaceAll(string(i.content), "\r\n", "\n")
+	normalizedContent := strings.ReplaceAll(string(req.content), "\r\n", "\n")
 	contentToWrite := []byte(normalizedContent)
 
 	// Write file atomically
 	perm := os.FileMode(domain.DefaultFilePerm)
-	if err := i.fileOps.WriteFileAtomic(i.absPath, contentToWrite, perm); err != nil {
+	if err := t.fileOps.WriteFileAtomic(req.absPath, contentToWrite, perm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
@@ -211,11 +233,11 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	}
 
 	// Update checksum cache
-	checksum := i.checksumManager.Compute(contentToWrite)
-	i.checksumManager.Update(i.absPath, checksum)
+	checksum := t.checksumManager.Compute(contentToWrite)
+	t.checksumManager.Update(req.absPath, checksum)
 
-	if i.exists {
-		return fmt.Sprintf("The file %s has been updated successfully.", i.absPath), d
+	if req.exists {
+		return fmt.Sprintf("The file %s has been updated successfully.", req.absPath), d
 	}
-	return fmt.Sprintf("file %s created successfully", i.absPath), d
+	return fmt.Sprintf("file %s created successfully", req.absPath), d
 }

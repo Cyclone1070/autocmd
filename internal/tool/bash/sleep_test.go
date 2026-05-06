@@ -18,9 +18,8 @@ func TestSleepTool_Execute_Success(t *testing.T) {
 	ctx := context.Background()
 
 	params := `{"duration_ms": 10}`
-	inv, _ := tl.Prepare(params)
-
-	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	req, _ := tl.validate(params)
+	llm, disp := tl.executeSleep(ctx, req)
 	assert.Equal(t, "slept for 10ms", llm)
 	assert.Equal(t, "Sleep for 10ms", disp.(domain.StringDisplay).Description)
 }
@@ -37,9 +36,8 @@ func TestSleepTool_Execute_Interrupted(t *testing.T) {
 	_ = tm.Register("t1", cmd, "", func() {}, "desc", "cmd")
 
 	params := `{"duration_ms": 5000}`
-	inv, _ := tl.Prepare(params)
-
-	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	req, _ := tl.validate(params)
+	llm, disp := tl.executeSleep(ctx, req)
 	assert.Regexp(t, regexp.MustCompile(`^sleep interrupted after [0-9hms]+: background bash process finished$`), llm)
 	assert.Regexp(t, regexp.MustCompile(`^Sleep interrupted after [0-9hms]+: background bash process finished$`), disp.(domain.StringDisplay).Description)
 	assert.Equal(t, "", disp.(domain.StringDisplay).Content)
@@ -52,8 +50,8 @@ func TestSleepTool_Execute_Cancelled(t *testing.T) {
 	cancel()
 
 	params := `{"duration_ms": 1000}`
-	inv, _ := tl.Prepare(params)
-	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	req, _ := tl.validate(params)
+	_, disp := tl.executeSleep(ctx, req)
 
 	assert.Equal(t, domain.ToolErrorCancelled, disp.(domain.StringDisplay).Error)
 	assert.Equal(t, "Sleep for 1s", disp.(domain.StringDisplay).Description)
@@ -76,10 +74,10 @@ func TestSleepTool_Execute_AlreadyFinished(t *testing.T) {
 
 	// 3. Call sleep. It should return immediately because a task is already done.
 	params := `{"duration_ms": 1000}`
-	inv, _ := tl.Prepare(params)
+	req, _ := tl.validate(params)
 
 	start := time.Now()
-	llm, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llm, disp := tl.executeSleep(ctx, req)
 	duration := time.Since(start)
 
 	assert.Less(t, duration, 500*time.Millisecond, "Sleep should have been interrupted immediately, but took %v", duration)

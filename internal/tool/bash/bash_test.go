@@ -86,12 +86,23 @@ type mockTaskManager struct {
 	mock.Mock
 }
 
+type captureEventSender struct {
+	mu      sync.Mutex
+	updates []domain.UIUpdate
+}
+
+func (c *captureEventSender) SendUIUpdate(u domain.UIUpdate) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.updates = append(c.updates, u)
+}
+
 func (m *mockTaskManager) Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string) error {
 	args := m.Called(id, cmd, logPath, cancel, description, command)
 	return args.Error(0)
 }
 
-func TestBashTool_Prepare_BlockedCommand(t *testing.T) {
+func TestBashTool_Validate_BlockedCommand(t *testing.T) {
 	mockFS := &mockFileSystem{}
 	mockExec := &mockExecutor{}
 	mockResolver := &mockPathResolver{root: "/workspace"}
@@ -108,7 +119,7 @@ func TestBashTool_Prepare_BlockedCommand(t *testing.T) {
 	for _, cmd := range forbidden {
 		t.Run(cmd, func(t *testing.T) {
 			params := fmt.Sprintf(`{"command": "%s", "description": "test"}`, cmd)
-			_, err := tool.Prepare(params)
+			_, err := tool.validate(params)
 			if err == nil {
 				t.Errorf("Expected command %q to be blocked, but it was accepted", cmd)
 			}
@@ -155,7 +166,7 @@ func TestBashTool_Execute(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "echo test", "description": "test command"}`
-	inv, err := tool.Prepare(params)
+	req, err := tool.validate(params)
 	assert.NoError(t, err)
 
 	// Mock streaming command
@@ -168,7 +179,7 @@ func TestBashTool_Execute(t *testing.T) {
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
 	ctx := context.Background()
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	assert.Contains(t, llmContent, "test output")
 	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
@@ -185,11 +196,7 @@ func TestBashTool_Stream(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "echo test", "description": "test stream"}`
-	inv, _ := tool.Prepare(params)
-
-	// Stream should be available BEFORE Execute
-	reader := inv.(domain.StreamableInvocation).Stream()
-	assert.NotNil(t, reader)
+	req, _ := tool.validate(params)
 
 	// Start execution in background
 	output := strings.NewReader("real time output")
@@ -201,15 +208,22 @@ func TestBashTool_Stream(t *testing.T) {
 	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
-	go inv.(domain.ExecutableInvocation).Execute(context.Background())
-
-	// Data should flow through the proxy reader
-	buf := make([]byte, 100)
-	n, err := reader.Read(buf)
-	assert.NoError(t, err)
-	assert.Equal(t, "real time output", string(buf[:n]))
+	events := &captureEventSender{}
+	go tool.executeBash(context.Background(), req, events, "call-1")
+	time.Sleep(20 * time.Millisecond)
 
 	close(waitDone) // Now allow Execute to finish
+	time.Sleep(20 * time.Millisecond)
+	events.mu.Lock()
+	defer events.mu.Unlock()
+	assert.NotEmpty(t, events.updates)
+	combined := ""
+	for _, update := range events.updates {
+		if streamEvent, ok := update.(domain.ToolStreamEvent); ok {
+			combined += streamEvent.Chunk
+		}
+	}
+	assert.Contains(t, combined, "real time output")
 }
 
 func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
@@ -224,7 +238,7 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 
 		tool := NewTool(mockFS, mockExec, mockResolver, mockTM)
 
-		inv, _ := tool.Prepare(`{"command": "long_running", "description": "test", "timeout": 100}`)
+		req, _ := tool.validate(`{"command": "long_running", "description": "test", "timeout": 100}`)
 
 		mockExec.On("RunStreaming", mock.Anything, "long_running", "/workspace", true).Return(
 			executor.NewStreamingCmd("task1", strings.NewReader("some output"), func() (*executor.Result, error) {
@@ -237,7 +251,7 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 		// No mock expectation for Register here, handled by manual mock
 
 		start := time.Now()
-		resp, display := inv.(*bashInvocation).Execute(context.Background())
+		resp, display := tool.executeBash(context.Background(), req, nil, "")
 		duration := time.Since(start)
 
 		assert.Contains(t, resp, "the command is running in the background")
@@ -294,7 +308,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, taskMgr)
 
 	params := `{"command": "long_command", "description": "test backgrounding"}`
-	inv, _ := tool.Prepare(params)
+	req, _ := tool.validate(params)
 
 	waitCh := make(chan struct{})
 	waitFn := func() (*executor.Result, error) {
@@ -307,7 +321,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
 	ctx := context.Background()
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	// Should have backgrounded immediately
 	assert.Contains(t, llmContent, "<background_task_id>")
@@ -325,14 +339,14 @@ func TestBashTool_IsConcurrentSafe(t *testing.T) {
 	assert.True(t, tool.IsConcurrentSafe())
 }
 
-func TestBashTool_Prepare_EmptyDescription(t *testing.T) {
+func TestBashTool_Validate_EmptyDescription(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}
 	resolver := &mockPathResolver{root: "/tmp"}
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "ls"}`
-	_, err := tool.Prepare(params)
+	_, err := tool.validate(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "description is required")
 }
@@ -345,7 +359,7 @@ func TestBashTool_DeadlineExceeded_TreatedAsFailure(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "sleep 10", "description": "testing hard timeout", "timeout": 100}`
-	inv, _ := tool.Prepare(params)
+	req, _ := tool.validate(params)
 
 	output := strings.NewReader("some partial output")
 	waitFn := func() (*executor.Result, error) {
@@ -356,7 +370,7 @@ func TestBashTool_DeadlineExceeded_TreatedAsFailure(t *testing.T) {
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
 	ctx := context.Background()
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	assert.Contains(t, llmContent, "Error: command failed:")
 	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
@@ -370,7 +384,7 @@ func TestBashTool_Cancellation(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "ls", "description": "testing cancellation"}`
-	inv, _ := tool.Prepare(params)
+	req, _ := tool.validate(params)
 
 	output := strings.NewReader("")
 	waitFn := func() (*executor.Result, error) {
@@ -383,7 +397,7 @@ func TestBashTool_Cancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	assert.Equal(t, domain.ToolErrorCancelled, llmContent)
 	assert.Equal(t, domain.ToolErrorCancelled, display.GetError())
@@ -396,7 +410,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "large_command", "description": "testing large output"}`
-	inv, _ := tool.Prepare(params)
+	req, _ := tool.validate(params)
 
 	output := strings.NewReader("")
 	waitFn := func() (*executor.Result, error) {
@@ -419,7 +433,7 @@ func TestBashTool_LargeOutput(t *testing.T) {
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
 	ctx := context.Background()
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	assert.Contains(t, llmContent, "too large")
 	assert.Contains(t, llmContent, "tail data")
@@ -433,7 +447,7 @@ func TestBashTool_DeadlineExceeded_LargeOutput_TreatedAsFailure(t *testing.T) {
 	tool := NewTool(fs, exec, resolver, nil)
 
 	params := `{"command": "sleep 10", "description": "testing timeout + large", "timeout": 100}`
-	inv, _ := tool.Prepare(params)
+	req, _ := tool.validate(params)
 
 	output := strings.NewReader("")
 	waitFn := func() (*executor.Result, error) {
@@ -456,7 +470,7 @@ func TestBashTool_DeadlineExceeded_LargeOutput_TreatedAsFailure(t *testing.T) {
 	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
 
 	ctx := context.Background()
-	llmContent, display := inv.(domain.ExecutableInvocation).Execute(ctx)
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
 
 	assert.Contains(t, llmContent, "Error: command failed:")
 	assert.Contains(t, llmContent, "too large")

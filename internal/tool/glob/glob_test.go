@@ -21,7 +21,8 @@ import (
 
 func TestGlob_Definition(t *testing.T) {
 	tool := NewTool(&mockFileSystem{}, &mockCommandExecutor{}, &mockPathResolver{})
-	def := tool.Definition()
+	def, err := tool.Info(context.Background())
+	require.NoError(t, err)
 
 	assert.Equal(t, "glob", def.Name)
 	assert.Contains(t, def.Desc, "Fast file pattern matching")
@@ -137,12 +138,12 @@ func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {
 	tool := NewTool(fs, exec, pathResolver)
 	req := &Request{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 	params, _ := json.Marshal(req)
-	inv, err := tool.Prepare(string(params))
+	validated, err := tool.validate(string(params))
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+	_, disp := tool.executeGlob(ctx, validated)
 	assert.ErrorIs(t, ctx.Err(), context.Canceled)
 	assert.NotNil(t, disp)
 	assert.Equal(t, domain.ToolErrorCancelled, disp.GetError())
@@ -256,7 +257,7 @@ type mockPathResolver struct {
 	mock.Mock
 }
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
+func (m *mockPathResolver) ValidateAbs(p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}
@@ -293,11 +294,9 @@ func executeFind(t *testing.T, tool *Tool, req *Request) (string, error) {
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	invocation, err := tool.Prepare(string(params))
+	out, err := tool.InvokableRun(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}
-
-	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, nil
 }

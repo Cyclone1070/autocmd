@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/cloudwego/eino/compose"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -102,18 +103,11 @@ func (m *mockChecksumManagerForRead) Get(path string) (string, bool) {
 
 // Test functions
 
-// executeRead calls Prepare then Execute, returning the LLM output string.
-// Prepare errors: returns ("", err)
-// Execute errors: returns (llmContent, err) per contract.
+// executeRead calls InvokableRun, returning the LLM output string.
 func executeRead(t *testing.T, rtool *Tool, req *Request) (string, error) {
 	t.Helper()
 	params, _ := json.Marshal(req)
-	inv, err := rtool.Prepare(string(params))
-	if err != nil {
-		return "", err
-	}
-	out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
-	return out, err
+	return rtool.InvokableRun(context.Background(), string(params))
 }
 
 func TestReadFile(t *testing.T) {
@@ -129,12 +123,12 @@ func TestReadFile(t *testing.T) {
 
 		req := &Request{FilePath: "/workspace/a.txt"}
 		params, _ := json.Marshal(req)
-		inv, err := rtool.Prepare(string(params))
+		validated, err := rtool.validate(string(params))
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, disp := inv.(domain.ExecutableInvocation).Execute(ctx)
+		_, disp := rtool.executeRead(ctx, validated)
 
 		require.ErrorIs(t, ctx.Err(), context.Canceled)
 		require.NotNil(t, disp)
@@ -219,7 +213,7 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/subdir"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(string(params))
+		_, err := readTool.validate(string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for directory")
 		}
@@ -236,7 +230,7 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/nonexistent.txt"}
 		params, _ := json.Marshal(readReq)
-		_, err := readTool.Prepare(string(params))
+		_, err := readTool.validate(string(params))
 		if err == nil {
 			t.Error("expected Prepare to fail for non-existent file")
 		}
@@ -362,13 +356,13 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt"}
 		params, _ := json.Marshal(readReq)
-		inv, err := readTool.Prepare(string(params))
+		validated, err := readTool.validate(string(params))
 		require.NoError(t, err)
 
 		// Delete file after prepare to cause Execute failure
 		delete(fs.files, "/workspace/test.txt")
 
-		output, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		output, _ := readTool.executeRead(context.Background(), validated)
 		require.NoError(t, err)
 		assertContains(t, output, "Error:")
 	})
@@ -384,13 +378,8 @@ func TestReadFile(t *testing.T) {
 
 		// Agent sends absolute path
 		params, _ := json.Marshal(&Request{FilePath: absFile})
-		inv, err := readTool.Prepare(string(params))
-		if err != nil {
-			t.Fatalf("Prepare failed: %v", err)
-		}
-
-		// Display should show full absolute path
-		display := inv.Display().(domain.StringDisplay)
+		displayRaw := readTool.Preview(&compose.ToolInput{Arguments: string(params)})
+		display := displayRaw.(domain.StringDisplay)
 		assert.Equal(t, "Read \"/workspace/subdir/test.txt\"", display.Description)
 		assert.Equal(t, "", display.Content)
 	})
@@ -404,10 +393,9 @@ func TestReadFile(t *testing.T) {
 
 		readTool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot})
 		params, _ := json.Marshal(&Request{FilePath: absFile, Offset: 0, Limit: 2})
-		inv, err := readTool.Prepare(string(params))
+		validated, err := readTool.validate(string(params))
 		require.NoError(t, err)
-
-		_, finalDisplay := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		_, finalDisplay := readTool.executeRead(context.Background(), validated)
 		typed, ok := finalDisplay.(domain.StringDisplay)
 		require.True(t, ok)
 		assert.Equal(t, "Read \"/workspace/subdir/test.txt\" Lines 0-2", typed.Description)
@@ -451,7 +439,7 @@ type mockPathResolver struct {
 	workspaceRoot string
 }
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
+func (m *mockPathResolver) ValidateAbs(p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}

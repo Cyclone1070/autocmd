@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -35,8 +38,7 @@ func (t *SleepTool) Name() string {
 // IsConcurrentSafe returns true as sleep is safe to run concurrently.
 func (t *SleepTool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the JSON schema for the sleep tool.
-func (t *SleepTool) Definition() *schema.ToolInfo {
+func (t *SleepTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "sleep",
 		Desc: `Wait for a specified duration or until a background bash task completes.
@@ -57,14 +59,49 @@ Usage:
 				Required: true,
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare validates the sleep request and returns an invocation.
-func (t *SleepTool) Prepare(params string) (domain.Invocation, error) {
-	var req struct {
-		DurationMS int `json:"duration_ms"`
+func (t *SleepTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
 	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeSleep(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *SleepTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	var req sleepRequest
+	if err := json.Unmarshal([]byte(input.Arguments), &req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	duration := time.Duration(req.DurationMS) * time.Millisecond
+	return domain.NewStringDisplay(fmt.Sprintf("Sleep for %s", duration.String()), "")
+}
+
+func (t *SleepTool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type sleepRequest struct {
+	DurationMS int `json:"duration_ms"`
+}
+
+type validatedSleepRequest struct {
+	durationMS int
+}
+
+func (t *SleepTool) validate(params string) (*validatedSleepRequest, error) {
+	var req sleepRequest
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -73,49 +110,36 @@ func (t *SleepTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("duration_ms must be positive")
 	}
 
-	duration := time.Duration(req.DurationMS) * time.Millisecond
-	return &sleepInvocation{
-		notifier:   t.notifier,
+	return &validatedSleepRequest{
 		durationMS: req.DurationMS,
-		display:    domain.NewStringDisplay(fmt.Sprintf("Sleep for %s", duration.String()), ""),
 	}, nil
 }
 
-type sleepInvocation struct {
-	notifier   completionNotifier
-	display    domain.StringDisplay
-	durationMS int
-}
-
-func (i *sleepInvocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *sleepInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (t *SleepTool) executeSleep(ctx context.Context, req *validatedSleepRequest) (string, domain.ToolDisplay) {
 	start := time.Now()
+	duration := time.Duration(req.durationMS) * time.Millisecond
+	display := domain.NewStringDisplay(fmt.Sprintf("Sleep for %s", duration.String()), "")
 
-	if i.notifier.HasPending() {
+	if t.notifier.HasPending() {
 		elapsed := time.Since(start).Round(time.Second).String()
 		llm := fmt.Sprintf("sleep interrupted after %s: background bash process finished", elapsed)
-		i.display.Description = fmt.Sprintf("Sleep interrupted after %s: background bash process finished", elapsed)
-		i.display.Content = ""
-		return llm, i.display
+		display.Description = fmt.Sprintf("Sleep interrupted after %s: background bash process finished", elapsed)
+		display.Content = ""
+		return llm, display
 	}
-
-	duration := time.Duration(i.durationMS) * time.Millisecond
 
 	select {
 	case <-time.After(duration):
-		llm := fmt.Sprintf("slept for %dms", i.durationMS)
-		return llm, i.display
-	case <-i.notifier.NotifyChan():
+		llm := fmt.Sprintf("slept for %dms", req.durationMS)
+		return llm, display
+	case <-t.notifier.NotifyChan():
 		elapsed := time.Since(start).Round(time.Second).String()
 		llm := fmt.Sprintf("sleep interrupted after %s: background bash process finished", elapsed)
-		i.display.Description = fmt.Sprintf("Sleep interrupted after %s: background bash process finished", elapsed)
-		i.display.Content = ""
-		return llm, i.display
+		display.Description = fmt.Sprintf("Sleep interrupted after %s: background bash process finished", elapsed)
+		display.Content = ""
+		return llm, display
 	case <-ctx.Done():
-		i.display.Error = domain.ToolErrorCancelled
-		return domain.ToolErrorCancelled, i.display
+		display.Error = domain.ToolErrorCancelled
+		return domain.ToolErrorCancelled, display
 	}
 }

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,15 +31,13 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, dispErr := tool.InvokableRun(context.Background(), string(params))
+		require.NoError(t, dispErr)
 		assert.Contains(t, out, "file " + testWorkspaceRoot + "/new.txt created successfully")
 		assert.Equal(t, "hello", string(fs.files[testWorkspaceRoot + "/new.txt"]))
-
-		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "creating new file", display.Description)
 	})
 
 	t.Run("Overwrite existing file after read", func(t *testing.T) {
@@ -59,15 +56,13 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, runErr := tool.InvokableRun(context.Background(), string(params))
+		require.NoError(t, runErr)
 		assert.Contains(t, out, "The file " + testWorkspaceRoot + "/exists.txt has been updated successfully.")
 		assert.Equal(t, "new", string(fs.files[testWorkspaceRoot + "/exists.txt"]))
-
-		display := inv.Display().(domain.StringDisplay)
-		assert.Equal(t, "overwriting file", display.Description)
 	})
 
 	t.Run("Rejects write if never read", func(t *testing.T) {
@@ -84,7 +79,7 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file has not been read yet")
 	})
@@ -104,7 +99,7 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "file has been modified since read")
 	})
@@ -121,9 +116,9 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
+		_, _ = tool.InvokableRun(context.Background(), string(params))
 
 		assert.Equal(t, "line1\nline2", string(fs.files[testWorkspaceRoot + "/crlf.txt"]))
 	})
@@ -139,7 +134,7 @@ func TestWriteFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "absolute path required")
 	})
@@ -150,7 +145,7 @@ type mockPathResolver struct {
 	workspaceRoot string
 }
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
+func (m *mockPathResolver) ValidateAbs(p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}

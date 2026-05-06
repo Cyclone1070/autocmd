@@ -16,6 +16,9 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -89,8 +92,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the grep tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the tool's schema for the LLM using eino schema.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "grep",
 		Desc: `A powerful search tool built on ripgrep.
@@ -158,11 +160,49 @@ Usage:
 				Desc: "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare parses the grep parameters and returns an invocation.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
+	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeGrep(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	searchPath := req.Path
+	if searchPath == "" {
+		searchPath = t.pathResolver.Root()
+	}
+	displayPath := t.pathResolver.DisplayPath(searchPath)
+	return domain.NewStringDisplay(fmt.Sprintf("Grep \"%s\" in \"%s\"", req.Pattern, displayPath), "")
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type validatedRequest struct {
+	absPath string
+	req     *Request
+}
+
+func (t *Tool) validate(params string) (*validatedRequest, error) {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -195,7 +235,7 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		searchPath = t.pathResolver.Root()
 	}
 
-	absSearchPath, err := t.pathResolver.Abs(searchPath)
+	absSearchPath, err := t.pathResolver.ValidateAbs(searchPath)
 	if err != nil {
 		return nil, err
 	}
@@ -209,46 +249,28 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("failed to stat %s: %w", absSearchPath, err)
 	}
 
-	displayPath := t.pathResolver.DisplayPath(absSearchPath)
-
-	return &invocation{
-		fs:              t.fs,
-		commandExecutor: t.commandExecutor,
-		pathResolver:    t.pathResolver,
-		absPath:         absSearchPath,
-		req:             req,
-		display:         domain.NewStringDisplay(fmt.Sprintf("Grep \"%s\" in \"%s\"", req.Pattern, filepath.ToSlash(displayPath)), ""),
+	return &validatedRequest{
+		absPath: absSearchPath,
+		req:     req,
 	}, nil
 }
 
-type invocation struct {
-	fs              fileSystem
-	commandExecutor commandExecutor
-	pathResolver    pathResolver
-	absPath         string
-	req             *Request
-	display         domain.StringDisplay
-}
-
-func (i *invocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
-	d := i.display
+func (t *Tool) executeGrep(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
+	displayPath := t.pathResolver.DisplayPath(req.absPath)
+	d := domain.NewStringDisplay(fmt.Sprintf("Grep \"%s\" in \"%s\"", req.req.Pattern, filepath.ToSlash(displayPath)), "")
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
 		return domain.ToolErrorCancelled, d
 	}
 
-	cmdStr := i.prepareCommand()
-	workDir := i.pathResolver.Root()
+	cmdStr := t.prepareCommand(req)
+	workDir := t.pathResolver.Root()
 
 	ctx, cancel := context.WithTimeout(ctx, defaultGrepTimeout)
 	defer cancel()
 
-	res, err := i.commandExecutor.Run(ctx, cmdStr, workDir, true)
+	res, err := t.commandExecutor.Run(ctx, cmdStr, workDir, true)
 	timedOut := false
 	if err != nil {
 		switch {
@@ -265,7 +287,7 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 
 	output := res.Stdout
 	if res.LogPath != "" {
-		matches, files, _ := i.analyzeLog(res.LogPath)
+		matches, files, _ := t.analyzeLog(res.LogPath)
 		output = fmt.Sprintf("Output too large (%d matches across %d files). Full output saved to %s. Use `read_file` tool to read full output.", matches, files, res.LogPath)
 	}
 	if output == "" {
@@ -289,8 +311,8 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	return output, d
 }
 
-func (i *invocation) prepareCommand() string {
-	mode := i.req.OutputMode
+func (t *Tool) prepareCommand(req *validatedRequest) string {
+	mode := req.req.OutputMode
 	args := []string{"rg", "--hidden", "--stats"}
 	for _, excl := range vcsExclusions {
 		args = append(args, "--glob", "!"+excl)
@@ -304,57 +326,57 @@ func (i *invocation) prepareCommand() string {
 		args = append(args, "-c", "--with-filename")
 	case outputModeContent:
 		args = append(args, "--with-filename")
-		if i.req.ShowLineNumbers == nil || *i.req.ShowLineNumbers {
+		if req.req.ShowLineNumbers == nil || *req.req.ShowLineNumbers {
 			args = append(args, "-n")
 		}
 		contextLines := 0
-		if i.req.ContextLines != nil {
-			contextLines = *i.req.ContextLines
-		} else if i.req.ContextC != nil {
-			contextLines = *i.req.ContextC
+		if req.req.ContextLines != nil {
+			contextLines = *req.req.ContextLines
+		} else if req.req.ContextC != nil {
+			contextLines = *req.req.ContextC
 		}
 		if contextLines > 0 {
 			args = append(args, "-C", strconv.Itoa(contextLines))
 		} else {
-			if i.req.ContextB != nil && *i.req.ContextB > 0 {
-				args = append(args, "-B", strconv.Itoa(*i.req.ContextB))
+			if req.req.ContextB != nil && *req.req.ContextB > 0 {
+				args = append(args, "-B", strconv.Itoa(*req.req.ContextB))
 			}
-			if i.req.ContextA != nil && *i.req.ContextA > 0 {
-				args = append(args, "-A", strconv.Itoa(*i.req.ContextA))
+			if req.req.ContextA != nil && *req.req.ContextA > 0 {
+				args = append(args, "-A", strconv.Itoa(*req.req.ContextA))
 			}
 		}
 	}
 
-	if i.req.I != nil && *i.req.I {
+	if req.req.I != nil && *req.req.I {
 		args = append(args, "-i")
 	}
-	if i.req.Multiline != nil && *i.req.Multiline {
+	if req.req.Multiline != nil && *req.req.Multiline {
 		args = append(args, "-U", "--multiline-dotall")
 	}
-	if i.req.Type != "" {
-		args = append(args, "--type", i.req.Type)
+	if req.req.Type != "" {
+		args = append(args, "--type", req.req.Type)
 	}
-	if i.req.Glob != "" {
-		globs := splitGlobs(i.req.Glob)
+	if req.req.Glob != "" {
+		globs := splitGlobs(req.req.Glob)
 		for _, g := range globs {
 			args = append(args, "--glob", g)
 		}
 	}
 
-	if strings.HasPrefix(i.req.Pattern, "-") {
-		args = append(args, "-e", i.req.Pattern)
+	if strings.HasPrefix(req.req.Pattern, "-") {
+		args = append(args, "-e", req.req.Pattern)
 	} else {
-		args = append(args, i.req.Pattern)
+		args = append(args, req.req.Pattern)
 	}
 
 	// Always use absolute path for rg to get absolute path output
-	args = append(args, i.absPath)
+	args = append(args, req.absPath)
 
 	return joinArgs(args)
 }
 
-func (i *invocation) analyzeLog(path string) (matches, files int, err error) {
-	f, err := i.fs.Open(path)
+func (t *Tool) analyzeLog(path string) (matches, files int, err error) {
+	f, err := t.fs.Open(path)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -396,3 +418,4 @@ func (i *invocation) analyzeLog(path string) (matches, files int, err error) {
 
 	return matches, files, nil
 }
+

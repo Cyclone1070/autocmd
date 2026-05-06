@@ -14,7 +14,10 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -75,8 +78,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the bash tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the Eino tool definition for the bash tool.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "bash",
 		Desc: `Execute a bash command on the local machine.
@@ -135,17 +137,60 @@ EOF
 				Desc: "Set to true to run this command in the background. Note: The task will be killed when you finish your response unless you use 'sleep' to wait.",
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare parses the bash parameters and returns an invocation.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
-	var req struct {
-		Command         string `json:"command"`
-		Description     string `json:"description"`
-		Timeout         int    `json:"timeout"`
-		RunInBackground bool   `json:"run_in_background"`
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
 	}
+	callID := compose.GetToolCallID(ctx)
+
+	events, _ := runtimectx.EventSenderFrom(ctx)
+	sink, _ := runtimectx.ToolDisplaySinkFrom(ctx)
+	llmContent, finalDisplay := t.executeBash(ctx, req, events, callID)
+	if events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	wdDisplay := t.pathResolver.DisplayPath(t.pathResolver.Root())
+	return domain.NewBashDisplay(req.Description, req.Command, wdDisplay, "")
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type Request struct {
+	Command         string `json:"command"`
+	Description     string `json:"description"`
+	Timeout         int    `json:"timeout"`
+	RunInBackground bool   `json:"run_in_background"`
+}
+
+type validatedRequest struct {
+	wd              string
+	wdDisplay       string
+	command         string
+	description     string
+	timeoutMS       int
+	runInBackground bool
+}
+
+func (t *Tool) validate(params string) (*validatedRequest, error) {
+	var req Request
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse bash parameters: %w", err)
 	}
@@ -160,17 +205,13 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 	if req.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
-	return &bashInvocation{
-		fs:              t.fs,
-		commandExecutor: t.commandExecutor,
-		taskManager:     t.taskManager,
+	return &validatedRequest{
 		wd:              wd,
 		wdDisplay:       wdDisplay,
 		command:         req.Command,
 		description:     req.Description,
 		timeoutMS:       req.Timeout,
 		runInBackground: req.RunInBackground,
-		proxy:           newProxyReader(),
 	}, nil
 }
 
@@ -230,43 +271,22 @@ func validateCommand(cmd string) error {
 	return nil
 }
 
-type bashInvocation struct {
-	fs              fileSystem
-	commandExecutor commandExecutor
-	taskManager     backgroundRegistrar
-	proxy           *proxyReader
-	wd              string
-	wdDisplay       string
-	command         string
-	description     string
-	timeoutMS       int
-	runInBackground bool
-}
-
-func (i *bashInvocation) tryPromoteToBackground(streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {
-	if i.taskManager == nil {
+func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {
+	if t.taskManager == nil {
 		return "", domain.BashDisplay{}, false
 	}
 
 	id := streamCmd.ID()
-	if err := i.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, i.description, i.command); err != nil {
+	if err := t.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, req.description, req.command); err != nil {
 		return "", domain.BashDisplay{}, false
 	}
 
-	display = domain.NewBashDisplay(i.description, i.command, i.wdDisplay, fmt.Sprintf("(command is running in background. Live output is saved at \"%s\")", streamCmd.LogPath()))
-	llmContent = fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, i.wd)
+	display = domain.NewBashDisplay(req.description, req.command, req.wdDisplay, fmt.Sprintf("(command is running in background. Live output is saved at \"%s\")", streamCmd.LogPath()))
+	llmContent = fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, req.wd)
 	return llmContent, display, true
 }
 
-func (i *bashInvocation) Display() domain.ToolDisplay {
-	return domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
-}
-
-func (i *bashInvocation) Stream() io.Reader {
-	return i.proxy
-}
-
-func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (t *Tool) executeBash(ctx context.Context, req *validatedRequest, events runtimectx.EventSender, callID string) (string, domain.ToolDisplay) {
 	// We pass the OG context down so executor has SessionID and responds to App exit,
 	// but we don't wrap it with timeout so the process survives backgrounding.
 	taskCtx, taskCancel := context.WithCancel(ctx)
@@ -276,27 +296,44 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 		if !promoted {
 			taskCancel()
 		}
-		i.proxy.Close()
 	}()
 
 	// Map LLM timeout to waitDuration (default 10s)
 	waitDuration := defaultWaitDuration
-	if i.timeoutMS > 0 {
-		waitDuration = time.Duration(i.timeoutMS) * time.Millisecond
+	if req.timeoutMS > 0 {
+		waitDuration = time.Duration(req.timeoutMS) * time.Millisecond
 	}
 
-	streamCmd, err := i.commandExecutor.RunStreaming(taskCtx, i.command, i.wd, true)
+	streamCmd, err := t.commandExecutor.RunStreaming(taskCtx, req.command, req.wd, true)
 	if err != nil {
-		d := domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
+		d := domain.NewBashDisplay(req.description, req.command, req.wdDisplay, "")
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("failed to run command: %v\n\n<cwd>%s</cwd>", err, i.wd), d
+		return fmt.Sprintf("failed to run command: %v\n\n<cwd>%s</cwd>", err, req.wd), d
 	}
 
-	// Plug the real follower into the proxy
-	i.proxy.Set(streamCmd.Output())
+	var wg sync.WaitGroup
+	if events != nil {
+		rd := streamCmd.Output()
+		wg.Go(func() {
+			buf := make([]byte, 1024*1024)
+			for {
+				n, readErr := rd.Read(buf)
+				if n > 0 {
+					events.SendUIUpdate(domain.ToolStreamEvent{CallID: callID, Chunk: string(buf[:n])})
+				}
+				if readErr != nil {
+					return
+				}
+			}
+		})
+		defer func() {
+			stopStreamReader(rd)
+			wg.Wait()
+		}()
+	}
 
-	if i.runInBackground {
-		if llmContent, d, ok := i.tryPromoteToBackground(streamCmd, taskCancel); ok {
+	if req.runInBackground {
+		if llmContent, d, ok := t.tryPromoteToBackground(req, streamCmd, taskCancel); ok {
 			promoted = true
 			return llmContent, d
 		}
@@ -315,19 +352,19 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	case <-done:
 		// Done case handled below
 	case <-time.After(waitDuration):
-		if llmContent, d, ok := i.tryPromoteToBackground(streamCmd, taskCancel); ok {
+		if llmContent, d, ok := t.tryPromoteToBackground(req, streamCmd, taskCancel); ok {
 			promoted = true
 			return llmContent, d
 		}
 		<-done
 	}
 
-	d := domain.NewBashDisplay(i.description, i.command, i.wdDisplay, "")
+	d := domain.NewBashDisplay(req.description, req.command, req.wdDisplay, "")
 
 	llmOutput := res.Stdout
 	uiOutput := res.Stdout
 	if res.LogPath != "" {
-		preview := i.readTail(res.LogPath, tailPreviewSize)
+		preview := t.readTail(res.LogPath, tailPreviewSize)
 		llmOutput = fmt.Sprintf("Output too large. Full output saved to %s. Use `read_file` tool to read full output.\n\nPreview output (last 2KB):\n%s", res.LogPath, preview)
 		uiOutput = fmt.Sprintf("(Output too large, saved to %s)", res.LogPath)
 	}
@@ -342,11 +379,11 @@ func (i *bashInvocation) Execute(ctx context.Context) (string, domain.ToolDispla
 	}
 
 	d.CapturedOutput = uiOutput
-	return fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>\n<cwd>%s</cwd>", llmOutput, res.ExitCode, i.wd), d
+	return fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>\n<cwd>%s</cwd>", llmOutput, res.ExitCode, req.wd), d
 }
 
-func (i *bashInvocation) readTail(path string, size int64) string {
-	f, err := i.fs.Open(path)
+func (t *Tool) readTail(path string, size int64) string {
+	f, err := t.fs.Open(path)
 	if err != nil {
 		return ""
 	}
@@ -377,80 +414,11 @@ func (i *bashInvocation) readTail(path string, size int64) string {
 	return string(buf)
 }
 
-type proxyReader struct {
-	r     io.Reader
-	ch    chan io.Reader
-	close chan struct{}
-	once  sync.Once
-	mu    sync.Mutex
-}
-
-func newProxyReader() *proxyReader {
-	return &proxyReader{
-		ch:    make(chan io.Reader, 1),
-		close: make(chan struct{}),
+func stopStreamReader(r io.Reader) {
+	if closer, ok := r.(io.Closer); ok {
+		_ = closer.Close()
 	}
-}
-
-func (p *proxyReader) Set(r io.Reader) {
-	select {
-	case <-p.close:
-		// Already closed, terminate the incoming reader immediately
-		if closer, ok := r.(io.Closer); ok {
-			_ = closer.Close()
-		}
-		if stopper, ok := r.(interface{ Stop() }); ok {
-			stopper.Stop()
-		}
-	case p.ch <- r:
-	default:
+	if stopper, ok := r.(interface{ Stop() }); ok {
+		stopper.Stop()
 	}
-}
-
-func (p *proxyReader) Close() {
-	p.once.Do(func() {
-		close(p.close)
-		p.mu.Lock()
-		r := p.r
-		p.mu.Unlock()
-		if r != nil {
-			if closer, ok := r.(io.Closer); ok {
-				_ = closer.Close()
-			}
-			if stopper, ok := r.(interface{ Stop() }); ok {
-				stopper.Stop()
-			}
-		}
-	})
-}
-
-func (p *proxyReader) Read(b []byte) (int, error) {
-	p.mu.Lock()
-	r := p.r
-	p.mu.Unlock()
-
-	if r == nil {
-		select {
-		case newR := <-p.ch:
-			// We got a reader, but Close() may have already fired.
-			// Check if close was signalled while we were waiting.
-			select {
-			case <-p.close:
-				// Close() already ran but couldn't Stop() because p.r was nil.
-				// We must stop the reader ourselves.
-				if stopper, ok := newR.(interface{ Stop() }); ok {
-					stopper.Stop()
-				}
-				return 0, io.EOF
-			default:
-			}
-			p.mu.Lock()
-			p.r = newR
-			r = newR
-			p.mu.Unlock()
-		case <-p.close:
-			return 0, io.EOF
-		}
-	}
-	return r.Read(b)
 }

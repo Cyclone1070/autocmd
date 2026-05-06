@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -65,8 +68,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the glob tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the JSON schema for the tool.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: t.Name(),
 		Desc: `Fast file pattern matching tool that works with any codebase size.
@@ -87,11 +89,49 @@ Usage:
 				Desc: fmt.Sprintf("The absolute directory path to search in. If not specified, the workspace root (currently \"%s\") will be used.", t.pathResolver.Root()),
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare validates input and resolves path.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
+	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeGlob(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	searchPath := req.Path
+	if searchPath == "" {
+		searchPath = t.pathResolver.Root()
+	}
+	displayPath := t.pathResolver.DisplayPath(searchPath)
+	return domain.NewStringDisplay(fmt.Sprintf("Glob \"%s\" in \"%s\"", req.Pattern, displayPath), "")
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type validatedRequest struct {
+	absPath string
+	pattern string
+}
+
+func (t *Tool) validate(params string) (*validatedRequest, error) {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -111,7 +151,7 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		searchPath = t.pathResolver.Root()
 	}
 
-	absPath, err := t.pathResolver.Abs(searchPath)
+	absPath, err := t.pathResolver.ValidateAbs(searchPath)
 	if err != nil {
 		return nil, err
 	}
@@ -128,45 +168,31 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("not a directory: %s", absPath)
 	}
 
-	displayPath := t.pathResolver.DisplayPath(absPath)
-
-	return &invocation{
-		tool:    t,
+	return &validatedRequest{
 		absPath: absPath,
 		pattern: req.Pattern,
-		display: domain.NewStringDisplay(fmt.Sprintf("Glob \"%s\" in \"%s\"", req.Pattern, filepath.ToSlash(displayPath)), ""),
 	}, nil
 }
 
-type invocation struct {
-	tool    *Tool
-	pattern string
-	absPath string
-	display domain.StringDisplay
-}
-
-func (i *invocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
-	d := i.display
+func (t *Tool) executeGlob(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
+	displayPath := t.pathResolver.DisplayPath(req.absPath)
+	d := domain.NewStringDisplay(fmt.Sprintf("Glob \"%s\" in \"%s\"", req.pattern, filepath.ToSlash(displayPath)), "")
 
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
 		return domain.ToolErrorCancelled, d
 	}
 
-	workDir := i.tool.pathResolver.Root()
+	workDir := t.pathResolver.Root()
 
 	// Use absolute path for rg to get absolute path output
-	args := []string{"rg", "--files", "--glob", i.pattern, "--sort=modified", "--no-ignore", "--hidden", i.absPath}
+	args := []string{"rg", "--files", "--glob", req.pattern, "--sort=modified", "--no-ignore", "--hidden", req.absPath}
 	cmdStr := joinArgs(args)
 
 	ctx, cancel := context.WithTimeout(ctx, defaultGlobTimeout)
 	defer cancel()
 
-	res, err := i.tool.commandExecutor.Run(ctx, cmdStr, workDir, true)
+	res, err := t.commandExecutor.Run(ctx, cmdStr, workDir, true)
 	timedOut := false
 	if err != nil {
 		switch {
@@ -184,7 +210,7 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 
 	output := res.Stdout
 	if res.LogPath != "" {
-		count, _ := i.countLines(res.LogPath)
+		count, _ := t.countLines(res.LogPath)
 		output = fmt.Sprintf("Output too large (%d files found). Full output saved to %s. Use `read_file` tool to read full output.", count, res.LogPath)
 	}
 	if output == "" {
@@ -208,8 +234,8 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	return strings.TrimSpace(output), d
 }
 
-func (i *invocation) countLines(path string) (int, error) {
-	f, err := i.tool.fs.Open(path)
+func (t *Tool) countLines(path string) (int, error) {
+	f, err := t.fs.Open(path)
 	if err != nil {
 		return 0, err
 	}
@@ -239,3 +265,4 @@ func (i *invocation) countLines(path string) (int, error) {
 	}
 	return count, nil
 }
+

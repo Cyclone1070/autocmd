@@ -7,6 +7,9 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -34,8 +37,7 @@ func (t *TaskStopTool) Name() string {
 // IsConcurrentSafe indicates if the task stop tool can be run concurrently.
 func (t *TaskStopTool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the Eino tool definition for the task stop tool.
-func (t *TaskStopTool) Definition() *schema.ToolInfo {
+func (t *TaskStopTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "task_stop",
 		Desc: `Terminates a running background task by its ID.
@@ -51,14 +53,48 @@ Usage:
 				Required: true,
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare parses the task stop parameters and returns an invocation.
-func (t *TaskStopTool) Prepare(params string) (domain.Invocation, error) {
-	var req struct {
-		TaskID string `json:"task_id"`
+func (t *TaskStopTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
 	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeTaskStop(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *TaskStopTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &taskStopRequest{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	return domain.NewStringDisplay(fmt.Sprintf("Stop background bash task %s", req.TaskID), "")
+}
+
+func (t *TaskStopTool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type taskStopRequest struct {
+	TaskID string `json:"task_id"`
+}
+
+type validatedTaskStopRequest struct {
+	taskID string
+}
+
+func (t *TaskStopTool) validate(params string) (*validatedTaskStopRequest, error) {
+	var req taskStopRequest
 	if err := json.Unmarshal([]byte(params), &req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
 	}
@@ -67,36 +103,25 @@ func (t *TaskStopTool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("task_id is required")
 	}
 
-	return &taskStopInvocation{
-		manager: t.manager,
-		taskID:  req.TaskID,
-		display: domain.NewStringDisplay(fmt.Sprintf("Stop background bash task %s", req.TaskID), ""),
+	return &validatedTaskStopRequest{
+		taskID: req.TaskID,
 	}, nil
 }
 
-type taskStopInvocation struct {
-	manager taskStopper
-	taskID  string
-	display domain.StringDisplay
-}
-
-func (i *taskStopInvocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *taskStopInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (t *TaskStopTool) executeTaskStop(ctx context.Context, req *validatedTaskStopRequest) (string, domain.ToolDisplay) {
+	display := domain.NewStringDisplay(fmt.Sprintf("Stop background bash task %s", req.taskID), "")
 	if ctx.Err() != nil {
-		i.display.Error = domain.ToolErrorCancelled
-		return domain.ToolErrorCancelled, i.display
+		display.Error = domain.ToolErrorCancelled
+		return domain.ToolErrorCancelled, display
 	}
 
-	err := i.manager.Stop(i.taskID)
+	err := t.manager.Stop(req.taskID)
 	if err != nil {
 		llm := fmt.Sprintf("error: %v", err)
-		i.display.Error = domain.ToolErrorFailed
-		return llm, i.display
+		display.Error = domain.ToolErrorFailed
+		return llm, display
 	}
 
-	llm := fmt.Sprintf("task %s stopped", i.taskID)
-	return llm, i.display
+	llm := fmt.Sprintf("task %s stopped", req.taskID)
+	return llm, display
 }

@@ -52,7 +52,7 @@ func TestAbs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			abs, err := resolver.Abs(tt.input)
+			abs, err := resolver.ValidateAbs(tt.input)
 			if tt.wantError {
 				if err == nil {
 					t.Fatal("expected error, got nil")

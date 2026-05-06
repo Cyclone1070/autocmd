@@ -242,7 +242,7 @@ type mockPathResolver struct {
 	mock.Mock
 }
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
+func (m *mockPathResolver) ValidateAbs(p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}
@@ -279,11 +279,9 @@ func executeSearch(t *testing.T, tool *Tool, req *Request) (string, error) {
 	params, err := json.Marshal(req)
 	require.NoError(t, err)
 
-	invocation, err := tool.Prepare(string(params))
+	out, err := tool.InvokableRun(context.Background(), string(params))
 	if err != nil {
 		return "", err
 	}
-
-	out, _ := invocation.(domain.ExecutableInvocation).Execute(context.Background())
 	return out, nil
 }

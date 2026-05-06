@@ -10,7 +10,10 @@ import (
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	udiff "github.com/aymanbagabas/go-udiff"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -77,8 +80,7 @@ func (t *Tool) Name() string {
 // IsConcurrentSafe indicates if the edit file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the tool's schema for the LLM using eino schema.
-func (t *Tool) Definition() *schema.ToolInfo {
+func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "edit_file",
 		Desc: `Performs exact string replacements in files.
@@ -117,11 +119,53 @@ Usage:
 				Desc: "Replace all occurrences of old_string (default false)",
 			},
 		}),
-	}
+	}, nil
 }
 
-// Prepare validates the request, reads the file, applies edits in memory, and returns an Invocation.
-func (t *Tool) Prepare(params string) (domain.Invocation, error) {
+func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	req, err := t.validate(argumentsInJSON)
+	if err != nil {
+		return "", err
+	}
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeEdit(ctx, req)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
+}
+
+func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+	}
+	displayPath := t.pathResolver.DisplayPath(req.FilePath)
+	return domain.NewDiffDisplay(req.Description, fmt.Sprintf("Edit \"%s\"", displayPath), 0, 0, "")
+}
+
+func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
+	_, err := t.validate(input.Arguments)
+	return err
+}
+
+type validatedRequest struct {
+	newContent       []byte
+	absPath          string
+	expectedChecksum string
+	originalPerm     os.FileMode
+	replaceAll       bool
+	description      string
+	target           string
+	diff             string
+	added            int
+	removed          int
+}
+
+func (t *Tool) validate(params string) (*validatedRequest, error) {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(params), req); err != nil {
 		return nil, fmt.Errorf("failed to parse arguments: %w", err)
@@ -134,7 +178,7 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 		return nil, fmt.Errorf("description is required")
 	}
 
-	abs, err := t.pathResolver.Abs(req.FilePath)
+	abs, err := t.pathResolver.ValidateAbs(req.FilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -279,48 +323,29 @@ func (t *Tool) Prepare(params string) (domain.Invocation, error) {
 
 	displayPath := t.pathResolver.DisplayPath(abs)
 
-	return &invocation{
-		fileOps:          t.fileOps,
-		checksumManager:  t.checksumManager,
+	return &validatedRequest{
 		absPath:          abs,
 		newContent:       newContentBytes,
 		originalPerm:     perm,
 		expectedChecksum: currentChecksum,
 		replaceAll:       req.ReplaceAll,
-		display: domain.NewDiffDisplay(
-			req.Description,
-			fmt.Sprintf("Edit \"%s\"", filepath.ToSlash(displayPath)),
-			added,
-			removed,
-			diff,
-		),
+		description:      req.Description,
+		target:           fmt.Sprintf("Edit \"%s\"", filepath.ToSlash(displayPath)),
+		diff:             diff,
+		added:            added,
+		removed:          removed,
 	}, nil
 }
 
-type invocation struct {
-	newContent       []byte
-	absPath          string
-	expectedChecksum string
-	fileOps          fileEditor
-	checksumManager  checksumManager
-	display          domain.DiffDisplay
-	originalPerm     os.FileMode
-	replaceAll       bool
-}
-
-func (i *invocation) Display() domain.ToolDisplay {
-	return i.display
-}
-
-func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
-	d := i.display
+func (t *Tool) executeEdit(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
+	d := domain.NewDiffDisplay(req.description, req.target, req.added, req.removed, req.diff)
 	if ctx.Err() != nil {
 		d.Error = domain.ToolErrorCancelled
 		return domain.ToolErrorCancelled, d
 	}
 
 	// Re-read file and verify checksum to prevent TOCTOU race
-	data, err := i.fileOps.ReadFile(i.absPath)
+	data, err := t.fileOps.ReadFile(req.absPath)
 	var currentRaw string
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -338,14 +363,14 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	}
 
 	normalized := strings.ReplaceAll(currentRaw, "\r\n", "\n")
-	currentChecksum := i.checksumManager.Compute([]byte(normalized))
-	if currentChecksum != i.expectedChecksum {
+	currentChecksum := t.checksumManager.Compute([]byte(normalized))
+	if currentChecksum != req.expectedChecksum {
 		d.Error = domain.ToolErrorFailed
-		return fmt.Sprintf("Error: edit conflict: file changed since edit was prepared: %s", i.absPath), d
+		return fmt.Sprintf("Error: edit conflict: file changed since edit was prepared: %s", req.absPath), d
 	}
 
 	// Write the modified content atomically using pre-computed content
-	if err := i.fileOps.WriteFileAtomic(i.absPath, i.newContent, i.originalPerm); err != nil {
+	if err := t.fileOps.WriteFileAtomic(req.absPath, req.newContent, req.originalPerm); err != nil {
 		if ctx.Err() != nil {
 			d.Error = domain.ToolErrorCancelled
 			return domain.ToolErrorCancelled, d
@@ -355,14 +380,14 @@ func (i *invocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
 	}
 
 	// Update checksum cache with normalized content
-	newNormalized := strings.ReplaceAll(string(i.newContent), "\r\n", "\n")
-	newChecksum := i.checksumManager.Compute([]byte(newNormalized))
-	i.checksumManager.Update(i.absPath, newChecksum)
+	newNormalized := strings.ReplaceAll(string(req.newContent), "\r\n", "\n")
+	newChecksum := t.checksumManager.Compute([]byte(newNormalized))
+	t.checksumManager.Update(req.absPath, newChecksum)
 
-	if i.replaceAll {
-		return fmt.Sprintf("The file %s has been updated. All occurrences were successfully replaced.", i.absPath), d
+	if req.replaceAll {
+		return fmt.Sprintf("The file %s has been updated. All occurrences were successfully replaced.", req.absPath), d
 	}
-	return fmt.Sprintf("The file %s has been updated successfully.", i.absPath), d
+	return fmt.Sprintf("The file %s has been updated successfully.", req.absPath), d
 }
 
 func normalizeQuotes(s string) string {

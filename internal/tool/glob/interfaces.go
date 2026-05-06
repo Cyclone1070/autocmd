@@ -10,7 +10,7 @@ import (
 
 // pathResolver defines workspace path resolution operations.
 type pathResolver interface {
-	Abs(path string) (string, error)
+	ValidateAbs(path string) (string, error)
 	DisplayPath(path string) string
 	Root() string
 }

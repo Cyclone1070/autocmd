@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
+	einotool "github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -37,8 +40,7 @@ func (t *TaskListTool) Name() string {
 // IsConcurrentSafe indicates if the task list tool can be run concurrently.
 func (t *TaskListTool) IsConcurrentSafe() bool { return true }
 
-// Definition returns the Eino tool definition for the task list tool.
-func (t *TaskListTool) Definition() *schema.ToolInfo {
+func (t *TaskListTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "task_list",
 		Desc: `List all active background bash tasks.
@@ -55,35 +57,39 @@ Returns a summary of each task:
 - **Command**: The actual bash command being executed.
 - **Status**: Whether the task is still running or potentially stalled.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
-	}
-}
-
-// Prepare returns an invocation for the task list tool.
-func (t *TaskListTool) Prepare(_ string) (domain.Invocation, error) {
-	return &taskListInvocation{
-		manager: t.manager,
-		display: domain.NewStringDisplay("List active background bash tasks", ""),
 	}, nil
 }
 
-type taskListInvocation struct {
-	manager taskLister
-	display domain.StringDisplay
+func (t *TaskListTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...einotool.Option) (string, error) {
+	callID := compose.GetToolCallID(ctx)
+	llmContent, finalDisplay := t.executeTaskList(ctx)
+	if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+		events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: finalDisplay})
+	}
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+		sink(callID, finalDisplay)
+	}
+	return llmContent, nil
 }
 
-func (i *taskListInvocation) Display() domain.ToolDisplay {
-	return i.display
+func (t *TaskListTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
+	return domain.NewStringDisplay("List active background bash tasks", "")
 }
 
-func (i *taskListInvocation) Execute(ctx context.Context) (string, domain.ToolDisplay) {
+func (t *TaskListTool) PreflightValidate(input *compose.ToolInput) error {
+	return nil
+}
+
+func (t *TaskListTool) executeTaskList(ctx context.Context) (string, domain.ToolDisplay) {
+	display := domain.NewStringDisplay("List active background bash tasks", "")
 	if ctx.Err() != nil {
-		i.display.Error = domain.ToolErrorCancelled
-		return domain.ToolErrorCancelled, i.display
+		display.Error = domain.ToolErrorCancelled
+		return domain.ToolErrorCancelled, display
 	}
 
-	tasks := i.manager.List()
+	tasks := t.manager.List()
 	if len(tasks) == 0 {
-		return "no active background tasks", i.display
+		return "no active background tasks", display
 	}
 
 	var sbLLM strings.Builder
@@ -103,5 +109,5 @@ func (i *taskListInvocation) Execute(ctx context.Context) (string, domain.ToolDi
 			t.ID, t.Description, t.Command, status, activityStr)
 	}
 
-	return sbLLM.String(), i.display
+	return sbLLM.String(), display
 }

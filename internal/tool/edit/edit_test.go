@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,15 +35,13 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, runErr := tool.InvokableRun(context.Background(), string(params))
+		require.NoError(t, runErr)
 		assert.Equal(t, "The file /workspace/test.txt has been updated successfully.", out)
 		assert.Equal(t, "goodbye world", string(fs.files["/workspace/test.txt"]))
-
-		display := inv.Display().(domain.DiffDisplay)
-		assert.Equal(t, "changing hello to goodbye", display.Description)
 	})
 
 	t.Run("Edit all matches successfully", func(t *testing.T) {
@@ -65,10 +62,10 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, _ := tool.InvokableRun(context.Background(), string(params))
 		assert.Equal(t, "The file /workspace/test.txt has been updated. All occurrences were successfully replaced.", out)
 		assert.Equal(t, "b b b", string(fs.files["/workspace/test.txt"]))
 	})
@@ -90,7 +87,7 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "found 2 matches of the string to replace, but replace_all is false")
 	})
@@ -111,10 +108,10 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, _ := tool.InvokableRun(context.Background(), string(params))
 		assert.Equal(t, "The file /workspace/new.txt has been updated successfully.", out)
 		assert.Equal(t, "brand new content", string(fs.files["/workspace/new.txt"]))
 	})
@@ -136,7 +133,7 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "cannot create new file - file already exists")
 	})
@@ -159,10 +156,10 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		out, _ := inv.(domain.ExecutableInvocation).Execute(context.Background())
+		out, _ := tool.InvokableRun(context.Background(), string(params))
 		assert.Equal(t, "The file /workspace/test.txt has been updated successfully.", out)
 		// Should preserve curly quotes in the replacement: “goodbye”
 		assert.Equal(t, "“goodbye”", string(fs.files["/workspace/test.txt"]))
@@ -185,10 +182,10 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
+		_, _ = tool.InvokableRun(context.Background(), string(params))
 		// Spaces should be stripped
 		assert.Equal(t, "package main\n\nfunc main() {} // comment\n", string(fs.files["/workspace/test.go"]))
 	})
@@ -210,10 +207,10 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		inv, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		require.NoError(t, err)
 
-		inv.(domain.ExecutableInvocation).Execute(context.Background())
+		_, _ = tool.InvokableRun(context.Background(), string(params))
 		// Spaces should BEAUTIFULLY remain
 		assert.Equal(t, "# Title  \n", string(fs.files["/workspace/test.md"]))
 	})
@@ -232,7 +229,7 @@ func TestEditFile(t *testing.T) {
 		}
 
 		params, _ := json.Marshal(req)
-		_, err := tool.Prepare(string(params))
+		_, err := tool.validate(string(params))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "absolute path required")
 	})
@@ -243,7 +240,7 @@ type mockPathResolver struct {
 	workspaceRoot string
 }
 
-func (m *mockPathResolver) Abs(p string) (string, error) {
+func (m *mockPathResolver) ValidateAbs(p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("absolute path required, but got: %q", p)
 	}

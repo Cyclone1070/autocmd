@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	"testing"
 	"time"
@@ -40,8 +42,26 @@ type mockEinoModelBridge struct {
 	llm *mockLLM
 }
 
-func (b *mockEinoModelBridge) Generate(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
-	return nil, nil
+func (b *mockEinoModelBridge) Generate(ctx context.Context, msgs []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	sr, err := b.Stream(ctx, msgs, opts...)
+	if err != nil {
+		return nil, err
+	}
+	defer sr.Close()
+
+	var chunks []*schema.Message
+	for {
+		chunk, err := sr.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return schema.ConcatMessages(chunks)
 }
 
 func (b *mockEinoModelBridge) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
@@ -130,7 +150,7 @@ func newMockEventSender(size int) *mockEventSender {
 func newTestLoop(tools []domain.Tool, m domain.LLM, events eventSender) *Loop {
 	registry := newMockToolRegistry(tools)
 	executor := NewToolExecutor(registry, nil)
-	return NewLoop(m, executor, 5, events, &mockTaskNotifier{})
+	return NewLoop(m, executor, 5, events, &mockTaskNotifier{}, nil)
 }
 
 type mockTaskNotifier struct {
@@ -165,7 +185,7 @@ func TestRun_TaskNotificationInjection(t *testing.T) {
 	registry := newMockToolRegistry(nil)
 	executor := NewToolExecutor(registry, nil)
 	// This will fail to compile as NewLoop only takes 4 args
-	l := NewLoop(m, executor, 5, nil, notifier)
+	l := NewLoop(m, executor, 5, nil, notifier, nil)
 
 	err := l.Run(ctx, session, "Next")
 	assert.NoError(t, err)
@@ -312,7 +332,7 @@ func TestRun_MaxIterationsExceeded(t *testing.T) {
 		},
 	}
 
-	l := NewLoop(m, NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil), 3, nil, &mockTaskNotifier{})
+	l := NewLoop(m, NewToolExecutor(newMockToolRegistry([]domain.Tool{mt}), nil), 3, nil, &mockTaskNotifier{}, nil)
 
 	session := &domain.Session{}
 	err := l.Run(context.Background(), session, "go")
@@ -628,4 +648,39 @@ func TestRun_ContextCancelled_PersistsPartialWithCollidingToolIndices(t *testing
 	assert.Len(t, session.Messages, 2)
 	assert.Equal(t, schema.Assistant, session.Messages[1].Role)
 	assert.Len(t, session.Messages[1].ToolCalls, 2)
+}
+
+func TestRun_SummarizationTriggered(t *testing.T) {
+	ctx := context.Background()
+	m := &mockLLM{
+		id:            "test",
+		contextWindow: 1000,
+		streams: []*mockStream{
+			{chunks: []mockChunk{{text: "Summary of old history"}}}, // For summarizer
+			{chunks: []mockChunk{{text: "New response"}}},          // For regular loop
+		},
+	}
+
+	session := &domain.Session{
+		Messages: []*schema.Message{
+			{Role: schema.User, Content: "Old message 1"},
+			{Role: schema.Assistant, Content: "Old response 1", ResponseMeta: &schema.ResponseMeta{Usage: &schema.TokenUsage{TotalTokens: 900}}},
+		},
+	}
+
+	sender := newMockEventSender(10)
+	l := newTestLoop([]domain.Tool{}, m, sender)
+	l.summarizer = NewSummarizer(m)
+
+	err := l.Run(ctx, session, "New message")
+	assert.NoError(t, err)
+
+	// History should be STUFFED (Summary + New user msg in one block)
+	// 0: [User] [Compacted] ... Summary ... === CURRENT REQUEST ===\n\n ... New message
+	// 1: [Assistant] New response
+	assert.Equal(t, 2, len(session.Messages))
+	assert.Equal(t, schema.User, session.Messages[0].Role)
+	assert.Contains(t, session.Messages[0].Content, "[Conversation compacted automatically]")
+	assert.Contains(t, session.Messages[0].Content, "Summary of old history")
+	assert.Contains(t, session.Messages[0].Content, "=== CURRENT REQUEST ===\n\nNew message")
 }

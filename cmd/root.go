@@ -117,7 +117,8 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		deps.Config.Tools().ToolPermissions(),
 	)
 	agentExecutor := agent.NewToolExecutor(toolRegistry, router, permissionResolver)
-	agentLoop := agent.NewLoop(llmInstance, agentExecutor, deps.Config.Tools().MaxIterations(), bus, taskMgr)
+	summarizer := agent.NewSummarizer(llmInstance)
+	agentLoop := agent.NewLoop(llmInstance, agentExecutor, deps.Config.Tools().MaxIterations(), bus, taskMgr, summarizer)
 
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),

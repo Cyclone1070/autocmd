@@ -14,12 +14,15 @@ import (
 
 // Loop is the central orchestrator for the execution prompt.
 type Loop struct {
-	llm           domain.LLM
 	toolExecutor  *ToolExecutor
 	events        eventSender
 	notifier      taskNotifier
+	summarizer    *Summarizer
+	llm           domain.LLM
 	maxIterations int
 }
+
+const contextSummaryThreshold = 0.0
 
 func classifyModelErr(err error) error {
 	if err == nil {
@@ -98,6 +101,7 @@ func NewLoop(
 	maxIterations int,
 	events eventSender,
 	notifier taskNotifier,
+	summarizer *Summarizer,
 ) *Loop {
 	return &Loop{
 		llm:           llm,
@@ -105,6 +109,7 @@ func NewLoop(
 		events:        events,
 		notifier:      notifier,
 		maxIterations: maxIterations,
+		summarizer:    summarizer,
 	}
 }
 
@@ -137,7 +142,10 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 	}()
 
 	for range l.maxIterations {
-		// 1. Drain background notifications before ANY other work in this turn
+		// 1. Context Summary Check
+		l.summarizeIfNecessary(ctx, session)
+
+		// 2. Drain background notifications before ANY other work in this turn
 		if l.notifier != nil {
 			for _, xml := range l.notifier.Drain() {
 				session.Messages = append(session.Messages, &schema.Message{
@@ -234,4 +242,25 @@ func (l *Loop) Run(ctx context.Context, session *domain.Session, input string) e
 	})
 
 	return fmt.Errorf("max iterations (%d) reached", l.maxIterations)
+}
+
+func (l *Loop) summarizeIfNecessary(ctx context.Context, session *domain.Session) {
+	if l.summarizer == nil || session.TotalTokens() <= int(float64(l.llm.ContextWindow())*contextSummaryThreshold) {
+		return
+	}
+
+	// Summarize history if we are nearing the context limit.
+	// We keep the most recent message (the current input) and replace everything before it with a summary.
+	if len(session.Messages) > 1 {
+		lastMsg := session.Messages[len(session.Messages)-1]
+		history := session.Messages[:len(session.Messages)-1]
+		summary, err := l.summarizer.Summarize(ctx, history)
+		if err == nil {
+			// Prompt Stuffing: Instead of creating a new conversational turn, we prepend
+			// the summary milestone to the CURRENT user request. This ensures the model
+			// sees the context immediately before responding, and avoids Role alternation errors.
+			lastMsg.Content = fmt.Sprintf("[Conversation compacted automatically]\n\n%s\n\n=== CURRENT REQUEST ===\n\n%s", summary.Content, lastMsg.Content)
+			session.Messages = []*schema.Message{lastMsg}
+		}
+	}
 }

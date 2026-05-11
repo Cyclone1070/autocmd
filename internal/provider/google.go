@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino-ext/components/model/gemini"
@@ -68,8 +70,11 @@ func (p *GoogleProvider) List() []domain.LLMInfo {
 
 // GetLLM initializes and returns a Google-backed LLM instance.
 func (p *GoogleProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
+	start := time.Now()
+	slog.Info("provider google get llm start", "model_id", info.ID)
 	client, err := p.newClient(ctx, cred)
 	if err != nil {
+		slog.Error("provider google client init failed", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds(), "error", err)
 		return nil, err
 	}
 
@@ -78,8 +83,10 @@ func (p *GoogleProvider) GetLLM(ctx context.Context, cred *domain.Credential, in
 		Model:  strings.TrimPrefix(info.ID, domain.ProviderGoogle+domain.ModelIDSeparator),
 	})
 	if err != nil {
+		slog.Error("provider google model init failed", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds(), "error", err)
 		return nil, fmt.Errorf("create eino gemini model: %w", err)
 	}
+	slog.Info("provider google get llm success", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds())
 
 	return &geminiLLM{
 		client:        client,

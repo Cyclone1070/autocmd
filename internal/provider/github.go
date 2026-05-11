@@ -4,9 +4,11 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -49,6 +51,8 @@ func (p *GitHubProvider) List() []domain.LLMInfo {
 
 // GetLLM initializes and returns a GitHub-backed LLM instance.
 func (p *GitHubProvider) GetLLM(ctx context.Context, cred *domain.Credential, info domain.LLMInfo) (domain.LLM, error) {
+	start := time.Now()
+	slog.Info("provider github get llm start", "model_id", info.ID)
 	tokenSource := NewTokenSource(cred.OAuthToken, "")
 
 	httpClient := &http.Client{
@@ -60,8 +64,10 @@ func (p *GitHubProvider) GetLLM(ctx context.Context, cred *domain.Credential, in
 		HTTPClient: httpClient,
 	})
 	if err != nil {
+		slog.Error("provider github model init failed", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds(), "error", err)
 		return nil, fmt.Errorf("create eino openai model: %w", err)
 	}
+	slog.Info("provider github get llm success", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds())
 
 	return &copilotLLM{
 		tokenSource:   tokenSource,

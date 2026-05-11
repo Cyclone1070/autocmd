@@ -85,7 +85,6 @@ func run() error {
 		LLM:          &mockLLM{},
 		Agent:        &mockAgent{bus: bus},
 		Bus:          bus,
-		ToolRegistry: &mockRegistry{},
 	}
 
 	done := workflow.RunPrompt(context.Background(), "", deps)
@@ -110,7 +109,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	defer tt.FlushOpenCancelled()
 
 	// 1. Thinking.
-	a.bus.SendUIUpdate(domain.ThinkingEvent{})
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -168,7 +166,3 @@ func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (in
 	return 0, nil
 }
 
-type mockRegistry struct{}
-
-func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

@@ -2,7 +2,7 @@ package domain
 
 // Tool lifecycle workflow→UI events (start/stream/end).
 
-// ToolStartEvent is emitted after Prepare succeeds.
+// ToolStartEvent is sent by preview middleware using the ToolDisplay returned from tool Preview.
 type ToolStartEvent struct {
 	Display ToolDisplay
 	CallID  string

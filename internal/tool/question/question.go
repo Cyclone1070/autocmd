@@ -4,6 +4,7 @@ package question
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -84,10 +85,30 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 	}
 	waiter, ok := runtimectx.ActionWaiterFrom(ctx)
 	if !ok || waiter == nil {
+		callID := compose.GetToolCallID(ctx)
+		failed := domain.NewStringDisplay("Question attempted", "").WithError(domain.ToolErrorFailed)
+		if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+			events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: failed})
+		}
+		if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+			sink(callID, failed)
+		}
 		return "", fmt.Errorf("question tool requires action waiter")
 	}
 	action, err := waiter.Wait(ctx, compose.GetToolCallID(ctx))
 	if err != nil {
+		callID := compose.GetToolCallID(ctx)
+		toolErr := domain.ToolErrorFailed
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			toolErr = domain.ToolErrorCancelled
+		}
+		failed := domain.NewStringDisplay("Question attempted", "").WithError(toolErr)
+		if events, ok := runtimectx.EventSenderFrom(ctx); ok && events != nil {
+			events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: failed})
+		}
+		if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok && sink != nil {
+			sink(callID, failed)
+		}
 		return "", err
 	}
 	callID := compose.GetToolCallID(ctx)

@@ -1,6 +1,6 @@
 package domain
 
-// Prompt workflow→UI events: UIUpdate marker, text/thinking/done.
+// Prompt workflow→UI events: UIUpdate marker, text/done.
 // Used by the main agent prompt run (iav <args>).
 
 // UIUpdate is the interface for all events flowing from Workflow to UI.
@@ -15,11 +15,6 @@ type TextEvent struct {
 }
 
 func (TextEvent) isUIUpdate() {}
-
-// ThinkingEvent is emitted when the LLM is processing.
-type ThinkingEvent struct{}
-
-func (ThinkingEvent) isUIUpdate() {}
 
 // DoneEvent is emitted when the workflow loop completes.
 type DoneEvent struct{}

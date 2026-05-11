@@ -34,6 +34,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"golang.org/x/term"
@@ -113,7 +114,7 @@ func run() error {
 	checksumManager := hash.NewChecksumManager()
 	taskMgr := bash.NewTaskManager(fileSystem)
 
-	tools := []domain.Tool{
+	tools := []einotool.BaseTool{
 		write.NewTool(fileSystem, checksumManager, pathResolver, maxFileSize),
 		edit.NewTool(fileSystem, checksumManager, pathResolver, maxFileSize),
 		read.NewTool(fileSystem, checksumManager, pathResolver),
@@ -126,10 +127,11 @@ func run() error {
 		bash.NewTaskStopTool(taskMgr),
 	}
 	registry := tool.NewRegistry(tools)
-	toolExecutor := agent.NewToolExecutor(registry, router)
-
 	overflowLLM := &overflowMockLLM{}
-	agentLoop := agent.NewLoop(overflowLLM, toolExecutor, agentIterations, bus, taskMgr)
+	agentLoop, err := agent.NewGraphRunner(overflowLLM, registry, router, agentIterations, bus, taskMgr, nil, nil)
+	if err != nil {
+		return fmt.Errorf("create graph runner: %w", err)
+	}
 
 	deps := &workflow.PromptDeps{
 		State:        &state.State{},

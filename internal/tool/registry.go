@@ -2,6 +2,8 @@
 package tool
 
 import (
+	"sort"
+
 	einotool "github.com/cloudwego/eino/components/tool"
 )
 
@@ -32,10 +34,25 @@ func (r *Registry) Get(name string) (einotool.BaseTool, bool) {
 	return tool, ok
 }
 
+// Tools returns the registered tools in a deterministic, name-sorted order.
+//
+// This ordering matters: the slice feeds straight into the LLM request payload
+// (function declarations / tool schemas). Go's map iteration order is
+// randomised per call, which would cause every request to send tools in a
+// different order. That breaks the model's prompt KV cache for tool
+// definitions, hurts output stability, and in practice causes thinking-capable
+// Gemini models to flake hard (long TTFB and Error 500). Keep the order
+// stable across calls.
 func (r *Registry) Tools() []einotool.BaseTool {
+	names := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	tools := make([]einotool.BaseTool, 0, len(r.tools))
-	for _, t := range r.tools {
-		tools = append(tools, t)
+	for _, name := range names {
+		tools = append(tools, r.tools[name])
 	}
 	return tools
 }

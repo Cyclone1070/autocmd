@@ -249,19 +249,18 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	}
 
 	switch u := u.(type) {
-	case domain.ThinkingEvent:
-		m.state = stateThinking
-		m.thinkingStart = time.Now()
-		m.thoughtText = ""
-		m.spinnerFrame = 0
-		flushBlocks = append(flushBlocks, m.stream.Flush()...)
-		return m.doFlush(flushBlocks, stateThinking)
 	case domain.TextEvent:
 		if u.IsThought {
 			if m.state == stateThinking {
 				m.thoughtText += u.Text
+				return m.schedulePollOnly()
 			}
-			return m.schedulePollOnly()
+			m.state = stateThinking
+			m.thinkingStart = time.Now()
+			m.thoughtText = u.Text
+			m.spinnerFrame = 0
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+			return m.doFlush(flushBlocks, stateThinking)
 		}
 		flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
 		m.state = stateIdle

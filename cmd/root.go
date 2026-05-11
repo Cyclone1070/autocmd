@@ -31,6 +31,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -88,7 +89,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	taskMgr := bash.NewTaskManager(fileSystem)
 
-	tools := []domain.Tool{
+	tools := []einotool.BaseTool{
 		read.NewTool(fileSystem, checksumMgr, pathResolver),
 		edit.NewTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
 		write.NewTool(fileSystem, checksumMgr, pathResolver, deps.Config.Tools().MaxFileSize()),
@@ -116,9 +117,20 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		deps.Config.Tools().PermissionDefault(),
 		deps.Config.Tools().ToolPermissions(),
 	)
-	agentExecutor := agent.NewToolExecutor(toolRegistry, router, permissionResolver)
 	summarizer := agent.NewSummarizer(llmInstance)
-	agentLoop := agent.NewLoop(llmInstance, agentExecutor, deps.Config.Tools().MaxIterations(), bus, taskMgr, summarizer)
+	graphRunner, err := agent.NewGraphRunner(
+		llmInstance,
+		toolRegistry,
+		router,
+		deps.Config.Tools().MaxIterations(),
+		bus,
+		taskMgr,
+		summarizer,
+		permissionResolver,
+	)
+	if err != nil {
+		return withCategory(errModelInitialization, err)
+	}
 
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
@@ -165,7 +177,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		Store:        deps.SessionStore,
 		LLM:          llmInstance,
 		ToolRegistry: toolRegistry,
-		Agent:        agentLoop,
+		Agent:        graphRunner,
 		Bus:          bus,
 		Forwarder:    router,
 	}

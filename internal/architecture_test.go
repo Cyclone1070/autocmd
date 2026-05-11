@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -25,34 +26,47 @@ func TestArchitecture(t *testing.T) {
 
 	module := "github.com/Cyclone1070/iav"
 	var rules []*arctest.DependencyRule
+	toolServices := []string{
+		"internal/tool/bash",
+		"internal/tool/edit",
+		"internal/tool/glob",
+		"internal/tool/grep",
+		"internal/tool/question",
+		"internal/tool/read",
+		"internal/tool/write",
+	}
 
-	// Helper to create anchored regex patterns for packages
-	pkg := func(p string) string {
-		// Escape dots for regex
-		p = strings.ReplaceAll(p, ".", "\\.")
-		return fmt.Sprintf("^%s(/.*)?$", p)
+	// Source packages are stored as relative paths like "internal/agent".
+	sourcePkg := func(p string) string {
+		return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(p))
+	}
+	// Imported targets are full import paths like "github.com/Cyclone1070/iav/internal/permission".
+	targetPkg := func(p string) string {
+		if !strings.HasPrefix(p, module) {
+			p = module + "/" + strings.TrimPrefix(p, "/")
+		}
+		return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(p))
 	}
 
 	// 1. Workflow Isolation
 	// Must NOT import internal/ui, internal/cmd, or any internal services (excluding Exceptions).
 	workflowForbidden := []string{
-		module + "/internal/ui",
-		module + "/cmd",
-		module + "/internal/agent",
-		module + "/internal/auth",
-		module + "/internal/config",
-		module + "/internal/fs",
-		module + "/internal/provider",
-		module + "/internal/session",
-		module + "/internal/state",
-		module + "/internal/tool/directory",
-		module + "/internal/tool/file",
-		module + "/internal/tool/search",
-		module + "/internal/tool/bash",
-		module + "/internal/tool/todo",
+		"internal/ui",
+		"cmd",
+		"internal/actionrouter",
+		"internal/agent",
+		"internal/auth",
+		"internal/config",
+		"internal/eventbus",
+		"internal/fs",
+		"internal/permission",
+		"internal/provider",
+		"internal/session",
+		"internal/state",
 	}
+	workflowForbidden = append(workflowForbidden, toolServices...)
 	for _, target := range workflowForbidden {
-		rule, err := arch.DoesNotDependOn(pkg("internal/workflow"), pkg(target))
+		rule, err := arch.DoesNotDependOn(sourcePkg("internal/workflow"), targetPkg(target))
 		if err != nil {
 			t.Fatalf("failed to create workflow rule: %v", err)
 		}
@@ -62,18 +76,22 @@ func TestArchitecture(t *testing.T) {
 	// 2. UI Isolation
 	// Must NOT import internal/workflow, internal/cmd, or any internal services (excluding Exceptions).
 	uiForbidden := []string{
-		module + "/internal/workflow",
-		module + "/cmd",
-		module + "/internal/agent",
-		module + "/internal/auth",
-		module + "/internal/config",
-		module + "/internal/fs",
-		module + "/internal/provider",
-		module + "/internal/session",
-		module + "/internal/state",
+		"internal/workflow",
+		"cmd",
+		"internal/actionrouter",
+		"internal/agent",
+		"internal/auth",
+		"internal/config",
+		"internal/eventbus",
+		"internal/fs",
+		"internal/permission",
+		"internal/provider",
+		"internal/session",
+		"internal/state",
 	}
+	uiForbidden = append(uiForbidden, toolServices...)
 	for _, target := range uiForbidden {
-		rule, err := arch.DoesNotDependOn(pkg("internal/ui"), pkg(target))
+		rule, err := arch.DoesNotDependOn(sourcePkg("internal/ui"), targetPkg(target))
 		if err != nil {
 			t.Fatalf("failed to create ui rule: %v", err)
 		}
@@ -82,20 +100,35 @@ func TestArchitecture(t *testing.T) {
 
 	// 3. Service Isolation
 	services := []string{
-		"agent", "auth", "config", "fs", "provider", "session", "state",
-		"tool/directory", "tool/file", "tool/search", "tool/bash", "tool/todo",
+		"actionrouter",
+		"agent",
+		"auth",
+		"config",
+		"eventbus",
+		"fs",
+		"permission",
+		"provider",
+		"session",
+		"state",
+		"tool/bash",
+		"tool/edit",
+		"tool/glob",
+		"tool/grep",
+		"tool/question",
+		"tool/read",
+		"tool/write",
 	}
 	for _, service := range services {
 		serviceRelPath := "internal/" + service
 
 		// Services cannot import workflow, ui, or cmd
 		serviceForbidden := []string{
-			module + "/internal/workflow",
-			module + "/internal/ui",
-			module + "/cmd",
+			"internal/workflow",
+			"internal/ui",
+			"cmd",
 		}
 		for _, target := range serviceForbidden {
-			rule, err := arch.DoesNotDependOn(pkg(serviceRelPath), pkg(target))
+			rule, err := arch.DoesNotDependOn(sourcePkg(serviceRelPath), targetPkg(target))
 			if err != nil {
 				t.Fatalf("failed to create service rule: %v", err)
 			}
@@ -107,7 +140,7 @@ func TestArchitecture(t *testing.T) {
 			if service == other {
 				continue
 			}
-			rule, err := arch.DoesNotDependOn(pkg(serviceRelPath), pkg(module+"/internal/"+other))
+			rule, err := arch.DoesNotDependOn(sourcePkg(serviceRelPath), targetPkg("internal/"+other))
 			if err != nil {
 				t.Fatalf("failed to create service cross-dependency rule: %v", err)
 			}

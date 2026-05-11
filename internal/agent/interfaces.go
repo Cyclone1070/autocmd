@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/cloudwego/eino/schema"
+	einotool "github.com/cloudwego/eino/components/tool"
 )
 
 // toolRegistry provides tool storage and lookup.
 type toolRegistry interface {
-	Definitions() []*schema.ToolInfo
-	Get(name string) (domain.Tool, bool)
+	Tools() []einotool.BaseTool
+	Get(name string) (einotool.BaseTool, bool)
 }
 
 // actionWaiter defines the interface for waiting on tool-specific user actions.

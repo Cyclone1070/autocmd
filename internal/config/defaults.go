@@ -130,6 +130,7 @@ func DefaultConfig() *Config {
 			"google": {
 				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: contextWindow256k},
 				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: contextWindow256k},
+				{ID: "google/gemini-3.1-flash-lite", Name: "Gemini 3.0 Flash Lite", ContextWindow: contextWindow2M},
 				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: contextWindow2M},
 				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: contextWindow2M},
 			},

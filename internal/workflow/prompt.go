@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/cloudwego/eino/schema"
 )
 
 // sessionStore defines the persistence operations for chat sessions.
@@ -23,11 +22,6 @@ type stateStore interface {
 	CurrentSessionID() string
 	SetCurrentSessionID(string)
 	Save() error
-}
-
-type toolRegistry interface {
-	Definitions() []*schema.ToolInfo
-	Get(name string) (domain.Tool, bool)
 }
 
 type agentRunner interface {
@@ -50,7 +44,7 @@ type PromptDeps struct {
 	State        stateStore
 	Store        sessionStore
 	LLM          domain.LLM
-	ToolRegistry toolRegistry
+	ToolRegistry any // retained for backward compatibility; unused in prompt workflow
 	Agent        agentRunner
 	Bus          bus
 	// Forwarder is used to route structured tool actions (like QuestionAnswerAction)

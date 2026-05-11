@@ -72,20 +72,6 @@ func (m *mockLLM) ContextWindow() int {
 	return args.Int(0)
 }
 
-type mockToolRegistry struct {
-	mock.Mock
-}
-
-func (m *mockToolRegistry) Definitions() []*schema.ToolInfo {
-	args := m.Called()
-	return args.Get(0).([]*schema.ToolInfo)
-}
-
-func (m *mockToolRegistry) Get(name string) (domain.Tool, bool) {
-	args := m.Called(name)
-	return args.Get(0).(domain.Tool), args.Bool(1)
-}
-
 type mockAgent struct {
 	mock.Mock
 }
@@ -108,7 +94,6 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 	bus := eventbus.New()
 	forwarder := new(mockActionForwarder)
@@ -117,7 +102,7 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        &state.State{},
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Forwarder:    forwarder,
@@ -153,7 +138,6 @@ func TestRunPrompt_GREEN(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 
 	appState := &state.State{}
 	// cfg is not needed by PromptDeps
@@ -165,7 +149,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        appState,
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 	}
@@ -198,7 +182,6 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
@@ -211,7 +194,7 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        appState,
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 	}
@@ -248,7 +231,6 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 
 	eb := eventbus.New()
@@ -258,7 +240,7 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        &state.State{},
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus.EventBus,
 	}
@@ -282,7 +264,6 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
@@ -290,7 +271,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        &state.State{},
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 	}
@@ -338,7 +319,6 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-	registry := new(mockToolRegistry)
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
@@ -349,7 +329,7 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 		Store:        store,
 		LLM:          llm,
 		State:        appState,
-		ToolRegistry: registry,
+		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 	}

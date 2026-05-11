@@ -86,7 +86,7 @@ func TestEventBus_Concurrent_Safe(_ *testing.T) {
 	// Multiple goroutines sending updates and actions
 	for range 10 {
 		go func() {
-			bus.SendUIUpdate(domain.ThinkingEvent{})
+			bus.SendUIUpdate(domain.TextEvent{Text: "thinking", IsThought: true})
 			bus.SendAction(domain.StopAction{})
 		}()
 	}

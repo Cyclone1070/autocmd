@@ -89,8 +89,7 @@ func getPromptElements() []PromptElement {
 		{
 			ID: "THINK",
 			Events: []domain.UIUpdate{
-				domain.ThinkingEvent{},
-				domain.TextEvent{Text: "thought 1s"}, // This finishes thinking in the prompt logic
+				domain.TextEvent{Text: "thought 1s", IsThought: true},
 			},
 		},
 	}

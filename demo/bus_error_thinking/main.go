@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
@@ -55,7 +54,6 @@ func run() error {
 
 	go func() {
 		time.Sleep(demoDelay)
-		bus.SendUIUpdate(domain.ThinkingEvent{})
 		time.Sleep(thinkingDelay)
 		bus.Close()
 	}()

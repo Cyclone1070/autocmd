@@ -33,6 +33,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"golang.org/x/term"
@@ -81,7 +82,7 @@ func run() error {
 	checksumMgr := hash.NewChecksumManager()
 	taskMgr := bash.NewTaskManager(fileSystem)
 
-	tools := []domain.Tool{
+	tools := []einotool.BaseTool{
 		read.NewTool(fileSystem, checksumMgr, pathResolver),
 		edit.NewTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
 		write.NewTool(fileSystem, checksumMgr, pathResolver, cfg.Tools().MaxFileSize()),
@@ -101,8 +102,10 @@ func run() error {
 	defer router.Close()
 
 	llm := &reproLLM{}
-	agentExecutor := agent.NewToolExecutor(toolRegistry, router)
-	agentLoop := agent.NewLoop(llm, agentExecutor, cfg.Tools().MaxIterations(), bus, taskMgr)
+	agentLoop, err := agent.NewGraphRunner(llm, toolRegistry, router, cfg.Tools().MaxIterations(), bus, taskMgr, nil, nil)
+	if err != nil {
+		return fmt.Errorf("create graph runner: %w", err)
+	}
 
 	themeCfg := ui.ThemeConfig{
 		PrimaryColor:   ui.ToAdaptiveColor(uiCfg.PrimaryColor()),

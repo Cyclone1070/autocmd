@@ -43,6 +43,11 @@ func (r *Resolver) Resolve(toolName string) Mode {
 	return r.defaultMode
 }
 
+// ShouldAsk reports whether the given tool requires explicit approval.
+func (r *Resolver) ShouldAsk(toolName string) bool {
+	return r.Resolve(toolName) == ModeAsk
+}
+
 func parseMode(mode string) Mode {
 	switch Mode(mode) {
 	case ModeAllow:

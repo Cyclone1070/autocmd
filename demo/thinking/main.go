@@ -85,7 +85,6 @@ func run() error {
 		LLM:          &mockLLM{},
 		Agent:        &mockAgent{bus: bus},
 		Bus:          bus,
-		ToolRegistry: &mockRegistry{},
 	}
 
 	done := workflow.RunPrompt(context.Background(), "thinking demo", deps)
@@ -115,7 +114,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	sendThoughtChunks := func(chunks []string) error {
-		a.bus.SendUIUpdate(domain.ThinkingEvent{})
 		for _, chunk := range chunks {
 			if err := sleep(); err != nil {
 				return err
@@ -210,7 +208,3 @@ func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (in
 	return 0, nil
 }
 
-type mockRegistry struct{}
-
-func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

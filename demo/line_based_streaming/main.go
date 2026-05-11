@@ -98,7 +98,6 @@ func run() error {
 		LLM:          &mockLLM{},
 		Agent:        &mockAgent{bus: bus},
 		Bus:          bus,
-		ToolRegistry: &mockRegistry{},
 	}
 
 	done := workflow.RunPrompt(context.Background(), "line-based streaming demo", deps)
@@ -141,7 +140,6 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 		return nil
 	}
 
-	a.bus.SendUIUpdate(domain.ThinkingEvent{})
 	if err := sleep(initDelay); err != nil {
 		return err
 	}
@@ -302,7 +300,3 @@ func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (in
 	return 0, nil
 }
 
-type mockRegistry struct{}
-
-func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

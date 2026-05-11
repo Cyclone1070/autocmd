@@ -85,7 +85,6 @@ func run() error {
 		LLM:          &mockLLM{},
 		Agent:        &mockAgent{bus: bus},
 		Bus:          bus,
-		ToolRegistry: &mockRegistry{},
 	}
 
 	done := workflow.RunPrompt(context.Background(), "", deps)
@@ -107,7 +106,6 @@ type mockAgent struct {
 
 func (a *mockAgent) Run(_ context.Context, _ *domain.Session, _ string) error {
 	// 1. Thinking.
-	a.bus.SendUIUpdate(domain.ThinkingEvent{})
 
 	a.bus.SendUIUpdate(domain.TextEvent{Text: "1st text: This text should be above tool call at all stages of the display."})
 
@@ -143,7 +141,3 @@ func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (in
 	return 0, nil
 }
 
-type mockRegistry struct{}
-
-func (r *mockRegistry) Definitions() []*schema.ToolInfo     { return nil }
-func (r *mockRegistry) Get(name string) (domain.Tool, bool) { return nil, false }

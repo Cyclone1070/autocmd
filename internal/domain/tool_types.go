@@ -3,12 +3,8 @@ package domain
 // Tool contract, invocations, JSON-serializable tool displays, and question-tool user actions.
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-
-	"github.com/cloudwego/eino/schema"
 )
 
 // ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
@@ -22,38 +18,6 @@ const ToolErrorTimedOut = "execution timed out"
 
 // ToolErrorPermissionDenied is ToolDisplay.Error when execution is blocked by permission policy.
 const ToolErrorPermissionDenied = "permission denied"
-
-// Invocation is a validated, prepared tool call: at minimum a display for the UI.
-// Returned by Tool.Prepare(). Concrete kinds implement ExecutableInvocation, StreamableInvocation,
-// and/or InteractiveInvocation.
-// Must be in domain so tools can implement without importing workflow.
-type Invocation interface {
-	Display() ToolDisplay
-}
-
-// ExecutableInvocation runs synchronously via Execute (most tools).
-type ExecutableInvocation interface {
-	Invocation
-	// Execute runs the operation and returns LLM-facing content and the finalized display for UI/history.
-	// It no longer returns an error; cancellation and technical outcomes are checked via ctx.Err()
-	// and reported inside the LLM content/display.
-	Execute(ctx context.Context) (llmContent string, finalDisplay ToolDisplay)
-}
-
-// StreamableInvocation is an ExecutableInvocation that exposes a live stdout/stderr stream for UI
-// (e.g. bash.. The stream is not part of ToolDisplay so displays stay JSON-serializable.
-type StreamableInvocation interface {
-	ExecutableInvocation
-	Stream() io.Reader
-}
-
-// InteractiveInvocation is resolved after the user replies via the UI (e.g. question tool).
-// The executor must not call Execute on these; it waits for an action and calls Resolve instead.
-type InteractiveInvocation interface {
-	Invocation
-	// Resolve is called after the user provides an action. It returns the finalized content and display.
-	Resolve(ctx context.Context, action Action) (llmContent string, finalDisplay ToolDisplay)
-}
 
 // ToolDisplay is implemented by all display types returned from tools.
 // The UI uses type switches to render each type appropriately.
@@ -273,10 +237,3 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Tool defines the interface for individual tools.
-type Tool interface {
-	Name() string
-	IsConcurrentSafe() bool
-	Definition() *schema.ToolInfo
-	Prepare(params string) (Invocation, error)
-}

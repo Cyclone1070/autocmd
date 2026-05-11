@@ -77,7 +77,7 @@ func TestModel_SyncPolling(t *testing.T) {
 
 	// pollBus delivers events as busEventMsg
 	m.isPolling = true
-	res, _ := m.Update(busEventMsg{event: domain.ThinkingEvent{}})
+	res, _ := m.Update(busEventMsg{event: domain.TextEvent{Text: "thinking...", IsThought: true}})
 	newModel := res.(*Model)
 
 	assert.Equal(t, stateFlushing, newModel.state)
@@ -192,7 +192,7 @@ func TestModel_CancelProcessesDoneEvent(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
-func TestModel_CancelRequested_IgnoresQueuedTextAndThinkingEventsInStreaming(t *testing.T) {
+func TestModel_CancelRequested_IgnoresQueuedTextAndThoughtEventsInStreaming(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	th := &mockThinkingRecorder{lastStatus: ui.StatusSuccess}
@@ -221,7 +221,7 @@ func TestModel_CancelRequested_IgnoresQueuedTextAndThinkingEventsInStreaming(t *
 	m = res.(*Model)
 	assert.Equal(t, stateIdle, m.state)
 
-	res, _ = m.Update(busEventMsg{event: domain.ThinkingEvent{}})
+	res, _ = m.Update(busEventMsg{event: domain.TextEvent{Text: "ignored thought", IsThought: true}})
 	m = res.(*Model)
 	assert.Equal(t, stateIdle, m.state)
 

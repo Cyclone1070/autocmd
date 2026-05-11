@@ -5,9 +5,16 @@ import (
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type capturingBus struct {
+	updates []domain.UIUpdate
+}
+
+func (b *capturingBus) SendUIUpdate(u domain.UIUpdate) { b.updates = append(b.updates, u) }
 
 func TestTool(t *testing.T) {
 	tool := NewTool()
@@ -114,6 +121,21 @@ func TestTool(t *testing.T) {
 		assert.Equal(t, domain.ToolErrorCancelled, sd.Error)
 		assert.Equal(t, "Question attempted", sd.Description)
 		assert.Equal(t, "", sd.Content)
+	})
+
+	t.Run("InvokableRun without waiter emits ToolEnd", func(t *testing.T) {
+		bus := &capturingBus{}
+		ctx := runtimectx.WithEventSender(context.Background(), bus)
+
+		_, err := tool.InvokableRun(ctx, `{"questions":[{"question":"Color?","options":["Red","Blue"]}]}`)
+		require.Error(t, err)
+		require.Len(t, bus.updates, 1)
+		end, ok := bus.updates[0].(domain.ToolEndEvent)
+		require.True(t, ok)
+		require.Equal(t, domain.ToolErrorFailed, end.Display.GetError())
+		sd, ok := end.Display.(domain.StringDisplay)
+		require.True(t, ok)
+		require.Equal(t, "Question attempted", sd.Description)
 	})
 }
 

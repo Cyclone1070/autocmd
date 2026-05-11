@@ -62,9 +62,6 @@ func (r *GraphRunner) isToolCallConcurrentSafe(toolName string) bool {
 	if toolName == "" {
 		return false
 	}
-	if toolName == "ask_question" {
-		return false
-	}
 	if r.permission != nil && r.permission.ShouldAsk(toolName) {
 		return false
 	}

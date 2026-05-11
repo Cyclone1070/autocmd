@@ -110,8 +110,12 @@ func DefaultConfig() *Config {
 		tools: ToolsConfig{
 			maxFileSize:       defaultMaxFileSize,
 			maxIterations:     defaultMaxIterations,
-			permissionDefault: "ask",
-			toolPermissions:   map[string]string{},
+			permissionDefault: "allow",
+			toolPermissions: map[string]string{
+				"edit_file":  "ask",
+				"write_file": "ask",
+				"bash":       "ask",
+			},
 		},
 		session: SessionConfig{
 			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),

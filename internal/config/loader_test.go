@@ -66,6 +66,11 @@ func TestLoad_NoConfigFile_ReturnsDefaults(t *testing.T) {
 	require.NoError(t, err)
 	// Using unexported field getters (will be implemented in GREEN phase)
 	assert.Equal(t, int64(20*1024*1024), cfg.Tools().MaxFileSize())
+	assert.Equal(t, "allow", cfg.Tools().PermissionDefault())
+	perms := cfg.Tools().ToolPermissions()
+	assert.Equal(t, "ask", perms["edit_file"])
+	assert.Equal(t, "ask", perms["write_file"])
+	assert.Equal(t, "ask", perms["bash"])
 }
 
 func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {

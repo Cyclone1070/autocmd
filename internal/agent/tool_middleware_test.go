@@ -118,6 +118,37 @@ func TestPermissionMiddleware_PermissionDenied_DoesNotCallNext(t *testing.T) {
 	require.Equal(t, "preview", sd.Description)
 }
 
+func TestPermissionMiddleware_AskQuestion_StillRespectsResolverPolicy(t *testing.T) {
+	events := &mockEventSender{}
+	waiter := &mockWaiter{act: domain.PermissionDecisionAction{Approved: false}}
+	resolver := permission.NewResolver("allow", map[string]string{"ask_question": "ask"})
+	tl := &mockPreviewTool{name: "ask_question"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"ask_question": tl}}
+	mw := newPermissionMiddleware(resolver, waiter, events, reg)
+
+	nextCalled := 0
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		nextCalled++
+		return &compose.ToolOutput{Result: "from_next"}, nil
+	}
+
+	ctx := context.Background()
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "ask_question",
+		Arguments: `{"questions":[]}`,
+		CallID:    "call_q_1",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Tool execution was denied by the user.", out.Result)
+	require.Equal(t, 0, nextCalled)
+	require.Len(t, events.updates, 2)
+	_, ok := events.updates[0].(domain.ToolApprovalRequestEvent)
+	require.True(t, ok)
+	end, ok := events.updates[1].(domain.ToolEndEvent)
+	require.True(t, ok)
+	require.Equal(t, domain.ToolErrorPermissionDenied, end.Display.GetError())
+}
+
 func TestPermissionMiddleware_WaiterNil_EmitsToolEnd(t *testing.T) {
 	events := &mockEventSender{}
 	resolver := permission.NewResolver("ask", map[string]string{"read_file": "ask"})

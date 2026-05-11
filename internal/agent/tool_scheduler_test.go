@@ -135,3 +135,14 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 	require.Less(t, idxStartSafe1, idxStartUnsafe)
 	require.Less(t, idxStartUnsafe, idxStartSafe2)
 }
+
+func TestGraphRunner_ToolConcurrency_AskQuestionNameNotSpecialCased(t *testing.T) {
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{
+		"ask_question": &concurrencyProbeTool{name: "ask_question", concurrentSafe: true},
+	}}
+	llm := &mockLLM{id: "mock", displayName: "Mock", contextWindow: 128_000}
+	runner, err := NewGraphRunner(llm, reg, nil, 5, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	require.True(t, runner.isToolCallConcurrentSafe("ask_question"), "scheduler should rely on tool capability/policy, not hardcoded tool name")
+}

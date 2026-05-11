@@ -52,7 +52,7 @@ func newPermissionMiddleware(
 	return compose.ToolMiddleware{
 		Invokable: func(next compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
 			return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
-				if permissionAsker == nil || !permissionAsker.ShouldAsk(input.Name) || input.Name == "ask_question" {
+				if permissionAsker == nil || !permissionAsker.ShouldAsk(input.Name) {
 					return next(ctx, input)
 				}
 				callID := input.CallID

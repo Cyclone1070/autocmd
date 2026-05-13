@@ -18,7 +18,7 @@ func TestGitHubProvider(t *testing.T) {
 	var foundOAuth bool
 	for _, m := range methods {
 		if oauth, ok := m.(domain.OAuthMethod); ok {
-			assert.Equal(t, "github_oauth", oauth.ID)
+			assert.Equal(t, authMethodGitHubOAuth, oauth.ID)
 			assert.NotEmpty(t, oauth.ClientID)
 			foundOAuth = true
 		}

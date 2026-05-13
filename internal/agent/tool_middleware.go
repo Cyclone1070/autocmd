@@ -13,6 +13,8 @@ import (
 	"github.com/cloudwego/eino/compose"
 )
 
+const toolErrorPermissionDenied = "permission denied"
+
 type previewer interface {
 	Preview(input *compose.ToolInput) domain.ToolDisplay
 }
@@ -93,7 +95,7 @@ func newPermissionMiddleware(
 				dec, ok := act.(domain.PermissionDecisionAction)
 				if !ok || !dec.Approved {
 					slog.Info("tool permission denied", "tool", input.Name, "call_id", callID, "duration_ms", time.Since(waitStart).Milliseconds())
-					deniedDisplay := resolveToolPreview(registry, input).WithError(domain.ToolErrorPermissionDenied)
+					deniedDisplay := resolveToolPreview(registry, input).WithError(toolErrorPermissionDenied)
 					if events != nil {
 						events.SendUIUpdate(domain.ToolEndEvent{CallID: callID, Display: deniedDisplay})
 					}

@@ -143,8 +143,8 @@ type Request struct {
 
 type validatedRequest struct {
 	absPath string
-	exists  bool
 	content []byte
+	exists  bool
 	reqDesc string
 }
 
@@ -202,8 +202,8 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 
 	return &validatedRequest{
 		absPath: abs,
-		exists:  exists,
 		content: contentBytes,
+		exists:  exists,
 		reqDesc: req.Description,
 	}, nil
 }

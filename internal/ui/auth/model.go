@@ -26,6 +26,8 @@ const (
 	stateOAuthFlow
 )
 
+const pickerActionLabelBack = "back"
+
 type oauthInfo struct {
 	uri  string
 	code string
@@ -291,7 +293,7 @@ func (m *model) initializeMethodPicker(providerID string, methods []domain.AuthM
 		Items: items,
 		Theme: m.theme,
 		Actions: []ui.Action{
-			{Key: "Backspace", Label: "back"},
+			{Key: "Backspace", Label: pickerActionLabelBack},
 		},
 	})
 }
@@ -380,7 +382,7 @@ func (m *model) View() string {
 		fmt.Fprintf(&s, "  %s\n\n", m.renderStageTitle(m.fieldTitle(field.Label, m.fieldIndex, len(apiKeyMeth.Fields))))
 		fmt.Fprintf(&s, "  %s\n\n", m.renderHelpRow([]helpKey{
 			{key: "Enter", label: "save"},
-			{key: "Esc", label: "back"},
+			{key: "Esc", label: pickerActionLabelBack},
 			{key: "Ctrl+c", label: "quit"},
 		}))
 		fmt.Fprintf(&s, "  %s\n\n", m.textInput.View())
@@ -389,7 +391,7 @@ func (m *model) View() string {
 		var s strings.Builder
 		fmt.Fprintf(&s, "  %s\n\n", m.renderStageTitle("OAUTH DEVICE AUTHORIZATION"))
 		fmt.Fprintf(&s, "  %s\n\n", m.renderHelpRow([]helpKey{
-			{key: "Backspace", label: "back"},
+			{key: "Backspace", label: pickerActionLabelBack},
 			{key: "q", label: "quit"},
 		}))
 		fmt.Fprintf(&s, "  1. Visit: %s\n", m.theme.Primary(m.oauth.uri))

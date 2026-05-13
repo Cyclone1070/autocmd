@@ -3,6 +3,7 @@ package domain
 // Session aggregate and summary types.
 
 import (
+	"slices"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
@@ -32,7 +33,7 @@ type SessionSummary struct {
 // TotalTokens returns the factual total tokens in the session as of the last model response.
 // It ignores any uncommitted user messages that haven't been processed by the LLM yet.
 func (s *Session) TotalTokens() int {
-	for i := len(s.Messages) - 1; i >= 0; i-- {
+	for i := range slices.Backward(s.Messages) {
 		m := s.Messages[i]
 		if m.Role == schema.Assistant && m.ResponseMeta != nil && m.ResponseMeta.Usage != nil {
 			return m.ResponseMeta.Usage.TotalTokens

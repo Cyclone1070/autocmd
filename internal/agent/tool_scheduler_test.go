@@ -14,13 +14,13 @@ import (
 )
 
 type concurrencyProbeTool struct {
-	name           string
-	delay          time.Duration
-	concurrentSafe bool
 	active         *atomic.Int32
 	unsafeOverlap  *atomic.Bool
 	orderMu        *sync.Mutex
 	order          *[]string
+	name           string
+	delay          time.Duration
+	concurrentSafe bool
 }
 
 func (t *concurrencyProbeTool) Name() string { return t.name }
@@ -62,7 +62,7 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 	var orderMu sync.Mutex
 
 	safe1 := &concurrencyProbeTool{
-		name:           "safe1",
+		name:           testConcurrencyProbeSafe1,
 		delay:          40 * time.Millisecond,
 		concurrentSafe: true,
 		active:         active,
@@ -71,7 +71,7 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 		order:          &order,
 	}
 	unsafe := &concurrencyProbeTool{
-		name:           "unsafe",
+		name:           testConcurrencyProbeUnsafe,
 		delay:          40 * time.Millisecond,
 		concurrentSafe: false,
 		active:         active,
@@ -80,7 +80,7 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 		order:          &order,
 	}
 	safe2 := &concurrencyProbeTool{
-		name:           "safe2",
+		name:           testConcurrencyProbeSafe2,
 		delay:          40 * time.Millisecond,
 		concurrentSafe: true,
 		active:         active,
@@ -89,11 +89,11 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 		order:          &order,
 	}
 	reg := &testToolRegistry{tools: map[string]tool.BaseTool{
-		"safe1":  safe1,
-		"unsafe": unsafe,
-		"safe2":  safe2,
+		testConcurrencyProbeSafe1:  safe1,
+		testConcurrencyProbeUnsafe: unsafe,
+		testConcurrencyProbeSafe2:  safe2,
 	}}
-	llm := &mockLLM{id: "mock", displayName: "Mock", contextWindow: 128_000}
+	llm := &mockLLM{id: testMockLLMID, displayName: testMockLLMDisplayName, contextWindow: 128_000}
 	runner, err := NewGraphRunner(llm, reg, nil, 5, nil, nil, nil, nil)
 	require.NoError(t, err)
 
@@ -103,9 +103,9 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 				{
 					Role: schema.Assistant,
 					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Function: schema.FunctionCall{Name: "safe1", Arguments: `{}`}},
-						{ID: "c2", Function: schema.FunctionCall{Name: "unsafe", Arguments: `{}`}},
-						{ID: "c3", Function: schema.FunctionCall{Name: "safe2", Arguments: `{}`}},
+						{ID: "c1", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe1, Arguments: `{}`}},
+						{ID: "c2", Function: schema.FunctionCall{Name: testConcurrencyProbeUnsafe, Arguments: `{}`}},
+						{ID: "c3", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe2, Arguments: `{}`}},
 					},
 				},
 			},
@@ -121,11 +121,11 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 	idxStartSafe2 := -1
 	for i, ev := range order {
 		switch ev {
-		case "start:safe1":
+		case "start:" + testConcurrencyProbeSafe1:
 			idxStartSafe1 = i
-		case "start:unsafe":
+		case "start:" + testConcurrencyProbeUnsafe:
 			idxStartUnsafe = i
-		case "start:safe2":
+		case "start:" + testConcurrencyProbeSafe2:
 			idxStartSafe2 = i
 		}
 	}
@@ -138,11 +138,11 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 
 func TestGraphRunner_ToolConcurrency_AskQuestionNameNotSpecialCased(t *testing.T) {
 	reg := &testToolRegistry{tools: map[string]tool.BaseTool{
-		"ask_question": &concurrencyProbeTool{name: "ask_question", concurrentSafe: true},
+		testToolNameAskQuestion: &concurrencyProbeTool{name: testToolNameAskQuestion, concurrentSafe: true},
 	}}
-	llm := &mockLLM{id: "mock", displayName: "Mock", contextWindow: 128_000}
+	llm := &mockLLM{id: testMockLLMID, displayName: testMockLLMDisplayName, contextWindow: 128_000}
 	runner, err := NewGraphRunner(llm, reg, nil, 5, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	require.True(t, runner.isToolCallConcurrentSafe("ask_question"), "scheduler should rely on tool capability/policy, not hardcoded tool name")
+	require.True(t, runner.isToolCallConcurrentSafe(testToolNameAskQuestion), "scheduler should rely on tool capability/policy, not hardcoded tool name")
 }

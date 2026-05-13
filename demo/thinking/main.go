@@ -29,6 +29,13 @@ const (
 	demoTokenLimit = 1000
 	stepDelay      = 250 * time.Millisecond
 	phaseGapDelay  = 200 * time.Millisecond
+
+	demoThoughtChunkPhase1a = "Inspecting recent user request and planning UI updates. "
+	demoThoughtChunkPhase1b = "I should keep this short enough to preview in the live thought content block, "
+	demoThoughtChunkPhase1c = "but long enough to show wrapping and truncation behavior while the spinner is active."
+	demoThoughtChunkPhase2a = "Now composing final response after the tool output. "
+	demoThoughtChunkPhase2b = "Ensuring we keep streamed thought content visible during thinking, "
+	demoThoughtChunkPhase2c = "and collapse back to only the final duration line once the phase completes."
 )
 
 func main() {
@@ -80,11 +87,11 @@ func run() error {
 	)
 
 	deps := &workflow.PromptDeps{
-		State:        &state.State{},
-		Store:        &mockStore{},
-		LLM:          &mockLLM{},
-		Agent:        &mockAgent{bus: bus},
-		Bus:          bus,
+		State: &state.State{},
+		Store: &mockStore{},
+		LLM:   &mockLLM{},
+		Agent: &mockAgent{bus: bus},
+		Bus:   bus,
 	}
 
 	done := workflow.RunPrompt(context.Background(), "thinking demo", deps)
@@ -127,15 +134,15 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	}
 
 	firstThinking := []string{
-		"Inspecting recent user request and planning UI updates. ",
-		"I should keep this short enough to preview in the live thought content block, ",
-		"but long enough to show wrapping and truncation behavior while the spinner is active.",
-		"Inspecting recent user request and planning UI updates. ",
-		"I should keep this short enough to preview in the live thought content block, ",
-		"but long enough to show wrapping and truncation behavior while the spinner is active.",
-		"Inspecting recent user request and planning UI updates. ",
-		"I should keep this short enough to preview in the live thought content block, ",
-		"but long enough to show wrapping and truncation behavior while the spinner is active.",
+		demoThoughtChunkPhase1a,
+		demoThoughtChunkPhase1b,
+		demoThoughtChunkPhase1c,
+		demoThoughtChunkPhase1a,
+		demoThoughtChunkPhase1b,
+		demoThoughtChunkPhase1c,
+		demoThoughtChunkPhase1a,
+		demoThoughtChunkPhase1b,
+		demoThoughtChunkPhase1c,
 	}
 	if err := sendThoughtChunks(firstThinking); err != nil {
 		return err
@@ -167,15 +174,15 @@ func (a *mockAgent) Run(ctx context.Context, sess *domain.Session, input string)
 	})
 
 	secondThinking := []string{
-		"Now composing final response after the tool output. ",
-		"Ensuring we keep streamed thought content visible during thinking, ",
-		"and collapse back to only the final duration line once the phase completes.",
-		"Now composing final response after the tool output. ",
-		"Now composing final response after the tool output. ",
-		"Ensuring we keep streamed thought content visible during thinking, ",
-		"and collapse back to only the final duration line once the phase completes.",
-		"Ensuring we keep streamed thought content visible during thinking, ",
-		"and collapse back to only the final duration line once the phase completes.",
+		demoThoughtChunkPhase2a,
+		demoThoughtChunkPhase2b,
+		demoThoughtChunkPhase2c,
+		demoThoughtChunkPhase2a,
+		demoThoughtChunkPhase2a,
+		demoThoughtChunkPhase2b,
+		demoThoughtChunkPhase2c,
+		demoThoughtChunkPhase2b,
+		demoThoughtChunkPhase2c,
 	}
 	if err := sendThoughtChunks(secondThinking); err != nil {
 		return err
@@ -207,4 +214,3 @@ func (l *mockLLM) Model() model.ToolCallingChatModel { return nil }
 func (l *mockLLM) ComputeTokens(ctx context.Context, msgs []*schema.Message) (int, error) {
 	return 0, nil
 }
-

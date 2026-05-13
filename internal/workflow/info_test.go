@@ -76,8 +76,8 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		llm := new(infoMockLLM)
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{
-			{ID: "google", Credential: &domain.Credential{Type: domain.AuthMethodEnv}},
-			{ID: "openai", Credential: nil},
+			{ID: domain.ProviderGoogle, Credential: &domain.Credential{Type: domain.AuthMethodEnv}},
+			{ID: testFixtureProviderOpenAI, Credential: nil},
 		}, nil)
 
 		state.On("Model").Return("google/gemini-pro")

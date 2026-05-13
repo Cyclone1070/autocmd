@@ -43,7 +43,7 @@ func TestRegistry_Tools_DeterministicSortedByName(t *testing.T) {
 	}
 	r := NewRegistry(tools)
 
-	for run := 0; run < 16; run++ {
+	for run := range 16 {
 		got := r.Tools()
 		gotNames := make([]string, len(got))
 		for i, tl := range got {

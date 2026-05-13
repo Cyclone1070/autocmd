@@ -24,6 +24,7 @@ import (
 const (
 	defaultWaitDuration = 10 * time.Second
 	tailPreviewSize     = 2048
+	streamReadChunkSize = 1024 * 1024
 )
 
 type commandExecutor interface {
@@ -315,7 +316,7 @@ func (t *Tool) executeBash(ctx context.Context, req *validatedRequest, events ru
 	if events != nil {
 		rd := streamCmd.Output()
 		wg.Go(func() {
-			buf := make([]byte, 1024*1024)
+			buf := make([]byte, streamReadChunkSize)
 			for {
 				n, readErr := rd.Read(buf)
 				if n > 0 {

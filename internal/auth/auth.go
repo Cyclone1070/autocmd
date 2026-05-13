@@ -12,6 +12,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
+const privateDirPerm os.FileMode = 0o700
+
 // FileSystem abstracts filesystem operations for the auth package.
 type FileSystem interface {
 	ReadFile(name string) ([]byte, error)
@@ -205,7 +207,7 @@ func (m *Manager) loadAll() (map[string]domain.Credential, error) {
 }
 
 func (m *Manager) saveAll(all map[string]domain.Credential) error {
-	if err := m.fs.MkdirAll(filepath.Dir(m.storePath), domain.PrivateDirPerm); err != nil {
+	if err := m.fs.MkdirAll(filepath.Dir(m.storePath), privateDirPerm); err != nil {
 		return fmt.Errorf("create auth dir: %w", err)
 	}
 

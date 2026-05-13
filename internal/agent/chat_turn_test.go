@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -22,13 +21,13 @@ func TestGraphRunner_ChatTurn_LogsSpecificLLMRecvError(t *testing.T) {
 	slog.Info("test logger marker chat")
 
 	greet := &greetTool{}
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": greet}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streams: []*mockStream{
-			{chunks: []mockChunk{{text: "partial"}}, err: errors.New("Error 500, Message: Internal error encountered.")},
+			{chunks: []mockChunk{{text: "partial"}}, err: errors.New("internal error encountered")},
 		},
 	}
 	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
@@ -46,7 +45,7 @@ func TestGraphRunner_ChatTurn_LogsSpecificLLMRecvError(t *testing.T) {
 	logOutput := buf.String()
 	require.Contains(t, logOutput, "test logger marker chat", "test logger did not capture output: %q", logOutput)
 	require.Contains(t, logOutput, "graph chat stream recv failed")
-	require.True(t, strings.Contains(logOutput, "Error 500, Message: Internal error encountered.") || strings.Contains(logOutput, "Internal error encountered"))
+	require.Contains(t, logOutput, "internal error encountered")
 }
 
 func TestNormalizeToolCallIndices_AssignsStableUniqueIndicesByID(t *testing.T) {
@@ -56,15 +55,15 @@ func TestNormalizeToolCallIndices_AssignsStableUniqueIndicesByID(t *testing.T) {
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "a", Index: &idx0, Function: schema.FunctionCall{Name: "read_file"}},
-				{ID: "b", Index: &idx0, Function: schema.FunctionCall{Name: "grep"}},
+				{ID: "a", Index: &idx0, Function: schema.FunctionCall{Name: testToolNameReadFile}},
+				{ID: "b", Index: &idx0, Function: schema.FunctionCall{Name: testToolNameGrep}},
 			},
 		},
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "a", Index: &idx1, Function: schema.FunctionCall{Name: "read_file"}},
-				{ID: "b", Index: &idx1, Function: schema.FunctionCall{Name: "grep"}},
+				{ID: "a", Index: &idx1, Function: schema.FunctionCall{Name: testToolNameReadFile}},
+				{ID: "b", Index: &idx1, Function: schema.FunctionCall{Name: testToolNameGrep}},
 			},
 		},
 	}
@@ -84,13 +83,13 @@ func TestNormalizeToolCallIndices_MapsIndexOnlyChunksAfterIDChunk(t *testing.T) 
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{ID: "a", Index: &idx5, Function: schema.FunctionCall{Name: "read_file"}},
+				{ID: "a", Index: &idx5, Function: schema.FunctionCall{Name: testToolNameReadFile}},
 			},
 		},
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{Index: &idx5, Function: schema.FunctionCall{Name: "read_file"}},
+				{Index: &idx5, Function: schema.FunctionCall{Name: testToolNameReadFile}},
 			},
 		},
 	}
@@ -108,7 +107,7 @@ func TestNormalizeToolCallIndices_LeavesUnknownIndexOnlyChunkUnchanged(t *testin
 		{
 			Role: schema.Assistant,
 			ToolCalls: []schema.ToolCall{
-				{Index: &orig, Function: schema.FunctionCall{Name: "grep"}},
+				{Index: &orig, Function: schema.FunctionCall{Name: testToolNameGrep}},
 			},
 		},
 	}
@@ -121,12 +120,12 @@ func TestNormalizeToolCallIndices_LeavesUnknownIndexOnlyChunkUnchanged(t *testin
 
 func TestGraphRunner_ChatTurn_EmitsOnlyThoughtTextEvents(t *testing.T) {
 	ctx := context.Background()
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": &greetTool{}}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: &greetTool{}}}
 	events := &mockEventSender{}
 
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streams: []*mockStream{
 			{chunks: []mockChunk{

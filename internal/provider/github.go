@@ -34,7 +34,7 @@ func (p *GitHubProvider) ID() string {
 func (p *GitHubProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return []domain.AuthMethod{
 		domain.OAuthMethod{
-			ID:            "github_oauth",
+			ID:            authMethodGitHubOAuth,
 			Name:          "GitHub OAuth",
 			ClientID:      "Iv1.b507a08c87ecfe98", // #nosec G101 - Public GitHub Copilot OAuth App ID
 			DeviceAuthURL: "https://github.com/login/device/code",
@@ -59,7 +59,7 @@ func (p *GitHubProvider) GetLLM(ctx context.Context, cred *domain.Credential, in
 		Transport: &tokenTransport{source: tokenSource},
 	}
 	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		Model:      strings.TrimPrefix(info.ID, domain.ProviderGitHub+domain.ModelIDSeparator),
+		Model:      strings.TrimPrefix(info.ID, domain.ProviderGitHub+modelIDSeparator),
 		BaseURL:    "https://api.githubcopilot.com/",
 		HTTPClient: httpClient,
 	})

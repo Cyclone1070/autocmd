@@ -80,7 +80,7 @@ func (p *GoogleProvider) GetLLM(ctx context.Context, cred *domain.Credential, in
 
 	chatModel, err := gemini.NewChatModel(ctx, &gemini.Config{
 		Client: client,
-		Model:  strings.TrimPrefix(info.ID, domain.ProviderGoogle+domain.ModelIDSeparator),
+		Model:  strings.TrimPrefix(info.ID, domain.ProviderGoogle+modelIDSeparator),
 	})
 	if err != nil {
 		slog.Error("provider google model init failed", "model_id", info.ID, "duration_ms", time.Since(start).Milliseconds(), "error", err)

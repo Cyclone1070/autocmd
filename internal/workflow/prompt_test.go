@@ -155,7 +155,7 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	}
 
 	// 1. Session Lifecycle Expectations
-	store.On("Create").Return(&domain.Session{ID: "new-id"}, nil)
+	store.On("Create").Return(&domain.Session{ID: testNewSessionID}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 
 	// 2. Auto-naming expectations
@@ -164,14 +164,14 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	// 3. Agent Loop expectations
 	agent.On("Run", mock.MatchedBy(func(ctx context.Context) bool {
 		id, ok := domain.GetSessionID(ctx)
-		return ok && id == "new-id"
+		return ok && id == testNewSessionID
 	}), mock.Anything, "hello").Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
 	err := <-done
 
 	assert.NoError(t, err)
-	assert.Equal(t, "new-id", appState.CurrentSessionID())
+	assert.Equal(t, testNewSessionID, appState.CurrentSessionID())
 	store.AssertExpectations(t)
 	llm.AssertExpectations(t)
 }
@@ -338,7 +338,7 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 	store.On("Get", "non-existent-id").Return((*domain.Session)(nil), fmt.Errorf("read session info: %w", os.ErrNotExist))
 
 	// Fallback expectations
-	store.On("Create").Return(&domain.Session{ID: "new-id"}, nil)
+	store.On("Create").Return(&domain.Session{ID: testNewSessionID}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
 	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
@@ -347,6 +347,6 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 	err := <-done
 
 	assert.NoError(t, err)
-	assert.Equal(t, "new-id", appState.CurrentSessionID(), "Should have fallen back to a new session ID")
+	assert.Equal(t, testNewSessionID, appState.CurrentSessionID(), "Should have fallen back to a new session ID")
 	store.AssertExpectations(t)
 }

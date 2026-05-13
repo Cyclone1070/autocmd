@@ -10,6 +10,12 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// Third provider id for API-key UI tests (no production registry entry).
+const (
+	testFixtureProviderOpenAI = "openai"
+	testAuthMethodGitHubOAuth = "github_oauth"
+)
+
 type mockBus struct {
 	mock.Mock
 }
@@ -73,14 +79,14 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		snapshot := domain.AuthProviderListEvent{
 			Providers: []domain.ProviderSummary{
-				{ID: "openai", Authorized: true, AuthMethod: "api_key"},
+				{ID: testFixtureProviderOpenAI, Authorized: true, AuthMethod: "api_key"},
 				{ID: "anthropic", Authorized: false},
 			},
 		}
 		m.Update(snapshot)
 
 		view := m.View()
-		assert.Contains(t, view, "openai")
+		assert.Contains(t, view, testFixtureProviderOpenAI)
 		assert.Contains(t, view, "api_key")
 		assert.Contains(t, view, "anthropic")
 	})
@@ -89,7 +95,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
 		m.state = stateMethodSelection
-		m.providerID = "openai"
+		m.providerID = testFixtureProviderOpenAI
 
 		ch := make(chan domain.UIUpdate, 1)
 		ch <- domain.DoneEvent{}
@@ -219,13 +225,13 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("Method selection back keys return to provider selection", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "openai"}}
+		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 		assert.Equal(t, stateMethodSelection, m.state)
 
 		backKeys := []tea.KeyMsg{
@@ -234,7 +240,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 			{Type: tea.KeyLeft},
 		}
 		for _, key := range backKeys {
-			m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+			m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 			_, _ = m.Update(key)
 			assert.Equal(t, stateProviderSelection, m.state)
 			assert.Contains(t, m.View(), "SELECT PROVIDER")
@@ -244,13 +250,13 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("Method selection shows Backspace hint", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "openai"}}
+		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 
 		view := m.View()
 		assert.Contains(t, view, "Backspace")
@@ -260,7 +266,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("Field collection back keys stay in field collection", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "openai"}}
+		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{
 				ID: "api_key", Name: "API Key",
@@ -269,7 +275,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 		m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
 		assert.Equal(t, stateFieldCollection, m.state)
 
@@ -290,7 +296,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("Field collection esc returns to method selection", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "openai"}}
+		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{
 				ID: "api_key", Name: "API Key",
@@ -299,12 +305,12 @@ func TestAuthUI_Interactive(t *testing.T) {
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 		m.Update(domain.CredentialFieldEvent{Method: methods[0], FieldIndex: 0})
 
 		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		assert.Equal(t, stateMethodSelection, m.state)
-		assert.Contains(t, m.View(), "SELECT AUTH MODE (openai)")
+		assert.Contains(t, m.View(), "SELECT AUTH MODE ("+testFixtureProviderOpenAI+")")
 	})
 
 	t.Run("OAuth flow back keys return to method selection", func(t *testing.T) {
@@ -312,7 +318,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: "github"}}
 		methods := []domain.AuthMethod{
-			domain.OAuthMethod{ID: "github_oauth", Name: "GitHub"},
+			domain.OAuthMethod{ID: testAuthMethodGitHubOAuth, Name: "GitHub"},
 		}
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
 		m.Update(domain.AuthMethodEvent{ProviderID: "github", Methods: methods})
@@ -339,12 +345,12 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("Esc in method selection goes back (stealth)", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "openai"}}
+		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "openai", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})
 
 		_, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		assert.Equal(t, stateProviderSelection, m.state)

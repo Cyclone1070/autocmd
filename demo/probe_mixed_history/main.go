@@ -4,13 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
-	"os"
 	"time"
 
 	"github.com/Cyclone1070/iav/cmd"
 	"github.com/cloudwego/eino/schema"
+)
+
+const (
+	probeRunTimeout        = 60 * time.Second
+	probeReplayMinMessages = 3
 )
 
 func main() {
@@ -30,7 +36,7 @@ func run() error {
 		return fmt.Errorf("no model selected")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeRunTimeout)
 	defer cancel()
 
 	llm, err := deps.LLMRegistry.Get(ctx, modelID)
@@ -94,23 +100,45 @@ func run() error {
 	}
 	fmt.Printf("[t=%6.3fs] stream done, %d chunks\n", time.Since(streamStart).Seconds(), chunks)
 
-	out, _ := json.MarshalIndent(struct {
-		ModelID          string `json:"model_id"`
-		Role             string `json:"role"`
-		ContentLen       int    `json:"content_len"`
-		ReasoningLen     int    `json:"reasoning_len"`
-		ToolCallsLen     int    `json:"tool_calls_len"`
-		FinishReasonHint any    `json:"response_meta"`
-	}{
-		ModelID:          modelID,
-		Role:             string(final.Role),
+	out, _ := json.MarshalIndent(probeStreamSummary{
 		ContentLen:       len(final.Content),
 		ReasoningLen:     len(final.ReasoningContent),
 		ToolCallsLen:     len(final.ToolCalls),
+		ModelID:          modelID,
+		Role:             string(final.Role),
 		FinishReasonHint: final.ResponseMeta,
 	}, "", "  ")
 	fmt.Println(string(out))
 	return nil
+}
+
+// probeStreamSummary is JSON output for the probe.
+type probeStreamSummary struct {
+	ContentLen       int    `json:"content_len"`
+	ReasoningLen     int    `json:"reasoning_len"`
+	ToolCallsLen     int    `json:"tool_calls_len"`
+	ModelID          string `json:"model_id"`
+	Role             string `json:"role"`
+	FinishReasonHint any    `json:"response_meta"`
+}
+
+func readReplayFileBytes(path string) ([]byte, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("replay path abs: %w", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("replay cwd: %w", err)
+	}
+	rel, err := filepath.Rel(cwd, abs)
+	if err != nil {
+		return nil, fmt.Errorf("replay path rel: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("replay path %q escapes cwd %q", abs, cwd)
+	}
+	return os.ReadFile(abs)
 }
 
 func buildProbeMessages() ([]*schema.Message, error) {
@@ -118,7 +146,7 @@ func buildProbeMessages() ([]*schema.Message, error) {
 		type replay struct {
 			Messages []*schema.Message `json:"messages"`
 		}
-		raw, err := os.ReadFile(replayPath)
+		raw, err := readReplayFileBytes(replayPath)
 		if err != nil {
 			return nil, fmt.Errorf("read replay file: %w", err)
 		}
@@ -126,10 +154,10 @@ func buildProbeMessages() ([]*schema.Message, error) {
 		if err := json.Unmarshal(raw, &r); err != nil {
 			return nil, fmt.Errorf("decode replay file: %w", err)
 		}
-		if len(r.Messages) < 3 {
-			return nil, fmt.Errorf("replay file has %d messages; need at least 3", len(r.Messages))
+		if len(r.Messages) < probeReplayMinMessages {
+			return nil, fmt.Errorf("replay file has %d messages; need at least %d", len(r.Messages), probeReplayMinMessages)
 		}
-		msgs := r.Messages[:3]
+		msgs := r.Messages[:probeReplayMinMessages]
 		if os.Getenv("PROBE_STRIP_REASONING") == "1" && len(msgs) > 1 {
 			msgs[1].ReasoningContent = ""
 		}
@@ -167,8 +195,8 @@ func buildProbeMessages() ([]*schema.Message, error) {
 			Content: "Please call bash and then continue.",
 		},
 		{
-			Role:    schema.Assistant,
-			Content: "Sure, I will run bash now.",
+			Role:             schema.Assistant,
+			Content:          "Sure, I will run bash now.",
 			ReasoningContent: "Need to call bash tool first, then continue.",
 			ToolCalls: []schema.ToolCall{
 				{

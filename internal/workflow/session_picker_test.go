@@ -99,17 +99,17 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		state := new(mockSessionPickerState)
 
-		newSess := &domain.Session{ID: "new-id"}
+		newSess := &domain.Session{ID: testNewSessionID}
 		store.On("FindBlank").Return((*domain.SessionSummary)(nil), nil)
 		store.On("Create").Return(newSess, nil)
-		state.On("SetCurrentSessionID", "new-id").Return()
+		state.On("SetCurrentSessionID", testNewSessionID).Return()
 		state.On("Save").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, state)
 		id, err := wf.createSession()
 
 		assert.NoError(t, err)
-		assert.Equal(t, "new-id", id)
+		assert.Equal(t, testNewSessionID, id)
 		store.AssertExpectations(t)
 		state.AssertExpectations(t)
 	})

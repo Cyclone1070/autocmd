@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testUserConfigJSONPath = "/home/user/.config/iav/config.json"
+
 // mockFileSystem is a local mock implementing config.FileSystem for testing.
 type mockFileSystem struct {
 	Files       map[string][]byte
@@ -79,7 +81,7 @@ func TestLoad_FullOverride_AllValuesReplaced(t *testing.T) {
 		"tools": {"max_file_size": 10485760, "max_iterations": 30}
 	}`
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(configJSON),
+		testUserConfigJSONPath: []byte(configJSON),
 	})
 	mgr := config.NewManager(fs)
 
@@ -94,7 +96,7 @@ func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
 	// Config file only overrides max_iterations - rest should be defaults
 	configJSON := `{"tools": {"max_iterations": 50}}`
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(configJSON),
+		testUserConfigJSONPath: []byte(configJSON),
 	})
 	mgr := config.NewManager(fs)
 
@@ -108,7 +110,7 @@ func TestLoad_PartialOverride_MergesWithDefaults(t *testing.T) {
 func TestLoad_EmptyConfigFile_ReturnsDefaults(t *testing.T) {
 	// Empty JSON object - should use all defaults
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(`{}`),
+		testUserConfigJSONPath: []byte(`{}`),
 	})
 	mgr := config.NewManager(fs)
 
@@ -122,7 +124,7 @@ func TestLoad_EmptyConfigFile_ReturnsDefaults(t *testing.T) {
 
 func TestLoad_MalformedJSON_ReturnsError(t *testing.T) {
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(`{invalid json`),
+		testUserConfigJSONPath: []byte(`{invalid json`),
 	})
 	mgr := config.NewManager(fs)
 
@@ -162,7 +164,7 @@ func TestLoad_HomeDirError_ReturnsDefaults(t *testing.T) {
 func TestLoad_WrongJSONType_ReturnsError(t *testing.T) {
 	// JSON is valid but wrong type (array instead of object)
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(`["not", "an", "object"]`),
+		testUserConfigJSONPath: []byte(`["not", "an", "object"]`),
 	})
 	mgr := config.NewManager(fs)
 
@@ -178,7 +180,7 @@ func TestLoad_NegativeValues_Rejected(t *testing.T) {
 	// Negative values should be rejected by validation
 	configJSON := `{"tools": {"max_iterations": -1}}`
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(configJSON),
+		testUserConfigJSONPath: []byte(configJSON),
 	})
 	mgr := config.NewManager(fs)
 
@@ -193,7 +195,7 @@ func TestLoad_UnknownFields_Ignored(t *testing.T) {
 	// Unknown fields in JSON should be silently ignored
 	configJSON := `{"tools": {"max_file_size": 1024}, "unknown_field": "ignored"}`
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(configJSON),
+		testUserConfigJSONPath: []byte(configJSON),
 	})
 	mgr := config.NewManager(fs)
 
@@ -216,7 +218,7 @@ func TestLoad_ToolPermissions_DefaultAndByTool(t *testing.T) {
 		}
 	}`
 	fs := createMockFS(map[string][]byte{
-		"/home/user/.config/iav/config.json": []byte(configJSON),
+		testUserConfigJSONPath: []byte(configJSON),
 	})
 	mgr := config.NewManager(fs)
 

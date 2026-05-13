@@ -50,7 +50,8 @@ func TestArchitecture(t *testing.T) {
 
 	// 1. Workflow Isolation
 	// Must NOT import internal/ui, internal/cmd, or any internal services (excluding Exceptions).
-	workflowForbidden := []string{
+	workflowForbidden := make([]string, 0, 12+len(toolServices))
+	workflowForbidden = append(workflowForbidden,
 		"internal/ui",
 		"cmd",
 		"internal/actionrouter",
@@ -63,7 +64,7 @@ func TestArchitecture(t *testing.T) {
 		"internal/provider",
 		"internal/session",
 		"internal/state",
-	}
+	)
 	workflowForbidden = append(workflowForbidden, toolServices...)
 	for _, target := range workflowForbidden {
 		rule, err := arch.DoesNotDependOn(sourcePkg("internal/workflow"), targetPkg(target))
@@ -75,7 +76,8 @@ func TestArchitecture(t *testing.T) {
 
 	// 2. UI Isolation
 	// Must NOT import internal/workflow, internal/cmd, or any internal services (excluding Exceptions).
-	uiForbidden := []string{
+	uiForbidden := make([]string, 0, 12+len(toolServices))
+	uiForbidden = append(uiForbidden,
 		"internal/workflow",
 		"cmd",
 		"internal/actionrouter",
@@ -88,7 +90,7 @@ func TestArchitecture(t *testing.T) {
 		"internal/provider",
 		"internal/session",
 		"internal/state",
-	}
+	)
 	uiForbidden = append(uiForbidden, toolServices...)
 	for _, target := range uiForbidden {
 		rule, err := arch.DoesNotDependOn(sourcePkg("internal/ui"), targetPkg(target))

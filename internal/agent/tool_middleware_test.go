@@ -43,7 +43,7 @@ type mockPreviewTool struct {
 	previewN int
 }
 
-func (m *mockPreviewTool) Name() string                                     { return m.name }
+func (m *mockPreviewTool) Name() string { return m.name }
 func (m *mockPreviewTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{Name: m.name}, nil
 }
@@ -56,53 +56,53 @@ func (m *mockPreviewTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 }
 
 func TestPreviewStartMiddleware_CallsPreview_EmitsToolStart_AndCallsNext(t *testing.T) {
-	tl := &mockPreviewTool{name: "read_file"}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"read_file": tl}}
+	tl := &mockPreviewTool{name: testToolNameReadFile}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameReadFile: tl}}
 	events := &mockEventSender{}
 	mw := newPreviewStartMiddleware(events, reg)
 
 	nextCalled := 0
 	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
 		nextCalled++
-		return &compose.ToolOutput{Result: "from_next"}, nil
+		return &compose.ToolOutput{Result: testToolOutputFromNext}, nil
 	}
 
 	ctx := context.Background()
 	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
-		Name:      "read_file",
-		Arguments: `{"file_path":"/tmp/x"}`,
-		CallID:    "call_1",
+		Name:      testToolNameReadFile,
+		Arguments: testReadFileArgsJSON,
+		CallID:    testToolCallID1,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "from_next", out.Result)
+	require.Equal(t, testToolOutputFromNext, out.Result)
 
 	require.Equal(t, 1, tl.previewN)
 	require.Equal(t, 1, nextCalled)
 	require.Len(t, events.updates, 1)
 	start, ok := events.updates[0].(domain.ToolStartEvent)
 	require.True(t, ok)
-	require.Equal(t, "call_1", start.CallID)
+	require.Equal(t, testToolCallID1, start.CallID)
 }
 
 func TestPermissionMiddleware_PermissionDenied_DoesNotCallNext(t *testing.T) {
 	events := &mockEventSender{}
 	waiter := &mockWaiter{act: domain.PermissionDecisionAction{Approved: false}}
-	resolver := permission.NewResolver("ask", map[string]string{"read_file": "ask"})
-	tl := &mockPreviewTool{name: "read_file"}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"read_file": tl}}
+	resolver := permission.NewResolver(testPermissionModeAsk, map[string]string{testToolNameReadFile: testPermissionModeAsk})
+	tl := &mockPreviewTool{name: testToolNameReadFile}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameReadFile: tl}}
 	mw := newPermissionMiddleware(resolver, waiter, events, reg)
 
 	nextCalled := 0
 	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
 		nextCalled++
-		return &compose.ToolOutput{Result: "from_next"}, nil
+		return &compose.ToolOutput{Result: testToolOutputFromNext}, nil
 	}
 
 	ctx := context.Background()
 	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
-		Name:      "read_file",
-		Arguments: `{"file_path":"/tmp/x"}`,
-		CallID:    "call_1",
+		Name:      testToolNameReadFile,
+		Arguments: testReadFileArgsJSON,
+		CallID:    testToolCallID1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Tool execution was denied by the user.", out.Result)
@@ -112,7 +112,7 @@ func TestPermissionMiddleware_PermissionDenied_DoesNotCallNext(t *testing.T) {
 	require.True(t, ok)
 	end, ok := events.updates[1].(domain.ToolEndEvent)
 	require.True(t, ok)
-	require.Equal(t, domain.ToolErrorPermissionDenied, end.Display.GetError())
+	require.Equal(t, toolErrorPermissionDenied, end.Display.GetError())
 	sd, ok := end.Display.(domain.StringDisplay)
 	require.True(t, ok)
 	require.Equal(t, "preview", sd.Description)
@@ -121,20 +121,20 @@ func TestPermissionMiddleware_PermissionDenied_DoesNotCallNext(t *testing.T) {
 func TestPermissionMiddleware_AskQuestion_StillRespectsResolverPolicy(t *testing.T) {
 	events := &mockEventSender{}
 	waiter := &mockWaiter{act: domain.PermissionDecisionAction{Approved: false}}
-	resolver := permission.NewResolver("allow", map[string]string{"ask_question": "ask"})
-	tl := &mockPreviewTool{name: "ask_question"}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"ask_question": tl}}
+	resolver := permission.NewResolver("allow", map[string]string{testToolNameAskQuestion: testPermissionModeAsk})
+	tl := &mockPreviewTool{name: testToolNameAskQuestion}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameAskQuestion: tl}}
 	mw := newPermissionMiddleware(resolver, waiter, events, reg)
 
 	nextCalled := 0
 	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
 		nextCalled++
-		return &compose.ToolOutput{Result: "from_next"}, nil
+		return &compose.ToolOutput{Result: testToolOutputFromNext}, nil
 	}
 
 	ctx := context.Background()
 	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
-		Name:      "ask_question",
+		Name:      testToolNameAskQuestion,
 		Arguments: `{"questions":[]}`,
 		CallID:    "call_q_1",
 	})
@@ -146,27 +146,27 @@ func TestPermissionMiddleware_AskQuestion_StillRespectsResolverPolicy(t *testing
 	require.True(t, ok)
 	end, ok := events.updates[1].(domain.ToolEndEvent)
 	require.True(t, ok)
-	require.Equal(t, domain.ToolErrorPermissionDenied, end.Display.GetError())
+	require.Equal(t, toolErrorPermissionDenied, end.Display.GetError())
 }
 
 func TestPermissionMiddleware_WaiterNil_EmitsToolEnd(t *testing.T) {
 	events := &mockEventSender{}
-	resolver := permission.NewResolver("ask", map[string]string{"read_file": "ask"})
-	tl := &mockPreviewTool{name: "read_file"}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"read_file": tl}}
+	resolver := permission.NewResolver(testPermissionModeAsk, map[string]string{testToolNameReadFile: testPermissionModeAsk})
+	tl := &mockPreviewTool{name: testToolNameReadFile}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameReadFile: tl}}
 	mw := newPermissionMiddleware(resolver, nil, events, reg)
 
 	nextCalled := 0
 	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
 		nextCalled++
-		return &compose.ToolOutput{Result: "from_next"}, nil
+		return &compose.ToolOutput{Result: testToolOutputFromNext}, nil
 	}
 
 	ctx := context.Background()
 	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
-		Name:      "read_file",
-		Arguments: `{"file_path":"/tmp/x"}`,
-		CallID:    "call_1",
+		Name:      testToolNameReadFile,
+		Arguments: testReadFileArgsJSON,
+		CallID:    testToolCallID1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "Internal error: permission waiter unavailable", out.Result)
@@ -185,23 +185,23 @@ func TestPermissionMiddleware_WaiterNil_EmitsToolEnd(t *testing.T) {
 func TestPermissionMiddleware_WaiterCancelled_EmitsToolEnd(t *testing.T) {
 	events := &mockEventSender{}
 	waiter := &mockWaiter{act: domain.PermissionDecisionAction{Approved: true}}
-	resolver := permission.NewResolver("ask", map[string]string{"read_file": "ask"})
-	tl := &mockPreviewTool{name: "read_file"}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"read_file": tl}}
+	resolver := permission.NewResolver(testPermissionModeAsk, map[string]string{testToolNameReadFile: testPermissionModeAsk})
+	tl := &mockPreviewTool{name: testToolNameReadFile}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameReadFile: tl}}
 	mw := newPermissionMiddleware(resolver, waiter, events, reg)
 
 	nextCalled := 0
 	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
 		nextCalled++
-		return &compose.ToolOutput{Result: "from_next"}, nil
+		return &compose.ToolOutput{Result: testToolOutputFromNext}, nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
-		Name:      "read_file",
-		Arguments: `{"file_path":"/tmp/x"}`,
-		CallID:    "call_1",
+		Name:      testToolNameReadFile,
+		Arguments: testReadFileArgsJSON,
+		CallID:    testToolCallID1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, domain.ToolErrorCancelled, out.Result)
@@ -227,8 +227,8 @@ func (m *mockPreviewValidateTool) PreflightValidate(input *compose.ToolInput) er
 }
 
 func TestPreflightValidationMiddleware_ValidationError_UsesBadToolRequestDisplay(t *testing.T) {
-	tl := &mockPreviewValidateTool{mockPreviewTool: mockPreviewTool{name: "read_file"}}
-	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"read_file": tl}}
+	tl := &mockPreviewValidateTool{mockPreviewTool: mockPreviewTool{name: testToolNameReadFile}}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{testToolNameReadFile: tl}}
 	events := &mockEventSender{}
 	mw := newPreflightValidationMiddleware(events, reg)
 
@@ -239,7 +239,7 @@ func TestPreflightValidationMiddleware_ValidationError_UsesBadToolRequestDisplay
 	}
 
 	out, err := mw.Invokable(next)(context.Background(), &compose.ToolInput{
-		Name:      "read_file",
+		Name:      testToolNameReadFile,
 		Arguments: `{}`,
 		CallID:    "c1",
 	})

@@ -11,6 +11,24 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+// Shared literals for agent tests (goconst).
+const (
+	testToolNameGreet          = "greet"
+	testMockLLMID              = "mock"
+	testMockLLMDisplayName     = "Mock"
+	testToolNameReadFile       = "read_file"
+	testToolNameGrep           = "grep"
+	testToolCallID1            = "call_1"
+	testToolCallIDTC1          = "tc1"
+	testToolOutputFromNext     = "from_next"
+	testReadFileArgsJSON       = `{"file_path":"/tmp/x"}`
+	testPermissionModeAsk      = "ask"
+	testToolNameAskQuestion    = "ask_question"
+	testConcurrencyProbeSafe1  = "safe1"
+	testConcurrencyProbeUnsafe = "unsafe"
+	testConcurrencyProbeSafe2  = "safe2"
+)
+
 type mockSummaryRunnable struct{}
 
 func (mockSummaryRunnable) Invoke(ctx context.Context, input []*schema.Message, opts ...compose.Option) (*schema.Message, error) {
@@ -62,11 +80,11 @@ type greetTool struct {
 	invokeCount int
 }
 
-func (g *greetTool) Name() string { return "greet" }
+func (g *greetTool) Name() string { return testToolNameGreet }
 
 func (g *greetTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "greet",
+		Name: testToolNameGreet,
 		Desc: "greet with name",
 		ParamsOneOf: schema.NewParamsOneOfByParams(
 			map[string]*schema.ParameterInfo{
@@ -91,5 +109,5 @@ func (g *greetTool) InvokableRun(_ context.Context, argumentsInJSON string, _ ..
 }
 
 func (g *greetTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
-	return domain.NewStringDisplay("greet", input.Arguments)
+	return domain.NewStringDisplay(testToolNameGreet, input.Arguments)
 }

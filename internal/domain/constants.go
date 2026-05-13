@@ -13,11 +13,6 @@ const (
 	AuthFieldAPIKey  = "api_key"
 )
 
-// UI and Formatting.
-const (
-	ModelIDSeparator = "/"
-)
-
 // Message metadata keys.
 const (
 	NotificationMessageExtraKey = "iav/is_notification"
@@ -33,6 +28,5 @@ const (
 const (
 	DefaultDirPerm  = 0o755
 	DefaultFilePerm = 0o644
-	PrivateDirPerm  = 0o700
 	PrivateFilePerm = 0o600
 )

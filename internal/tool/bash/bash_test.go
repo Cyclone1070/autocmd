@@ -87,8 +87,8 @@ type mockTaskManager struct {
 }
 
 type captureEventSender struct {
-	mu      sync.Mutex
 	updates []domain.UIUpdate
+	mu      sync.Mutex
 }
 
 func (c *captureEventSender) SendUIUpdate(u domain.UIUpdate) {
@@ -217,13 +217,13 @@ func TestBashTool_Stream(t *testing.T) {
 	events.mu.Lock()
 	defer events.mu.Unlock()
 	assert.NotEmpty(t, events.updates)
-	combined := ""
+	var combined strings.Builder
 	for _, update := range events.updates {
 		if streamEvent, ok := update.(domain.ToolStreamEvent); ok {
-			combined += streamEvent.Chunk
+			combined.WriteString(streamEvent.Chunk)
 		}
 	}
-	assert.Contains(t, combined, "real time output")
+	assert.Contains(t, combined.String(), "real time output")
 }
 
 func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {

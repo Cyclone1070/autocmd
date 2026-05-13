@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testAuthMethodGitHubOAuth = "github_oauth"
+
 // mockFileSystem implements auth.FileSystem for testing.
 type mockFileSystem struct {
 	files     map[string][]byte
@@ -48,13 +50,13 @@ func TestAuth(t *testing.T) {
 	t.Run("SetAndGet", func(t *testing.T) {
 		mgr := NewManager(mockFS, storePath)
 		cred := domain.Credential{
-			Type:   "api_key",
+			Type:   domain.AuthMethodAPIKey,
 			APIKey: "test-key",
 		}
-		err := mgr.Set("google", cred)
+		err := mgr.Set(domain.ProviderGoogle, cred)
 		assert.NoError(t, err)
 
-		got, err := mgr.Get("google")
+		got, err := mgr.Get(domain.ProviderGoogle)
 		assert.NoError(t, err)
 		require.NotNil(t, got)
 		assert.Equal(t, cred, *got)
@@ -62,14 +64,14 @@ func TestAuth(t *testing.T) {
 
 	t.Run("Set_OverwritesExisting", func(t *testing.T) {
 		mgr := NewManager(mockFS, storePath)
-		err := mgr.Set("google", domain.Credential{Type: "api_key", APIKey: "key1"})
+		err := mgr.Set(domain.ProviderGoogle, domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "key1"})
 		assert.NoError(t, err)
 
-		newCred := domain.Credential{Type: "api_key", APIKey: "key2"}
-		err = mgr.Set("google", newCred)
+		newCred := domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "key2"}
+		err = mgr.Set(domain.ProviderGoogle, newCred)
 		assert.NoError(t, err)
 
-		got, err := mgr.Get("google")
+		got, err := mgr.Get(domain.ProviderGoogle)
 		assert.NoError(t, err)
 		assert.Equal(t, "key2", got.APIKey)
 	})
@@ -84,8 +86,8 @@ func TestAuth(t *testing.T) {
 
 	t.Run("All_MultipleProviders", func(t *testing.T) {
 		mgr := NewManager(mockFS, storePath)
-		require.NoError(t, mgr.Set("p1", domain.Credential{Type: "api_key", APIKey: "k1"}))
-		require.NoError(t, mgr.Set("p2", domain.Credential{Type: "api_key", APIKey: "k2"}))
+		require.NoError(t, mgr.Set("p1", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "k1"}))
+		require.NoError(t, mgr.Set("p2", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "k2"}))
 
 		all, err := mgr.All()
 		assert.NoError(t, err)
@@ -96,7 +98,7 @@ func TestAuth(t *testing.T) {
 
 	t.Run("Remove", func(t *testing.T) {
 		mgr := NewManager(mockFS, storePath)
-		require.NoError(t, mgr.Set("rem", domain.Credential{Type: "api_key", APIKey: "val"}))
+		require.NoError(t, mgr.Set("rem", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "val"}))
 		err := mgr.Remove("rem")
 		assert.NoError(t, err)
 
@@ -140,7 +142,7 @@ func TestManager_Caching(t *testing.T) {
 	assert.Equal(t, 1, mockFS.readCount, "Should NOT have read from disk again (cached)")
 
 	// 3. Set should invalidate or update cache
-	err = mgr.Set("p2", domain.Credential{Type: "api_key", APIKey: "k2"})
+	err = mgr.Set("p2", domain.Credential{Type: domain.AuthMethodAPIKey, APIKey: "k2"})
 	assert.NoError(t, err)
 
 	// 4. Get after Set might trigger a re-read if we invalidate, or use updated if we sync
@@ -221,14 +223,14 @@ func TestManager_GetWithFallback_RED(t *testing.T) {
 	t.Run("GetWithFallback returns stored OAuthToken", func(t *testing.T) {
 		fs := &mockFileSystem{files: make(map[string][]byte)}
 		p := &authMockProvider{
-			id: "github",
+			id: domain.ProviderGitHub,
 			methods: []domain.AuthMethod{
-				domain.OAuthMethod{ID: "github_oauth"},
+				domain.OAuthMethod{ID: testAuthMethodGitHubOAuth},
 			},
 		}
 
 		creds := map[string]domain.Credential{
-			"github": {Type: "github_oauth", OAuthToken: "gho_test"},
+			domain.ProviderGitHub: {Type: testAuthMethodGitHubOAuth, OAuthToken: "gho_test"},
 		}
 		// #nosec G117
 		data, _ := json.Marshal(creds)

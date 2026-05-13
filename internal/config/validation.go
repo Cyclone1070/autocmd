@@ -6,7 +6,7 @@ import (
 )
 
 func isPermissionModeValid(mode string) bool {
-	return mode == "ask" || mode == "allow" || mode == "deny"
+	return mode == permissionModeAsk || mode == permissionModeAllow || mode == permissionModeDeny
 }
 
 // Validate checks config values for life correctness.

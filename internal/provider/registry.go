@@ -85,7 +85,7 @@ func NewLLMRegistry(authManager CredentialStore, providers *Registry) *LLMRegist
 
 // Get resolves "google/gemini-2.5-flash" to an LLM instance.
 func (r *LLMRegistry) Get(ctx context.Context, id string) (domain.LLM, error) {
-	parts := strings.SplitN(id, domain.ModelIDSeparator, modelIDParts)
+	parts := strings.SplitN(id, modelIDSeparator, modelIDParts)
 	if len(parts) != modelIDParts {
 		return nil, fmt.Errorf("invalid LLM ID format: %s (expected provider/model)", id)
 	}

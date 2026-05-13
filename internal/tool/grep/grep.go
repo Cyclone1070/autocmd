@@ -198,8 +198,8 @@ func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
 }
 
 type validatedRequest struct {
-	absPath string
 	req     *Request
+	absPath string
 }
 
 func (t *Tool) validate(params string) (*validatedRequest, error) {
@@ -250,8 +250,8 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 	}
 
 	return &validatedRequest{
-		absPath: absSearchPath,
 		req:     req,
+		absPath: absSearchPath,
 	}, nil
 }
 
@@ -418,4 +418,3 @@ func (t *Tool) analyzeLog(path string) (matches, files int, err error) {
 
 	return matches, files, nil
 }
-

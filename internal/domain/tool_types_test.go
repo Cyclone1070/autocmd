@@ -47,7 +47,7 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 
 		d, ok := m["call-1"].(QuestionDisplay)
 		require.True(t, ok)
-		assert.Equal(t, "question", d.Type())
+		assert.Equal(t, toolDisplayTypeQuestion, d.Type())
 		assert.Len(t, d.Questions, 1)
 		assert.Equal(t, "Pick one?", d.Questions[0].Question)
 		assert.True(t, d.Questions[0].MultiSelect)
@@ -60,7 +60,7 @@ func TestNewQuestionDisplay(t *testing.T) {
 	d := NewQuestionDisplay([]QuestionInfo{
 		{Question: "Q?", Options: []string{"x"}},
 	})
-	assert.Equal(t, "question", d.TypeField)
+	assert.Equal(t, toolDisplayTypeQuestion, d.TypeField)
 	assert.Len(t, d.Questions, 1)
 }
 
@@ -75,28 +75,28 @@ func TestToolDisplay_GetError(t *testing.T) {
 		d := NewStringDisplay("c", "x")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := StringDisplay{TypeField: "string", Description: "c", Content: "x", Error: "e"}
+		d2 := StringDisplay{TypeField: toolDisplayTypeString, Description: "c", Content: "x", Error: "e"}
 		assert.Equal(t, "e", d2.GetError())
 	})
 	t.Run("DiffDisplay", func(t *testing.T) {
 		d := NewDiffDisplay("c", "t", 1, 2, "diff")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := DiffDisplay{TypeField: "diff", Description: "c", Target: "t", Diff: "d", Error: "bad"}
+		d2 := DiffDisplay{TypeField: toolDisplayTypeDiff, Description: "c", Target: "t", Diff: "d", Error: "bad"}
 		assert.Equal(t, "bad", d2.GetError())
 	})
 	t.Run("BashDisplay", func(t *testing.T) {
 		d := NewBashDisplay("c", "cmd", "", "out")
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := BashDisplay{TypeField: "bash", Description: "c", Command: "cmd", Error: "x"}
+		d2 := BashDisplay{TypeField: toolDisplayTypeBash, Description: "c", Command: "cmd", Error: "x"}
 		assert.Equal(t, "x", d2.GetError())
 	})
 	t.Run("QuestionDisplay", func(t *testing.T) {
 		d := NewQuestionDisplay(nil)
 		var td ToolDisplay = d
 		assert.Equal(t, "", td.GetError())
-		d2 := QuestionDisplay{TypeField: "question", Questions: nil, Error: "e"}
+		d2 := QuestionDisplay{TypeField: toolDisplayTypeQuestion, Questions: nil, Error: "e"}
 		assert.Equal(t, "e", d2.GetError())
 	})
 }

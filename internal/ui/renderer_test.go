@@ -2,6 +2,7 @@ package ui
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestRenderer_RedBarSymmetry(t *testing.T) {
 	}
 
 	bottomBlanks := 0
-	for i := len(barIndices) - 1; i >= 0; i-- {
+	for i := range slices.Backward(barIndices) {
 		stripped := stripANSI(lines[barIndices[i]])
 		content := strings.TrimSpace(strings.Replace(stripped, "┃", "", 1))
 		if content == "" {

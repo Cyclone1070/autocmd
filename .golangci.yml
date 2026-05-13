@@ -20,7 +20,6 @@ linters:
     - mnd
     - modernize
     - nakedret
-    - nilerr
     - noctx
     - nolintlint
     - prealloc
@@ -32,9 +31,9 @@ linters:
     - unparam
     - wastedassign
   settings:
-    govet:
-      enable:
-        - fieldalignment
+    goconst:
+      # Tests: see linters.exclusions.rules (*_test.go). ignore-tests is kept for linters that honor it only here.
+      ignore-tests: true
     revive:
       rules:
         - name: blank-imports
@@ -66,17 +65,15 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      - path: demo/.*
-        linters: ["*"]
-      - linters:
-          - revive
-        path: internal/provider/registry.go
-      - linters:
-          - revive
-        path: internal/tool/bash/bash.go
-      - linters:
-          - revive
-        path: internal/tool/question/question.go
+      # Demos and tests: allow repeated literals and numeric fixtures without goconst/mnd churn.
+      - path: (^|/)demo/
+        linters:
+          - goconst
+          - mnd
+      - path: _test\.go$
+        linters:
+          - goconst
+          - mnd
       - linters:
           - revive
         text: stutter

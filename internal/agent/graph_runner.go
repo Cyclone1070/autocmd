@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/runtimectx"
@@ -14,38 +15,46 @@ import (
 // requestInterruptedByUserMessage is appended as a synthetic user message when the graph run context is cancelled.
 const requestInterruptedByUserMessage = "[Request interrupted by user]"
 
+// composeMaxRunStepsPerIteration and composeMaxRunStepsSlack bound compose.WithMaxRunSteps for the agent graph topology.
+const (
+	composeMaxRunStepsPerIteration = 4
+	composeMaxRunStepsSlack        = 20
+	graphNodeFinish                = "finish"
+)
+
 // transcriptSummarizer compacts message history for context overflow. Implemented by *Summarizer.
 type transcriptSummarizer interface {
 	Summarize(ctx context.Context, msgs []*schema.Message) (*schema.Message, error)
 }
 
 type graphRunState struct {
-	session     *domain.Session
-	input       string
-	iterations  int
-	stopReason  error
+	session    *domain.Session
+	stopReason error
+	input      string
+	iterations int
 }
 
+// GraphRunner executes the LLM/tool graph. Field order is kept for readability; padding is acceptable.
 type GraphRunner struct {
-	llm          domain.LLM
-	registry     toolRegistry
-	waiter       actionWaiter
-	events       eventSender
-	notifier     taskNotifier
-	summarizer   transcriptSummarizer
-	maxIteration int
-	permission   permissionAsker
-	toolInfos    []*schema.ToolInfo
+	llm                 domain.LLM
+	registry            toolRegistry
+	waiter              actionWaiter
+	events              eventSender
+	notifier            taskNotifier
+	summarizer          transcriptSummarizer
+	maxIteration        int
+	permission          permissionAsker
+	toolInfos           []*schema.ToolInfo
 	toolsNodeParallel   *compose.ToolsNode
 	toolsNodeSequential *compose.ToolsNode
-	graph        compose.Runnable[*graphRunState, *graphRunState]
+	graph               compose.Runnable[*graphRunState, *graphRunState]
 }
 
 func graphMaxRunSteps(maxIterations int) int {
 	if maxIterations <= 0 {
 		maxIterations = 1
 	}
-	return maxIterations*4 + 20
+	return maxIterations*composeMaxRunStepsPerIteration + composeMaxRunStepsSlack
 }
 
 func NewGraphRunner(
@@ -88,7 +97,7 @@ func NewGraphRunner(
 		newPermissionMiddleware(permission, waiter, events, registry),
 	}
 	toolsNodeParallel, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
-		Tools: tools,
+		Tools:               tools,
 		ToolCallMiddlewares: commonMiddlewares,
 	})
 	if err != nil {
@@ -104,15 +113,15 @@ func NewGraphRunner(
 	}
 
 	r := &GraphRunner{
-		llm:          llm,
-		registry:     registry,
-		waiter:       waiter,
-		events:       events,
-		notifier:     notifier,
-		summarizer:   summarizer,
-		maxIteration: maxIterations,
-		permission:   permission,
-		toolInfos:    toolInfos,
+		llm:                 llm,
+		registry:            registry,
+		waiter:              waiter,
+		events:              events,
+		notifier:            notifier,
+		summarizer:          summarizer,
+		maxIteration:        maxIterations,
+		permission:          permission,
+		toolInfos:           toolInfos,
 		toolsNodeParallel:   toolsNodeParallel,
 		toolsNodeSequential: toolsNodeSequential,
 	}
@@ -135,7 +144,7 @@ func (r *GraphRunner) buildGraph() (compose.Runnable[*graphRunState, *graphRunSt
 	if err := g.AddLambdaNode("run_tools", compose.InvokableLambda(r.graphRunTools)); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("finish", compose.InvokableLambda(func(_ context.Context, st *graphRunState) (*graphRunState, error) {
+	if err := g.AddLambdaNode(graphNodeFinish, compose.InvokableLambda(func(_ context.Context, st *graphRunState) (*graphRunState, error) {
 		return st, nil
 	})); err != nil {
 		return nil, err
@@ -147,33 +156,33 @@ func (r *GraphRunner) buildGraph() (compose.Runnable[*graphRunState, *graphRunSt
 	if err := g.AddBranch("preturn", compose.NewGraphBranch(
 		func(_ context.Context, st *graphRunState) (string, error) {
 			if st == nil || st.stopReason != nil {
-				return "finish", nil
+				return graphNodeFinish, nil
 			}
 			return "chat", nil
 		},
-		map[string]bool{"chat": true, "finish": true},
+		map[string]bool{"chat": true, graphNodeFinish: true},
 	)); err != nil {
 		return nil, err
 	}
 	if err := g.AddBranch("chat", compose.NewGraphBranch(
 		func(_ context.Context, st *graphRunState) (string, error) {
 			if st == nil || st.stopReason != nil {
-				return "finish", nil
+				return graphNodeFinish, nil
 			}
 			last := lastAssistant(st.session.Messages)
 			if last == nil || len(last.ToolCalls) == 0 {
-				return "finish", nil
+				return graphNodeFinish, nil
 			}
 			return "run_tools", nil
 		},
-		map[string]bool{"run_tools": true, "finish": true},
+		map[string]bool{"run_tools": true, graphNodeFinish: true},
 	)); err != nil {
 		return nil, err
 	}
 	if err := g.AddEdge("run_tools", "preturn"); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("finish", compose.END); err != nil {
+	if err := g.AddEdge(graphNodeFinish, compose.END); err != nil {
 		return nil, err
 	}
 
@@ -223,18 +232,14 @@ func (r *GraphRunner) Run(ctx context.Context, session *domain.Session, input st
 	if out != nil && out.stopReason != nil {
 		return out.stopReason
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return nil
+	return ctx.Err()
 }
 
 func lastAssistant(msgs []*schema.Message) *schema.Message {
-	for i := len(msgs) - 1; i >= 0; i-- {
+	for i := range slices.Backward(msgs) {
 		if msgs[i] != nil && msgs[i].Role == schema.Assistant {
 			return msgs[i]
 		}
 	}
 	return nil
 }
-

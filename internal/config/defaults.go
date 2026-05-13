@@ -14,6 +14,10 @@ const (
 	defaultMaxFileSize      = 20 * 1024 * 1024
 	defaultMaxIterations    = 50
 
+	permissionModeAsk   = "ask"
+	permissionModeAllow = "allow"
+	permissionModeDeny  = "deny"
+
 	contextWindow128k = 128000
 	contextWindow256k = 256000
 	contextWindow2M   = 2000000
@@ -110,11 +114,11 @@ func DefaultConfig() *Config {
 		tools: ToolsConfig{
 			maxFileSize:       defaultMaxFileSize,
 			maxIterations:     defaultMaxIterations,
-			permissionDefault: "allow",
+			permissionDefault: permissionModeAllow,
 			toolPermissions: map[string]string{
-				"edit_file":  "ask",
-				"write_file": "ask",
-				"bash":       "ask",
+				"edit_file":  permissionModeAsk,
+				"write_file": permissionModeAsk,
+				"bash":       permissionModeAsk,
 			},
 		},
 		session: SessionConfig{

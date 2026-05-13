@@ -46,20 +46,20 @@ func (m memFileInfo) Sys() any           { return nil }
 
 type memChecksum struct{}
 
-func (memChecksum) Compute(data []byte) string               { return string(data) }
-func (memChecksum) Update(path string, checksum string)      {}
+func (memChecksum) Compute(data []byte) string          { return string(data) }
+func (memChecksum) Update(path string, checksum string) {}
 
 type memPathResolver struct{}
 
 func (memPathResolver) ValidateAbs(path string) (string, error) { return path, nil }
-func (memPathResolver) DisplayPath(path string) string  { return path }
+func (memPathResolver) DisplayPath(path string) string          { return path }
 
 func TestToolExecution_EmitsToolEndEvent_AndPersistsDisplay_StrictSplit(t *testing.T) {
 	// Use real read tool with mocks from its test helpers via minimal deps.
 	// For integration purposes, we just need Prepare/Execute to run without touching disk.
 	readTool := read.NewTool(memReadFS{}, memChecksum{}, memPathResolver{})
 
-	var tools []einotool.BaseTool = []einotool.BaseTool{readTool}
+	tools := []einotool.BaseTool{readTool}
 	reg := tool.NewRegistry(tools)
 	waiter := &mockWaiter{act: domain.PermissionDecisionAction{Approved: true}}
 	bus := &capturingBus{}
@@ -83,9 +83,9 @@ func TestToolExecution_EmitsToolEndEvent_AndPersistsDisplay_StrictSplit(t *testi
 	assistant := &schema.Message{
 		Role: schema.Assistant,
 		ToolCalls: []schema.ToolCall{{
-			ID: "call_1",
+			ID: testToolCallID1,
 			Function: schema.FunctionCall{
-				Name:      "read_file",
+				Name:      testToolNameReadFile,
 				Arguments: `{"file_path":"` + testutil.TestWorkspaceRoot + `/a.txt"}`,
 			},
 		}},
@@ -98,10 +98,9 @@ func TestToolExecution_EmitsToolEndEvent_AndPersistsDisplay_StrictSplit(t *testi
 	for _, u := range bus.updates {
 		if e, ok := u.(domain.ToolEndEvent); ok {
 			foundEnd = true
-			require.Equal(t, "call_1", e.CallID)
+			require.Equal(t, testToolCallID1, e.CallID)
 		}
 	}
 	require.True(t, foundEnd, "expected ToolEndEvent from tool execution")
-	require.NotNil(t, displays["call_1"], "expected ToolDisplay persisted by call id")
+	require.NotNil(t, displays[testToolCallID1], "expected ToolDisplay persisted by call id")
 }
-

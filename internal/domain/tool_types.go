@@ -16,8 +16,13 @@ const ToolErrorFailed = "execution failed"
 // ToolErrorTimedOut is ToolDisplay.Error when Execute returns because the operation took too long.
 const ToolErrorTimedOut = "execution timed out"
 
-// ToolErrorPermissionDenied is ToolDisplay.Error when execution is blocked by permission policy.
-const ToolErrorPermissionDenied = "permission denied"
+const (
+	toolDisplayTypeString   = "string"
+	toolDisplayTypeDiff     = "diff"
+	toolDisplayTypeQuestion = "question"
+	// toolDisplayTypeBash is BashDisplay's JSON "type" discriminator (wire format only).
+	toolDisplayTypeBash = "bash"
+)
 
 // ToolDisplay is implemented by all display types returned from tools.
 // The UI uses type switches to render each type appropriately.
@@ -53,7 +58,7 @@ func (s StringDisplay) WithError(err string) ToolDisplay {
 
 // NewStringDisplay creates a new StringDisplay with correct type.
 func NewStringDisplay(description, content string) StringDisplay {
-	return StringDisplay{TypeField: "string", Description: description, Content: content}
+	return StringDisplay{TypeField: toolDisplayTypeString, Description: description, Content: content}
 }
 
 // DiffDisplay is for file edit operations with unified diff content.
@@ -84,7 +89,7 @@ func (d DiffDisplay) WithError(err string) ToolDisplay {
 // NewDiffDisplay creates a new DiffDisplay with correct type.
 func NewDiffDisplay(description, target string, added, removed int, diff string) DiffDisplay {
 	return DiffDisplay{
-		TypeField:   "diff",
+		TypeField:   toolDisplayTypeDiff,
 		Description: description,
 		Target:      target,
 		Added:       added,
@@ -120,7 +125,7 @@ func (s BashDisplay) WithError(err string) ToolDisplay {
 // NewBashDisplay creates a new BashDisplay with correct type.
 func NewBashDisplay(description, command, cwd, capturedOutput string) BashDisplay {
 	return BashDisplay{
-		TypeField:      "bash",
+		TypeField:      toolDisplayTypeBash,
 		Description:    description,
 		Command:        command,
 		Cwd:            cwd,
@@ -159,7 +164,7 @@ func (d QuestionDisplay) WithError(err string) ToolDisplay {
 
 // NewQuestionDisplay returns a QuestionDisplay with type "question".
 func NewQuestionDisplay(questions []QuestionInfo) QuestionDisplay {
-	return QuestionDisplay{TypeField: "question", Questions: questions}
+	return QuestionDisplay{TypeField: toolDisplayTypeQuestion, Questions: questions}
 }
 
 // QuestionAnswerAction is sent by the prompt UI after the user submits or cancels the question toolbox.
@@ -205,25 +210,25 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 
 		var display ToolDisplay
 		switch peek.Type {
-		case "string":
+		case toolDisplayTypeString:
 			var d StringDisplay
 			if err := json.Unmarshal(raw, &d); err != nil {
 				return err
 			}
 			display = d
-		case "diff":
+		case toolDisplayTypeDiff:
 			var d DiffDisplay
 			if err := json.Unmarshal(raw, &d); err != nil {
 				return err
 			}
 			display = d
-		case "bash":
+		case toolDisplayTypeBash:
 			var d BashDisplay
 			if err := json.Unmarshal(raw, &d); err != nil {
 				return err
 			}
 			display = d
-		case "question":
+		case toolDisplayTypeQuestion:
 			var d QuestionDisplay
 			if err := json.Unmarshal(raw, &d); err != nil {
 				return err
@@ -236,4 +241,3 @@ func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
-

@@ -13,20 +13,20 @@ import (
 func TestGraphRunner_Run_ReActToolThenFinalMessage(t *testing.T) {
 	ctx := context.Background()
 	greet := &greetTool{}
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": greet}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
 
 	info, err := greet.Info(ctx)
 	require.NoError(t, err)
 
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streamErr:     nil,
 		streams: []*mockStream{
 			{chunks: []mockChunk{{
 				toolCalls: []schema.ToolCall{{
-					ID: "tc1",
+					ID: testToolCallIDTC1,
 					Function: schema.FunctionCall{
 						Name:      info.Name,
 						Arguments: `{"name":"Ada"}`,
@@ -52,21 +52,21 @@ func TestGraphRunner_Run_ReActToolThenFinalMessage(t *testing.T) {
 func TestGraphRunner_Run_TextChunkBeforeToolCallStillInvokesTool(t *testing.T) {
 	ctx := context.Background()
 	greet := &greetTool{}
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": greet}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
 
 	info, err := greet.Info(ctx)
 	require.NoError(t, err)
 
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streamErr:     nil,
 		streams: []*mockStream{
 			{chunks: []mockChunk{
 				{text: "I'll use the tool."},
 				{toolCalls: []schema.ToolCall{{
-					ID: "tc1",
+					ID: testToolCallIDTC1,
 					Function: schema.FunctionCall{
 						Name:      info.Name,
 						Arguments: `{"name":"Bob"}`,
@@ -88,12 +88,12 @@ func TestGraphRunner_Run_TextChunkBeforeToolCallStillInvokesTool(t *testing.T) {
 
 func TestGraphRunner_Run_EmitsAssistantTextEvents(t *testing.T) {
 	ctx := context.Background()
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": &greetTool{}}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: &greetTool{}}}
 	events := &mockEventSender{}
 
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streams: []*mockStream{
 			{chunks: []mockChunk{{text: "hello from assistant"}}},
@@ -119,21 +119,21 @@ func TestGraphRunner_Run_EmitsAssistantTextEvents(t *testing.T) {
 func TestGraphRunner_Run_EmitsAssistantTextEvents_WhenToolCallTurnContainsText(t *testing.T) {
 	ctx := context.Background()
 	greet := &greetTool{}
-	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"greet": greet}}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
 	events := &mockEventSender{}
 
 	info, err := greet.Info(ctx)
 	require.NoError(t, err)
 
 	llm := &mockLLM{
-		id:            "mock",
-		displayName:   "Mock",
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
 		contextWindow: 128_000,
 		streams: []*mockStream{
 			{chunks: []mockChunk{
 				{text: "let me inspect first"},
 				{toolCalls: []schema.ToolCall{{
-					ID: "tc1",
+					ID: testToolCallIDTC1,
 					Function: schema.FunctionCall{
 						Name:      info.Name,
 						Arguments: `{"name":"Ada"}`,
@@ -160,4 +160,3 @@ func TestGraphRunner_Run_EmitsAssistantTextEvents_WhenToolCallTurnContainsText(t
 	}
 	require.True(t, foundToolTurnText, "expected assistant text from tool-call turn to be emitted")
 }
-

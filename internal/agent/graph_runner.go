@@ -11,7 +11,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const graphContextSummaryThreshold = 0.8
+// requestInterruptedByUserMessage is appended as a synthetic user message when the graph run context is cancelled.
+const requestInterruptedByUserMessage = "[Request interrupted by user]"
+
+// transcriptSummarizer compacts message history for context overflow. Implemented by *Summarizer.
+type transcriptSummarizer interface {
+	Summarize(ctx context.Context, msgs []*schema.Message) (*schema.Message, error)
+}
 
 type graphRunState struct {
 	session     *domain.Session
@@ -26,7 +32,7 @@ type GraphRunner struct {
 	waiter       actionWaiter
 	events       eventSender
 	notifier     taskNotifier
-	summarizer   *Summarizer
+	summarizer   transcriptSummarizer
 	maxIteration int
 	permission   permissionAsker
 	toolInfos    []*schema.ToolInfo
@@ -49,7 +55,7 @@ func NewGraphRunner(
 	maxIterations int,
 	events eventSender,
 	notifier taskNotifier,
-	summarizer *Summarizer,
+	summarizer transcriptSummarizer,
 	permission permissionAsker,
 ) (*GraphRunner, error) {
 	if maxIterations <= 0 {
@@ -179,26 +185,20 @@ func (r *GraphRunner) Run(ctx context.Context, session *domain.Session, input st
 		return fmt.Errorf("session is required")
 	}
 	defer func() {
-		if ctx.Err() != nil {
-			msgs := session.Messages
-			if len(msgs) == 0 {
-				return
-			}
-			last := msgs[len(msgs)-1]
-			if last.Role != schema.User || last.Content != "[Session cancelled by user]" {
-				session.Messages = append(session.Messages, &schema.Message{
-					Role:    schema.User,
-					Content: "[Session cancelled by user]",
-					Extra:   map[string]any{domain.CancelMessageExtraKey: true},
-				})
-			}
+		if ctx.Err() != nil && len(session.Messages) > 0 {
+			_ = appendMessageMerge(&session.Messages, &schema.Message{
+				Role:    schema.User,
+				Content: requestInterruptedByUserMessage,
+			})
 		}
 	}()
 
-	session.Messages = append(session.Messages, &schema.Message{
+	if err := appendMessageMerge(&session.Messages, &schema.Message{
 		Role:    schema.User,
 		Content: input,
-	})
+	}); err != nil {
+		return err
+	}
 
 	runCtx := ctx
 	runCtx = runtimectx.WithActionWaiter(runCtx, r.waiter)

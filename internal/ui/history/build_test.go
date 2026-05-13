@@ -387,26 +387,40 @@ func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testi
 	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant messages should still coalesce across notification-only entries")
 }
 
-func TestBuildHistory_CancelledAssistantShowsGutterMarkerNotCancelText(t *testing.T) {
+func TestBuildHistory_SessionInterruptLineShownAsNormalUserMessage(t *testing.T) {
+	const interruptLine = "[Request interrupted by user]"
 	theme := newTestTheme()
 	b := NewBuilder(nil, theme, testHistoryWidth, 12)
 
 	msgs := []*schema.Message{
 		{Role: schema.Assistant, Content: "last assistant response"},
-		{
-			Role:    schema.User,
-			Content: "[Session cancelled by user]",
-			Extra:   map[string]any{domain.CancelMessageExtraKey: true},
-		},
+		{Role: schema.User, Content: interruptLine},
 	}
 
 	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
 
 	assert.Contains(t, out, "last assistant response")
-	assert.NotContains(t, out, "[Session cancelled by user]", "cancel line is LLM-only; history must not render it")
-	assert.Contains(t, out, "✘│", "cancelled assistant block should end with red gutter marker")
-	assert.Equal(t, 1, strings.Count(out, "\nA│\n"), "assistant block should stay unified")
-	assert.Equal(t, 0, strings.Count(out, "\nU┃\n"), "cancel should not render as user message")
+	assert.Contains(t, out, interruptLine)
+	assert.NotContains(t, out, "✘│")
+	assert.Equal(t, 1, strings.Count(out, "\nA│\n"))
+	assert.Equal(t, 1, strings.Count(out, "\nU┃\n"))
+}
+
+func TestBuildHistory_MergedInterruptAndFollowUpShownVerbatim(t *testing.T) {
+	const interruptLine = "[Request interrupted by user]"
+	theme := newTestTheme()
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
+
+	msgs := []*schema.Message{
+		{Role: schema.Assistant, Content: "reply"},
+		{Role: schema.User, Content: interruptLine + "\n\nfollow-up question"},
+	}
+
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	assert.Contains(t, out, interruptLine)
+	assert.Contains(t, out, "follow-up question")
+	assert.NotContains(t, out, "✘│")
+	assert.Contains(t, out, "\nU┃\n")
 }
 
 func TestDivider_Color(t *testing.T) {

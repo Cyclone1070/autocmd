@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -124,7 +123,28 @@ func TestRenderer_CodeBlockTrailingSpacing(t *testing.T) {
 	assert.True(t, strings.TrimSpace(stripANSI(remaining[0])) == "", "Line immediately after code block should be blank")
 }
 
-// WrapGlamour adapts an existing glamour.TermRenderer to Renderer (for tests).
-func WrapGlamour(tr *glamour.TermRenderer) Renderer {
-	return &GlamourRenderer{tr: tr}
+func TestRenderer_DiagramNoHighlight(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	// The large diagram that triggered the red lines in the history
+	diagram := "┌─────────────────────────────────────────────────────────────┐\n" +
+		"│                          cmd/                               │\n" +
+		"│  Wiring layer. Creates concrete instances, connects them    │\n" +
+		"│  via dependency injection, and manages lifecycle.           │\n" +
+		"└────────┬──────────────────┬──────────────────┬──────────────┘\n" +
+		"                 │ injects          │ injects          │ injects\n" +
+		"                 ▼                  ▼                  ▼\n" +
+		"        ┌──────────────┐      ┌───────────────┐   ┌────────────────────┐\n" +
+		"        │  workflow/   │      │    ui/        │   │  internal services │\n" +
+		"        │ Orchestrator │◄────►│  Reactive     │   │  agent/  auth/     │\n" +
+		"        │ coordinates  │events│  event-driven │   │  config/ fs/       │\n" +
+		"        │ use cases    │      │  display      │   │  llm/    session/  │\n" +
+		"        │              │      │               │   │  state/  tool/     │\n" +
+		"        └──────────────┘      └───────────────┘   └────────────────────┘"
+
+	markdown := "```\n" + diagram + "\n```"
+	rendered := r.Render(markdown)
+
+	// Check for the red background ANSI code \x1b[48;5;203m which indicates error highlighting.
+	// This should be absent now that we've disabled error backgrounds in the style.
+	assert.NotContains(t, rendered, "\x1b[48;5;203m", "Should not contain red background error highlighting for diagrams")
 }

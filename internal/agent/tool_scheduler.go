@@ -52,7 +52,9 @@ func (r *GraphRunner) appendToolOutputsForCalls(
 	}
 	for _, msg := range out {
 		if msg != nil {
-			st.session.Messages = append(st.session.Messages, msg)
+			if err := appendMessageMerge(&st.session.Messages, msg); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

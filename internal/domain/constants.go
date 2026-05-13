@@ -21,9 +21,6 @@ const (
 // Message metadata keys.
 const (
 	NotificationMessageExtraKey = "iav/is_notification"
-	// CancelMessageExtraKey marks the synthetic user message appended on session cancel (LLM-facing).
-	// History view does not print its content; it shows a gutter marker on the preceding assistant block.
-	CancelMessageExtraKey = "iav/is_cancel_message"
 )
 
 // Application Metadata.

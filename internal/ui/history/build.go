@@ -16,9 +16,8 @@ const gutterWidth = 2 // "A│" / "U┃" / " │" (assistant) or " ┃" (user)
 const userGutterPipe = "┃"
 
 type renderItem struct {
-	assistantIndices   []int
-	idx                int
-	assistantCancelled bool
+	assistantIndices []int
+	idx              int
 }
 
 func buildRenderItems(messages []*schema.Message) []renderItem {
@@ -32,14 +31,10 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 		if messages[i].Extra[domain.NotificationMessageExtraKey] == true {
 			continue
 		}
-		if messages[i].Extra[domain.CancelMessageExtraKey] == true {
-			continue
-		}
 
 		// Coalesce consecutive assistant turns into a single rendered assistant block.
 		if messages[i].Role == schema.Assistant {
 			assistantIdxs := []int{i}
-			assistantCancelled := false
 			j := i + 1
 			for j < len(messages) {
 				if messages[j].Role == schema.Tool {
@@ -50,19 +45,14 @@ func buildRenderItems(messages []*schema.Message) []renderItem {
 					j++
 					continue
 				}
-				if messages[j].Extra[domain.CancelMessageExtraKey] == true {
-					assistantCancelled = true
-					j++
-					continue
-				}
 				if messages[j].Role != schema.Assistant {
 					break
 				}
 				assistantIdxs = append(assistantIdxs, j)
 				j++
 			}
-			if len(assistantIdxs) > 1 || assistantCancelled {
-				items = append(items, renderItem{idx: i, assistantIndices: assistantIdxs, assistantCancelled: assistantCancelled})
+			if len(assistantIdxs) > 1 {
+				items = append(items, renderItem{idx: i, assistantIndices: assistantIdxs})
 				i = j - 1
 				continue
 			}
@@ -99,7 +89,7 @@ func (h *Builder) BuildSession(session *domain.Session) string {
 	items := buildRenderItems(messages)
 	for renderedCount, it := range items {
 		if len(it.assistantIndices) > 0 {
-			sb.WriteString(h.renderCoalescedAssistant(messages, it.assistantIndices, displays, it.assistantCancelled))
+			sb.WriteString(h.renderCoalescedAssistant(messages, it.assistantIndices, displays))
 			continue
 		}
 		sb.WriteString(h.RenderMessage(messages, it.idx, displays, renderedCount > 0))
@@ -108,16 +98,16 @@ func (h *Builder) BuildSession(session *domain.Session) string {
 	return sb.String()
 }
 
-func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) string {
+func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
-	h.renderAssistantSequence(&sb, messages, assistantIndices, displays, assistantCancelled)
+	h.renderAssistantSequence(&sb, messages, assistantIndices, displays)
 	sb.WriteString("\n")
 	return sb.String()
 }
 
-func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays, assistantCancelled bool) {
+func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -153,7 +143,7 @@ func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schem
 	}
 
 	body := strings.Join(parts, "\n")
-	h.writeAssistantFramedWithGutter(sb, body, assistantCancelled)
+	h.writeAssistantFramedWithGutter(sb, body)
 }
 
 // RenderMessage renders a single message at the given index.
@@ -217,7 +207,7 @@ func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message
 
 	// Join normalized parts with a single newline (as terminal surrogate).
 	body := strings.Join(parts, "\n")
-	h.writeAssistantFramedWithGutter(sb, body, false)
+	h.writeAssistantFramedWithGutter(sb, body)
 }
 
 func (h *Builder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
@@ -263,10 +253,7 @@ func (h *Builder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDispla
 	return rendered
 }
 
-// writeAssistantFramedWithGutter frames assistant content like writeFramedWithGutter, but when
-// assistantCancelled the bottom symmetric gutter line becomes a red ✘ in the role column (cancel
-// text stays in session messages for the model; history shows this marker only).
-func (h *Builder) writeAssistantFramedWithGutter(sb *strings.Builder, body string, assistantCancelled bool) {
+func (h *Builder) writeAssistantFramedWithGutter(sb *strings.Builder, body string) {
 	style := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
 	roleLine := style.Render("A│")
 	contPrefix := style.Render(" │")
@@ -275,11 +262,7 @@ func (h *Builder) writeAssistantFramedWithGutter(sb *strings.Builder, body strin
 	if content == "" {
 		sb.WriteString(roleLine)
 		sb.WriteString("\n")
-		if assistantCancelled {
-			sb.WriteString(h.assistantCancelGutterLine())
-		} else {
-			sb.WriteString(contPrefix)
-		}
+		sb.WriteString(contPrefix)
 		return
 	}
 
@@ -294,17 +277,7 @@ func (h *Builder) writeAssistantFramedWithGutter(sb *strings.Builder, body strin
 		}
 	}
 	sb.WriteString("\n")
-	if assistantCancelled {
-		sb.WriteString(h.assistantCancelGutterLine())
-	} else {
-		sb.WriteString(contPrefix)
-	}
-}
-
-func (h *Builder) assistantCancelGutterLine() string {
-	errSt := lipgloss.NewStyle().Foreground(h.Theme.ErrorColor()).Bold(true)
-	muted := lipgloss.NewStyle().Foreground(h.Theme.MutedColor()).Bold(true)
-	return errSt.Render("✘") + muted.Render("│")
+	sb.WriteString(contPrefix)
 }
 
 // writeFramedWithGutter renders a symmetric, guttered frame:

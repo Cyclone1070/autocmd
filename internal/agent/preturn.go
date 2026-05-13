@@ -9,15 +9,19 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const graphContextSummaryThreshold = 0.8
+
 func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*graphRunState, error) {
 	if st == nil || st.session == nil {
 		return st, fmt.Errorf("session is required")
 	}
 	if st.iterations >= r.maxIteration {
-		st.session.Messages = append(st.session.Messages, &schema.Message{
+		if err := appendMessageMerge(&st.session.Messages, &schema.Message{
 			Role:    schema.User,
 			Content: "[Max iterations reached]",
-		})
+		}); err != nil {
+			return st, err
+		}
 		st.stopReason = fmt.Errorf("max iterations (%d) reached", r.maxIteration)
 		return st, nil
 	}
@@ -39,31 +43,58 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 			"last_role", lastRole,
 		)
 		last := msgs[len(msgs)-1]
-		history := msgs[:len(msgs)-1]
-		summary, err := r.summarizer.Summarize(ctx, history)
-		if err == nil {
-			last.Content = fmt.Sprintf(
-				"[Conversation compacted automatically]\n\n%s\n\n=== CURRENT REQUEST ===\n\n%s",
-				summary.Content,
-				last.Content,
-			)
-			msgs = []*schema.Message{last}
-			slog.Info(
-				"graph preturn compaction applied",
-				"messages_after", len(msgs),
-				"last_role_after", last.Role,
-			)
+		var replacement []*schema.Message
+		var summarizeErr error
+		var summary *schema.Message
+
+		if last.Role == schema.User {
+			history := msgs[:len(msgs)-1]
+			summary, summarizeErr = r.summarizer.Summarize(ctx, history)
+			if summarizeErr == nil && summary != nil {
+				prefix := "[Conversation compacted automatically]\n\n" + summary.Content + "\n\n=== CURRENT REQUEST ===\n\n"
+				part := &schema.Message{Role: schema.User, Content: prefix}
+				var out []*schema.Message
+				if err := appendMessageMerge(&out, part); err != nil {
+					return st, err
+				}
+				if err := appendMessageMerge(&out, last); err != nil {
+					return st, err
+				}
+				replacement = out
+			}
 		} else {
-			slog.Warn("graph preturn compaction summarize failed", "error", err, "error_text", err.Error())
+			summary, summarizeErr = r.summarizer.Summarize(ctx, msgs)
+			if summarizeErr == nil && summary != nil {
+				comp := "[Conversation compacted automatically]\n\n" + summary.Content
+				replacement = []*schema.Message{{Role: schema.User, Content: comp}}
+			}
 		}
+
+		if summarizeErr != nil {
+			slog.Warn("graph preturn compaction summarize failed", "error", summarizeErr, "error_text", summarizeErr.Error())
+			return st, fmt.Errorf("graph preturn compaction: summarize: %w", summarizeErr)
+		}
+		if len(replacement) == 0 {
+			errNil := fmt.Errorf("summarize returned nil message")
+			slog.Warn("graph preturn compaction summarize failed", "error", errNil, "error_text", errNil.Error())
+			return st, fmt.Errorf("graph preturn compaction: %w", errNil)
+		}
+		msgs = replacement
+		slog.Info(
+			"graph preturn compaction applied",
+			"messages_after", len(msgs),
+			"last_role_after", msgs[len(msgs)-1].Role,
+		)
 	}
 	if r.notifier != nil {
 		for _, xml := range r.notifier.Drain() {
-			msgs = append(msgs, &schema.Message{
+			if err := appendMessageMerge(&msgs, &schema.Message{
 				Role:    schema.User,
 				Content: xml,
 				Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
-			})
+			}); err != nil {
+				return st, err
+			}
 		}
 	}
 	st.session.Messages = msgs

@@ -75,8 +75,7 @@ func graphAppendConcatenatedAssistantMessage(session *domain.Session, chunks []*
 	if err != nil {
 		return fmt.Errorf("ConcatMessages: %w", err)
 	}
-	session.Messages = append(session.Messages, msg)
-	return nil
+	return appendMessageMerge(&session.Messages, msg)
 }
 
 // normalizeToolCallIndices ensures every unique tool call ID has a stable, unique index.

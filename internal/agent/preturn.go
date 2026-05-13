@@ -51,7 +51,7 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 			history := msgs[:len(msgs)-1]
 			summary, summarizeErr = r.summarizer.Summarize(ctx, history)
 			if summarizeErr == nil && summary != nil {
-				prefix := "[Conversation compacted automatically]\n\n" + summary.Content + "\n\n=== CURRENT REQUEST ===\n\n"
+				prefix := "[Conversation compacted automatically]\n\n" + summary.Content + "\n\n=== CURRENT REQUEST ==="
 				part := &schema.Message{Role: schema.User, Content: prefix}
 				var out []*schema.Message
 				if err := appendMessageMerge(&out, part); err != nil {

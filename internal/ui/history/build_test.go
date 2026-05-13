@@ -42,6 +42,31 @@ func newTestTheme() *ui.Theme {
 	return ui.NewTheme(themeCfg)
 }
 
+func TestBuildHistory_AssistantWithReasoningDuration_RendersThoughtLine(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	theme := newTestTheme()
+	b := NewBuilder(nil, theme, testHistoryWidth, 12)
+
+	msgs := []*schema.Message{
+		{
+			Role:             schema.Assistant,
+			ReasoningContent: "internal chain of thought",
+			Content:          "Hello user.",
+			Extra: map[string]any{
+				domain.ThoughtDurationMsExtraKey: int64(2000),
+			},
+		},
+	}
+
+	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	assert.Contains(t, out, "Thought for 2s")
+	assert.Contains(t, out, "✔")
+	assert.Contains(t, out, "Hello user.")
+	assert.NotContains(t, out, "internal chain of thought", "reasoning text must not leak into history body")
+}
+
 func TestBashHistory_UseCapturedOutput(t *testing.T) {
 	theme := newTestTheme()
 	b := NewBuilder(nil, theme, testHistoryWidth, 12)

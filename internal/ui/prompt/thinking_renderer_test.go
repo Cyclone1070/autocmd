@@ -66,6 +66,15 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 		assert.NotContains(t, got, "⎿", "Completed thought should not show content block")
 	})
 
+	t.Run("RenderCompletedThought_matches_flushed_success_thinking", func(t *testing.T) {
+		d := 42 * time.Second
+		start := time.Now().Add(-d)
+		label := d.Round(time.Second).String()
+		flushed := r.RenderThinking(ui.StatusSuccess, start, 0, "", sp)
+		hist := r.RenderCompletedThought(label, 0, sp)
+		assert.Equal(t, flushed, hist, "history thought row should match prompt flush chrome")
+	})
+
 	t.Run("StatusError", func(t *testing.T) {
 		got := r.RenderThinking(ui.StatusError, time.Now(), 0, "hidden content", sp)
 		expectedLabel := theme.Error("Thought for 0s")

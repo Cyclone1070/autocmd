@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/components/tool"
@@ -149,6 +150,11 @@ func TestGraphRunner_ChatTurn_EmitsOnlyThoughtTextEvents(t *testing.T) {
 	_, err = runner.graphChatTurn(ctx, st)
 	require.NoError(t, err)
 
+	last := lastAssistant(st.session.Messages)
+	require.NotNil(t, last)
+	_, has := last.Extra[domain.ThoughtDurationMsExtraKey]
+	require.True(t, has, "thought duration should be persisted in Message.Extra for history")
+
 	thoughtTextCount := 0
 	nonTextEventCount := 0
 	for _, upd := range events.updates {
@@ -162,4 +168,35 @@ func TestGraphRunner_ChatTurn_EmitsOnlyThoughtTextEvents(t *testing.T) {
 	}
 	require.Equal(t, 0, nonTextEventCount, "unified contract should emit only text deltas for this scenario")
 	require.Equal(t, 2, thoughtTextCount, "thought chunks should still emit thought text deltas")
+}
+
+func TestBuildConcatenatedAssistantMessage_EmptyChunks(t *testing.T) {
+	msg, err := buildConcatenatedAssistantMessage(nil)
+	require.NoError(t, err)
+	require.Nil(t, msg)
+
+	msg, err = buildConcatenatedAssistantMessage([]*schema.Message{})
+	require.NoError(t, err)
+	require.Nil(t, msg)
+}
+
+func TestApplyThoughtDurationExtra_SetsExtraOnConcatenatedMessage(t *testing.T) {
+	chunks := []*schema.Message{
+		{Role: schema.Assistant, ReasoningContent: "a"},
+		{Role: schema.Assistant, Content: "body"},
+	}
+	msg, err := buildConcatenatedAssistantMessage(chunks)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	require.NotEmpty(t, msg.ReasoningContent)
+
+	start := time.Now().Add(-2 * time.Second)
+	end := time.Now()
+	applyThoughtDurationExtra(msg, true, start, end)
+
+	v, ok := msg.Extra[domain.ThoughtDurationMsExtraKey]
+	require.True(t, ok)
+	ms, ok := v.(int64)
+	require.True(t, ok, "expected int64 milliseconds, got %T", v)
+	require.GreaterOrEqual(t, ms, int64(1500), "duration should reflect wall clock between start and end")
 }

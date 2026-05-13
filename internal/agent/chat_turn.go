@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	flowagent "github.com/cloudwego/eino/flow/agent"
@@ -28,6 +30,8 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 	defer stream.Close()
 
 	var chunks []*schema.Message
+	var reasoningStart time.Time
+	var reasoningStarted bool
 	for {
 		chunk, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -35,11 +39,15 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 		}
 		if err != nil {
 			slog.Error("graph chat stream recv failed", "error", err, "error_text", err.Error(), "chunks_received", len(chunks))
-			if appendErr := graphAppendConcatenatedAssistantMessage(st.session, chunks); appendErr != nil {
+			if appendErr := appendConcatenatedAssistantTurn(st.session, chunks, reasoningStarted, reasoningStart); appendErr != nil {
 				slog.Error("graph chat append partial assistant failed", "error", appendErr, "error_text", appendErr.Error())
 				return st, appendErr
 			}
 			return st, fmt.Errorf("%w: reader.Recv: %w", classifyModelErr(err), err)
+		}
+		if chunk.ReasoningContent != "" && !reasoningStarted {
+			reasoningStart = time.Now()
+			reasoningStarted = true
 		}
 		chunks = append(chunks, chunk)
 		if r.events != nil {
@@ -51,7 +59,7 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 			}
 		}
 	}
-	if err := graphAppendConcatenatedAssistantMessage(st.session, chunks); err != nil {
+	if err := appendConcatenatedAssistantTurn(st.session, chunks, reasoningStarted, reasoningStart); err != nil {
 		slog.Error("graph chat append assistant failed", "error", err, "error_text", err.Error())
 		return st, err
 	}
@@ -66,15 +74,42 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 	return st, nil
 }
 
-func graphAppendConcatenatedAssistantMessage(session *domain.Session, chunks []*schema.Message) error {
+// buildConcatenatedAssistantMessage returns nil when chunks is empty.
+func buildConcatenatedAssistantMessage(chunks []*schema.Message) (*schema.Message, error) {
 	if len(chunks) == 0 {
-		return nil
+		return nil, nil
 	}
 	normalizeToolCallIndices(chunks)
 	msg, err := schema.ConcatMessages(chunks)
 	if err != nil {
-		return fmt.Errorf("ConcatMessages: %w", err)
+		return nil, fmt.Errorf("ConcatMessages: %w", err)
 	}
+	return msg, nil
+}
+
+func applyThoughtDurationExtra(msg *schema.Message, reasoningStarted bool, reasoningStart, end time.Time) {
+	if msg == nil || !reasoningStarted {
+		return
+	}
+	if strings.TrimSpace(msg.ReasoningContent) == "" {
+		return
+	}
+	d := max(time.Duration(0), end.Sub(reasoningStart))
+	if msg.Extra == nil {
+		msg.Extra = make(map[string]any)
+	}
+	msg.Extra[domain.ThoughtDurationMsExtraKey] = d.Milliseconds()
+}
+
+func appendConcatenatedAssistantTurn(session *domain.Session, chunks []*schema.Message, reasoningStarted bool, reasoningStart time.Time) error {
+	msg, err := buildConcatenatedAssistantMessage(chunks)
+	if err != nil {
+		return err
+	}
+	if msg == nil {
+		return nil
+	}
+	applyThoughtDurationExtra(msg, reasoningStarted, reasoningStart, time.Now())
 	return appendMessageMerge(&session.Messages, msg)
 }
 

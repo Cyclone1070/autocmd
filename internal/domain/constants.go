@@ -16,6 +16,8 @@ const (
 // Message metadata keys.
 const (
 	NotificationMessageExtraKey = "iav/is_notification"
+	// ThoughtDurationMsExtraKey is Message.Extra: ms from first reasoning chunk to stream end (persisted for history UI).
+	ThoughtDurationMsExtraKey = "iav/reasoning_phase_duration_ms"
 )
 
 // Application Metadata.

@@ -70,6 +70,29 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 	return r.Theme.RenderActionBlock(spec)
 }
 
+// RenderCompletedThought renders the same action-block chrome as RenderThinking for
+// StatusSuccess, using an explicit duration label (e.g. "17s", "1m2s") for persisted history.
+func (r *ThinkingRenderer) RenderCompletedThought(durationLabel string, tick int, sp spinnerProvider) string {
+	if sp == nil {
+		sp = noopThinkingSpinner{}
+	}
+	label := r.Theme.Success(fmt.Sprintf("Thought for %s", durationLabel))
+	spec := ui.ActionBlockSpec{
+		Status:      ui.StatusSuccess,
+		Frame:       sp.Frame(tick),
+		HeaderLines: []string{label},
+	}
+	headerPrefixWidth := lipgloss.Width(r.Theme.StatusPrefix(spec.Status, spec.Frame))
+	headerContinuationWidth := r.Width - lipgloss.Width(ui.ToolInsetPrefix)
+	headerFirstWidth := headerContinuationWidth - headerPrefixWidth
+	spec.HeaderLines = wrapThinkingLines(spec.HeaderLines, headerFirstWidth, headerContinuationWidth)
+	return r.Theme.RenderActionBlock(spec)
+}
+
+type noopThinkingSpinner struct{}
+
+func (noopThinkingSpinner) Frame(int) string { return "" }
+
 func completedVisualThoughtLines(text string, firstWidth, continuationWidth int) []string {
 	if text == "" {
 		return nil

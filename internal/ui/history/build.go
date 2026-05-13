@@ -117,6 +117,10 @@ func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schem
 			continue
 		}
 
+		if line := thoughtHistoryLine(h, am); line != "" {
+			parts = append(parts, ui.NormalizeBlock(line))
+		}
+
 		// Content at the point it was produced.
 		if am.Content != "" {
 			content := am.Content
@@ -183,6 +187,9 @@ func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message
 	contentWidth := h.contentWidth()
 
 	var parts []string
+	if line := thoughtHistoryLine(h, am); line != "" {
+		parts = append(parts, ui.NormalizeBlock(line))
+	}
 	if am.Content != "" {
 		content := am.Content
 		if h.Renderer != nil {

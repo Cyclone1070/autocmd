@@ -27,9 +27,9 @@ const (
 	ToolContentGutterPrefix = "     "
 )
 
-// ToolBlockSpec is the semantic rendering contract passed from ToolRenderer to Theme.
+// ActionBlockSpec is the semantic rendering contract passed from ToolRenderer to Theme.
 // Theme consumes this structure for placement and styling only.
-type ToolBlockSpec struct {
+type ActionBlockSpec struct {
 	Frame        string
 	HeaderLines  []string
 	ContentLines []string
@@ -145,8 +145,8 @@ func (r *ToolRenderer) RenderString(d domain.StringDisplay, status ToolStatus, e
 	return r.renderSpec(spec, opts)
 }
 
-func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
-	spec := ToolBlockSpec{
+func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus, err string, frame string) (ActionBlockSpec, bool) {
+	spec := ActionBlockSpec{
 		Status: status,
 		Frame:  frame,
 	}
@@ -170,7 +170,7 @@ func (r *ToolRenderer) buildStringSpec(d domain.StringDisplay, status ToolStatus
 	}
 
 	if len(spec.HeaderLines) == 0 && len(spec.ContentLines) == 0 {
-		return ToolBlockSpec{}, false
+		return ActionBlockSpec{}, false
 	}
 	return spec, true
 }
@@ -189,10 +189,10 @@ func (r *ToolRenderer) RenderDiff(d domain.DiffDisplay, status ToolStatus, err s
 	return r.renderSpec(spec, opts)
 }
 
-func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) ToolBlockSpec {
+func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, err string, frame string) ActionBlockSpec {
 	header := d.Description
 	target := d.Target
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		HeaderLines: []string{r.statusColor(status, header)},
 		Status:      status,
 		Frame:       frame,
@@ -257,9 +257,9 @@ func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status To
 	return r.renderSpec(spec, opts)
 }
 
-func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) ToolBlockSpec {
+func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status ToolStatus, err string, frame string) ActionBlockSpec {
 	header := d.Description
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		HeaderLines: []string{r.statusColor(status, header)},
 		Status:      status,
 		Frame:       frame,
@@ -297,9 +297,9 @@ func (r *ToolRenderer) RenderQuestion(d domain.QuestionDisplay, state QuestionUI
 	return r.renderSpec(spec, RenderSpecOptions{TruncateMode: truncateNone, TruncateFromContentIndex: 0})
 }
 
-func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string, frame string) (ToolBlockSpec, bool) {
+func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state QuestionUIState, status ToolStatus, err string, frame string) (ActionBlockSpec, bool) {
 	if len(d.Questions) == 0 {
-		return ToolBlockSpec{}, false
+		return ActionBlockSpec{}, false
 	}
 
 	n := len(d.Questions)
@@ -348,7 +348,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 		}
 		body := summary + "\n\n" + r.renderQuestionReviewBlock(stRender)
 		lines := strings.Split(body, "\n")
-		spec := ToolBlockSpec{
+		spec := ActionBlockSpec{
 			Status: status,
 			Frame:  frame,
 		}
@@ -377,7 +377,7 @@ func (r *ToolRenderer) buildQuestionSpec(d domain.QuestionDisplay, state Questio
 
 	body := strings.Join(parts, "\n\n")
 	lines := strings.Split(body, "\n")
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		Status:      status,
 		Frame:       frame,
 		HeaderLines: []string{lines[0]},
@@ -555,7 +555,7 @@ func (r *ToolRenderer) renderQuestionOptionBlock(q domain.QuestionInfo, st Quest
 	return strings.Join(lines, "\n")
 }
 
-func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) string {
+func (r *ToolRenderer) renderSpec(spec ActionBlockSpec, opts RenderSpecOptions) string {
 	headerPrefixWidth := lipgloss.Width(r.Theme.StatusPrefix(spec.Status, spec.Frame))
 	headerContinuationWidth := r.Width - lipgloss.Width(ToolInsetPrefix)
 	headerFirstWidth := headerContinuationWidth - headerPrefixWidth
@@ -590,5 +590,5 @@ func (r *ToolRenderer) renderSpec(spec ToolBlockSpec, opts RenderSpecOptions) st
 	}
 	spec.FooterLines = r.wrapLines(spec.FooterLines, footerWidth, footerWidth)
 
-	return r.Theme.RenderToolBlock(spec)
+	return r.Theme.RenderActionBlock(spec)
 }

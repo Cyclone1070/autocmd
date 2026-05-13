@@ -47,7 +47,7 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 		label = r.Theme.Error(fmt.Sprintf("Thought for %s", dur))
 	}
 
-	spec := ui.ToolBlockSpec{
+	spec := ui.ActionBlockSpec{
 		Status:      status,
 		Frame:       sp.Frame(tick),
 		HeaderLines: []string{label},
@@ -67,7 +67,7 @@ func (r *ThinkingRenderer) RenderThinking(status ui.ToolStatus, start time.Time,
 		}
 		spec.ContentLines = wrappedContent
 	}
-	return r.Theme.RenderToolBlock(spec)
+	return r.Theme.RenderActionBlock(spec)
 }
 
 func completedVisualThoughtLines(text string, firstWidth, continuationWidth int) []string {

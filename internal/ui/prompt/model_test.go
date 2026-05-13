@@ -70,6 +70,70 @@ func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, _ time.Time,
 	return "thinking_rendered"
 }
 
+func TestModel_SummaryCompaction_Lifecycle(t *testing.T) {
+	var flushed []string
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
+		flushed = append(flushed, c)
+		return nil
+	}))
+	m.isPolling = true
+
+	res, _ := m.Update(busEventMsg{event: domain.SummaryCompactionStartEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateSummarizing, m.nextState)
+
+	res, _ = m.Update(flushDoneMsg{})
+	m = res.(*Model)
+	assert.Equal(t, stateSummarizing, m.state)
+	v := m.View()
+	assert.Contains(t, v, summaryCompactionTitle)
+	assert.NotContains(t, v, "Summarize context for")
+
+	res, _ = m.Update(busEventMsg{event: domain.SummaryCompactionEndEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateIdle, m.nextState)
+	require.NotEmpty(t, flushed)
+	joined := strings.Join(flushed, "")
+	assert.Contains(t, joined, summaryCompactionTitle)
+	// End flush should emit exactly one completion block (no duplicate prefix flush).
+	assert.Equal(t, 1, strings.Count(joined, summaryCompactionTitle))
+}
+
+func TestModel_SummaryCompaction_EndError_OneLineUserMessage(t *testing.T) {
+	var flushed []string
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
+		flushed = append(flushed, c)
+		return nil
+	}))
+	m.isPolling = true
+
+	res, _ := m.Update(busEventMsg{event: domain.SummaryCompactionStartEvent{}})
+	m = res.(*Model)
+	res, _ = m.Update(flushDoneMsg{})
+	m = res.(*Model)
+	require.Equal(t, stateSummarizing, m.state)
+
+	res, _ = m.Update(busEventMsg{event: domain.SummaryCompactionEndEvent{Error: "internal summarize blew up"}})
+	m = res.(*Model)
+	require.Equal(t, stateFlushing, m.state)
+
+	res, _ = m.Update(flushDoneMsg{})
+	_ = res
+	require.NotEmpty(t, flushed)
+	out := strings.Join(flushed, "")
+	assert.Contains(t, out, "Summarization failed")
+	assert.NotContains(t, out, "internal summarize blew up")
+	assert.NotContains(t, out, "Summarization failed -")
+}
+
 func TestModel_SyncPolling(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	theme := ui.NewTheme(ui.ThemeConfig{})

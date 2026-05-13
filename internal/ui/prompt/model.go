@@ -48,6 +48,7 @@ const (
 	stateThinking
 	stateTooling
 	stateFlushing
+	stateSummarizing
 	stateDone
 )
 
@@ -146,7 +147,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case busEventMsg:
 		if m.cancelRequested {
 			switch msg.event.(type) {
-			case domain.ToolEndEvent, domain.DoneEvent:
+			case domain.ToolEndEvent, domain.DoneEvent, domain.SummaryCompactionEndEvent:
 				return m.handleBusEvent(msg.event)
 			default:
 				// Trash queued non-terminal workflow activity after cancellation.
@@ -203,7 +204,7 @@ func (m *Model) schedulePollOnly() (tea.Model, tea.Cmd) {
 
 func (m *Model) isReadyForEvent() bool {
 	switch m.state {
-	case stateIdle, stateThinking, stateTooling:
+	case stateIdle, stateThinking, stateTooling, stateSummarizing:
 		return true
 	}
 	return false
@@ -221,6 +222,9 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 	case stateThinking:
 		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, "", m.spinnerProvider)
 		return m.doFlush([]string{thinkingLine, errLine}, stateDone)
+	case stateSummarizing:
+		summaryLine := m.renderSummaryCompactionTool(ui.StatusError)
+		return m.doFlush([]string{summaryLine, errLine}, stateDone)
 	case stateTooling:
 		for i := range m.tools {
 			if m.tools[i].status == ui.StatusRunning {
@@ -233,6 +237,62 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 		blocks := append(m.stream.Flush(), errLine)
 		return m.doFlush(blocks, stateDone)
 	}
+}
+
+func (m *Model) handleBusTextEvent(u domain.TextEvent, flushBlocks []string) (tea.Model, tea.Cmd) {
+	if u.IsThought {
+		if m.state == stateThinking {
+			m.thoughtText += u.Text
+			return m.schedulePollOnly()
+		}
+		m.state = stateThinking
+		m.thinkingStart = time.Now()
+		m.thoughtText = u.Text
+		m.spinnerFrame = 0
+		flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		return m.doFlush(flushBlocks, stateThinking)
+	}
+	flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
+	m.state = stateIdle
+	if len(flushBlocks) > 0 {
+		return m.doFlush(flushBlocks, stateIdle)
+	}
+	return m.schedulePollOnly()
+}
+
+func (m *Model) handleBusToolEndEvent(u domain.ToolEndEvent, flushBlocks []string) (tea.Model, tea.Cmd) {
+	if m.state == stateTooling {
+		for i := range m.tools {
+			if m.tools[i].callID == u.CallID {
+				if u.Display != nil {
+					m.tools[i].display = u.Display
+					m.tools[i].errorMsg = ""
+					if u.Display.GetError() != "" {
+						m.tools[i].status = ui.StatusError
+					} else {
+						m.tools[i].status = ui.StatusSuccess
+					}
+				}
+				break
+			}
+		}
+		flushed := m.flushCompletedToolPrefix()
+		if len(flushed) > 0 {
+			next := stateTooling
+			if len(m.tools) == 0 {
+				next = stateIdle
+			}
+			flushed = append(flushBlocks, flushed...)
+			return m.doFlush(flushed, next)
+		}
+		if len(m.tools) == 0 {
+			m.state = stateIdle
+		}
+	}
+	if len(flushBlocks) > 0 {
+		return m.doFlush(flushBlocks, m.state)
+	}
+	return m.schedulePollOnly()
 }
 
 func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
@@ -250,24 +310,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 
 	switch u := u.(type) {
 	case domain.TextEvent:
-		if u.IsThought {
-			if m.state == stateThinking {
-				m.thoughtText += u.Text
-				return m.schedulePollOnly()
-			}
-			m.state = stateThinking
-			m.thinkingStart = time.Now()
-			m.thoughtText = u.Text
-			m.spinnerFrame = 0
-			flushBlocks = append(flushBlocks, m.stream.Flush()...)
-			return m.doFlush(flushBlocks, stateThinking)
-		}
-		flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
-		m.state = stateIdle
-		if len(flushBlocks) > 0 {
-			return m.doFlush(flushBlocks, stateIdle)
-		}
-		return m.schedulePollOnly()
+		return m.handleBusTextEvent(u, flushBlocks)
 	case domain.ToolStartEvent:
 		slot := toolSlot{
 			callID:  u.CallID,
@@ -295,6 +338,21 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		m.state = stateDone
 		flushBlocks = append(flushBlocks, m.stream.Flush()...)
 		return m.doFlush(flushBlocks, stateDone)
+	case domain.SummaryCompactionStartEvent:
+		m.state = stateSummarizing
+		m.spinnerFrame = 0
+		flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		return m.doFlush(flushBlocks, stateSummarizing)
+	case domain.SummaryCompactionEndEvent:
+		status := ui.StatusSuccess
+		switch {
+		case u.Error != "":
+			status = ui.StatusError
+		case m.cancelRequested:
+			status = ui.StatusError
+		}
+		flushBlocks = append(flushBlocks, m.renderSummaryCompactionTool(status))
+		return m.doFlush(flushBlocks, stateIdle)
 	case domain.ToolStreamEvent:
 		if m.state == stateTooling {
 			for i := range m.tools {
@@ -306,38 +364,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		}
 		return m.schedulePollOnly()
 	case domain.ToolEndEvent:
-		if m.state == stateTooling {
-			for i := range m.tools {
-				if m.tools[i].callID == u.CallID {
-					if u.Display != nil {
-						m.tools[i].display = u.Display
-						m.tools[i].errorMsg = ""
-						if u.Display.GetError() != "" {
-							m.tools[i].status = ui.StatusError
-						} else {
-							m.tools[i].status = ui.StatusSuccess
-						}
-					}
-					break
-				}
-			}
-			flushed := m.flushCompletedToolPrefix()
-			if len(flushed) > 0 {
-				next := stateTooling
-				if len(m.tools) == 0 {
-					next = stateIdle
-				}
-				flushed = append(flushBlocks, flushed...)
-				return m.doFlush(flushed, next)
-			}
-			if len(m.tools) == 0 {
-				m.state = stateIdle
-			}
-		}
-		if len(flushBlocks) > 0 {
-			return m.doFlush(flushBlocks, m.state)
-		}
-		return m.schedulePollOnly()
+		return m.handleBusToolEndEvent(u, flushBlocks)
 	}
 	if len(flushBlocks) > 0 {
 		return m.doFlush(flushBlocks, m.state)
@@ -393,6 +420,12 @@ func (m *Model) View() string {
 			status = ui.StatusError
 		}
 		content = ui.NormalizeBlock(m.thinkingRenderer.RenderThinking(status, m.thinkingStart, m.spinnerFrame, m.thoughtText, m.spinnerProvider))
+	case stateSummarizing:
+		status := ui.StatusRunning
+		if m.cancelRequested {
+			status = ui.StatusError
+		}
+		content = ui.NormalizeBlock(m.renderSummaryCompactionTool(status))
 	case stateTooling:
 		content = ui.NormalizeBlock(strings.Join(m.renderAllTools(), ""))
 	}
@@ -537,6 +570,24 @@ func (m *Model) flushCompletedToolPrefix() []string {
 		m.tools = m.tools[1:]
 	}
 	return flushed
+}
+
+const summaryCompactionTitle = "Summarize context"
+
+// renderSummaryCompactionTool renders context compaction like a string tool call (no duration labels).
+// Status is shown by the tool prefix (spinner / ✔ / ✘); the title stays the same for running and success.
+// On error, description and content are empty; the header is a single Theme.Error line (see ToolRenderer.buildStringSpec).
+func (m *Model) renderSummaryCompactionTool(status ui.ToolStatus) string {
+	if m.toolRenderer == nil || m.spinnerProvider == nil {
+		return ""
+	}
+	frame := m.spinnerProvider.Frame(m.spinnerFrame)
+	switch status {
+	case ui.StatusError:
+		return m.toolRenderer.RenderString(domain.NewStringDisplay("", ""), status, "Summarization failed", frame)
+	default:
+		return m.toolRenderer.RenderString(domain.NewStringDisplay(summaryCompactionTitle, ""), status, "", frame)
+	}
 }
 
 func (m *Model) renderToolBox(slot toolSlot) string {

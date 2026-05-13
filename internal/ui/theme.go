@@ -114,8 +114,8 @@ func (t *Theme) Separator(width int, status ToolStatus) string {
 	return lipgloss.NewStyle().Foreground(color).Render(strings.Repeat("─", width))
 }
 
-// RenderToolBlock renders a tool execution block using the theme's status markers and colors.
-func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
+// RenderActionBlock renders an action execution block using status markers and colors.
+func (t *Theme) RenderActionBlock(spec ActionBlockSpec) string {
 	header := trimEmptyLines(spec.HeaderLines)
 	content := trimEmptyLines(spec.ContentLines)
 	footer := trimEmptyLines(spec.FooterLines)
@@ -154,14 +154,14 @@ func (t *Theme) RenderToolBlock(spec ToolBlockSpec) string {
 	return "\n\n" + strings.Join(out, "\n")
 }
 
-// ToolBlock renders a simple tool block with header and content.
-func (t *Theme) ToolBlock(content string, status ToolStatus, _ string) string {
+// ActionBlock renders a simple action block with header and content.
+func (t *Theme) ActionBlock(content string, status ToolStatus, _ string) string {
 	content = strings.Trim(content, "\n")
 	if content == "" {
 		return ""
 	}
 	lines := strings.Split(content, "\n")
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		Status: status,
 	}
 	if len(lines) > 0 {
@@ -170,12 +170,12 @@ func (t *Theme) ToolBlock(content string, status ToolStatus, _ string) string {
 	if len(lines) > 1 {
 		spec.ContentLines = lines[1:]
 	}
-	return t.RenderToolBlock(spec)
+	return t.RenderActionBlock(spec)
 }
 
 // Box exists for compatibility while tests migrate from box-style assertions.
 func (t *Theme) Box(content string, _ int, status ToolStatus) string {
-	return t.ToolBlock(content, status, "")
+	return t.ActionBlock(content, status, "")
 }
 
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {

@@ -34,6 +34,9 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 	threshold := int(float64(cw) * graphContextSummaryThreshold)
 	totalTokens := st.session.TotalTokens()
 	if r.summarizer != nil && len(msgs) > 1 && totalTokens > threshold {
+		if r.events != nil {
+			r.events.SendUIUpdate(domain.SummaryCompactionStartEvent{})
+		}
 		lastRole := msgs[len(msgs)-1].Role
 		slog.Info(
 			"graph preturn compaction triggered",
@@ -71,15 +74,24 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 		}
 
 		if summarizeErr != nil {
+			if r.events != nil {
+				r.events.SendUIUpdate(domain.SummaryCompactionEndEvent{Error: summarizeErr.Error()})
+			}
 			slog.Warn("graph preturn compaction summarize failed", "error", summarizeErr, "error_text", summarizeErr.Error())
 			return st, fmt.Errorf("graph preturn compaction: summarize: %w", summarizeErr)
 		}
 		if len(replacement) == 0 {
 			errNil := fmt.Errorf("summarize returned nil message")
+			if r.events != nil {
+				r.events.SendUIUpdate(domain.SummaryCompactionEndEvent{Error: errNil.Error()})
+			}
 			slog.Warn("graph preturn compaction summarize failed", "error", errNil, "error_text", errNil.Error())
 			return st, fmt.Errorf("graph preturn compaction: %w", errNil)
 		}
 		msgs = replacement
+		if r.events != nil {
+			r.events.SendUIUpdate(domain.SummaryCompactionEndEvent{})
+		}
 		slog.Info(
 			"graph preturn compaction applied",
 			"messages_after", len(msgs),

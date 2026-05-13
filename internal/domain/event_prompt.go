@@ -16,6 +16,19 @@ type TextEvent struct {
 
 func (TextEvent) isUIUpdate() {}
 
+// SummaryCompactionStartEvent is emitted when context compaction begins.
+type SummaryCompactionStartEvent struct{}
+
+func (SummaryCompactionStartEvent) isUIUpdate() {}
+
+// SummaryCompactionEndEvent is emitted when context compaction completes.
+// Error is empty on success.
+type SummaryCompactionEndEvent struct {
+	Error string
+}
+
+func (SummaryCompactionEndEvent) isUIUpdate() {}
+
 // DoneEvent is emitted when the workflow loop completes.
 type DoneEvent struct{}
 

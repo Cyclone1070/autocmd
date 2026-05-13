@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTheme_RenderToolBlock_HeaderAndGutter(t *testing.T) {
+func TestTheme_RenderActionBlock_HeaderAndGutter(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
 	th := NewTheme(ThemeConfig{
 		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
@@ -16,18 +16,18 @@ func TestTheme_RenderToolBlock_HeaderAndGutter(t *testing.T) {
 		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	})
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		HeaderLines:  []string{"Read \"main.go\""},
 		ContentLines: []string{"first line", "second line"},
 		Status:       StatusSuccess,
 	}
 
-	got := th.RenderToolBlock(spec)
+	got := th.RenderActionBlock(spec)
 
 	assert.Equal(t, "\n\n    ✔ Read \"main.go\"\n       ⎿ first line\n         second line", got)
 }
 
-func TestTheme_RenderToolBlock_HeaderContinuationIndented(t *testing.T) {
+func TestTheme_RenderActionBlock_HeaderContinuationIndented(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
 	th := NewTheme(ThemeConfig{
 		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
@@ -36,12 +36,12 @@ func TestTheme_RenderToolBlock_HeaderContinuationIndented(t *testing.T) {
 		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	})
-	spec := ToolBlockSpec{
+	spec := ActionBlockSpec{
 		HeaderLines: []string{"Read \"main.go\"", "with extra context"},
 		Status:      StatusSuccess,
 	}
 
-	got := th.RenderToolBlock(spec)
+	got := th.RenderActionBlock(spec)
 
 	assert.Equal(t, "\n\n    ✔ Read \"main.go\"\n      with extra context", got)
 }

@@ -121,6 +121,8 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 	// Remove background colors to ensure safe contrast on all palettes
 	style.H1.BackgroundColor = nil
 	style.Code.BackgroundColor = nil
+	style.Code.Prefix = ""
+	style.Code.Suffix = ""
 	style.CodeBlock.BackgroundColor = nil
 
 	// Disable background and foreground for Chroma errors to avoid "red lines" in diagrams

@@ -149,3 +149,14 @@ func TestRenderer_DiagramNoHighlight(t *testing.T) {
 	// This should be absent now that we've disabled error backgrounds in the style.
 	assert.NotContains(t, rendered, "\x1b[48;5;203m", "Should not contain red background error highlighting for diagrams")
 }
+
+func TestRenderer_InlineCodePadding(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	markdown := "use `read_file` tool"
+	rendered := r.Render(markdown)
+	stripped := stripANSI(rendered)
+	
+	// If padding is present, it will have "use  read_file  tool" (double spaces)
+	assert.Contains(t, stripped, "use read_file tool", "Inline code should not have padding")
+	assert.NotContains(t, stripped, "use  read_file  tool", "Inline code should not have double spaces from padding")
+}

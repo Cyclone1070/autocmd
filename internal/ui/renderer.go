@@ -125,8 +125,10 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 
 	// Disable background and foreground for Chroma errors to avoid "red lines" in diagrams
 	if style.CodeBlock.Chroma != nil {
-		style.CodeBlock.Chroma.Error.BackgroundColor = nil
-		style.CodeBlock.Chroma.Error.Color = nil
+		chromaCopy := *style.CodeBlock.Chroma
+		chromaCopy.Error.BackgroundColor = nil
+		chromaCopy.Error.Color = nil
+		style.CodeBlock.Chroma = &chromaCopy
 	}
 
 	// Match H1 foreground to other headings (H2) and restore bold/underline

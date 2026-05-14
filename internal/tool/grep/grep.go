@@ -98,7 +98,7 @@ func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 		Desc: `A powerful search tool built on ripgrep.
 
 Usage:
-- The path parameter MUST be an absolute path.
+- The path parameter MUST be an absolute path (or start with ~).
 - ALWAYS use this tool for search tasks. NEVER invoke "grep" or "rg" as a bash command. This tool has been optimized for correct permissions and access.
 - Supports full regex syntax (e.g., "log.*Error", "function\s+\w+").
 - Filter files with the "glob" parameter (e.g., "*.js", "**/*.tsx") or "type" parameter (e.g., "js", "py", "rust").
@@ -116,7 +116,7 @@ Usage:
 			},
 			"path": {
 				Type: schema.String,
-				Desc: fmt.Sprintf("Absolute path to file or directory to search in (rg PATH). Defaults to workspace root (currently \"%s\").", t.pathResolver.Root()),
+				Desc: fmt.Sprintf("Absolute path (or ~ path) to file or directory to search in (rg PATH). Defaults to workspace root (currently \"%s\").", t.pathResolver.Root()),
 			},
 			"glob": {
 				Type: schema.String,

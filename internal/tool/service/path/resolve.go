@@ -81,8 +81,16 @@ func (r *Resolver) ValidateAbs(path string) (string, error) {
 		return "", fmt.Errorf("workspace root not set")
 	}
 
+	if strings.HasPrefix(path, "~") && r.homeDir != "" {
+		if path == "~" {
+			path = r.homeDir
+		} else if strings.HasPrefix(path, "~/") {
+			path = filepath.Join(r.homeDir, path[2:])
+		}
+	}
+
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("absolute path required, but got: %q. Please provide full path from root (starts with /)", path)
+		return "", fmt.Errorf("absolute path required, but got: %q. Please provide full path from root (starts with / or ~)", path)
 	}
 
 	return filepath.Clean(path), nil

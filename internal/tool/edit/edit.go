@@ -86,7 +86,7 @@ func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 		Desc: `Performs exact string replacements in files.
 
 Usage:
-- The file_path MUST be an absolute path.
+- The file_path MUST be an absolute path (or start with ~).
 - You must use the "read_file" tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.
 - When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + tab. Everything after that is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
@@ -96,7 +96,7 @@ Usage:
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The absolute path to the file to edit.",
+				Desc:     "The absolute path (or ~ path) to the file to edit.",
 				Required: true,
 			},
 			"description": {

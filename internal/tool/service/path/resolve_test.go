@@ -10,6 +10,7 @@ import (
 func TestAbs(t *testing.T) {
 	workspaceRoot := testutil.TestWorkspaceRoot
 	resolver := NewResolver(workspaceRoot)
+	resolver.homeDir = "/mock/home"
 
 	tests := []struct {
 		name      string
@@ -18,6 +19,18 @@ func TestAbs(t *testing.T) {
 		errorMsg  string
 		wantError bool
 	}{
+		{
+			name:      "tilde home path",
+			input:     "~/src/main.go",
+			expected:  "/mock/home/src/main.go",
+			wantError: false,
+		},
+		{
+			name:      "tilde standalone",
+			input:     "~",
+			expected:  "/mock/home",
+			wantError: false,
+		},
 		{
 			name:      "relative path rejection",
 			input:     "src/main.go",

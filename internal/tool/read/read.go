@@ -76,7 +76,7 @@ func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 		Desc: `Read a file from the local filesystem.
 
 Usage:
-- The file_path parameter MUST be an absolute path.
+- The file_path parameter MUST be an absolute path (or start with ~).
 - Results are returned using "cat -n" format, with line numbers starting at 1.
 - By default, it reads up to 2000 lines starting from the beginning of the file.
 - Negative offsets count backward from the end of the file (-1 is the last line).
@@ -86,7 +86,7 @@ Usage:
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {
 				Type:     schema.String,
-				Desc:     "The absolute path to the file to read.",
+				Desc:     "The absolute path (or ~ path) to the file to read.",
 				Required: true,
 			},
 			"offset": {

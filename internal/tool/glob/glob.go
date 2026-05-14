@@ -74,7 +74,7 @@ func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 		Desc: `Fast file pattern matching tool that works with any codebase size.
 
 Usage:
-- The path parameter MUST be an absolute path.
+- The path parameter MUST be an absolute path (or start with ~).
 - Supports glob patterns like "**/*.js" or "src/**/*.ts".
 - Returns matching absolute file paths sorted by modification time.
 - Use this tool when you need to find files by name patterns.`,
@@ -86,7 +86,7 @@ Usage:
 			},
 			"path": {
 				Type: schema.String,
-				Desc: fmt.Sprintf("The absolute directory path to search in. If not specified, the workspace root (currently \"%s\") will be used.", t.pathResolver.Root()),
+				Desc: fmt.Sprintf("The absolute (or ~) directory path to search in. If not specified, the workspace root (currently \"%s\") will be used.", t.pathResolver.Root()),
 			},
 		}),
 	}, nil

@@ -479,3 +479,28 @@ func TestBashTool_DeadlineExceeded_LargeOutput_TreatedAsFailure(t *testing.T) {
 	assert.Equal(t, "(Output too large, saved to /tmp/large.log)", display.(domain.BashDisplay).CapturedOutput)
 	assert.Equal(t, domain.ToolErrorFailed, display.GetError())
 }
+
+func TestBashTool_NonZeroExit_SuccessUI(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockExecutor{}
+	resolver := &mockPathResolver{root: "/tmp"}
+	tool := NewTool(fs, exec, resolver, nil)
+
+	params := `{"command": "false", "description": "testing non-zero exit"}`
+	req, _ := tool.validate(params)
+
+	output := strings.NewReader("some error output")
+	waitFn := func() (*executor.Result, error) {
+		return &executor.Result{Stdout: "some error output", ExitCode: 1}, nil
+	}
+	streamCmd := executor.NewStreamingCmd("t1", output, waitFn, "")
+
+	exec.On("RunStreaming", mock.Anything, mock.Anything, "/tmp", true).Return(streamCmd, nil)
+
+	ctx := context.Background()
+	llmContent, display := tool.executeBash(ctx, req, nil, "")
+
+	assert.Contains(t, llmContent, "some error output")
+	assert.Contains(t, llmContent, "<exit_code>1</exit_code>")
+	assert.Empty(t, display.GetError(), "Display should NOT have an error for non-zero exit codes")
+}

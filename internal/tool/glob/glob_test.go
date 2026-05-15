@@ -107,24 +107,24 @@ func TestGlob_Offloaded(t *testing.T) {
 	assert.Contains(t, result, "read_file")
 }
 
-func TestGlob_ExecutionFailure(t *testing.T) {
+func TestGlob_ExitCode2_SuccessUI(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}
 	pathResolver := &mockPathResolver{}
 	setupMockResolver(pathResolver)
 
-	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil)
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
 
-	// Simulate fd failure
+	// Exit code 2 (e.g. ripgrep error) should NOT cause 'execution failed'
 	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
-		Return(&executor.Result{Stdout: "fatal error", ExitCode: 2}, nil)
+		Return(&executor.Result{Stdout: "ripgrep error", ExitCode: 2}, nil)
 
 	tool := NewTool(fs, exec, pathResolver)
 	req := &Request{Pattern: "*.go", Path: testutil.TestWorkspaceRoot}
 
-	result, err := executeFind(t, tool, req)
-	assert.NoError(t, err)
-	assert.Contains(t, result, "fatal error")
+	_, display := tool.executeGlob(context.Background(), &validatedRequest{pattern: req.Pattern, absPath: testutil.TestWorkspaceRoot})
+
+	assert.Empty(t, display.GetError(), "Display should NOT have an error for exit code 2")
 }
 
 func TestGlob_ExecuteCancelled_ReturnsToolErrorCancelledDisplay(t *testing.T) {

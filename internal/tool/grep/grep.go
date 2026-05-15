@@ -296,7 +296,6 @@ func (t *Tool) executeGrep(ctx context.Context, req *validatedRequest) (string, 
 
 	if !timedOut {
 		if res.ExitCode != 0 && res.ExitCode != 1 {
-			d.Error = domain.ToolErrorFailed
 			output = fmt.Sprintf("Error: ripgrep failed\n%s", output)
 		}
 	}

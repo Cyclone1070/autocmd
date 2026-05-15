@@ -320,3 +320,17 @@ func TestOSCommandExecutor_NoFallbackTimeout(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, duration, 1*time.Second)
 }
+
+func TestOSCommandExecutor_NonZeroExitReturnsNilError(t *testing.T) {
+	osFS := fs.NewOSFileSystem(-1)
+	exec := NewOSCommandExecutor(osFS)
+
+	ctx := context.Background()
+	// 'false' command exits with status 1
+	res, err := exec.Run(ctx, "false", ".", false)
+
+	assert.NoError(t, err, "Executor should not return error for non-zero exit codes")
+	if res != nil {
+		assert.Equal(t, 1, res.ExitCode, "Exit code should be captured in result")
+	}
+}

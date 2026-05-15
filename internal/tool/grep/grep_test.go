@@ -95,6 +95,26 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 	assert.Equal(t, "No matches found\n\n<exit_code>1</exit_code>", result)
 }
 
+func TestGrep_ExitCode2_SuccessUI(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := &mockCommandExecutor{}
+	pathResolver := &mockPathResolver{}
+	setupMockResolver(pathResolver)
+
+	fs.On("Stat", testutil.TestWorkspaceRoot).Return(&toolMockFileInfo{name: "workspace", isDir: true}, nil).Maybe()
+
+	// Exit code 2 (e.g. syntax error) should NOT cause 'execution failed'
+	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
+		Return(&executor.Result{Stdout: "syntax error", ExitCode: 2}, nil)
+
+	tool := NewTool(fs, exec, pathResolver)
+	req := &Request{Pattern: "pattern", Path: testutil.TestWorkspaceRoot}
+
+	_, display := tool.executeGrep(context.Background(), &validatedRequest{req: req, absPath: testutil.TestWorkspaceRoot})
+
+	assert.Empty(t, display.GetError(), "Display should NOT have an error for exit code 2")
+}
+
 func TestGrep_MalformedStats(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockCommandExecutor{}

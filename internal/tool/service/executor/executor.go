@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -279,6 +280,11 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 
 		if ctx.Err() != nil {
 			return res, ctx.Err()
+		}
+
+		var ee *exec.ExitError
+		if errors.As(execErr, &ee) && ee.ExitCode() >= 0 {
+			execErr = nil
 		}
 		return res, execErr
 	}

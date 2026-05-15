@@ -160,3 +160,12 @@ func TestRenderer_InlineCodePadding(t *testing.T) {
 	assert.Contains(t, stripped, "use read_file tool", "Inline code should not have padding")
 	assert.NotContains(t, stripped, "use  read_file  tool", "Inline code should not have double spaces from padding")
 }
+func TestRenderer_LaTeXSanitization(t *testing.T) {
+	r := NewGlamourRenderer(80, true)
+	// Common LLM symbols
+	markdown := "Step 1 $\\rightarrow$ Step 2 $\\checkmark$"
+	rendered := r.Render(markdown)
+	stripped := stripANSI(rendered)
+	
+	assert.Contains(t, stripped, "Step 1 → Step 2 ✓")
+}

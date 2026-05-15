@@ -27,10 +27,48 @@ type GlamourRenderer struct {
 	isDark bool
 }
 
-var reANSI = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+var (
+	reANSI       = regexp.MustCompile(`\x1b\[[0-9;]*[mGKH]`)
+	reLaTeX      = regexp.MustCompile(`\$\\[a-zA-Z]+\$`)
+	latexSymbols = map[string]string{
+		"$\\rightarrow$":     "→",
+		"$\\to$":             "→",
+		"$\\Rightarrow$":     "→",
+		"$\\leftarrow$":      "←",
+		"$\\Leftarrow$":      "←",
+		"$\\leftrightarrow$": "↔",
+		"$\\Leftrightarrow$": "↔",
+		"$\\le$":             "≤",
+		"$\\leq$":            "≤",
+		"$\\ge$":             "≥",
+		"$\\geq$":            "≥",
+		"$\\neq$":            "≠",
+		"$\\approx$":         "≈",
+		"$\\pm$":             "±",
+		"$\\times$":          "×",
+		"$\\cdot$":           "·",
+		"$\\in$":             "∈",
+		"$\\notin$":          "∉",
+		"$\\forall$":         "∀",
+		"$\\exists$":         "∃",
+		"$\\checkmark$":      "✓",
+		"$\\infty$":          "∞",
+		"$\\dots$":           "…",
+	}
+)
+
+func sanitizeLaTeX(input string) string {
+	return reLaTeX.ReplaceAllStringFunc(input, func(match string) string {
+		if val, ok := latexSymbols[match]; ok {
+			return val
+		}
+		return match
+	})
+}
 
 // Render implements Renderer. On error, it returns the original markdown and logs.
 func (g *GlamourRenderer) Render(markdown string) string {
+	markdown = sanitizeLaTeX(markdown)
 	rendered, err := g.tr.Render(markdown)
 	if err != nil {
 		slog.Warn("glamour render failed, falling back to raw text", "err", err)

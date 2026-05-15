@@ -53,6 +53,12 @@ func TestGlob_Basic(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
+
+	// Capture final display
+	_, display := tool.executeGlob(context.Background(), &validatedRequest{pattern: req.Pattern, absPath: testutil.TestWorkspaceRoot})
+	sd := display.(domain.StringDisplay)
+	assert.Contains(t, sd.Description, "(1 files)")
+
 	assert.Equal(t, "/workspace/a.go\n\n<exit_code>0</exit_code>", result)
 }
 
@@ -72,6 +78,12 @@ func TestGlob_NoMatches(t *testing.T) {
 
 	result, err := executeFind(t, tool, req)
 	assert.NoError(t, err)
+
+	// Capture final display
+	_, display := tool.executeGlob(context.Background(), &validatedRequest{pattern: req.Pattern, absPath: testutil.TestWorkspaceRoot})
+	sd := display.(domain.StringDisplay)
+	assert.Contains(t, sd.Description, "(0 files)")
+
 	assert.Equal(t, "No files found\n\n<exit_code>0</exit_code>", result)
 }
 

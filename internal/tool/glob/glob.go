@@ -177,10 +177,8 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 func (t *Tool) executeGlob(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
 	displayPath := t.pathResolver.DisplayPath(req.absPath)
 	d := domain.NewStringDisplay(fmt.Sprintf("Glob \"%s\" in \"%s\"", req.pattern, filepath.ToSlash(displayPath)), "")
-
 	if ctx.Err() != nil {
-		d.Error = domain.ToolErrorCancelled
-		return domain.ToolErrorCancelled, d
+		return domain.ToolErrorCancelled, d.WithError(domain.ToolErrorCancelled)
 	}
 
 	workDir := t.pathResolver.Root()
@@ -209,10 +207,15 @@ func (t *Tool) executeGlob(ctx context.Context, req *validatedRequest) (string, 
 	}
 
 	output := res.Stdout
+	var count int
 	if res.LogPath != "" {
-		count, _ := t.countLines(res.LogPath)
+		count, _ = t.countLines(res.LogPath)
 		output = fmt.Sprintf("Output too large (%d files found). Full output saved to %s. Use `read_file` tool to read full output.", count, res.LogPath)
+	} else {
+		count = strings.Count(output, "\n")
 	}
+
+	d.Description = fmt.Sprintf("%s (%d files)", d.Description, count)
 	if output == "" {
 		output = "No files found"
 	}
@@ -226,8 +229,8 @@ func (t *Tool) executeGlob(ctx context.Context, req *validatedRequest) (string, 
 	output = strings.TrimRight(output, "\n")
 	output = fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>", output, res.ExitCode)
 	if timedOut {
-		d.Error = domain.ToolErrorTimedOut
 		output = fmt.Sprintf("%s\n<timeout>true</timeout>", output)
+		return output, d.WithError(domain.ToolErrorTimedOut)
 	}
 
 	return strings.TrimSpace(output), d

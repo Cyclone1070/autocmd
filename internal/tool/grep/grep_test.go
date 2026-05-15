@@ -28,7 +28,7 @@ func TestGrep_RawRelative(t *testing.T) {
 	fs.On("Stat", testutil.TestWorkspaceRoot+"/internal").Return(&toolMockFileInfo{name: "internal", isDir: true}, nil).Maybe()
 
 	// Ripgrep is run with absolute path and returns absolute paths.
-	output := testutil.TestWorkspaceRoot + "/internal/file.txt:1:match\n"
+	output := testutil.TestWorkspaceRoot + "/internal/file.txt:1:match\n1 matches\n1 files contained matches\n"
 	exec.On("Run", mock.Anything, mock.Anything, testutil.TestWorkspaceRoot, true).
 		Return(&executor.Result{Stdout: output, ExitCode: 0}, nil)
 
@@ -37,6 +37,11 @@ func TestGrep_RawRelative(t *testing.T) {
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
+
+	// Capture the final display
+	_, display := tool.executeGrep(context.Background(), &validatedRequest{req: req, absPath: testutil.TestWorkspaceRoot + "/internal"})
+	sd := display.(domain.StringDisplay)
+	assert.Contains(t, sd.Description, "(1 matches in 1 files)")
 
 	// Result should preserve ripgrep output and append metadata at the end.
 	assert.Contains(t, result, output)
@@ -92,6 +97,12 @@ func TestGrep_NoMatchesRaw(t *testing.T) {
 
 	result, err := executeSearch(t, tool, req)
 	assert.NoError(t, err)
+
+	// Capture the final display
+	_, display := tool.executeGrep(context.Background(), &validatedRequest{req: req, absPath: testutil.TestWorkspaceRoot})
+	sd := display.(domain.StringDisplay)
+	assert.Contains(t, sd.Description, "(0 matches in 0 files)")
+
 	assert.Equal(t, "No matches found\n\n<exit_code>1</exit_code>", result)
 }
 

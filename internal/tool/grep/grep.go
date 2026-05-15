@@ -258,10 +258,8 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 func (t *Tool) executeGrep(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {
 	displayPath := t.pathResolver.DisplayPath(req.absPath)
 	d := domain.NewStringDisplay(fmt.Sprintf("Grep \"%s\" in \"%s\"", req.req.Pattern, filepath.ToSlash(displayPath)), "")
-
 	if ctx.Err() != nil {
-		d.Error = domain.ToolErrorCancelled
-		return domain.ToolErrorCancelled, d
+		return domain.ToolErrorCancelled, d.WithError(domain.ToolErrorCancelled)
 	}
 
 	cmdStr := t.prepareCommand(req)
@@ -286,10 +284,15 @@ func (t *Tool) executeGrep(ctx context.Context, req *validatedRequest) (string, 
 	}
 
 	output := res.Stdout
+	var matches, files int
 	if res.LogPath != "" {
-		matches, files, _ := t.analyzeLog(res.LogPath)
+		matches, files, _ = t.analyzeLog(res.LogPath)
 		output = fmt.Sprintf("Output too large (%d matches across %d files). Full output saved to %s. Use `read_file` tool to read full output.", matches, files, res.LogPath)
+	} else {
+		matches, files = t.parseStats(output)
 	}
+
+	d.Description = fmt.Sprintf("%s (%d matches in %d files)", d.Description, matches, files)
 	if output == "" {
 		output = "No matches found"
 	}
@@ -303,8 +306,8 @@ func (t *Tool) executeGrep(ctx context.Context, req *validatedRequest) (string, 
 	output = strings.TrimRight(output, "\n")
 	output = fmt.Sprintf("%s\n\n<exit_code>%d</exit_code>", output, res.ExitCode)
 	if timedOut {
-		d.Error = domain.ToolErrorTimedOut
 		output = fmt.Sprintf("%s\n<timeout>true</timeout>", output)
+		return output, d.WithError(domain.ToolErrorTimedOut)
 	}
 
 	return output, d
@@ -401,19 +404,23 @@ func (t *Tool) analyzeLog(path string) (matches, files int, err error) {
 		return 0, 0, err
 	}
 
+	matches, files = t.parseStats(string(content))
+	return matches, files, nil
+}
+
+func (t *Tool) parseStats(content string) (matches, files int) {
 	reMatches := regexp.MustCompile(`(\d+)\s+matches`)
 	reFiles := regexp.MustCompile(`(\d+)\s+files\s+contained\s+matches`)
 
-	if m := reMatches.FindStringSubmatch(string(content)); len(m) > 1 {
+	if m := reMatches.FindStringSubmatch(content); len(m) > 1 {
 		if val, err := strconv.Atoi(m[1]); err == nil {
 			matches = val
 		}
 	}
-	if m := reFiles.FindStringSubmatch(string(content)); len(m) > 1 {
+	if m := reFiles.FindStringSubmatch(content); len(m) > 1 {
 		if val, err := strconv.Atoi(m[1]); err == nil {
 			files = val
 		}
 	}
-
-	return matches, files, nil
+	return matches, files
 }

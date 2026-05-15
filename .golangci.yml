@@ -29,6 +29,7 @@ linters:
     - tparallel
     - unconvert
     - unparam
+    - unused
     - wastedassign
   settings:
     goconst:
@@ -57,33 +58,22 @@ linters:
         - name: superfluous-else
         - name: unused-parameter
         - name: redefines-builtin-id
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      # Demos and tests: allow repeated literals and numeric fixtures without goconst/mnd churn.
-      - path: (^|/)demo/
-        linters:
-          - goconst
-          - mnd
-      - path: _test\.go$
-        linters:
-          - goconst
-          - mnd
-      - linters:
-          - revive
-        text: stutter
-      - linters:
-          - revive
-        text: unused-parameter
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+  rules:
+    # Demos and tests: allow repeated literals and numeric fixtures without goconst/mnd churn.
+    - path: (^|/)demo/
+      linters:
+        - goconst
+        - mnd
+    - path: _test\.go$
+      linters:
+        - goconst
+        - mnd
+    - linters:
+        - revive
+      text: stutter
+    - linters:
+        - revive
+      text: unused-parameter
 formatters:
   exclusions:
     generated: lax

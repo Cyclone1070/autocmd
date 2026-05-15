@@ -23,7 +23,6 @@ import (
 const (
 	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
 	defaultSmartDrainThreshold = 16 * 1024         // 16KB
-	defaultBinarySampleSize    = 8000              // 8KB sample for binary detection
 	defaultBufferSize          = 4096              // 4KB standard buffer
 	maxIDRetries               = 5
 	numPipes                   = 2 // stdout, stderr

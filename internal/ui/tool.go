@@ -251,9 +251,6 @@ func (r *ToolRenderer) RenderBash(d domain.BashDisplay, output string, status To
 		TruncateFromContentIndex: 1,
 		Scrollable:               status == StatusAwaitingApproval,
 	}
-	if status == StatusAwaitingApproval {
-		opts.TruncateMode = truncateNone
-	}
 	return r.renderSpec(spec, opts)
 }
 

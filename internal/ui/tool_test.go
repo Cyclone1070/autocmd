@@ -395,3 +395,18 @@ func TestToolRenderer_DiffNoTruncateDuringPermission(t *testing.T) {
 	assert.Contains(t, got, "line1")
 	assert.Contains(t, got, "line5")
 }
+
+func TestToolRenderer_BashTruncateDuringPermissionIfHuge(t *testing.T) {
+	theme := NewTheme(ThemeConfig{})
+	// Gater with budget 5
+	g := NewToolOutputGater(5)
+	r := NewToolRenderer(theme, 80, g)
+
+	output := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8"
+	d := domain.BashDisplay{Description: "Run", Command: "ls"}
+
+	got := r.RenderBash(d, output, StatusAwaitingApproval, "", "*")
+	// Should contain truncation indicator because output (8 lines) exceeds budget (5 lines)
+	assert.Contains(t, got, "▲ [")
+}
+

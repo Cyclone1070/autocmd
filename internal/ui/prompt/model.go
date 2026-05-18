@@ -461,8 +461,8 @@ func (m *Model) handleKey(key tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 
-	if handled := m.handleApprovalKey(key); handled {
-		return nil
+	if handled, cmd := m.handleApprovalKey(key); handled {
+		return cmd
 	}
 
 	return m.handleQuestionKey(key)
@@ -488,10 +488,10 @@ func (m *Model) isInteractiveOrAwaitingApproval() bool {
 	return false
 }
 
-func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
+func (m *Model) handleApprovalKey(key tea.KeyMsg) (bool, tea.Cmd) {
 	approvalSlot := m.firstAwaitingApprovalSlot()
 	if approvalSlot == nil {
-		return false
+		return false, nil
 	}
 
 	sendDecision := func(approved bool) {
@@ -501,31 +501,40 @@ func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
 		m.bus.SendAction(domain.PermissionDecisionAction{CallID: approvalSlot.callID, Approved: approved})
 	}
 
+	// repaintCmd is a workaround for a Bubbletea inline renderer bug.
+	// When the view shrinks (e.g. permission prompt disappears) and the top lines haven't changed,
+	// Bubbletea skips repainting them (leaving the cursor at the top) but still issues an
+	// "Erase Screen Below" command, accidentally wiping out the skipped lines.
+	// Sending WindowSizeMsg forces Bubbletea to clear its cache and do a full redraw.
+	repaintCmd := func() tea.Msg {
+		return tea.WindowSizeMsg{Width: m.width, Height: 0}
+	}
+
 	switch key.Type {
 	case tea.KeyRunes:
 		if len(key.Runes) != 1 {
-			return false
+			return false, nil
 		}
 		switch key.Runes[0] {
 		case 'y', 'Y':
 			approvalSlot.status = ui.StatusRunning
 			sendDecision(true)
-			return true
+			return true, repaintCmd
 		case 'n', 'N':
 			sendDecision(false)
-			return true
+			return true, repaintCmd
 		default:
-			return false
+			return false, nil
 		}
 	case tea.KeyEnter, tea.KeySpace:
 		approvalSlot.status = ui.StatusRunning
 		sendDecision(true)
-		return true
+		return true, repaintCmd
 	case tea.KeyEsc:
 		sendDecision(false)
-		return true
+		return true, repaintCmd
 	default:
-		return false
+		return false, nil
 	}
 }
 

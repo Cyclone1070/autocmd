@@ -1023,3 +1023,30 @@ func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
 
 
 }
+
+func TestModel_PermissionApproval_ReturnsRepaintCommand(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
+	
+	d := domain.NewBashDisplay("Run a loop", "ls", "", "")
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "bash-1", Display: d})
+	m.Update(flushDoneMsg{})
+	m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "bash-1"})
+	
+	// Pre-condition: status should be awaiting approval
+	assert.Equal(t, ui.StatusAwaitingApproval, m.tools[0].status)
+	
+	// Action: press 'y'
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	
+	// Post-condition: should return a command that yields WindowSizeMsg
+	assert.NotNil(t, cmd, "Command should not be nil on state change")
+	if cmd != nil {
+		msg := cmd()
+		assert.IsType(t, tea.WindowSizeMsg{}, msg, "Command should return WindowSizeMsg")
+	}
+}
+

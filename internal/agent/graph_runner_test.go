@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/require"
@@ -222,4 +224,62 @@ func TestGraphRunner_Run_TurnGuardPreventsExitWithRunningTasks(t *testing.T) {
 		}
 	}
 	require.True(t, foundNotification, "Expected UI to receive SystemNotificationEvent when Turn Guard triggered")
+}
+
+type sinkTool struct {
+	tool.BaseTool
+}
+
+func (t *sinkTool) Name() string { return "sink_tool" }
+func (t *sinkTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: "sink_tool"}, nil
+}
+func (t *sinkTool) IsConcurrentSafe() bool { return true }
+func (t *sinkTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...tool.Option) (string, error) {
+	if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok {
+		time.Sleep(10 * time.Millisecond) // Force overlap!
+		sink(argumentsInJSON, domain.NewStringDisplay("sink_tool", "output"))
+	}
+	return "done", nil
+}
+
+func TestGraphRunner_Run_ParallelToolCalls_Race(t *testing.T) {
+	ctx := context.Background()
+	st := &sinkTool{}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{"sink_tool": st}}
+
+	llm := &mockLLM{
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
+		contextWindow: 128_000,
+		streams: []*mockStream{
+			{chunks: []mockChunk{{
+				toolCalls: []schema.ToolCall{
+					{
+						ID: "tc1",
+						Function: schema.FunctionCall{
+							Name:      "sink_tool",
+							Arguments: `key1`,
+						},
+					},
+					{
+						ID: "tc2",
+						Function: schema.FunctionCall{
+							Name:      "sink_tool",
+							Arguments: `key2`,
+						},
+					},
+				},
+			}}},
+			{chunks: []mockChunk{{text: "done"}}},
+		},
+	}
+
+	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	sess := &domain.Session{Messages: []*schema.Message{}}
+	
+	err = runner.Run(ctx, sess, "use sink_tool")
+	require.NoError(t, err)
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/runtimectx"
@@ -243,10 +244,13 @@ func (r *GraphRunner) Run(ctx context.Context, session *domain.Session, input st
 	runCtx := ctx
 	runCtx = runtimectx.WithActionWaiter(runCtx, r.waiter)
 	runCtx = runtimectx.WithEventSender(runCtx, r.events)
+	var mu sync.Mutex
 	runCtx = runtimectx.WithToolDisplaySink(runCtx, func(callID string, display domain.ToolDisplay) {
 		if display == nil || callID == "" {
 			return
 		}
+		mu.Lock()
+		defer mu.Unlock()
 		if session.ToolDisplays == nil {
 			session.ToolDisplays = make(domain.ToolDisplays)
 		}

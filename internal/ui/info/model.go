@@ -85,7 +85,7 @@ func (m *Model) renderInfo(data *domain.InfoEvent) string {
 	formatLine := func(label, value string) string {
 		padding := 22
 		rawLabel := fmt.Sprintf("%-*s", padding, label)
-		return fmt.Sprintf("%s %s\n", labelStyle.Render(rawLabel), value)
+		return fmt.Sprintf("%s %s\n", labelStyle.Render(rawLabel), m.theme.Success(value))
 	}
 
 	// Model Section

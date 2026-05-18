@@ -6,6 +6,8 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -106,5 +108,21 @@ func TestRenderInfo(t *testing.T) {
 		assert.Contains(t, output, "none")
 		assert.NotContains(t, output, "Model:")
 		assert.NotContains(t, output, "Authorized Providers:")
+	})
+
+	t.Run("Values are styled with Success color", func(t *testing.T) {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		defer lipgloss.SetColorProfile(termenv.Ascii)
+
+		successColor := lipgloss.AdaptiveColor{Light: "10", Dark: "10"}
+		theme := ui.NewTheme(ui.ThemeConfig{SuccessColor: successColor})
+		m := NewModel(nil, theme)
+
+		data := &domain.InfoEvent{
+			SessionDisplay: "Test Session",
+		}
+
+		output := m.renderInfo(data)
+		assert.Contains(t, output, theme.Success("Test Session"))
 	})
 }

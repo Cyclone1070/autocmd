@@ -208,8 +208,9 @@ func TestGraphRunner_Run_TurnGuardPreventsExitWithRunningTasks(t *testing.T) {
 	require.Equal(t, 4, len(sess.Messages), "Expected 4 messages due to turn guard loop")
 	require.Equal(t, schema.User, sess.Messages[2].Role)
 	require.Contains(t, sess.Messages[2].Content, "Exit denied. Active background tasks exist.")
-	require.Contains(t, sess.Messages[2].Content, "Required action: Call 'sleep' or 'task_stop_all'.")
-	require.Contains(t, sess.Messages[2].Content, "[Message auto generated, user doesn't see this message - write your response accordingly]")
+	require.Contains(t, sess.Messages[2].Content, "Required action: Call")
+	require.Contains(t, sess.Messages[2].Content, "<note>Message auto generated")
+	require.NotContains(t, sess.Messages[2].Content, "&#xA;")
 
 	// Verify that the system notification event was emitted
 	var foundNotification bool

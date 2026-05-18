@@ -257,7 +257,7 @@ func (m *mockTaskNotifierWithResults) HasRunning() bool {
 func TestGraphPreTurn_TaskCompletion_AppendsNotification(t *testing.T) {
 	notifier := &mockTaskNotifierWithResults{
 		results: []domain.TaskResult{
-			{ID: "t1", Status: "done", ExitCode: 0},
+			{ID: "t1", Status: "done", ExitCode: 0, Cwd: "/test/cwd"},
 		},
 	}
 	events := &captureEventSender{}
@@ -283,7 +283,8 @@ func TestGraphPreTurn_TaskCompletion_AppendsNotification(t *testing.T) {
 	require.Equal(t, 3, len(st.session.Messages))
 	require.Equal(t, schema.User, st.session.Messages[2].Role)
 	require.Contains(t, st.session.Messages[2].Content, "<system-notification type=\"task_completion\">")
-	require.Contains(t, st.session.Messages[2].Content, "[Message auto generated, user doesn't see this message - write your response accordingly]")
+	require.Contains(t, st.session.Messages[2].Content, "<cwd>/test/cwd</cwd>")
+	require.Contains(t, st.session.Messages[2].Content, "<note>Message auto generated")
 
 	// Verify that the system notification event was emitted
 	var foundNotification bool
@@ -295,4 +296,31 @@ func TestGraphPreTurn_TaskCompletion_AppendsNotification(t *testing.T) {
 		}
 	}
 	require.True(t, foundNotification, "Expected UI to receive SystemNotificationEvent on task completion")
+}
+
+func TestGraphPreTurn_TaskCompletion_EscapesXML(t *testing.T) {
+	notifier := &mockTaskNotifierWithResults{
+		results: []domain.TaskResult{
+			{ID: "t1", Status: "done", Command: "echo <hello>", ExitCode: 0},
+		},
+	}
+	r := &GraphRunner{
+		llm:          &mockLLM{contextWindow: 1000},
+		notifier:     notifier,
+		maxIteration: 10,
+	}
+	st := &graphRunState{
+		session: &domain.Session{
+			Messages: []*schema.Message{
+				{Role: schema.User, Content: "hello"},
+				{Role: schema.Assistant, Content: "world"},
+			},
+		},
+	}
+
+	_, err := r.graphPreTurn(context.Background(), st)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(st.session.Messages))
+	require.Contains(t, st.session.Messages[2].Content, "echo &lt;hello&gt;")
 }

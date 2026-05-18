@@ -19,7 +19,7 @@ func TestTaskListTool_Execute(t *testing.T) {
 	cmd := executor.NewStreamingCmd("t-list-1", strings.NewReader(""), func() (*executor.Result, error) {
 		return &executor.Result{ExitCode: 0}, nil
 	}, "")
-	_ = tm.Register("t-list-1", cmd, "", func() {}, "list files", "ls -R")
+	_ = tm.Register("t-list-1", cmd, "", func() {}, "list files", "ls -R", "/tmp")
 
 	llm, disp := tl.executeTaskList(ctx)
 

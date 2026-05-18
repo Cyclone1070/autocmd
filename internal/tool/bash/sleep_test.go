@@ -33,7 +33,7 @@ func TestSleepTool_Execute_Interrupted(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 		return &executor.Result{ExitCode: 0}, nil
 	}, "")
-	_ = tm.Register("t1", cmd, "", func() {}, "desc", "cmd")
+	_ = tm.Register("t1", cmd, "", func() {}, "desc", "cmd", "/tmp")
 
 	params := `{"duration_ms": 5000}`
 	req, _ := tl.validate(params)
@@ -66,7 +66,7 @@ func TestSleepTool_Execute_AlreadyFinished(t *testing.T) {
 	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
 		return &executor.Result{ExitCode: 0}, nil
 	}, "")
-	_ = tm.Register("t1", cmd, "log1", func() {}, "desc", "cmd")
+	_ = tm.Register("t1", cmd, "log1", func() {}, "desc", "cmd", "/tmp")
 
 	// 2. Wait for it to finish and be processed by TaskManager
 	// The goroutine in Register calls handleCompletion which closes notifyChan and replaces it.

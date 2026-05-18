@@ -22,7 +22,7 @@ func TestTaskManager_RegisterAndDrain(t *testing.T) {
 		return &executor.Result{ExitCode: 0, Stdout: "final output"}, nil
 	}, "")
 
-	err := tm.Register("t1", cmd, "/tmp/bash_t1.log", func() {}, "test description", "test command")
+	err := tm.Register("t1", cmd, "/tmp/bash_t1.log", func() {}, "test description", "test command", "/test/cwd")
 	if err != nil {
 		t.Fatalf("failed to register task: %v", err)
 	}
@@ -47,6 +47,7 @@ func TestTaskManager_RegisterAndDrain(t *testing.T) {
 	assert.Equal(t, "execution completed", notif.Status)
 	assert.Equal(t, "test description", notif.Description)
 	assert.Equal(t, "test command", notif.Command)
+	assert.Equal(t, "/test/cwd", notif.Cwd)
 }
 
 func TestTaskManager_ActivityTracking(t *testing.T) {
@@ -61,7 +62,7 @@ func TestTaskManager_ActivityTracking(t *testing.T) {
 	// Manual update to activity
 	cmd.UpdateActivity()
 
-	_ = tm.Register("t1", cmd, "/tmp/t1.log", func() {}, "test", "command")
+	_ = tm.Register("t1", cmd, "/tmp/t1.log", func() {}, "test", "command", "/tmp")
 
 	tasks := tm.List()
 	if len(tasks) != 1 {
@@ -83,7 +84,7 @@ func TestTaskManager_NotifyChan(t *testing.T) {
 		return &executor.Result{ExitCode: 0}, nil
 	}, "")
 
-	_ = tm.Register("t1", cmd, "/tmp/t1.log", func() {}, "test description", "test command")
+	_ = tm.Register("t1", cmd, "/tmp/t1.log", func() {}, "test description", "test command", "/tmp")
 
 	select {
 	case <-notify:

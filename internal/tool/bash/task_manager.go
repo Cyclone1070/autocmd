@@ -36,6 +36,7 @@ type bashTask struct {
 	cmd         *executor.StreamingCmd
 	cancel      context.CancelFunc
 	logPath     string
+	cwd         string
 }
 
 // NewTaskManager creates a new task manager.
@@ -48,7 +49,7 @@ func NewTaskManager(fs fileSystem) *TaskManager {
 }
 
 // Register takes control of an already running process and tracks it in the background.
-func (m *TaskManager) Register(id string, proc *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string) error {
+func (m *TaskManager) Register(id string, proc *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string, cwd string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -59,6 +60,7 @@ func (m *TaskManager) Register(id string, proc *executor.StreamingCmd, logPath s
 		cmd:         proc,
 		cancel:      cancel,
 		logPath:     logPath,
+		cwd:         cwd,
 	}
 	m.tasks[id] = task
 
@@ -80,9 +82,11 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 	task, ok := m.tasks[id]
 	desc := ""
 	command := ""
+	cwd := ""
 	if ok {
 		desc = task.description
 		command = task.command
+		cwd = task.cwd
 	}
 
 	status := "execution completed"
@@ -115,6 +119,7 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 		Command:     command,
 		ExitCode:    exitCode,
 		LogPath:     effectiveLogPath,
+		Cwd:         cwd,
 	}
 	if errDetails != nil {
 		result.Error = errDetails.Error()

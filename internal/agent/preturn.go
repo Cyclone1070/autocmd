@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"log/slog"
 
@@ -100,19 +101,22 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 	}
 	if r.notifier != nil {
 		for _, res := range r.notifier.Drain() {
-			errorXML := ""
-			if res.Error != "" {
-				errorXML = fmt.Sprintf("\n  <error>%s</error>", res.Error)
+			type notificationWrapper struct {
+				XMLName string `xml:"system-notification"`
+				Type    string `xml:"type,attr"`
+				domain.TaskResult
+				Note string `xml:"note"`
 			}
-			xml := fmt.Sprintf(`<system-notification type="task_completion">
-  <task-id>%s</task-id>
-  <status>%s</status>
-  <description>%s</description>
-  <command>%s</command>
-  <exit-code>%d</exit-code>%s
-  <log-file>%s</log-file>
-  [Message auto generated, user doesn't see this message - write your response accordingly]
-</system-notification>`, res.ID, res.Status, res.Description, res.Command, res.ExitCode, errorXML, res.LogPath)
+			wrapper := notificationWrapper{
+				Type:       "task_completion",
+				TaskResult: res,
+				Note:       "Message auto generated. User doesn't see this message - write your response accordingly",
+			}
+			xmlBytes, err := xml.MarshalIndent(wrapper, "", "  ")
+			if err != nil {
+				return st, fmt.Errorf("marshal notification: %w", err)
+			}
+			xml := string(xmlBytes)
 
 			if err := appendMessageMerge(&msgs, &schema.Message{
 				Role:    schema.User,

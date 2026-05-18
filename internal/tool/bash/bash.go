@@ -37,7 +37,7 @@ type pathResolver interface {
 }
 
 type backgroundRegistrar interface {
-	Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string) error
+	Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string, cwd string) error
 }
 type fileSystem interface {
 	Open(path string) (domain.File, error)
@@ -280,7 +280,7 @@ func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor
 	streamCmd.DisableAutoCleanup()
 
 	id := streamCmd.ID()
-	if err := t.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, req.description, req.command); err != nil {
+	if err := t.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, req.description, req.command, req.wd); err != nil {
 		return "", domain.BashDisplay{}, false
 	}
 

@@ -97,8 +97,8 @@ func (c *captureEventSender) SendUIUpdate(u domain.UIUpdate) {
 	c.updates = append(c.updates, u)
 }
 
-func (m *mockTaskManager) Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string) error {
-	args := m.Called(id, cmd, logPath, cancel, description, command)
+func (m *mockTaskManager) Register(id string, cmd *executor.StreamingCmd, logPath string, cancel context.CancelFunc, description, command string, cwd string) error {
+	args := m.Called(id, cmd, logPath, cancel, description, command, cwd)
 	return args.Error(0)
 }
 
@@ -282,7 +282,7 @@ type syncTM struct {
 	mu sync.Mutex
 }
 
-func (m *syncTM) Register(id string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string) error {
+func (m *syncTM) Register(id string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string, _ string) error {
 	m.mu.Lock()
 	m.registeredCmds[id] = cmd
 	m.mu.Unlock()
@@ -299,7 +299,7 @@ type testStubTaskManager struct {
 	capturedCmd *executor.StreamingCmd
 }
 
-func (s *testStubTaskManager) Register(_ string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string) error {
+func (s *testStubTaskManager) Register(_ string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string, _ string) error {
 	s.capturedCmd = cmd
 	return nil
 }

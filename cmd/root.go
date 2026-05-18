@@ -99,6 +99,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		bash.NewSleepTool(taskMgr),
 		bash.NewTaskListTool(taskMgr),
 		bash.NewTaskStopTool(taskMgr),
+		bash.NewTaskStopAllTool(taskMgr),
 		question.NewTool(),
 	}
 	toolRegistry := tool.NewRegistry(tools)

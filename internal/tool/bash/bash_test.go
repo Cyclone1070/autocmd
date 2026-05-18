@@ -137,6 +137,10 @@ func (m *mockTaskManager) Stop(id string) error {
 	return args.Error(0)
 }
 
+func (m *mockTaskManager) StopAll() {
+	m.Called()
+}
+
 func (m *mockTaskManager) NotifyChan() <-chan struct{} {
 	args := m.Called()
 	return args.Get(0).(<-chan struct{})
@@ -292,9 +296,11 @@ func (m *syncTM) Register(id string, cmd *executor.StreamingCmd, _ string, _ con
 
 type testStubTaskManager struct {
 	mockTaskManager
+	capturedCmd *executor.StreamingCmd
 }
 
-func (s *testStubTaskManager) Register(_ string, _ *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string) error {
+func (s *testStubTaskManager) Register(_ string, cmd *executor.StreamingCmd, _ string, _ context.CancelFunc, _, _ string) error {
+	s.capturedCmd = cmd
 	return nil
 }
 
@@ -328,6 +334,9 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
 	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(Command ran in the background")
 	assert.Equal(t, "/tmp", display.(domain.BashDisplay).Cwd)
+
+	// Verify that command was registered
+	assert.NotNil(t, taskMgr.capturedCmd, "Command should be registered")
 
 	exec.AssertExpectations(t)
 	close(waitCh)                     // Cleanup

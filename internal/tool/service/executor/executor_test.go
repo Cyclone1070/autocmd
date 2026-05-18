@@ -334,3 +334,27 @@ func TestOSCommandExecutor_NonZeroExitReturnsNilError(t *testing.T) {
 		assert.Equal(t, 1, res.ExitCode, "Exit code should be captured in result")
 	}
 }
+
+func TestStreamingCmd_DisableAutoCleanup(t *testing.T) {
+	fs := &mockFileSystem{}
+	exec := NewOSCommandExecutor(fs)
+	exec.SmartDrainThreshold = 1000 // Ensure threshold is larger than output
+
+	sc, err := exec.RunStreaming(context.Background(), "echo test", "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sc.DisableAutoCleanup()
+
+	_, err = sc.Wait()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the file STILL EXISTS in the mock filesystem!
+	if _, ok := fs.files[sc.LogPath()]; !ok {
+		t.Error("Expected log file to survive because auto-cleanup was disabled")
+	}
+}
+

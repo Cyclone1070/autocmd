@@ -178,6 +178,16 @@ func (m *TaskManager) Stop(id string) error {
 	return nil
 }
 
+// StopAll terminates all active background tasks.
+func (m *TaskManager) StopAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, task := range m.tasks {
+		task.cancel()
+	}
+}
+
 // List returns a summary of all active tasks.
 func (m *TaskManager) List() []TaskInfo {
 	m.mu.Lock()

@@ -61,15 +61,16 @@ type Result struct {
 
 // StreamingCmd represents a running command with real-time output streaming.
 type StreamingCmd struct {
-	lastActivityAt time.Time
-	output         io.Reader
-	err            error
-	result         *Result
-	wait           func() (*Result, error)
-	logPath        string
-	id             string
-	once           sync.Once
-	mu             sync.Mutex
+	lastActivityAt     time.Time
+	output             io.Reader
+	err                error
+	result             *Result
+	wait               func() (*Result, error)
+	logPath             string
+	id                  string
+	autoCleanupDisabled bool
+	once                sync.Once
+	mu                 sync.Mutex
 }
 
 // NewStreamingCmd creates a new StreamingCmd instance.
@@ -85,6 +86,13 @@ func NewStreamingCmd(id string, output io.Reader, wait func() (*Result, error), 
 // ID returns the unique identifier for the command.
 func (s *StreamingCmd) ID() string {
 	return s.id
+}
+
+// DisableAutoCleanup prevents the command from deleting the log file if it is small.
+func (s *StreamingCmd) DisableAutoCleanup() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.autoCleanupDisabled = true
 }
 
 // Output returns a reader for the command's streaming output.
@@ -262,7 +270,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 
 		if logPath != "" {
 			info, err := f.fs.Stat(logPath)
-			shouldReturnStdout := !enableLogging || (err == nil && info.Size() < f.SmartDrainThreshold)
+			shouldReturnStdout := !enableLogging || (!sc.autoCleanupDisabled && err == nil && info.Size() < f.SmartDrainThreshold)
 
 			if shouldReturnStdout {
 				if fl, err := f.fs.Open(logPath); err == nil {

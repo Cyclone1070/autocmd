@@ -277,6 +277,8 @@ func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor
 		return "", domain.BashDisplay{}, false
 	}
 
+	streamCmd.DisableAutoCleanup()
+
 	id := streamCmd.ID()
 	if err := t.taskManager.Register(id, streamCmd, streamCmd.LogPath(), taskCancel, req.description, req.command); err != nil {
 		return "", domain.BashDisplay{}, false

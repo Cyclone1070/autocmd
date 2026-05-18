@@ -39,6 +39,7 @@ func (t *TaskStopAllTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: "task_stop_all",
 		Desc: `Terminates all active background tasks immediately. Use this tool when you decide you no longer need running tasks, or when you are ready to finish your response and need to clean up active tasks.`,
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
 	}, nil
 }
 

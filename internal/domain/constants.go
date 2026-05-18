@@ -6,6 +6,12 @@ const (
 	ProviderGitHub = "github"
 )
 
+// ID Generation Constants.
+const (
+	ShortIDLength       = 8
+	MaxCollisionRetries = 100
+)
+
 // Auth Method and Field IDs.
 const (
 	AuthMethodAPIKey = "api_key"

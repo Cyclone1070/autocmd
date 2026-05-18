@@ -21,6 +21,7 @@ type mockFileSystem struct {
 	files        map[string]*bytes.Buffer
 	removedFiles []string
 	createdPaths []string
+	createAtomicErr error
 }
 
 func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
@@ -29,6 +30,9 @@ func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 
 func (m *mockFileSystem) CreateAtomic(path string) (io.WriteCloser, error) {
 	m.createdPaths = append(m.createdPaths, path)
+	if m.createAtomicErr != nil {
+		return nil, m.createAtomicErr
+	}
 	if m.files == nil {
 		m.files = make(map[string]*bytes.Buffer)
 	}
@@ -86,6 +90,8 @@ func (m *mockCommandFactory) Command(ctx context.Context, name string, args ...s
 	// #nosec G702 - Intentional in test mock
 	return exec.CommandContext(ctx, "true")
 }
+
+
 
 type mockFile struct {
 	*bytes.Reader

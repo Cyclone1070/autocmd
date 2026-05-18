@@ -24,7 +24,6 @@ const (
 	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
 	defaultSmartDrainThreshold = 16 * 1024         // 16KB
 	defaultBufferSize          = 4096              // 4KB standard buffer
-	maxIDRetries               = 5
 	numPipes                   = 2 // stdout, stderr
 	hexRatio                   = 2
 	kvParts                    = 2
@@ -156,6 +155,15 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 	}
 }
 
+
+func randomShortID(length int) string {
+	bytes := make([]byte, length/hexRatio)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(fmt.Sprintf("failed to generate random ID: %v", err))
+	}
+	return hex.EncodeToString(bytes)
+}
+
 // Run executes a command and waits for its completion.
 func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, enableLogging bool) (*Result, error) {
 	s, err := f.RunStreaming(ctx, command, dir, enableLogging)
@@ -231,18 +239,21 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	}
 
 	_ = f.fs.MkdirAll(logDir, domain.DefaultDirPerm)
-	const idLen = 8
-	for range maxIDRetries {
-		tmpID := randomShortID(idLen)
+	var tmpID string
+	for i := range domain.MaxCollisionRetries {
+		tmpID = randomShortID(domain.ShortIDLength)
 		tmpPath := filepath.Join(logDir, tmpID+".output.log")
 		fl, err := f.fs.CreateAtomic(tmpPath)
 		if err == nil {
 			logFile = fl
 			logPath = tmpPath
-			finalID = tmpID
 			break
 		}
+		if i == domain.MaxCollisionRetries-1 {
+			return nil, fmt.Errorf("failed to generate unique log ID: failed to generate unique ID after 100 attempts")
+		}
 	}
+	finalID = tmpID
 
 	if logFile == nil {
 		return nil, fmt.Errorf("failed to create log file")
@@ -347,14 +358,6 @@ func (f *OSCommandExecutor) getExitCode(err error) int {
 		return ec.ExitCode()
 	}
 	return -1
-}
-
-func randomShortID(length int) string {
-	bytes := make([]byte, length/hexRatio)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(fmt.Sprintf("failed to generate random ID: %v", err))
-	}
-	return hex.EncodeToString(bytes)
 }
 
 var envWhitelist = map[string]bool{

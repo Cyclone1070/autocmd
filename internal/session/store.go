@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/cloudwego/eino/schema"
-	"github.com/google/uuid"
 )
 
 // fileSystem defines the filesystem operations needed by Store.
@@ -47,7 +48,20 @@ type Store struct {
 
 // NewStore creates a new session store.
 func NewStore(fs fileSystem, storageDir string) *Store {
-	return &Store{storageDir: storageDir, fs: fs}
+	return &Store{
+		storageDir: storageDir,
+		fs:         fs,
+	}
+}
+
+const hexRatio = 2
+
+func randomShortID(length int) string {
+	bytes := make([]byte, length/hexRatio)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(fmt.Sprintf("failed to generate random ID: %v", err))
+	}
+	return hex.EncodeToString(bytes)
 }
 
 // GenerateName is a facade for the session.GenerateName function.
@@ -61,7 +75,22 @@ func (st *Store) Create() (*domain.Session, error) {
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
 	now := time.Now()
-	id := uuid.New().String()
+	var id string
+	for i := range domain.MaxCollisionRetries {
+		id = randomShortID(domain.ShortIDLength)
+		sessionDir := filepath.Join(st.storageDir, id)
+		infoPath := filepath.Join(sessionDir, "metadata.json")
+		_, err := st.fs.ReadFile(infoPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				break // Found a unique ID
+			}
+			return nil, fmt.Errorf("check session existence: %w", err)
+		}
+		if i == domain.MaxCollisionRetries-1 {
+			return nil, fmt.Errorf("failed to generate unique ID after 100 attempts")
+		}
+	}
 	s := &domain.Session{
 		ID:       id,
 		Name:     "",

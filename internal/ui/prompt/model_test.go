@@ -328,6 +328,23 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	assert.Contains(t, flushed[0], "thinking_rendered", "Thinking result should be flushed on transition")
 }
 
+func TestModel_HandleBusEvent_SystemNotificationEvent(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	stream := &mockStream{}
+	m := NewModel(&mockBus{}, &mockThinkingRenderer{}, nil, &mockSpinner{}, theme, stream, ui.NewTruncatingGater(10), 80)
+	m.state = stateThinking
+
+	// Transition on SystemNotificationEvent
+	_, _ = m.handleBusEvent(domain.SystemNotificationEvent{Content: "test"})
+
+	// Verify that the state becomes stateFlushing (and will transition to stateIdle)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateIdle, m.nextState)
+	
+	// Verify that the stream received newlines
+	assert.Equal(t, "\n\n", stream.lastAppend, "Stream should receive newlines on SystemNotificationEvent")
+}
+
 func TestModel_ViewportTruncation(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(3), 80)

@@ -241,3 +241,58 @@ func TestGraphPreTurn_Compaction_EmitsSummaryLifecycleEventsOnSuccess(t *testing
 	require.True(t, ok)
 	require.Empty(t, end.Error)
 }
+
+type mockTaskNotifierWithResults struct {
+	results []domain.TaskResult
+}
+
+func (m *mockTaskNotifierWithResults) Drain() []domain.TaskResult {
+	return m.results
+}
+
+func (m *mockTaskNotifierWithResults) HasRunning() bool {
+	return false
+}
+
+func TestGraphPreTurn_TaskCompletion_AppendsNotification(t *testing.T) {
+	notifier := &mockTaskNotifierWithResults{
+		results: []domain.TaskResult{
+			{ID: "t1", Status: "done", ExitCode: 0},
+		},
+	}
+	events := &captureEventSender{}
+	r := &GraphRunner{
+		llm:          &mockLLM{contextWindow: 1000}, // Large window to avoid compaction
+		notifier:     notifier,
+		events:       events,
+		maxIteration: 10,
+	}
+	st := &graphRunState{
+		session: &domain.Session{
+			Messages: []*schema.Message{
+				{Role: schema.User, Content: "hello"},
+				{Role: schema.Assistant, Content: "world"},
+			},
+		},
+	}
+
+	_, err := r.graphPreTurn(context.Background(), st)
+	require.NoError(t, err)
+
+	// Expect a new message appended (the notification)
+	require.Equal(t, 3, len(st.session.Messages))
+	require.Equal(t, schema.User, st.session.Messages[2].Role)
+	require.Contains(t, st.session.Messages[2].Content, "<system-notification type=\"task_completion\">")
+	require.Contains(t, st.session.Messages[2].Content, "[Message auto generated, user doesn't see this message - write your response accordingly]")
+
+	// Verify that the system notification event was emitted
+	var foundNotification bool
+	for _, ev := range events.updates {
+		if se, ok := ev.(domain.SystemNotificationEvent); ok {
+			foundNotification = true
+			require.Contains(t, se.Content, "<system-notification type=\"task_completion\">")
+			break
+		}
+	}
+	require.True(t, foundNotification, "Expected UI to receive SystemNotificationEvent on task completion")
+}

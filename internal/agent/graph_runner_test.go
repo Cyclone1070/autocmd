@@ -160,3 +160,65 @@ func TestGraphRunner_Run_EmitsAssistantTextEvents_WhenToolCallTurnContainsText(t
 	}
 	require.True(t, foundToolTurnText, "expected assistant text from tool-call turn to be emitted")
 }
+
+type statefulMockTaskNotifier struct {
+	hasRunning bool
+	callCount  int
+}
+
+func (m *statefulMockTaskNotifier) Drain() []domain.TaskResult {
+	return nil
+}
+
+func (m *statefulMockTaskNotifier) HasRunning() bool {
+	m.callCount++
+	if m.callCount > 1 {
+		return false
+	}
+	return m.hasRunning
+}
+
+
+
+func TestGraphRunner_Run_TurnGuardPreventsExitWithRunningTasks(t *testing.T) {
+	ctx := context.Background()
+	greet := &greetTool{}
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
+	
+	mockNotifier := &statefulMockTaskNotifier{hasRunning: true}
+	mockEvents := &mockEventSender{}
+
+	llm := &mockLLM{
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
+		contextWindow: 128_000,
+		streams: []*mockStream{
+			{chunks: []mockChunk{{text: "I want to finish but tasks are running"}}},
+			{chunks: []mockChunk{{text: "Ok I'll stop them or wait"}}},
+		},
+	}
+
+	runner, err := NewGraphRunner(llm, reg, nil, 20, mockEvents, mockNotifier, nil, nil)
+	require.NoError(t, err)
+
+	sess := &domain.Session{Messages: []*schema.Message{}}
+	require.NoError(t, runner.Run(ctx, sess, "do something"))
+
+	// We expect 4 messages: User, Assistant 1, Synthetic User, Assistant 2
+	require.Equal(t, 4, len(sess.Messages), "Expected 4 messages due to turn guard loop")
+	require.Equal(t, schema.User, sess.Messages[2].Role)
+	require.Contains(t, sess.Messages[2].Content, "Exit denied. Active background tasks exist.")
+	require.Contains(t, sess.Messages[2].Content, "Required action: Call 'sleep' or 'task_stop_all'.")
+	require.Contains(t, sess.Messages[2].Content, "[Message auto generated, user doesn't see this message - write your response accordingly]")
+
+	// Verify that the system notification event was emitted
+	var foundNotification bool
+	for _, ev := range mockEvents.updates {
+		if se, ok := ev.(domain.SystemNotificationEvent); ok {
+			foundNotification = true
+			require.Contains(t, se.Content, "Exit denied. Active background tasks exist.")
+			break
+		}
+	}
+	require.True(t, foundNotification, "Expected UI to receive SystemNotificationEvent when Turn Guard triggered")
+}

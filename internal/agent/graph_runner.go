@@ -171,11 +171,30 @@ func (r *GraphRunner) buildGraph() (compose.Runnable[*graphRunState, *graphRunSt
 			}
 			last := lastAssistant(st.session.Messages)
 			if last == nil || len(last.ToolCalls) == 0 {
+				if r.notifier != nil && r.notifier.HasRunning() {
+					xml := `<system-notification type="turn_guard">
+Exit denied. Active background tasks exist.
+Required action: Call 'sleep' or 'task_stop_all'.
+[Message auto generated, user doesn't see this message - write your response accordingly]
+</system-notification>`
+					_ = appendMessageMerge(&st.session.Messages, &schema.Message{
+						Role:    schema.User,
+						Content: xml,
+						Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
+					})
+					
+					// Emit SystemNotificationEvent with the content!
+					if r.events != nil {
+						r.events.SendUIUpdate(domain.SystemNotificationEvent{Content: xml})
+					}
+					
+					return "preturn", nil
+				}
 				return graphNodeFinish, nil
 			}
 			return "run_tools", nil
 		},
-		map[string]bool{"run_tools": true, graphNodeFinish: true},
+		map[string]bool{"run_tools": true, graphNodeFinish: true, "preturn": true},
 	)); err != nil {
 		return nil, err
 	}

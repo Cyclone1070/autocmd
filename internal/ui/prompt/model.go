@@ -311,6 +311,13 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	switch u := u.(type) {
 	case domain.TextEvent:
 		return m.handleBusTextEvent(u, flushBlocks)
+	case domain.SystemNotificationEvent:
+		flushBlocks = append(flushBlocks, m.stream.Append("\n\n")...)
+		m.state = stateIdle
+		if len(flushBlocks) > 0 {
+			return m.doFlush(flushBlocks, stateIdle)
+		}
+		return m.schedulePollOnly()
 	case domain.ToolStartEvent:
 		slot := toolSlot{
 			callID:  u.CallID,

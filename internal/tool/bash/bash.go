@@ -91,7 +91,7 @@ The working directory is always the workspace root (currently ` + fmt.Sprintf("\
 - Always quote file paths that contain spaces with double quotes in your command (e.g., cd "path with spaces/file.txt").
 - You may specify an optional timeout in milliseconds (default ` + fmt.Sprintf("%dms", defaultWaitDuration.Milliseconds()) + `). Commands exceeding this limit will be automatically moved to the background and you will receive a task ID.
 - Use "run_in_background" to run a command in the background immediately without waiting.
-- IMPORTANT: Background tasks (including those promoted on timeout) are tied to your current response turn. They will be terminated as soon as you stop talking and return control to the user. If you need a task (like a build or test) to complete before you finish, you MUST use the 'sleep' tool to wait for it.
+- IMPORTANT: Background tasks run in parallel. You can do other work while they run. However, you cannot end your response turn while tasks are still active. If you are ready to finish, you must either use 'sleep' to wait for them, or 'task_stop_all' to stop them.
 
 ## Parallel Execution
 - If commands are independent and can run in parallel, make multiple bash tool calls in a single message for optimal performance.
@@ -285,7 +285,7 @@ func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor
 	}
 
 	display = domain.NewBashDisplay(req.description, req.command, req.wdDisplay, fmt.Sprintf("(Command ran in the background. Live output is saved at \"%s\")", streamCmd.LogPath()))
-	llmContent = fmt.Sprintf("command ran in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it, \"task_list\" to check status, \"task_stop\" to terminate, \"sleep\" to wait for task to finish. Command will be terminated if you do not call any tool and end the ReAct loop.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, req.wd)
+	llmContent = fmt.Sprintf("command ran in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it, \"task_list\" to check status, \"task_stop\" to terminate, \"sleep\" to wait for task to finish.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, req.wd)
 	return llmContent, display, true
 }
 

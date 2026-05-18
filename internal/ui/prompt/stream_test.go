@@ -472,6 +472,13 @@ func TestStream_StillSplitsParagraphBeforeHeading(t *testing.T) {
 	}
 }
 
+func TestStream_Append_ParagraphWithDoubleNewlineFlushesImmediately(t *testing.T) {
+	s := NewStream(mockRenderer{})
+	flushed := s.Append("hello\n\n")
+	assert.NotEmpty(t, flushed, "Expected paragraph with double newline to flush immediately")
+	assert.Equal(t, "\nhello", flushed[0], "Expected flushed content to be '\nhello'")
+}
+
 func TestStream_Pending_HidesTrailingIncompleteLine(t *testing.T) {
 	s := NewStream(mockRenderer{})
 	s.Append("abcdefghij")

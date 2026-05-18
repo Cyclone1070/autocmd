@@ -24,6 +24,8 @@ type eventSender interface {
 }
 
 type taskNotifier interface {
-	// Drain returns all pre-formatted XML notifications for tasks completed since the last call.
-	Drain() []string
+	// Drain returns all completed background tasks since the last call.
+	Drain() []domain.TaskResult
+	// HasRunning returns true if there are still active background tasks.
+	HasRunning() bool
 }

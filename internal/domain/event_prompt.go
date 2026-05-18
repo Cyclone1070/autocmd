@@ -33,3 +33,10 @@ func (SummaryCompactionEndEvent) isUIUpdate() {}
 type DoneEvent struct{}
 
 func (DoneEvent) isUIUpdate() {}
+
+// SystemNotificationEvent is emitted when a system notification is injected.
+type SystemNotificationEvent struct {
+	Content string
+}
+
+func (SystemNotificationEvent) isUIUpdate() {}

@@ -99,13 +99,32 @@ func (r *GraphRunner) graphPreTurn(ctx context.Context, st *graphRunState) (*gra
 		)
 	}
 	if r.notifier != nil {
-		for _, xml := range r.notifier.Drain() {
+		for _, res := range r.notifier.Drain() {
+			errorXML := ""
+			if res.Error != "" {
+				errorXML = fmt.Sprintf("\n  <error>%s</error>", res.Error)
+			}
+			xml := fmt.Sprintf(`<system-notification type="task_completion">
+  <task-id>%s</task-id>
+  <status>%s</status>
+  <description>%s</description>
+  <command>%s</command>
+  <exit-code>%d</exit-code>%s
+  <log-file>%s</log-file>
+  [Message auto generated, user doesn't see this message - write your response accordingly]
+</system-notification>`, res.ID, res.Status, res.Description, res.Command, res.ExitCode, errorXML, res.LogPath)
+
 			if err := appendMessageMerge(&msgs, &schema.Message{
 				Role:    schema.User,
 				Content: xml,
 				Extra:   map[string]any{domain.NotificationMessageExtraKey: true},
 			}); err != nil {
 				return st, err
+			}
+
+			// Emit SystemNotificationEvent with the content!
+			if r.events != nil {
+				r.events.SendUIUpdate(domain.SystemNotificationEvent{Content: xml})
 			}
 		}
 	}

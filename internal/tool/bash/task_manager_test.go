@@ -3,7 +3,6 @@ package bash
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 	"time"
@@ -44,10 +43,10 @@ func TestTaskManager_RegisterAndDrain(t *testing.T) {
 	}
 
 	notif := notifications[0]
-	assert.Contains(t, notif, "<task-id>t1</task-id>")
-	assert.Contains(t, notif, "<status>execution completed</status>")
-	assert.Contains(t, notif, "<description>test description</description>")
-	assert.Contains(t, notif, "<command>test command</command>")
+	assert.Equal(t, "t1", notif.ID)
+	assert.Equal(t, "execution completed", notif.Status)
+	assert.Equal(t, "test description", notif.Description)
+	assert.Equal(t, "test command", notif.Command)
 }
 
 func TestTaskManager_ActivityTracking(t *testing.T) {
@@ -94,74 +93,7 @@ func TestTaskManager_NotifyChan(t *testing.T) {
 	}
 }
 
-func TestTaskManager_Register_ReconstructsLogPath(t *testing.T) {
-	fs := &mockBashFileSystem{files: make(map[string][]byte)}
-	tm := NewTaskManager(fs)
 
-	logPath := "/tmp/task.log"
-	cmd := executor.NewStreamingCmd("t1", strings.NewReader(""), func() (*executor.Result, error) {
-		// Mock result with Stdout but no LogPath (simulating <16kb deletion)
-		return &executor.Result{ExitCode: 0, Stdout: "secret output", LogPath: ""}, nil
-	}, logPath)
-
-	cancel := func() {}
-	err := tm.Register("t1", cmd, logPath, cancel, "test description", "test command")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Wait for notification
-	select {
-	case <-tm.NotifyChan():
-	case <-time.After(1 * time.Second):
-		t.Fatal("timed out waiting for task completion")
-	}
-
-	// Check if log file was recreated
-	content, ok := fs.files[logPath]
-	if !ok {
-		t.Fatalf("expected log file %s to be recreated", logPath)
-	}
-	if string(content) != "secret output" {
-		t.Errorf("expected content 'secret output', got %q", string(content))
-	}
-
-	notifs := tm.Drain()
-	if len(notifs) != 1 {
-		t.Fatal("expected 1 notification")
-	}
-	if !strings.Contains(notifs[0], fmt.Sprintf("<log-file>%s</log-file>", logPath)) {
-		t.Errorf("notification missing log path: %s", notifs[0])
-	}
-}
-
-type mockBashFileSystem struct {
-	files map[string][]byte
-}
-
-func (m *mockBashFileSystem) Open(_ string) (domain.File, error) {
-	return nil, nil // Not used in this test
-}
-
-func (m *mockBashFileSystem) CreateAtomic(path string) (io.WriteCloser, error) {
-	return &mockBashWriteCloser{path: path, fs: m}, nil
-}
-
-type mockBashWriteCloser struct {
-	path string
-	fs   *mockBashFileSystem
-	buf  []byte
-}
-
-func (m *mockBashWriteCloser) Write(p []byte) (n int, err error) {
-	m.buf = append(m.buf, p...)
-	return len(p), nil
-}
-
-func (m *mockBashWriteCloser) Close() error {
-	m.fs.files[m.path] = m.buf
-	return nil
-}
 
 func TestTaskManager_HandleCompletion_Constants(t *testing.T) {
 	tm := NewTaskManager(nil)
@@ -169,35 +101,33 @@ func TestTaskManager_HandleCompletion_Constants(t *testing.T) {
 	t.Run("zero exit code -> execution completed", func(t *testing.T) {
 		tm.handleCompletion("t1", &executor.Result{ExitCode: 0}, nil, "/tmp/t1.log")
 		notif := tm.Drain()[0]
-		assert.Contains(t, notif, "<status>execution completed</status>")
-		assert.Contains(t, notif, "<exit-code>0</exit-code>")
+		assert.Equal(t, "execution completed", notif.Status)
+		assert.Equal(t, 0, notif.ExitCode)
 	})
 
 	t.Run("non-zero exit code -> still execution completed", func(t *testing.T) {
 		tm.handleCompletion("t2", &executor.Result{ExitCode: 1}, nil, "/tmp/t2.log")
 		notif := tm.Drain()[0]
-		assert.Contains(t, notif, "<status>execution completed</status>")
-		assert.Contains(t, notif, "<exit-code>1</exit-code>")
+		assert.Equal(t, "execution completed", notif.Status)
+		assert.Equal(t, 1, notif.ExitCode)
 	})
 
 	t.Run("context cancelled -> ToolErrorCancelled", func(t *testing.T) {
 		tm.handleCompletion("t3", &executor.Result{ExitCode: -1}, context.Canceled, "/tmp/t3.log")
 		notif := tm.Drain()[0]
-		assert.Contains(t, notif, fmt.Sprintf("<status>%s</status>", domain.ToolErrorCancelled))
+		assert.Equal(t, string(domain.ToolErrorCancelled), notif.Status)
 	})
 
 	t.Run("context deadline exceeded -> ToolErrorTimedOut as status", func(t *testing.T) {
 		tm.handleCompletion("t4", &executor.Result{ExitCode: -1}, context.DeadlineExceeded, "/tmp/t4.log")
 		notif := tm.Drain()[0]
-		assert.Contains(t, notif, fmt.Sprintf("<status>%s</status>", domain.ToolErrorTimedOut))
-		assert.NotContains(t, notif, "<timedout>")
+		assert.Equal(t, string(domain.ToolErrorTimedOut), notif.Status)
 	})
 
-	t.Run("system error -> ToolErrorFailed with <error> tag", func(t *testing.T) {
+	t.Run("system error -> ToolErrorFailed with error field", func(t *testing.T) {
 		tm.handleCompletion("t5", &executor.Result{ExitCode: -1}, fmt.Errorf("system crash"), "/tmp/t5.log")
 		notif := tm.Drain()[0]
-		// Red Phase: This currently has <status>failed</status>
-		assert.Contains(t, notif, fmt.Sprintf("<status>%s</status>", domain.ToolErrorFailed))
-		assert.Contains(t, notif, "<error>system crash</error>")
+		assert.Equal(t, string(domain.ToolErrorFailed), notif.Status)
+		assert.Equal(t, "system crash", notif.Error)
 	})
 }

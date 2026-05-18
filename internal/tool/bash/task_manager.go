@@ -24,7 +24,7 @@ type TaskManager struct {
 	fs         fileSystem
 	tasks      map[string]*bashTask
 	notifyChan chan struct{}
-	doneQueue  []string
+	doneQueue  []domain.TaskResult
 	mu         sync.Mutex
 }
 
@@ -99,40 +99,28 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 		}
 	}
 
-	errorXML := ""
-	if errDetails != nil {
-		errorXML = fmt.Sprintf("\n  <error>%v</error>", errDetails)
-	}
-
 	exitCode := 0
 	if res != nil {
 		exitCode = res.ExitCode
 	}
 
 	effectiveLogPath := logPath
-	if res != nil {
-		if res.LogPath != "" {
-			effectiveLogPath = res.LogPath
-		} else if res.Stdout != "" && m.fs != nil {
-			// Reconstruct log file if it was deleted by executor (<16kb)
-			if fl, err := m.fs.CreateAtomic(logPath); err == nil {
-				_, _ = fl.Write([]byte(res.Stdout))
-				_ = fl.Close()
-			}
-		}
+	if res != nil && res.LogPath != "" {
+		effectiveLogPath = res.LogPath
 	}
-	logFileXML := fmt.Sprintf("\n  <log-file>%s</log-file>", effectiveLogPath)
+	result := domain.TaskResult{
+		ID:          id,
+		Status:      status,
+		Description: desc,
+		Command:     command,
+		ExitCode:    exitCode,
+		LogPath:     effectiveLogPath,
+	}
+	if errDetails != nil {
+		result.Error = errDetails.Error()
+	}
 
-	// Format XML notification
-	xml := fmt.Sprintf(`<task-notification>
-  <task-id>%s</task-id>
-  <status>%s</status>
-  <description>%s</description>
-  <command>%s</command>
-  <exit-code>%d</exit-code>%s%s
-</task-notification>`, id, status, desc, command, exitCode, errorXML, logFileXML)
-
-	m.doneQueue = append(m.doneQueue, xml)
+	m.doneQueue = append(m.doneQueue, result)
 	delete(m.tasks, id)
 
 	// Signal listeners (Sleep tool)
@@ -141,7 +129,7 @@ func (m *TaskManager) handleCompletion(id string, res *executor.Result, err erro
 }
 
 // Drain returns and clears the pending notification queue.
-func (m *TaskManager) Drain() []string {
+func (m *TaskManager) Drain() []domain.TaskResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -162,6 +150,13 @@ func (m *TaskManager) HasPending() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.doneQueue) > 0
+}
+
+// HasRunning returns true if there are still active background tasks.
+func (m *TaskManager) HasRunning() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.tasks) > 0
 }
 
 // Stop terminates a background task by ID.

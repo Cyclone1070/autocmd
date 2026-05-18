@@ -146,9 +146,9 @@ func (m *mockTaskManager) NotifyChan() <-chan struct{} {
 	return args.Get(0).(<-chan struct{})
 }
 
-func (m *mockTaskManager) Drain() []string {
+func (m *mockTaskManager) Drain() []domain.TaskResult {
 	args := m.Called()
-	return args.Get(0).([]string)
+	return args.Get(0).([]domain.TaskResult)
 }
 
 type mockPathResolver struct {

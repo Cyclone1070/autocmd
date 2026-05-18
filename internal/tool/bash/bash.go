@@ -282,8 +282,8 @@ func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor
 		return "", domain.BashDisplay{}, false
 	}
 
-	display = domain.NewBashDisplay(req.description, req.command, req.wdDisplay, fmt.Sprintf("(command is running in background. Live output is saved at \"%s\")", streamCmd.LogPath()))
-	llmContent = fmt.Sprintf("the command is running in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, req.wd)
+	display = domain.NewBashDisplay(req.description, req.command, req.wdDisplay, fmt.Sprintf("(Command ran in the background. Live output is saved at \"%s\")", streamCmd.LogPath()))
+	llmContent = fmt.Sprintf("command ran in the background. Live output is saved at \"%s\", use \"read_file\" tool to read it, \"task_list\" to check status, \"task_stop\" to terminate, \"sleep\" to wait for task to finish. Command will be terminated if you do not call any tool and end the ReAct loop.\n\n<background_task_id>%s</background_task_id>\n<cwd>%s</cwd>", streamCmd.LogPath(), id, req.wd)
 	return llmContent, display, true
 }
 

@@ -254,10 +254,10 @@ func TestBashTool_Execute_AlignWithClaudeCode(t *testing.T) {
 		resp, display := tool.executeBash(context.Background(), req, nil, "")
 		duration := time.Since(start)
 
-		assert.Contains(t, resp, "the command is running in the background")
+		assert.Contains(t, resp, "command ran in the background")
 		assert.Contains(t, resp, "<cwd>/workspace</cwd>")
 		bd := display.(domain.BashDisplay)
-		assert.Contains(t, bd.CapturedOutput, "(command is running in background")
+		assert.Contains(t, bd.CapturedOutput, "(Command ran in the background")
 		assert.Equal(t, "/workspace", bd.Cwd)
 		assert.Less(t, duration, 150*time.Millisecond)
 
@@ -326,7 +326,7 @@ func TestBashTool_ZeroForegroundTimeout(t *testing.T) {
 	// Should have backgrounded immediately
 	assert.Contains(t, llmContent, "<background_task_id>")
 	assert.Contains(t, llmContent, "<cwd>/tmp</cwd>")
-	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(command is running in background")
+	assert.Contains(t, display.(domain.BashDisplay).CapturedOutput, "(Command ran in the background")
 	assert.Equal(t, "/tmp", display.(domain.BashDisplay).Cwd)
 
 	exec.AssertExpectations(t)

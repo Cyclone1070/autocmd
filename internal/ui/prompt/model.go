@@ -53,12 +53,12 @@ const (
 )
 
 type toolSlot struct {
-	display          domain.ToolDisplay
-	callID           string
-	errorMsg         string
-	streamOutput     string
-	questionState    ui.QuestionUIState
-	status           ui.ToolStatus
+	display       domain.ToolDisplay
+	callID        string
+	errorMsg      string
+	streamOutput  string
+	questionState ui.QuestionUIState
+	status        ui.ToolStatus
 }
 
 // Model is the main bubbletea model for the interactive prompt.
@@ -508,6 +508,7 @@ func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
 		}
 		switch key.Runes[0] {
 		case 'y', 'Y':
+			approvalSlot.status = ui.StatusRunning
 			sendDecision(true)
 			return true
 		case 'n', 'N':
@@ -517,6 +518,7 @@ func (m *Model) handleApprovalKey(key tea.KeyMsg) bool {
 			return false
 		}
 	case tea.KeyEnter, tea.KeySpace:
+		approvalSlot.status = ui.StatusRunning
 		sendDecision(true)
 		return true
 	case tea.KeyEsc:
@@ -622,7 +624,6 @@ func (m *Model) renderToolBox(slot toolSlot) string {
 	}
 	return rendered
 }
-
 
 func (m *Model) firstAwaitingApprovalSlot() *toolSlot {
 	for i := range m.tools {

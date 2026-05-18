@@ -651,6 +651,7 @@ func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "call-1", act.CallID)
 	assert.True(t, act.Approved)
+	assert.Equal(t, ui.StatusRunning, m.tools[0].status, "status should become StatusRunning after approval")
 }
 
 func TestModel_PermissionApproval_SpaceKeySendsApproveAction(t *testing.T) {
@@ -971,4 +972,54 @@ func TestView_StrictToolboxSpacing(t *testing.T) {
 	}
 
 	assert.False(t, strings.Contains(view, "\n\n\n"), "View should not contain triple newlines (double blank lines) between boxes")
+}
+
+func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
+	sp := &mockSpinner{}
+	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
+	
+	cwd := "~/repos/iav"
+	cmd := "for i in {1..5}; do date; sleep 1; done"
+	t.Logf("stateIdle: %v, stateThinking: %v, stateTooling: %v, stateFlushing: %v", stateIdle, stateThinking, stateTooling, stateFlushing)
+	d := domain.NewBashDisplay("Run a loop", cmd, cwd, "")
+	m.handleBusEvent(domain.ToolStartEvent{CallID: "bash-1", Display: d})
+	m.Update(flushDoneMsg{})
+	
+	m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "bash-1"})
+	
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	
+	viewBeforeStream := m.View()
+	t.Logf("View before stream:\n%q", viewBeforeStream)
+	
+	hugeOutput := "out\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\n"
+	m.handleBusEvent(domain.ToolStreamEvent{CallID: "bash-1", Chunk: hugeOutput})
+	m.Update(flushDoneMsg{})
+	
+	rawTools := strings.Join(m.renderAllTools(), "")
+	t.Logf("rawTools: %q", rawTools)
+	
+	norm := ui.NormalizeBlock(rawTools)
+	t.Logf("norm: %q", norm)
+	
+	split := strings.Split(norm, "\n")
+	t.Logf("split length: %d", len(split))
+	
+	isInteractive := m.isInteractiveOrAwaitingApproval()
+	t.Logf("isInteractive: %v", isInteractive)
+	
+	gated8, _ := m.gater.Gate(split, 8, isInteractive, m.theme)
+	t.Logf("Gate(8): %q", strings.Join(gated8, "\n"))
+	
+	gated, maxScroll := m.gater.Gate(split, m.scrollOffset, isInteractive, m.theme)
+	t.Logf("gated length: %d, maxScroll: %d", len(gated), maxScroll)
+	
+	view := strings.Join(gated, "\n")
+	t.Logf("Manual View: %q", view)
+	t.Logf("Actual m.View() output: %q", m.View())
+
+
 }

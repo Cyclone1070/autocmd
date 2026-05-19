@@ -33,7 +33,10 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		store := buildSessionStore(cfg, bootstrapFS)
+		store, err := buildSessionStore(bootstrapFS)
+		if err != nil {
+			return err
+		}
 
 		if _, err := workflow.CreateSession(store, appState); err != nil {
 			return err

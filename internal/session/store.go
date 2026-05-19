@@ -46,6 +46,15 @@ type Store struct {
 	storageDir string
 }
 
+// DefaultStorageDir returns the default session storage path (~/.config/iav/sessions).
+func DefaultStorageDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get user home dir: %w", err)
+	}
+	return filepath.Join(home, domain.ConfigBaseDir, domain.AppName, "sessions"), nil
+}
+
 // NewStore creates a new session store.
 func NewStore(fs fileSystem, storageDir string) *Store {
 	return &Store{

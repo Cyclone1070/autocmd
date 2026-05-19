@@ -3,8 +3,6 @@ package config
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 )
 
 const (
@@ -27,15 +25,12 @@ const (
 type Config struct {
 	tools     ToolsConfig
 	providers ProviderConfig
-	session   SessionConfig
 	ui        UIConfig
 }
 
 // Tools returns the configuration for tools.
 func (c *Config) Tools() ToolsConfig { return c.tools }
 
-// Session returns the configuration for sessions.
-func (c *Config) Session() SessionConfig { return c.session }
 
 // UI returns the configuration for the terminal UI.
 func (c *Config) UI() UIConfig { return c.ui }
@@ -43,13 +38,6 @@ func (c *Config) UI() UIConfig { return c.ui }
 // Providers returns the configuration for AI providers.
 func (c *Config) Providers() ProviderConfig { return c.providers }
 
-// SessionConfig holds session-specific configuration.
-type SessionConfig struct {
-	storageDir string
-}
-
-// StorageDir returns the directory where session data is stored.
-func (c SessionConfig) StorageDir() string { return c.storageDir }
 
 // ToolsConfig holds tool-specific configuration.
 type ToolsConfig struct {
@@ -86,9 +74,6 @@ type ModelConfig struct {
 type ProviderConfig map[string][]ModelConfig
 
 // DTOs for JSON persistence.
-type sessionDTO struct {
-	StorageDir string `json:"storage_dir"`
-}
 
 type toolsDTO struct {
 	Permissions   permissionsDTO `json:"permissions"`
@@ -104,7 +89,6 @@ type permissionsDTO struct {
 type configDTO struct {
 	Tools     toolsDTO       `json:"tools"`
 	Providers ProviderConfig `json:"providers,omitempty"`
-	Session   sessionDTO     `json:"session"`
 	UI        uiDTO          `json:"ui"`
 }
 
@@ -120,9 +104,6 @@ func DefaultConfig() *Config {
 				"write_file": permissionModeAsk,
 				"bash":       permissionModeAsk,
 			},
-		},
-		session: SessionConfig{
-			storageDir: filepath.Join(os.Getenv("HOME"), ".config", "iav", "sessions"),
 		},
 		ui: UIConfig{
 			primaryColor:     ColorConfig{light: "#0EA5E9", dark: "#38BDF8"},

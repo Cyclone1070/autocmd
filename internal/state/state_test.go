@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,7 +61,7 @@ func TestSave_PersistsToFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify file was written
-	statePath := filepath.Join("/home/user", ".config", "iav", "state.json")
+	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
 	assert.Contains(t, fs.Files, statePath)
 	assert.Contains(t, string(fs.Files[statePath]), "custom-model")
 	assert.Contains(t, string(fs.Files[statePath]), "session-123")
@@ -68,7 +69,7 @@ func TestSave_PersistsToFile(t *testing.T) {
 
 func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
-	statePath := filepath.Join("/home/user", ".config", "iav", "state.json")
+	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
 	fs.Files[statePath] = []byte(`{"model": "saved-model", "current_session_id": "999"}`)
 
 	mgr := state.NewManager(fs)

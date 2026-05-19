@@ -931,3 +931,17 @@ func TestStore_LoadSaveChecksums(t *testing.T) {
 		t.Errorf("expected empty map for non-existent session, got %v", empty)
 	}
 }
+
+func TestDefaultStorageDir(t *testing.T) {
+	dir, err := DefaultStorageDir()
+	if err != nil {
+		t.Fatalf("DefaultStorageDir failed: %v", err)
+	}
+	if dir == "" {
+		t.Error("expected non-empty storage directory")
+	}
+	if filepath.Base(dir) != "sessions" {
+		t.Errorf("expected suffix sessions, got %s", dir)
+	}
+}
+

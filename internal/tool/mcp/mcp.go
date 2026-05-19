@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Cyclone1070/iav/internal/domain"
+
 	einotool "github.com/cloudwego/eino/components/tool"
 	mcpp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/mark3labs/mcp-go/client"
@@ -44,7 +46,7 @@ func ResolveConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "iav", "mcp.json"), nil
+	return filepath.Join(home, domain.ConfigBaseDir, domain.AppName, "mcp.json"), nil
 }
 
 // LoadConfigPath loads the config from the given file path.

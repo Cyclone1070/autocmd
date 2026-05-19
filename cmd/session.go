@@ -34,7 +34,10 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 	defer bus.Close()
 
 	fileSystem := fs.NewOSFileSystem(-1)
-	store := buildSessionStore(deps.Config, fileSystem)
+	store, err := buildSessionStore(fileSystem)
+	if err != nil {
+		return err
+	}
 
 	done := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
 		Bus:   bus,

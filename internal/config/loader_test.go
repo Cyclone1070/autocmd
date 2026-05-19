@@ -3,14 +3,16 @@ package config_test
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const testUserConfigJSONPath = "/home/user/.config/iav/config.json"
+var testUserConfigJSONPath = filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "config.json")
 
 // mockFileSystem is a local mock implementing config.FileSystem for testing.
 type mockFileSystem struct {

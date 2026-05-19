@@ -3,8 +3,10 @@ package mcp
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
+	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +42,8 @@ func TestLoadConfig_EmptyOrInvalid(t *testing.T) {
 func TestResolveConfigPath(t *testing.T) {
 	path, err := ResolveConfigPath()
 	assert.NoError(t, err)
-	assert.Contains(t, path, ".config/iav/mcp.json")
+	expectedSuffix := filepath.Join(domain.ConfigBaseDir, domain.AppName, "mcp.json")
+	assert.Contains(t, path, expectedSuffix)
 }
 
 func TestLoadConfigPath_NonExistent(t *testing.T) {

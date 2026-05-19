@@ -30,10 +30,6 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// Session validation
-	if c.session.storageDir == "" {
-		errs = append(errs, "session.storage_dir must not be empty")
-	}
 
 	// UI validation
 	hexRegex := regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`)

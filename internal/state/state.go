@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	configDir = "iav"
 	stateFile = "state.json"
 )
 
@@ -92,7 +91,7 @@ func (m *Manager) Load() (*State, error) {
 		return s, nil
 	}
 
-	statePath := filepath.Join(homeDir, ".config", configDir, stateFile)
+	statePath := filepath.Join(homeDir, domain.ConfigBaseDir, domain.AppName, stateFile)
 
 	data, err := m.fs.ReadFile(statePath)
 	if err != nil {
@@ -125,7 +124,7 @@ func (m *Manager) Save(s *State) error {
 		return fmt.Errorf("get home dir: %w", err)
 	}
 
-	configDir := filepath.Join(homeDir, ".config", configDir)
+	configDir := filepath.Join(homeDir, domain.ConfigBaseDir, domain.AppName)
 	statePath := filepath.Join(configDir, stateFile)
 
 	if err := m.fs.MkdirAll(configDir, domain.DefaultDirPerm); err != nil {

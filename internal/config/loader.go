@@ -6,10 +6,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 const (
-	configDir = "iav"
 	configFile = "config.json"
 )
 
@@ -76,9 +77,6 @@ func newConfig(dto configDTO) (*Config, error) {
 			permissionDefault: dto.Tools.Permissions.Default,
 			toolPermissions:   copyStringMap(dto.Tools.Permissions.ByTool),
 		},
-		session: SessionConfig{
-			storageDir: dto.Session.StorageDir,
-		},
 		ui: UIConfig{
 			primaryColor: ColorConfig{
 				light: dto.UI.PrimaryColor.Light,
@@ -124,9 +122,6 @@ func (m *Manager) Load() (*Config, error) {
 				ByTool:  copyStringMap(defaults.tools.toolPermissions),
 			},
 		},
-		Session: sessionDTO{
-			StorageDir: defaults.session.storageDir,
-		},
 		UI: uiDTO{
 			PrimaryColor:     colorDTO{Light: defaults.ui.primaryColor.light, Dark: defaults.ui.primaryColor.dark},
 			SuccessColor:     colorDTO{Light: defaults.ui.successColor.light, Dark: defaults.ui.successColor.dark},
@@ -142,7 +137,7 @@ func (m *Manager) Load() (*Config, error) {
 
 	homeDir, err := m.fs.UserHomeDir()
 	if err == nil {
-		configPath := filepath.Join(homeDir, ".config", configDir, configFile)
+		configPath := filepath.Join(homeDir, domain.ConfigBaseDir, domain.AppName, configFile)
 		data, err := m.fs.ReadFile(configPath)
 		if err == nil {
 			if err := json.Unmarshal(data, &dto); err != nil {

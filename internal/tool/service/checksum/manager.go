@@ -4,6 +4,7 @@ package checksum
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"sync"
 )
 
@@ -79,9 +80,7 @@ func (m *Manager) ensureLoaded() {
 	m.store = make(map[string]string)
 	loaded, err := m.checksumStore.LoadChecksums(sessionID)
 	if err == nil {
-		for k, v := range loaded {
-			m.store[k] = v
-		}
+		maps.Copy(m.store, loaded)
 	}
 }
 

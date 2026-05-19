@@ -1,6 +1,7 @@
 package checksum
 
 import (
+	"maps"
 	"sync"
 	"testing"
 )
@@ -96,9 +97,7 @@ func (m *mockChecksumStore) LoadChecksums(sessionID string) (map[string]string, 
 		return make(map[string]string), nil
 	}
 	copied := make(map[string]string)
-	for k, v := range checksums {
-		copied[k] = v
-	}
+	maps.Copy(copied, checksums)
 	return copied, nil
 }
 
@@ -107,9 +106,7 @@ func (m *mockChecksumStore) SaveChecksums(sessionID string, checksums map[string
 		m.data = make(map[string]map[string]string)
 	}
 	copied := make(map[string]string)
-	for k, v := range checksums {
-		copied[k] = v
-	}
+	maps.Copy(copied, checksums)
 	m.data[sessionID] = copied
 	return nil
 }

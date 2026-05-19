@@ -248,40 +248,11 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		if strings.Contains(oldContent, before) {
 			actualOldString = before
 		} else {
-			// Try normalized match
-			normedOld := normalizeQuotes(oldContent)
-			normedBefore := normalizeQuotes(before)
-			found := strings.Contains(normedOld, normedBefore)
-			if found {
-				// We found a match in normalized space, now extract the actual string from the original content
-				runes := []rune(oldContent)
-				normedRunes := []rune(normedOld)
-				normedBeforeRunes := []rune(normedBefore)
-
-				// Re-find in normedRunes to be safe with rune indices
-				start := -1
-				for i := 0; i <= len(normedRunes)-len(normedBeforeRunes); i++ {
-					match := true
-					for j := range normedBeforeRunes {
-						if normedRunes[i+j] != normedBeforeRunes[j] {
-							match = false
-							break
-						}
-					}
-					if match {
-						start = i
-						break
-					}
-				}
-
-				if start != -1 {
-					actualOldString = string(runes[start : start+len(normedBeforeRunes)])
-				} else {
-					return nil, fmt.Errorf("string to replace not found in file (normalization failed).\nString: %s", req.OldString)
-				}
-			} else {
-				return nil, fmt.Errorf("string to replace not found in file.\nString: %s", req.OldString)
+			actual, err := findNormalizedMatch(oldContent, before)
+			if err != nil {
+				return nil, fmt.Errorf("%w.\nString: %s", err, req.OldString)
 			}
+			actualOldString = actual
 		}
 
 		matches = strings.Count(oldContent, actualOldString)
@@ -503,4 +474,39 @@ func computeDiff(oldContent, newContent string) (diff string, added, removed int
 	}
 	diff = strings.Join(lines, "\n")
 	return diff, added, removed
+}
+
+func findNormalizedMatch(oldContent, before string) (string, error) {
+	normedOld := normalizeQuotes(oldContent)
+	normedBefore := normalizeQuotes(before)
+	found := strings.Contains(normedOld, normedBefore)
+	if !found {
+		return "", fmt.Errorf("string to replace not found in file")
+	}
+
+	// We found a match in normalized space, now extract the actual string from the original content
+	runes := []rune(oldContent)
+	normedRunes := []rune(normedOld)
+	normedBeforeRunes := []rune(normedBefore)
+
+	// Re-find in normedRunes to be safe with rune indices
+	start := -1
+	for i := 0; i <= len(normedRunes)-len(normedBeforeRunes); i++ {
+		match := true
+		for j := range normedBeforeRunes {
+			if normedRunes[i+j] != normedBeforeRunes[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			start = i
+			break
+		}
+	}
+
+	if start == -1 {
+		return "", fmt.Errorf("string to replace not found in file (normalization failed)")
+	}
+	return string(runes[start : start+len(normedBeforeRunes)]), nil
 }

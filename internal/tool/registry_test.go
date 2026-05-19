@@ -14,8 +14,6 @@ type fakeTool struct {
 	name string
 }
 
-func (f *fakeTool) Name() string { return f.name }
-
 func (f *fakeTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{Name: f.name, Desc: f.name}, nil
 }

@@ -19,16 +19,11 @@ func NewRegistry(tools []einotool.BaseTool) *Registry {
 		tools: make(map[string]einotool.BaseTool),
 	}
 	for _, t := range tools {
-		var name string
-		if n, ok := t.(interface{ Name() string }); ok {
-			name = n.Name()
-		} else {
-			info, err := t.Info(context.Background())
-			if err != nil {
-				continue
-			}
-			name = info.Name
+		info, err := t.Info(context.Background())
+		if err != nil {
+			continue
 		}
+		name := info.Name
 		if name != "" {
 			registry.tools[name] = t
 		}

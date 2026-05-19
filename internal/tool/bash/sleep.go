@@ -13,6 +13,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const sleepToolName = "sleep"
+
 type completionNotifier interface {
 	NotifyChan() <-chan struct{}
 	HasPending() bool
@@ -30,17 +32,13 @@ func NewSleepTool(notifier completionNotifier) *SleepTool {
 	}
 }
 
-// Name returns the name of the tool.
-func (t *SleepTool) Name() string {
-	return "sleep"
-}
 
 // IsConcurrentSafe returns true as sleep is safe to run concurrently.
 func (t *SleepTool) IsConcurrentSafe() bool { return true }
 
 func (t *SleepTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "sleep",
+		Name: sleepToolName,
 		Desc: `Wait for a specified duration or until a background bash task completes.
 
 Usage:
@@ -81,7 +79,7 @@ func (t *SleepTool) InvokableRun(ctx context.Context, argumentsInJSON string, _ 
 func (t *SleepTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	var req sleepRequest
 	if err := json.Unmarshal([]byte(input.Arguments), &req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", sleepToolName), "")
 	}
 	duration := time.Duration(req.DurationMS) * time.Millisecond
 	return domain.NewStringDisplay(fmt.Sprintf("Sleep for %s", duration.String()), "")

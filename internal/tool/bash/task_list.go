@@ -14,7 +14,10 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const stalledThresholdSeconds = 30
+const (
+	taskListToolName        = "task_list"
+	stalledThresholdSeconds = 30
+)
 
 type taskLister interface {
 	List() []TaskInfo
@@ -32,17 +35,13 @@ func NewTaskListTool(manager taskLister) *TaskListTool {
 	}
 }
 
-// Name returns the unique identifier for the task list tool.
-func (t *TaskListTool) Name() string {
-	return "task_list"
-}
 
 // IsConcurrentSafe indicates if the task list tool can be run concurrently.
 func (t *TaskListTool) IsConcurrentSafe() bool { return true }
 
 func (t *TaskListTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "task_list",
+		Name: taskListToolName,
 		Desc: `List all active background bash tasks.
 
 ## When to Use This Tool

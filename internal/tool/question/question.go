@@ -15,6 +15,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const toolName = "ask_question"
+
 // Tool is a tool that allows the LLM to ask the user interactive questions.
 type Tool struct{}
 
@@ -23,17 +25,12 @@ func NewTool() *Tool {
 	return &Tool{}
 }
 
-// Name returns the unique identifier for the question tool.
-func (t *Tool) Name() string {
-	return "ask_question"
-}
-
 // IsConcurrentSafe indicates if the tool can be run concurrently (false for interactive tools).
 func (t *Tool) IsConcurrentSafe() bool { return false }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: t.Name(),
+		Name: toolName,
 		Desc: `Asks the user one or more multiple choice questions to gather information, clarify ambiguity, understand preferences, make decisions or offer them choices.
 
 Use this tool when you need to ask the user questions during execution. This allows you to:

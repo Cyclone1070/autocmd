@@ -22,6 +22,7 @@ import (
 )
 
 const (
+	bashToolName        = "bash"
 	defaultWaitDuration = 10 * time.Second
 	tailPreviewSize     = 2048
 	streamReadChunkSize = 1024 * 1024
@@ -71,17 +72,12 @@ func NewTool(fs fileSystem, commandExecutor commandExecutor, pathResolver pathRe
 	}
 }
 
-// Name returns the unique identifier for the bash tool.
-func (t *Tool) Name() string {
-	return "bash"
-}
-
 // IsConcurrentSafe indicates if the bash tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "bash",
+		Name: bashToolName,
 		Desc: `Execute a bash command on the local machine.
 
 The working directory is always the workspace root (currently ` + fmt.Sprintf("\"%s\"", t.pathResolver.Root()) + `) for every command. Shell state does not persist between calls.
@@ -163,7 +159,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", bashToolName), "")
 	}
 	wdDisplay := t.pathResolver.DisplayPath(t.pathResolver.Root())
 	return domain.NewBashDisplay(req.Description, req.Command, wdDisplay, "")

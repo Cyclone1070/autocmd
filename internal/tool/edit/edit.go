@@ -17,6 +17,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const toolName = "edit_file"
+
 // fileEditor defines the minimal filesystem operations needed for editing files.
 type fileEditor interface {
 	Stat(path string) (os.FileInfo, error)
@@ -72,17 +74,13 @@ func NewTool(
 	}
 }
 
-// Name returns the unique identifier for the edit file tool.
-func (t *Tool) Name() string {
-	return "edit_file"
-}
 
 // IsConcurrentSafe indicates if the edit file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "edit_file",
+		Name: toolName,
 		Desc: `Performs exact string replacements in files.
 
 Usage:
@@ -141,7 +139,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
 	}
 	displayPath := t.pathResolver.DisplayPath(req.FilePath)
 	return domain.NewDiffDisplay(req.Description, fmt.Sprintf("Edit \"%s\"", displayPath), 0, 0, "")

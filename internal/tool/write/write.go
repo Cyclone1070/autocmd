@@ -17,6 +17,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const toolName = "write_file"
+
 // fileWriter defines the minimal filesystem operations needed for writing files.
 type fileWriter interface {
 	Stat(path string) (os.FileInfo, error)
@@ -64,17 +66,13 @@ func NewTool(
 	}
 }
 
-// Name returns the unique identifier for the write file tool.
-func (t *Tool) Name() string {
-	return "write_file"
-}
 
 // IsConcurrentSafe indicates if the write file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "write_file",
+		Name: toolName,
 		Desc: `Write a file to the local filesystem.
 
 Usage:
@@ -123,7 +121,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
 	}
 	displayPath := t.pathResolver.DisplayPath(req.FilePath)
 	return domain.NewStringDisplay(req.Description, fmt.Sprintf("Write \"%s\"", displayPath))

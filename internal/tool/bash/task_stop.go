@@ -13,6 +13,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const taskStopToolName = "task_stop"
+
 type taskStopper interface {
 	Stop(id string) error
 }
@@ -29,17 +31,13 @@ func NewTaskStopTool(manager taskStopper) *TaskStopTool {
 	}
 }
 
-// Name returns the unique identifier for the task stop tool.
-func (t *TaskStopTool) Name() string {
-	return "task_stop"
-}
 
 // IsConcurrentSafe indicates if the task stop tool can be run concurrently.
 func (t *TaskStopTool) IsConcurrentSafe() bool { return true }
 
 func (t *TaskStopTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "task_stop",
+		Name: taskStopToolName,
 		Desc: `Terminates a running background task by its ID.
 
 Usage:
@@ -75,7 +73,7 @@ func (t *TaskStopTool) InvokableRun(ctx context.Context, argumentsInJSON string,
 func (t *TaskStopTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &taskStopRequest{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", taskStopToolName), "")
 	}
 	return domain.NewStringDisplay(fmt.Sprintf("Stop background bash task %s", req.TaskID), "")
 }

@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	toolName           = "glob"
 	defaultGlobTimeout = 20 * time.Second
 	readBufferSize     = 32 * 1024
 )
@@ -60,17 +61,13 @@ func NewTool(
 	}
 }
 
-// Name returns the name of the tool.
-func (t *Tool) Name() string {
-	return "glob"
-}
 
 // IsConcurrentSafe indicates if the glob tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: t.Name(),
+		Name: toolName,
 		Desc: `Fast file pattern matching tool that works with any codebase size.
 
 Usage:
@@ -111,7 +108,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
 	}
 	searchPath := req.Path
 	if searchPath == "" {

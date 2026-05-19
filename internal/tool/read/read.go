@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	toolName             = "read_file"
 	defaultReadFileLimit = 2000
 )
 
@@ -62,17 +63,13 @@ func NewTool(
 	}
 }
 
-// Name returns the unique identifier for the read file tool.
-func (t *Tool) Name() string {
-	return "read_file"
-}
 
 // IsConcurrentSafe indicates if the read file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "read_file",
+		Name: toolName,
 		Desc: `Read a file from the local filesystem.
 
 Usage:
@@ -120,7 +117,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
 	}
 	displayPath := t.pathResolver.DisplayPath(req.FilePath)
 	return domain.NewStringDisplay(fmt.Sprintf("Read \"%s\"", displayPath), "")

@@ -23,6 +23,8 @@ import (
 )
 
 const (
+	toolName = "grep"
+
 	// Prevents base64/minified files from blowing up context.
 	defaultMaxColumns = 500
 
@@ -84,17 +86,13 @@ func NewTool(
 	}
 }
 
-// Name returns the unique identifier for the grep tool.
-func (t *Tool) Name() string {
-	return "grep"
-}
 
 // IsConcurrentSafe indicates if the grep tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "grep",
+		Name: toolName,
 		Desc: `A powerful search tool built on ripgrep.
 
 Usage:
@@ -182,7 +180,7 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	req := &Request{}
 	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", t.Name()), "")
+		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
 	}
 	searchPath := req.Path
 	if searchPath == "" {

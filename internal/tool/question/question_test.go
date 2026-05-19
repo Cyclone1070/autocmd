@@ -20,7 +20,6 @@ func TestTool(t *testing.T) {
 	tool := NewTool()
 
 	t.Run("Name and Definition", func(t *testing.T) {
-		assert.Equal(t, "ask_question", tool.Name())
 		assert.False(t, tool.IsConcurrentSafe())
 		def, err := tool.Info(context.Background())
 		require.NoError(t, err)

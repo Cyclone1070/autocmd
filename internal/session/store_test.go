@@ -170,7 +170,7 @@ func TestCreate_SaveFails(t *testing.T) {
 	}
 }
 
-func TestGet_Success(t *testing.T) {
+func TestGet_SplitSuccess(t *testing.T) {
 	store, fs := newTestStore()
 
 	sessID := testSessionID
@@ -185,19 +185,26 @@ func TestGet_Success(t *testing.T) {
 	}
 	infoData, _ := json.MarshalIndent(infoDTO, "", "  ")
 
-	messagesDTO := sessionMessagesDTO{
-		Messages: []*schema.Message{
-			{Role: schema.User, Content: "Hello"},
-			{Role: schema.Assistant, Content: "Hi there"},
-		},
+	// Messages as direct JSON array
+	messages := []*schema.Message{
+		{Role: schema.User, Content: "Hello"},
+		{Role: schema.Assistant, Content: "Hi there"},
 	}
-	messagesData, _ := json.MarshalIndent(messagesDTO, "", "  ")
+	messagesData, _ := json.MarshalIndent(messages, "", "  ")
+
+	// Displays as separate displays.json
+	displays := domain.ToolDisplays{
+		"call-1": domain.NewStringDisplay("desc", "content"),
+	}
+	displaysData, _ := json.MarshalIndent(displays, "", "  ")
 
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	messagesPath := filepath.Join(store.storageDir, sessID, "messages.json")
+	displaysPath := filepath.Join(store.storageDir, sessID, "displays.json")
 
 	fs.files[infoPath] = infoData
 	fs.files[messagesPath] = messagesData
+	fs.files[displaysPath] = displaysData
 
 	sess, err := store.Get(sessID)
 	if err != nil {
@@ -213,7 +220,15 @@ func TestGet_Success(t *testing.T) {
 	if len(sess.Messages) != 2 {
 		t.Errorf("Session Messages count mismatch: got %d, want 2", len(sess.Messages))
 	}
+	if len(sess.ToolDisplays) != 1 {
+		t.Fatalf("expected 1 tool display, got %d", len(sess.ToolDisplays))
+	}
+	d, ok := sess.ToolDisplays["call-1"].(domain.StringDisplay)
+	if !ok || d.Content != "content" {
+		t.Errorf("Session ToolDisplays mismatch: got %v", sess.ToolDisplays)
+	}
 }
+
 
 func TestGet_NotFound(t *testing.T) {
 	store, _ := newTestStore()
@@ -312,6 +327,9 @@ func TestSave_Success(t *testing.T) {
 		Messages: []*schema.Message{
 			{Role: schema.User, Content: "Hello"},
 		},
+		ToolDisplays: domain.ToolDisplays{
+			"call-1": domain.NewStringDisplay("desc", "content"),
+		},
 	}
 
 	err := store.Save(sess)
@@ -321,12 +339,38 @@ func TestSave_Success(t *testing.T) {
 
 	infoPath := filepath.Join(store.storageDir, sess.ID, "metadata.json")
 	messagesPath := filepath.Join(store.storageDir, sess.ID, "messages.json")
+	displaysPath := filepath.Join(store.storageDir, sess.ID, "displays.json")
 
 	if _, ok := fs.files[infoPath]; !ok {
 		t.Error("Info file should have been written")
 	}
 	if _, ok := fs.files[messagesPath]; !ok {
 		t.Error("Messages file should have been written")
+	}
+	if _, ok := fs.files[displaysPath]; !ok {
+		t.Error("Displays file should have been written")
+	}
+
+	// Verify displays content
+	var savedDisplays domain.ToolDisplays
+	if err := json.Unmarshal(fs.files[displaysPath], &savedDisplays); err != nil {
+		t.Fatalf("failed to unmarshal displays: %v", err)
+	}
+	if len(savedDisplays) != 1 {
+		t.Fatalf("saved displays count mismatch: %d", len(savedDisplays))
+	}
+	d, ok := savedDisplays["call-1"].(domain.StringDisplay)
+	if !ok || d.Content != "content" {
+		t.Errorf("saved displays mismatch: %v", savedDisplays)
+	}
+
+	// Verify messages content (should be direct array)
+	var savedMessages []*schema.Message
+	if err := json.Unmarshal(fs.files[messagesPath], &savedMessages); err != nil {
+		t.Fatalf("failed to unmarshal messages: %v", err)
+	}
+	if len(savedMessages) != 1 || savedMessages[0].Content != "Hello" {
+		t.Errorf("saved messages mismatch: %v", savedMessages)
 	}
 
 	// Verify Updated timestamp was set

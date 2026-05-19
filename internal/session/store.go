@@ -34,12 +34,6 @@ type sessionInfoDTO struct {
 	Updated      int64  `json:"updated"`
 }
 
-// sessionMessagesDTO is used for the .messages.json file.
-type sessionMessagesDTO struct {
-	Displays domain.ToolDisplays `json:"displays,omitempty"`
-	Messages []*schema.Message   `json:"messages"`
-}
-
 // Store manages session creation, loading, saving, and listing.
 type Store struct {
 	fs         fileSystem
@@ -131,22 +125,32 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 
 	// Read messages file
 	messagesPath := filepath.Join(sessionDir, "messages.json")
-	var messages []*schema.Message
-	var displays domain.ToolDisplays
 	messagesData, err := st.fs.ReadFile(messagesPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("read session messages: %w", err)
-		}
-		// Messages file doesn't exist yet, use empty slice
-		messages = []*schema.Message{}
-	} else {
-		var messagesDTO sessionMessagesDTO
-		if err := json.Unmarshal(messagesData, &messagesDTO); err != nil {
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read session messages: %w", err)
+	}
+
+	var messages []*schema.Message
+	if len(messagesData) > 0 {
+		if err := json.Unmarshal(messagesData, &messages); err != nil {
 			return nil, fmt.Errorf("unmarshal session messages: %w", err)
 		}
-		messages = messagesDTO.Messages
-		displays = messagesDTO.Displays
+	} else {
+		messages = []*schema.Message{}
+	}
+
+	// Read displays file
+	displaysPath := filepath.Join(sessionDir, "displays.json")
+	displaysData, err := st.fs.ReadFile(displaysPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read session displays: %w", err)
+	}
+
+	displays := make(domain.ToolDisplays)
+	if len(displaysData) > 0 {
+		if err := json.Unmarshal(displaysData, &displays); err != nil {
+			return nil, fmt.Errorf("unmarshal session displays: %w", err)
+		}
 	}
 
 	return &domain.Session{
@@ -188,16 +192,22 @@ func (st *Store) Save(s *domain.Session) error {
 
 	// Write messages file
 	messagesPath := filepath.Join(sessionDir, "messages.json")
-	messagesDTO := sessionMessagesDTO{
-		Messages: s.Messages,
-		Displays: s.ToolDisplays,
-	}
-	messagesData, err := json.MarshalIndent(messagesDTO, "", "  ")
+	messagesData, err := json.MarshalIndent(s.Messages, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal session messages: %w", err)
 	}
 	if err := st.fs.WriteFileAtomic(messagesPath, messagesData, domain.DefaultFilePerm); err != nil {
 		return fmt.Errorf("write session messages: %w", err)
+	}
+
+	// Write displays file
+	displaysPath := filepath.Join(sessionDir, "displays.json")
+	displaysData, err := json.MarshalIndent(s.ToolDisplays, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session displays: %w", err)
+	}
+	if err := st.fs.WriteFileAtomic(displaysPath, displaysData, domain.DefaultFilePerm); err != nil {
+		return fmt.Errorf("write session displays: %w", err)
 	}
 
 	return nil

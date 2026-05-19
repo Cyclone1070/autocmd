@@ -2,6 +2,7 @@
 package tool
 
 import (
+	"context"
 	"sort"
 
 	einotool "github.com/cloudwego/eino/components/tool"
@@ -18,12 +19,19 @@ func NewRegistry(tools []einotool.BaseTool) *Registry {
 		tools: make(map[string]einotool.BaseTool),
 	}
 	for _, t := range tools {
-		n, ok := t.(interface{ Name() string })
-		if !ok {
-			continue
+		var name string
+		if n, ok := t.(interface{ Name() string }); ok {
+			name = n.Name()
+		} else {
+			info, err := t.Info(context.Background())
+			if err != nil {
+				continue
+			}
+			name = info.Name
 		}
-		name := n.Name()
-		registry.tools[name] = t
+		if name != "" {
+			registry.tools[name] = t
+		}
 	}
 	return registry
 }

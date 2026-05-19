@@ -181,3 +181,51 @@ func resolveToolPreview(registry toolRegistry, input *compose.ToolInput) domain.
 	}
 	return domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), "")
 }
+
+func newExternalToolEventMiddleware(events eventSender, registry toolRegistry) compose.ToolMiddleware {
+	return compose.ToolMiddleware{
+		Invokable: func(next compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
+			return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
+				if registry == nil || events == nil {
+					return next(ctx, input)
+				}
+				tl, ok := registry.Get(input.Name)
+				if !ok {
+					return next(ctx, input)
+				}
+				_, isPreview := tl.(previewer)
+				if isPreview {
+					return next(ctx, input)
+				}
+
+				// External/MCP tool: emit ToolStartEvent
+				display := domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), "")
+				events.SendUIUpdate(domain.ToolStartEvent{
+					CallID:  input.CallID,
+					Display: display,
+				})
+
+				out, err := next(ctx, input)
+				if err != nil {
+					events.SendUIUpdate(domain.ToolEndEvent{
+						CallID:  input.CallID,
+						Display: display.WithError(err.Error()),
+					})
+					return nil, err
+				}
+
+				// Emit ToolEndEvent with the result content
+				var resultStr string
+				if out != nil {
+					resultStr = out.Result
+				}
+				events.SendUIUpdate(domain.ToolEndEvent{
+					CallID:  input.CallID,
+					Display: domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), resultStr),
+				})
+				return out, nil
+			}
+		},
+	}
+}
+

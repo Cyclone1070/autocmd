@@ -21,6 +21,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/edit"
 	"github.com/Cyclone1070/iav/internal/tool/glob"
 	"github.com/Cyclone1070/iav/internal/tool/grep"
+	"github.com/Cyclone1070/iav/internal/tool/mcp"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/write"
@@ -102,6 +103,22 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		bash.NewTaskStopAllTool(taskMgr),
 		question.NewTool(),
 	}
+
+	mcpPath, err := mcp.ResolveConfigPath()
+	if err == nil {
+		mcpCfg, err := mcp.LoadConfigPath(mcpPath)
+		if err == nil && len(mcpCfg.McpServers) > 0 {
+			mcpMgr := mcp.NewManager(mcpCfg, nil, nil)
+			defer mcpMgr.Close()
+
+			fetchedTools, err := mcpMgr.Start(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to start mcp: %w", err)
+			}
+			tools = append(tools, fetchedTools...)
+		}
+	}
+
 	toolRegistry := tool.NewRegistry(tools)
 
 	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())

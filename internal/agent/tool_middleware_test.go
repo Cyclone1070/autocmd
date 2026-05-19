@@ -295,3 +295,76 @@ func TestPreflightValidationMiddleware_UnknownTool_EmitsUnknownToolRequestDispla
 	require.Equal(t, "", sd.Content)
 	require.Equal(t, "Unknown tool request", sd.Error)
 }
+
+type mockNonPreviewTool struct {
+	name string
+}
+
+func (m *mockNonPreviewTool) Name() string { return m.name }
+func (m *mockNonPreviewTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: m.name}, nil
+}
+func (m *mockNonPreviewTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+	return "external tool result", nil
+}
+
+func TestExternalToolEventMiddleware_ForExternalTool(t *testing.T) {
+	tl := &mockNonPreviewTool{name: "external_tool"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"external_tool": tl}}
+	events := &mockEventSender{}
+	mw := newExternalToolEventMiddleware(events, reg)
+
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		return &compose.ToolOutput{Result: "external tool result"}, nil
+	}
+
+	ctx := context.Background()
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "external_tool",
+		Arguments: "{}",
+		CallID:    "c_ext",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "external tool result", out.Result)
+
+	require.Len(t, events.updates, 2)
+
+	start, ok := events.updates[0].(domain.ToolStartEvent)
+	require.True(t, ok)
+	require.Equal(t, "c_ext", start.CallID)
+	sdStart, ok := start.Display.(domain.StringDisplay)
+	require.True(t, ok)
+	require.Equal(t, `Run "external_tool"`, sdStart.Description)
+
+	end, ok := events.updates[1].(domain.ToolEndEvent)
+	require.True(t, ok)
+	require.Equal(t, "c_ext", end.CallID)
+	sdEnd, ok := end.Display.(domain.StringDisplay)
+	require.True(t, ok)
+	require.Equal(t, `Run "external_tool"`, sdEnd.Description)
+	require.Equal(t, "external tool result", sdEnd.Content)
+}
+
+func TestExternalToolEventMiddleware_ForBuiltInTool(t *testing.T) {
+	tl := &mockPreviewTool{name: "builtin_tool"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"builtin_tool": tl}}
+	events := &mockEventSender{}
+	mw := newExternalToolEventMiddleware(events, reg)
+
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		return &compose.ToolOutput{Result: "builtin tool result"}, nil
+	}
+
+	ctx := context.Background()
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "builtin_tool",
+		Arguments: "{}",
+		CallID:    "c_built",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "builtin tool result", out.Result)
+
+	// Since it's a built-in tool, it implements previewer, so the middleware should not emit events
+	require.Empty(t, events.updates)
+}
+

@@ -97,6 +97,7 @@ func NewGraphRunner(
 		newPreflightValidationMiddleware(events, registry),
 		newPreviewStartMiddleware(events, registry),
 		newPermissionMiddleware(permission, waiter, events, registry),
+		newExternalToolEventMiddleware(events, registry),
 	}
 	toolsNodeParallel, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
 		Tools:               tools,

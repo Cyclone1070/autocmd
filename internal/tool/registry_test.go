@@ -47,10 +47,36 @@ func TestRegistry_Tools_DeterministicSortedByName(t *testing.T) {
 		got := r.Tools()
 		gotNames := make([]string, len(got))
 		for i, tl := range got {
-			n, ok := tl.(interface{ Name() string })
-			require.True(t, ok, "tool must expose Name()")
-			gotNames[i] = n.Name()
+			info, err := tl.Info(context.Background())
+			require.NoError(t, err, "failed to get tool info")
+			gotNames[i] = info.Name
 		}
 		require.Equal(t, want, gotNames, "Tools() must return tools sorted by name on every call (run %d)", run)
 	}
 }
+
+type mcpLikeTool struct {
+	name string
+}
+
+func (m *mcpLikeTool) Info(_ context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: m.name, Desc: m.name}, nil
+}
+
+func (m *mcpLikeTool) Exec(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
+var _ einotool.BaseTool = (*mcpLikeTool)(nil)
+
+func TestRegistry_Tools_SupportsBaseToolWithoutNameMethod(t *testing.T) {
+	tools := []einotool.BaseTool{
+		&mcpLikeTool{name: "mcp_tool"},
+	}
+	r := NewRegistry(tools)
+
+	got, ok := r.Get("mcp_tool")
+	require.True(t, ok, "should find mcp_tool in registry")
+	require.Equal(t, tools[0], got)
+}
+

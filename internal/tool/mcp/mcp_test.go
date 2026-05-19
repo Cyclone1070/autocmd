@@ -73,7 +73,7 @@ func (m *mockMCPClient) Close() error {
 	return nil
 }
 
-// Implement other methods of client.MCPClient interface as no-ops
+// Implement other methods of client.MCPClient interface as no-ops.
 func (m *mockMCPClient) Ping(ctx context.Context) error { return nil }
 func (m *mockMCPClient) ListResourcesByPage(ctx context.Context, request mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	return nil, nil

@@ -881,3 +881,53 @@ func TestRename(t *testing.T) {
 		t.Error("Rename() should have failed for non-existent session")
 	}
 }
+
+func TestStore_LoadSaveChecksums(t *testing.T) {
+	store, fs := newTestStore()
+	sessID := "test-session-checksums"
+
+	checksums := map[string]string{
+		"/file1.txt": "hash1",
+		"/file2.txt": "hash2",
+	}
+
+	// Save
+	if err := store.SaveChecksums(sessID, checksums); err != nil {
+		t.Fatalf("SaveChecksums() failed: %v", err)
+	}
+
+	// Verify it was written to file
+	expectedPath := filepath.Join(store.storageDir, sessID, "checksums.json")
+	data, ok := fs.files[expectedPath]
+	if !ok {
+		t.Fatalf("expected checksums.json to be written at %s", expectedPath)
+	}
+
+	var loaded map[string]string
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		t.Fatalf("failed to unmarshal written checksums: %v", err)
+	}
+
+	if loaded["/file1.txt"] != "hash1" || loaded["/file2.txt"] != "hash2" {
+		t.Errorf("unexpected saved checksums content: %v", loaded)
+	}
+
+	// Load
+	retrieved, err := store.LoadChecksums(sessID)
+	if err != nil {
+		t.Fatalf("LoadChecksums() failed: %v", err)
+	}
+
+	if retrieved["/file1.txt"] != "hash1" || retrieved["/file2.txt"] != "hash2" {
+		t.Errorf("unexpected loaded checksums: %v", retrieved)
+	}
+
+	// Non-existent session load
+	empty, err := store.LoadChecksums("non-existent-session-id")
+	if err != nil {
+		t.Fatalf("LoadChecksums should succeed for non-existent session, got: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("expected empty map for non-existent session, got %v", empty)
+	}
+}

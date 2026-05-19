@@ -26,7 +26,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/service/hash"
+	"github.com/Cyclone1070/iav/internal/tool/service/checksum"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -86,7 +86,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
 	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
-	checksumMgr := hash.NewChecksumManager()
+	checksumMgr := checksum.NewManager(deps.SessionStore, deps.State)
 
 	taskMgr := bash.NewTaskManager(fileSystem)
 

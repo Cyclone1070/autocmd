@@ -277,3 +277,51 @@ func (st *Store) Delete(id string) error {
 	}
 	return nil
 }
+
+// LoadChecksums retrieves the stored checksums for a session.
+func (st *Store) LoadChecksums(sessionID string) (map[string]string, error) {
+	sessionDir := filepath.Join(st.storageDir, sessionID)
+	checksumsPath := filepath.Join(sessionDir, "checksums.json")
+
+	data, err := st.fs.ReadFile(checksumsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]string), nil
+		}
+		return nil, fmt.Errorf("read checksums: %w", err)
+	}
+
+	var checksums map[string]string
+	if err := json.Unmarshal(data, &checksums); err != nil {
+		return nil, fmt.Errorf("unmarshal checksums: %w", err)
+	}
+
+	return checksums, nil
+}
+
+// SaveChecksums persists the checksums for a session.
+func (st *Store) SaveChecksums(sessionID string, checksums map[string]string) error {
+	sessionDir := filepath.Join(st.storageDir, sessionID)
+	if err := st.fs.EnsureDirs(sessionDir); err != nil {
+		return fmt.Errorf("create session dir: %w", err)
+	}
+
+	checksumsPath := filepath.Join(sessionDir, "checksums.json")
+	if len(checksums) == 0 {
+		if err := st.fs.Remove(checksumsPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove checksums file: %w", err)
+		}
+		return nil
+	}
+
+	data, err := json.MarshalIndent(checksums, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal checksums: %w", err)
+	}
+
+	if err := st.fs.WriteFileAtomic(checksumsPath, data, domain.DefaultFilePerm); err != nil {
+		return fmt.Errorf("write checksums: %w", err)
+	}
+
+	return nil
+}

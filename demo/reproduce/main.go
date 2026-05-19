@@ -26,7 +26,7 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/read"
 	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/service/hash"
+	"github.com/Cyclone1070/iav/internal/tool/service/checksum"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
@@ -79,7 +79,7 @@ func run() error {
 
 	fileSystem := fs.NewOSFileSystem(cfg.Tools().MaxFileSize())
 	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
-	checksumMgr := hash.NewChecksumManager()
+	checksumMgr := checksum.NewManager(nil, nil)
 	taskMgr := bash.NewTaskManager(fileSystem)
 
 	tools := []einotool.BaseTool{

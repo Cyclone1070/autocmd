@@ -349,7 +349,7 @@ func TestModel_ConnectingEvent(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
-	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{flushReturns: []string{}}, ui.NewNoOpGater(), 80)
 	m.state = stateIdle
 
 	res, _ := m.Update(busEventMsg{event: domain.ConnectingEvent{}})
@@ -361,16 +361,27 @@ func TestModel_ConnectingEvent(t *testing.T) {
 }
 
 func TestModel_WaitingForNamingEvent(t *testing.T) {
+	var flushed []string
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
-	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{p: "some pending text"}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
+		flushed = append(flushed, c)
+		return nil
+	}))
 	m.state = stateIdle
 
 	res, _ := m.Update(busEventMsg{event: domain.WaitingForNamingEvent{}})
 	m = res.(*Model)
+	assert.Equal(t, stateFlushing, m.state)
+	assert.Equal(t, stateWaitingForNaming, m.nextState)
+	require.NotEmpty(t, flushed)
+	assert.Contains(t, flushed[0], "flushed") // mockStream.Flush returns "flushed"
+
+	res, _ = m.Update(flushDoneMsg{})
+	m = res.(*Model)
 	assert.Equal(t, stateWaitingForNaming, m.state)
-	
+
 	v := m.View()
 	assert.Contains(t, v, "Waiting for auto session naming")
 }
@@ -422,10 +433,10 @@ func TestModel_NoTruncationIfHeightZero(t *testing.T) {
 }
 
 func TestModel_FlushDoneMsgSequencing(t *testing.T) {
-	// Logical check: doFlush must use tea.Sequence to ensure order
+	// Logical check: flushAndTransition must use tea.Sequence to ensure order
 	m := &Model{}
 	m.flushFn = func(_ string) tea.Cmd { return nil }
-	_, cmd := m.doFlush([]string{"b1", "b2"}, stateIdle)
+	_, cmd := m.flushAndTransition([]string{"b1", "b2"}, stateIdle)
 
 	// Verified in code: return m, tea.Sequence(cmds...)
 	assert.NotNil(t, cmd)
@@ -794,9 +805,9 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, stream, ui.NewNoOpGater(), 80, WithFlush(mockPrintf))
 
 	// Case 1: Avoid sticking between tool block and para
-	m.doFlush([]string{"✔ BOX\n  ╰ DONE"}, stateIdle)
+	m.flushAndTransition([]string{"✔ BOX\n  ╰ DONE"}, stateIdle)
 	// Simulate Para delta starting with \n
-	m.doFlush([]string{"\nPARA"}, stateIdle)
+	m.flushAndTransition([]string{"\nPARA"}, stateIdle)
 
 	output := terminalOutput.String()
 	t.Logf("Output Case 1:\n%q", output)
@@ -809,10 +820,10 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 
 	// Case 2: Avoid double-spacing with ANSI gap lines (Headers)
 	// Simulate Para ending
-	m.doFlush([]string{"PARA"}, stateIdle)
+	m.flushAndTransition([]string{"PARA"}, stateIdle)
 	// Simulate Header delta with ANSI gap line: "\x1b[0m  \x1b[0m\n## HEADER"
 	// Note: We use \x1b[0m as a common "reset" that glamour puts in gaps.
-	m.doFlush([]string{"\x1b[0m  \x1b[0m\n## HEADER"}, stateIdle)
+	m.flushAndTransition([]string{"\x1b[0m  \x1b[0m\n## HEADER"}, stateIdle)
 
 	output = terminalOutput.String()
 	t.Logf("Output Case 2:\n%q", output)
@@ -827,8 +838,8 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	terminalOutput.Reset()
 
 	// Case 3: Multiple newlines should be respected (minus 1 for tea.Printf)
-	m.doFlush([]string{"PARA"}, stateIdle)
-	m.doFlush([]string{"\n\n\nCONTENT"}, stateIdle)
+	m.flushAndTransition([]string{"PARA"}, stateIdle)
+	m.flushAndTransition([]string{"\n\n\nCONTENT"}, stateIdle)
 	output = terminalOutput.String()
 	// Total terminal: \nPARA\n (flush 1) + \n\n (from prepended \n\n) + CONTENT\n (flush 2)
 	assert.Contains(t, output, "\nPARA\n\n\nCONTENT\n", "Triple newlines should result in two blank lines (respecting the gap)")

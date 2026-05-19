@@ -206,7 +206,7 @@ func (m *Model) schedulePollOnly() (tea.Model, tea.Cmd) {
 
 func (m *Model) isReadyForEvent() bool {
 	switch m.state {
-	case stateIdle, stateThinking, stateTooling, stateSummarizing:
+	case stateIdle, stateThinking, stateTooling, stateSummarizing, stateConnecting, stateWaitingForNaming:
 		return true
 	}
 	return false
@@ -223,10 +223,10 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 	switch m.state {
 	case stateThinking:
 		thinkingLine := m.thinkingRenderer.RenderThinking(ui.StatusError, m.thinkingStart, m.spinnerFrame, "", m.spinnerProvider)
-		return m.doFlush([]string{thinkingLine, errLine}, stateDone)
+		return m.flushAndTransition([]string{thinkingLine, errLine}, stateDone)
 	case stateSummarizing:
 		summaryLine := m.renderSummaryCompactionTool(ui.StatusError)
-		return m.doFlush([]string{summaryLine, errLine}, stateDone)
+		return m.flushAndTransition([]string{summaryLine, errLine}, stateDone)
 	case stateTooling:
 		for i := range m.tools {
 			if m.tools[i].status == ui.StatusRunning {
@@ -234,10 +234,10 @@ func (m *Model) handleUnexpectedClose() (tea.Model, tea.Cmd) {
 				m.tools[i].errorMsg = "bus closed unexpectedly"
 			}
 		}
-		return m.doFlush(m.renderAllTools(), stateDone)
+		return m.flushAndTransition(m.renderAllTools(), stateDone)
 	default:
 		blocks := append(m.stream.Flush(), errLine)
-		return m.doFlush(blocks, stateDone)
+		return m.flushAndTransition(blocks, stateDone)
 	}
 }
 
@@ -247,19 +247,16 @@ func (m *Model) handleBusTextEvent(u domain.TextEvent, flushBlocks []string) (te
 			m.thoughtText += u.Text
 			return m.schedulePollOnly()
 		}
-		m.state = stateThinking
 		m.thinkingStart = time.Now()
 		m.thoughtText = u.Text
 		m.spinnerFrame = 0
-		flushBlocks = append(flushBlocks, m.stream.Flush()...)
-		return m.doFlush(flushBlocks, stateThinking)
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateThinking)
 	}
 	flushBlocks = append(flushBlocks, m.stream.Append(u.Text)...)
-	m.state = stateIdle
-	if len(flushBlocks) > 0 {
-		return m.doFlush(flushBlocks, stateIdle)
-	}
-	return m.schedulePollOnly()
+	return m.flushAndTransition(flushBlocks, stateIdle)
 }
 
 func (m *Model) handleBusToolEndEvent(u domain.ToolEndEvent, flushBlocks []string) (tea.Model, tea.Cmd) {
@@ -285,14 +282,14 @@ func (m *Model) handleBusToolEndEvent(u domain.ToolEndEvent, flushBlocks []strin
 				next = stateIdle
 			}
 			flushed = append(flushBlocks, flushed...)
-			return m.doFlush(flushed, next)
+			return m.flushAndTransition(flushed, next)
 		}
 		if len(m.tools) == 0 {
 			m.state = stateIdle
 		}
 	}
 	if len(flushBlocks) > 0 {
-		return m.doFlush(flushBlocks, m.state)
+		return m.flushAndTransition(flushBlocks, m.state)
 	}
 	return m.schedulePollOnly()
 }
@@ -312,20 +309,20 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 
 	switch u := u.(type) {
 	case domain.ConnectingEvent:
-		m.state = stateConnecting
-		return m.schedulePollOnly()
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateConnecting)
 	case domain.WaitingForNamingEvent:
-		m.state = stateWaitingForNaming
-		return m.schedulePollOnly()
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateWaitingForNaming)
 	case domain.TextEvent:
 		return m.handleBusTextEvent(u, flushBlocks)
 	case domain.SystemNotificationEvent:
 		flushBlocks = append(flushBlocks, m.stream.Append("\n\n")...)
-		m.state = stateIdle
-		if len(flushBlocks) > 0 {
-			return m.doFlush(flushBlocks, stateIdle)
-		}
-		return m.schedulePollOnly()
+		return m.flushAndTransition(flushBlocks, stateIdle)
 	case domain.ToolStartEvent:
 		slot := toolSlot{
 			callID:  u.CallID,
@@ -336,9 +333,10 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 			slot.questionState = ui.NewQuestionUIState(qd)
 		}
 		m.tools = append(m.tools, slot)
-		m.state = stateTooling
-		flushBlocks = append(flushBlocks, m.stream.Flush()...)
-		return m.doFlush(flushBlocks, stateTooling)
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateTooling)
 	case domain.ToolApprovalRequestEvent:
 		if m.state == stateTooling {
 			for i := range m.tools {
@@ -350,14 +348,16 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		}
 		return m.schedulePollOnly()
 	case domain.DoneEvent:
-		m.state = stateDone
-		flushBlocks = append(flushBlocks, m.stream.Flush()...)
-		return m.doFlush(flushBlocks, stateDone)
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateDone)
 	case domain.SummaryCompactionStartEvent:
-		m.state = stateSummarizing
 		m.spinnerFrame = 0
-		flushBlocks = append(flushBlocks, m.stream.Flush()...)
-		return m.doFlush(flushBlocks, stateSummarizing)
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateSummarizing)
 	case domain.SummaryCompactionEndEvent:
 		status := ui.StatusSuccess
 		switch {
@@ -367,7 +367,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 			status = ui.StatusError
 		}
 		flushBlocks = append(flushBlocks, m.renderSummaryCompactionTool(status))
-		return m.doFlush(flushBlocks, stateIdle)
+		return m.flushAndTransition(flushBlocks, stateIdle)
 	case domain.ToolStreamEvent:
 		if m.state == stateTooling {
 			for i := range m.tools {
@@ -382,7 +382,7 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 		return m.handleBusToolEndEvent(u, flushBlocks)
 	}
 	if len(flushBlocks) > 0 {
-		return m.doFlush(flushBlocks, m.state)
+		return m.flushAndTransition(flushBlocks, m.state)
 	}
 	return m.schedulePollOnly()
 }
@@ -395,7 +395,7 @@ func (m *Model) handleFlushDone() (tea.Model, tea.Cmd) {
 	return m.withPollIfNeeded()
 }
 
-func (m *Model) doFlush(blocks []string, next uiState) (tea.Model, tea.Cmd) {
+func (m *Model) flushAndTransition(blocks []string, next uiState) (tea.Model, tea.Cmd) {
 	if len(blocks) == 0 {
 		m.state = next
 		if m.state == stateDone {
@@ -589,7 +589,7 @@ func (m *Model) handleCancel() (tea.Model, tea.Cmd) {
 	if m.stream != nil {
 		blocks := m.stream.Flush()
 		if len(blocks) > 0 {
-			return m.doFlush(blocks, m.state)
+			return m.flushAndTransition(blocks, m.state)
 		}
 	}
 	return m.withPollIfNeeded()

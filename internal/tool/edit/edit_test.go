@@ -233,6 +233,28 @@ func TestEditFile(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "absolute path required")
 	})
+
+	t.Run("Fails if existing file has not been read", func(t *testing.T) {
+		fs := newMockFileOps()
+		checksumManager := newMockChecksumManagerShared()
+		fs.files["/workspace/test.txt"] = []byte("hello world")
+		// Do NOT simulate read (checksumManager is empty)
+
+		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
+
+		req := &Request{
+			FilePath:    "/workspace/test.txt",
+			Description: "changing hello to goodbye",
+			OldString:   "hello",
+			NewString:   "goodbye",
+			ReplaceAll:  false,
+		}
+
+		params, _ := json.Marshal(req)
+		_, err := tool.validate(string(params))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "file has not been read yet; read it first before editing it")
+	})
 }
 
 // Shared mocks used by file package tests.

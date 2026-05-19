@@ -217,8 +217,13 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 	// Check for conflicts with cached version
 	currentChecksum = t.checksumManager.Compute([]byte(oldContent))
 	priorChecksum, checksumOk := t.checksumManager.Get(abs)
-	if checksumOk && priorChecksum != currentChecksum {
-		return nil, fmt.Errorf("edit conflict: file changed since last read: %s", abs)
+	if info != nil {
+		if !checksumOk {
+			return nil, fmt.Errorf("file has not been read yet; read it first before editing it")
+		}
+		if priorChecksum != currentChecksum {
+			return nil, fmt.Errorf("edit conflict: file changed since last read: %s", abs)
+		}
 	}
 
 	// Apply replacement

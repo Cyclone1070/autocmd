@@ -140,11 +140,19 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 
 	go func() {
 		defer cancel()
+		deps.Bus.SendUIUpdate(domain.ConnectingEvent{})
 		err := deps.Agent.Run(workflowCtx, sess, input)
 
-		// Apply name if generated
-		if name, ok := <-nameChan; ok {
-			sess.Name = name
+		select {
+		case name, ok := <-nameChan:
+			if ok {
+				sess.Name = name
+			}
+		default:
+			deps.Bus.SendUIUpdate(domain.WaitingForNamingEvent{})
+			if name, ok := <-nameChan; ok {
+				sess.Name = name
+			}
 		}
 
 		_ = deps.Store.Save(sess)

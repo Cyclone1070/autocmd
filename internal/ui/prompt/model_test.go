@@ -345,6 +345,36 @@ func TestModel_HandleBusEvent_SystemNotificationEvent(t *testing.T) {
 	assert.Equal(t, "\n\n", stream.lastAppend, "Stream should receive newlines on SystemNotificationEvent")
 }
 
+func TestModel_ConnectingEvent(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateIdle
+
+	res, _ := m.Update(busEventMsg{event: domain.ConnectingEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateConnecting, m.state)
+	
+	v := m.View()
+	assert.Contains(t, v, "Connecting to provider")
+}
+
+func TestModel_WaitingForNamingEvent(t *testing.T) {
+	theme := ui.NewTheme(ui.ThemeConfig{})
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
+	m.state = stateIdle
+
+	res, _ := m.Update(busEventMsg{event: domain.WaitingForNamingEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateWaitingForNaming, m.state)
+	
+	v := m.View()
+	assert.Contains(t, v, "Waiting for auto session naming")
+}
+
 func TestModel_ViewportTruncation(t *testing.T) {
 	theme := ui.NewTheme(ui.ThemeConfig{})
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(3), 80)

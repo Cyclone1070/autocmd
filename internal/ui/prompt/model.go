@@ -49,6 +49,8 @@ const (
 	stateTooling
 	stateFlushing
 	stateSummarizing
+	stateConnecting
+	stateWaitingForNaming
 	stateDone
 )
 
@@ -309,6 +311,12 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	}
 
 	switch u := u.(type) {
+	case domain.ConnectingEvent:
+		m.state = stateConnecting
+		return m.schedulePollOnly()
+	case domain.WaitingForNamingEvent:
+		m.state = stateWaitingForNaming
+		return m.schedulePollOnly()
 	case domain.TextEvent:
 		return m.handleBusTextEvent(u, flushBlocks)
 	case domain.SystemNotificationEvent:
@@ -433,6 +441,12 @@ func (m *Model) View() string {
 			status = ui.StatusError
 		}
 		content = ui.NormalizeBlock(m.renderSummaryCompactionTool(status))
+	case stateConnecting:
+		frame := m.spinnerProvider.Frame(m.spinnerFrame)
+		content = ui.NormalizeBlock(m.toolRenderer.RenderString(domain.NewStringDisplay("Connecting to provider", ""), ui.StatusRunning, "", frame))
+	case stateWaitingForNaming:
+		frame := m.spinnerProvider.Frame(m.spinnerFrame)
+		content = ui.NormalizeBlock(m.toolRenderer.RenderString(domain.NewStringDisplay("Waiting for auto session naming", ""), ui.StatusRunning, "", frame))
 	case stateTooling:
 		content = ui.NormalizeBlock(strings.Join(m.renderAllTools(), ""))
 	}

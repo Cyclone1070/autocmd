@@ -213,6 +213,24 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 		t.Fatal("RunPrompt did not complete for existing named session (possible deadlock on nameChan)")
 	}
 
+	// Verify no WaitingForNamingEvent was sent because session already had a name
+	var receivedWaiting bool
+	doneEventReceived := false
+	for !doneEventReceived {
+		select {
+		case ev := <-bus.UIUpdates():
+			switch ev.(type) {
+			case domain.WaitingForNamingEvent:
+				receivedWaiting = true
+			case domain.DoneEvent:
+				doneEventReceived = true
+			}
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("Timed out waiting for DoneEvent")
+		}
+	}
+	assert.False(t, receivedWaiting, "Should not receive WaitingForNamingEvent when session already named")
+
 	store.AssertNotCalled(t, "GenerateName", mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -350,3 +368,69 @@ func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
 	assert.Equal(t, testNewSessionID, appState.CurrentSessionID(), "Should have fallen back to a new session ID")
 	store.AssertExpectations(t)
 }
+
+func TestRunPrompt_EmitsIndicators(t *testing.T) {
+	ctx := t.Context()
+
+	store := new(mockSessionStore)
+	llm := new(mockLLM)
+	agent := new(mockAgent)
+	bus := eventbus.New()
+
+	deps := &PromptDeps{
+		Store:        store,
+		LLM:          llm,
+		State:        &state.State{},
+		ToolRegistry: nil,
+		Agent:        agent,
+		Bus:          bus,
+	}
+
+	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
+	store.On("Save", mock.Anything).Return(nil)
+	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
+		time.Sleep(50 * time.Millisecond) // Ensure it blocks nameChan
+	}).Return("Name", nil)
+
+	// Keep the agent running for a bit so we can see the connecting event
+	agentRunStarted := make(chan struct{})
+	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
+		close(agentRunStarted)
+		time.Sleep(10 * time.Millisecond) // Simulate work
+	}).Return(nil)
+
+	done := RunPrompt(ctx, "hello", deps)
+
+	// We should receive ConnectingEvent first
+	select {
+	case ev := <-bus.UIUpdates():
+		_, ok := ev.(domain.ConnectingEvent)
+		assert.True(t, ok, "Expected ConnectingEvent")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timed out waiting for ConnectingEvent")
+	}
+
+	// Wait for agent to start
+	<-agentRunStarted
+
+	// We should receive WaitingForNamingEvent after agent finishes but before done
+	select {
+	case ev := <-bus.UIUpdates():
+		_, ok := ev.(domain.WaitingForNamingEvent)
+		assert.True(t, ok, "Expected WaitingForNamingEvent")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timed out waiting for WaitingForNamingEvent")
+	}
+
+	// Finally DoneEvent
+	select {
+	case ev := <-bus.UIUpdates():
+		_, ok := ev.(domain.DoneEvent)
+		assert.True(t, ok, "Expected DoneEvent")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timed out waiting for DoneEvent")
+	}
+
+	<-done
+}
+

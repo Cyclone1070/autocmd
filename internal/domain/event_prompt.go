@@ -40,3 +40,14 @@ type SystemNotificationEvent struct {
 }
 
 func (SystemNotificationEvent) isUIUpdate() {}
+
+// ConnectingEvent is emitted when the app is connecting to the provider.
+type ConnectingEvent struct{}
+
+func (ConnectingEvent) isUIUpdate() {}
+
+// WaitingForNamingEvent is emitted when the app is waiting for auto session naming.
+type WaitingForNamingEvent struct{}
+
+func (WaitingForNamingEvent) isUIUpdate() {}
+

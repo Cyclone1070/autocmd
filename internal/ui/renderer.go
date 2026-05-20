@@ -79,12 +79,12 @@ func (g *GlamourRenderer) Render(markdown string) string {
 	// We capture the entire line prefix to ensure absolute alignment with glamour's document layout.
 	re := regexp.MustCompile(`(?sm)^([^\n]*?)` + regexp.QuoteMeta(codeStartMarker) + `(.*?)\n?^([^\n]*?)` + regexp.QuoteMeta(codeEndMarker))
 
-	// Red color for the bar
-	red := "\x1b[38;2;240;93;94m" // #F05D5E (Light)
+	// Yellow color for the bar
+	yellow := "\x1b[38;2;181;137;0m" // #B58900 (Light)
 	if g.isDark {
-		red = "\x1b[38;2;255;102;102m" // #FF6666 (Dark)
+		yellow = "\x1b[38;2;240;198;56m" // #F0C638 (Dark)
 	}
-	bar := red + "┃" + "\x1b[0m"
+	bar := yellow + "┃" + "\x1b[0m"
 
 	out := re.ReplaceAllStringFunc(rendered, func(match string) string {
 		sub := re.FindStringSubmatch(match)
@@ -159,6 +159,13 @@ func NewGlamourRenderer(width int, isDark bool) Renderer {
 	// Remove background colors to ensure safe contrast on all palettes
 	style.H1.BackgroundColor = nil
 	style.Code.BackgroundColor = nil
+	if isDark {
+		yellowColor := "#F0C638"
+		style.Code.Color = &yellowColor
+	} else {
+		yellowColor := "#B58900"
+		style.Code.Color = &yellowColor
+	}
 	style.Code.Prefix = ""
 	style.Code.Suffix = ""
 	style.CodeBlock.BackgroundColor = nil

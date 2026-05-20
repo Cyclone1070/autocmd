@@ -50,7 +50,7 @@ var rootCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deps, err := Wire()
 		if err != nil {
-			return wrapForUser(withCategory(errBootstrap, err))
+			return wrapForUser(withCategory(errSetup, err))
 		}
 
 		if len(args) == 0 {
@@ -76,7 +76,7 @@ func Execute() {
 
 func runAgent(ctx context.Context, deps *Deps, input string) error {
 	if deps.State.Model() == "" {
-		return errNoModelSelected
+		return withCategory(errSetup, errors.New("no model selected"))
 	}
 
 	pathResolver, err := buildPathResolver()
@@ -123,7 +123,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())
 	if err != nil {
-		return withCategory(errModelInitialization, err)
+		return withCategory(errSetup, err)
 	}
 
 	// Wiring
@@ -147,7 +147,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		permissionResolver,
 	)
 	if err != nil {
-		return withCategory(errModelInitialization, err)
+		return withCategory(errSetup, err)
 	}
 
 	themeCfg := ui.ThemeConfig{
@@ -204,18 +204,15 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {
-		return withCategory(errUIRuntime, err)
+		return withCategory(errSetup, err)
 	}
 
 	agentErr := <-done
 	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
-		if errors.Is(agentErr, agent.ErrModelAuth) {
-			return withCategory(errModelAuth, agentErr)
+		if errors.Is(agentErr, agent.ErrModel) {
+			return withCategory(errModelProvider, agentErr)
 		}
-		if errors.Is(agentErr, agent.ErrModelBackend) {
-			return withCategory(errModelBackend, agentErr)
-		}
-		return agentErr
+		return withCategory(errAgenticLoop, agentErr)
 	}
 
 	return nil

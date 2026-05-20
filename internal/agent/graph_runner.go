@@ -263,7 +263,7 @@ func (r *GraphRunner) Run(ctx context.Context, session *domain.Session, input st
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		return fmt.Errorf("%w: graph invoke: %w", classifyModelErr(err), err)
+		return fmt.Errorf("%w: graph invoke: %w", ErrModel, err)
 	}
 	if out != nil && out.stopReason != nil {
 		return out.stopReason

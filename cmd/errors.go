@@ -9,44 +9,58 @@ import (
 )
 
 var (
-	errBootstrap            = errors.New("bootstrap failure")
+	errModelProvider        = errors.New("model provider failure")
+	errAgenticLoop          = errors.New("agentic loop failure")
 	errWorkspaceUnavailable = errors.New("workspace unavailable")
-	errModelInitialization  = errors.New("model initialization failure")
-	errModelBackend         = errors.New("model backend failure")
-	errModelAuth            = errors.New("model authentication failure")
-	errUIRuntime            = errors.New("ui runtime failure")
-	errNoModelSelected      = errors.New("no model selected")
+	errSetup                = errors.New("setup failure")
 )
 
+//nolint:staticcheck // We capitalize categories for user-facing CLI presentation
 func wrapForUser(err error) error {
 	if err == nil {
 		return nil
 	}
 	slog.Error("command failed", "error", err)
-	return errors.New(mapUserFacingError(err))
+
+	root := rootError(err)
+
+	switch {
+	case errors.Is(err, errModelProvider), errors.Is(err, agent.ErrModel):
+		return fmt.Errorf("LLM Provider Failed: %w", root)
+
+	case errors.Is(err, errAgenticLoop):
+		return fmt.Errorf("Agentic Loop Failed: %w", root)
+
+	case errors.Is(err, errWorkspaceUnavailable):
+		return fmt.Errorf("Workspace Access Failed: %w", root)
+
+	case errors.Is(err, errSetup):
+		return fmt.Errorf("Setup Failed: %w", root)
+
+	default:
+		return root
+	}
 }
 
-func mapUserFacingError(err error) string {
-	if err == nil {
-		return ""
-	}
-	switch {
-	case errors.Is(err, errNoModelSelected):
-		return "No model selected. Please run 'iav model' or 'iav auth' to get started"
-	case errors.Is(err, errBootstrap):
-		return "Failed to load app configuration/state. Check config and retry."
-	case errors.Is(err, errWorkspaceUnavailable):
-		return "Could not access current workspace. Verify directory exists and permissions."
-	case errors.Is(err, errModelInitialization):
-		return "Could not initialize selected model/provider. Run 'iav auth' or 'iav model'."
-	case errors.Is(err, errModelAuth), errors.Is(err, agent.ErrModelAuth):
-		return "Authentication failed for the selected model (invalid/expired API key or token). Run 'iav auth' and try again."
-	case errors.Is(err, errModelBackend), errors.Is(err, agent.ErrModelBackend):
-		return "Model backend error. Retry, or switch model with 'iav model'."
-	case errors.Is(err, errUIRuntime):
-		return "Terminal UI failed to start. Retry in a standard terminal session."
-	default:
-		return "Unexpected internal error. See log file for details."
+func rootError(err error) error {
+	for {
+		//nolint:errorlint // We explicitly inspect the current error wrapper in the chain
+		switch x := err.(type) {
+		case interface{ Unwrap() error }:
+			u := x.Unwrap()
+			if u == nil {
+				return err
+			}
+			err = u
+		case interface{ Unwrap() []error }:
+			u := x.Unwrap()
+			if len(u) == 0 {
+				return err
+			}
+			err = u[len(u)-1]
+		default:
+			return err
+		}
 	}
 }
 

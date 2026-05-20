@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMapUserFacingError(t *testing.T) {
+func TestWrapForUser(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -18,51 +18,67 @@ func TestMapUserFacingError(t *testing.T) {
 		want string
 	}{
 		{
-			name: "provider internal stream error",
-			err:  fmt.Errorf("%w: %w", errModelBackend, agent.ErrModelBackend),
-			want: "Model backend error. Retry, or switch model with 'iav model'.",
+			name: "nil error",
+			err:  nil,
+			want: "",
 		},
 		{
-			name: "provider auth error",
-			err:  fmt.Errorf("%w: %w", errModelAuth, agent.ErrModelAuth),
-			want: "Authentication failed for the selected model (invalid/expired API key or token). Run 'iav auth' and try again.",
+			name: "LLM Provider Failure (Backend)",
+			err:  withCategory(errModelProvider, fmt.Errorf("LLM.Stream: %w", errors.New("error 500: Internal Server Error"))),
+			want: "LLM Provider Failed: error 500: Internal Server Error",
 		},
 		{
-			name: "workspace root issue",
-			err:  fmt.Errorf("%w: invalid workspace root", errWorkspaceUnavailable),
-			want: "Could not access current workspace. Verify directory exists and permissions.",
+			name: "LLM Provider Failure (Auth)",
+			err:  withCategory(errModelProvider, agent.ErrModel),
+			want: "LLM Provider Failed: model failure",
 		},
 		{
-			name: "config issue",
-			err:  fmt.Errorf("%w: parse failure", errBootstrap),
-			want: "Failed to load app configuration/state. Check config and retry.",
+			name: "Agentic Loop Failure (Max Iterations)",
+			err:  withCategory(errAgenticLoop, errors.New("max iterations (10) reached")),
+			want: "Agentic Loop Failed: max iterations (10) reached",
 		},
 		{
-			name: "auth model init issue",
-			err:  fmt.Errorf("%w: credential missing", errModelInitialization),
-			want: "Could not initialize selected model/provider. Run 'iav auth' or 'iav model'.",
+			name: "Workspace Access Failure",
+			err:  withCategory(errWorkspaceUnavailable, errors.New("stat /wrong/path: no such file or directory")),
+			want: "Workspace Access Failed: stat /wrong/path: no such file or directory",
 		},
 		{
-			name: "ui startup issue",
-			err:  fmt.Errorf("%w: bad tty", errUIRuntime),
-			want: "Terminal UI failed to start. Retry in a standard terminal session.",
+			name: "Setup Failure (Bootstrap)",
+			err:  withCategory(errSetup, errors.New("invalid config yaml")),
+			want: "Setup Failed: invalid config yaml",
 		},
 		{
-			name: "no model selected",
-			err:  errNoModelSelected,
-			want: "No model selected. Please run 'iav model' or 'iav auth' to get started",
+			name: "Setup Failure (Model Init)",
+			err:  withCategory(errSetup, errors.New("LLM provider unknown")),
+			want: "Setup Failed: LLM provider unknown",
 		},
 		{
-			name: "fallback",
-			err:  errors.New("something unexpected exploded"),
-			want: "Unexpected internal error. See log file for details.",
+			name: "Setup Failure (UI Runtime)",
+			err:  withCategory(errSetup, errors.New("terminal size too small")),
+			want: "Setup Failed: terminal size too small",
+		},
+		{
+			name: "Setup Failure (No Model Selected)",
+			err:  withCategory(errSetup, errors.New("no model selected")),
+			want: "Setup Failed: no model selected",
+		},
+		{
+			name: "Fallback raw error without categories",
+			err:  errors.New("raw unexpected failure"),
+			want: "raw unexpected failure",
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, mapUserFacingError(tc.err))
+			got := wrapForUser(tc.err)
+			if tc.want == "" {
+				assert.NoError(t, got)
+			} else {
+				assert.Error(t, got)
+				assert.Equal(t, tc.want, got.Error())
+			}
 		})
 	}
 }

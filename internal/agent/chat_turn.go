@@ -20,12 +20,12 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 	modelWithTools, err := flowagent.ChatModelWithTools(nil, r.llm.Model(), r.toolInfos)
 	if err != nil {
 		slog.Error("graph chat bind tools failed", "error", err, "error_text", err.Error())
-		return st, fmt.Errorf("%w: bind tools: %w", classifyModelErr(err), err)
+		return st, fmt.Errorf("%w: bind tools: %w", ErrModel, err)
 	}
 	stream, err := modelWithTools.Stream(ctx, st.session.Messages)
 	if err != nil {
 		slog.Error("graph chat stream start failed", "error", err, "error_text", err.Error())
-		return st, fmt.Errorf("%w: LLM.Stream: %w", classifyModelErr(err), err)
+		return st, fmt.Errorf("%w: LLM.Stream: %w", ErrModel, err)
 	}
 	defer stream.Close()
 
@@ -43,7 +43,7 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 				slog.Error("graph chat append partial assistant failed", "error", appendErr, "error_text", appendErr.Error())
 				return st, appendErr
 			}
-			return st, fmt.Errorf("%w: reader.Recv: %w", classifyModelErr(err), err)
+			return st, fmt.Errorf("%w: reader.Recv: %w", ErrModel, err)
 		}
 		if chunk.ReasoningContent != "" && !reasoningStarted {
 			reasoningStart = time.Now()

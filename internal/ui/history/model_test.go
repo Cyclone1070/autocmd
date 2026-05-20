@@ -62,4 +62,18 @@ func TestModel_EventFlow(t *testing.T) {
 
 		bus.AssertCalled(t, "SendAction", domain.StopAction{})
 	})
+
+	t.Run("Footer rendering", func(t *testing.T) {
+		m := NewModel(bus, theme, 80, 12, 80, 40)
+		ev := domain.HistoryEvent{
+			Messages: []*schema.Message{{Role: schema.User, Content: "some message"}},
+		}
+		m.Update(ev)
+		m.Update(domain.DoneEvent{})
+
+		view := m.View()
+		assert.Contains(t, view, "\n"+theme.Primary("↑/↓")+theme.Muted(" navigate"))
+		assert.NotContains(t, view, "\n "+theme.Primary("↑/↓")+theme.Muted(" navigate"))
+		assert.Contains(t, view, theme.Primary("q")+theme.Muted(" quit"))
+	})
 }

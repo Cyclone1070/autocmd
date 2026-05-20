@@ -15,7 +15,10 @@ import (
 	"golang.org/x/term"
 )
 
-const preloadFactor = 2
+const (
+	preloadFactor = 2
+	footerHeight  = 1
+)
 
 type bus interface {
 	UIUpdates() <-chan domain.UIUpdate
@@ -95,7 +98,8 @@ func NewModel(b bus, theme *ui.Theme, chatWindowWidth int, bashOutputHeight int,
 
 	m.syncBuilder()
 
-	m.viewport = viewport.New(m.width, height)
+	vHeight := max(0, height-footerHeight)
+	m.viewport = viewport.New(m.width, vHeight)
 	return m
 }
 
@@ -239,7 +243,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.height = msg.Height
 		m.viewport.Width = m.width
-		m.viewport.Height = m.height
+		m.viewport.Height = max(0, msg.Height-footerHeight)
 		if m.loaded {
 			m.initializeContent()
 		}
@@ -258,7 +262,11 @@ func (m *Model) View() string {
 	if !m.loaded && len(m.messages) == 0 {
 		return ""
 	}
-	return m.viewport.View()
+	return m.viewport.View() + "\n" + m.footerView()
+}
+
+func (m *Model) footerView() string {
+	return m.theme.Primary("↑/↓") + m.theme.Muted(" navigate") + "   " + m.theme.Primary("q") + m.theme.Muted(" quit")
 }
 
 func toIntSafe(n uintptr) (int, error) {

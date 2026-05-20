@@ -214,14 +214,9 @@ func newExternalToolEventMiddleware(events eventSender, registry toolRegistry) c
 					return nil, err
 				}
 
-				// Emit ToolEndEvent with the result content
-				var resultStr string
-				if out != nil {
-					resultStr = out.Result
-				}
 				events.SendUIUpdate(domain.ToolEndEvent{
 					CallID:  input.CallID,
-					Display: domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), resultStr),
+					Display: domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), ""),
 				})
 				return out, nil
 			}

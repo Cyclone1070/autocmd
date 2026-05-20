@@ -342,7 +342,7 @@ func TestExternalToolEventMiddleware_ForExternalTool(t *testing.T) {
 	sdEnd, ok := end.Display.(domain.StringDisplay)
 	require.True(t, ok)
 	require.Equal(t, `Run "external_tool"`, sdEnd.Description)
-	require.Equal(t, "external tool result", sdEnd.Content)
+	require.Equal(t, "", sdEnd.Content)
 }
 
 func TestExternalToolEventMiddleware_ForBuiltInTool(t *testing.T) {

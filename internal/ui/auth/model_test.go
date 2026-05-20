@@ -79,7 +79,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		snapshot := domain.AuthProviderListEvent{
 			Providers: []domain.ProviderSummary{
-				{ID: testFixtureProviderOpenAI, Authorized: true, AuthMethod: "api_key"},
+				{ID: testFixtureProviderOpenAI, Authorized: true, AuthMethod: domain.AuthMethodAPIKey},
 				{ID: "anthropic", Authorized: false},
 			},
 		}
@@ -87,7 +87,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 
 		view := m.View()
 		assert.Contains(t, view, testFixtureProviderOpenAI)
-		assert.Contains(t, view, "api_key")
+		assert.Contains(t, view, domain.AuthMethodAPIKey)
 		assert.Contains(t, view, "anthropic")
 	})
 
@@ -129,13 +129,13 @@ func TestAuthUI_Interactive(t *testing.T) {
 
 		// While cancelled, receiving new UI updates should be ignored (but keep polling).
 		ch2 := make(chan domain.UIUpdate, 1)
-		ch2 <- domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: "github"}}}
+		ch2 <- domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: domain.ProviderGitHub}}}
 		close(ch2)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch2)).Once()
 
 		prevState := m.state
 		prevPicker := m.picker
-		_, cmd := m.Update(domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: "github"}}})
+		_, cmd := m.Update(domain.AuthProviderListEvent{Providers: []domain.ProviderSummary{{ID: domain.ProviderGitHub}}})
 		assert.NotNil(t, cmd)
 		_ = cmd() // drain the pollBus command
 		assert.Equal(t, prevState, m.state, "cancelRequested must prevent state changes from new events")
@@ -227,7 +227,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
-			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+			domain.APIKeyAuthMethod{ID: domain.AuthMethodAPIKey, Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
@@ -252,7 +252,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
-			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+			domain.APIKeyAuthMethod{ID: domain.AuthMethodAPIKey, Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
@@ -269,7 +269,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{
-				ID: "api_key", Name: "API Key",
+				ID: domain.AuthMethodAPIKey, Name: "API Key",
 				Fields: []domain.AuthField{{ID: "key", Label: "API Key", Placeholder: "Enter key"}},
 			},
 		}
@@ -299,7 +299,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
 			domain.APIKeyAuthMethod{
-				ID: "api_key", Name: "API Key",
+				ID: domain.AuthMethodAPIKey, Name: "API Key",
 				Fields: []domain.AuthField{{ID: "key", Label: "API Key", Placeholder: "Enter key"}},
 			},
 		}
@@ -316,12 +316,12 @@ func TestAuthUI_Interactive(t *testing.T) {
 	t.Run("OAuth flow back keys return to method selection", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme).(*model)
-		providers := []domain.ProviderSummary{{ID: "github"}}
+		providers := []domain.ProviderSummary{{ID: domain.ProviderGitHub}}
 		methods := []domain.AuthMethod{
 			domain.OAuthMethod{ID: testAuthMethodGitHubOAuth, Name: "GitHub"},
 		}
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
-		m.Update(domain.AuthMethodEvent{ProviderID: "github", Methods: methods})
+		m.Update(domain.AuthMethodEvent{ProviderID: domain.ProviderGitHub, Methods: methods})
 		m.Update(domain.OAuthDeviceFlowEvent{
 			VerificationURI: "https://github.com/login/device",
 			UserCode:        "ABCD-1234",
@@ -347,7 +347,7 @@ func TestAuthUI_Interactive(t *testing.T) {
 		m := NewModel(bus, theme).(*model)
 		providers := []domain.ProviderSummary{{ID: testFixtureProviderOpenAI}}
 		methods := []domain.AuthMethod{
-			domain.APIKeyAuthMethod{ID: "api_key", Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
+			domain.APIKeyAuthMethod{ID: domain.AuthMethodAPIKey, Name: "API Key", Fields: []domain.AuthField{{ID: "key"}}},
 		}
 		m.Update(domain.AuthProviderListEvent{Providers: providers})
 		m.Update(domain.AuthMethodEvent{ProviderID: testFixtureProviderOpenAI, Methods: methods})

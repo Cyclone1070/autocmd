@@ -207,7 +207,7 @@ func TestRunAuth(t *testing.T) {
 		p := new(mockProvider)
 		p.On("ID").Return(domain.ProviderGoogle)
 		methods := []domain.AuthMethod{
-			domain.EnvVarAuthMethod{ID: "env", Name: "Env", EnvVars: []string{"GEMINI_API_KEY"}},
+			domain.EnvVarAuthMethod{ID: domain.AuthMethodEnv, Name: "Env", EnvVars: []string{"GEMINI_API_KEY"}},
 		}
 		p.On("SupportedAuthMethods").Return(methods)
 		registry.On("Get", domain.ProviderGoogle).Return(p, true)

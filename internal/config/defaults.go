@@ -3,6 +3,8 @@ package config
 
 import (
 	"maps"
+
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 const (
@@ -116,14 +118,14 @@ func DefaultConfig() *Config {
 			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{
-			"google": {
+			domain.ProviderGoogle: {
 				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: contextWindow256k},
 				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: contextWindow256k},
 				{ID: "google/gemini-3.1-flash-lite", Name: "Gemini 3.0 Flash Lite", ContextWindow: contextWindow2M},
 				{ID: "google/gemini-3-flash-preview", Name: "Gemini 3.0 Flash", ContextWindow: contextWindow2M},
 				{ID: "google/gemini-3-pro-preview", Name: "Gemini 3.0 Pro", ContextWindow: contextWindow2M},
 			},
-			"github": {
+			domain.ProviderGitHub: {
 				{ID: "github/claude-haiku-4.5", Name: "Claude Haiku 4.5", ContextWindow: contextWindow128k},
 				{ID: "github/gemini-3-flash-preview", Name: "Gemini 3 Flash", ContextWindow: contextWindow2M},
 				{ID: "github/gpt-5.1", Name: "GPT 5.1", ContextWindow: contextWindow128k},

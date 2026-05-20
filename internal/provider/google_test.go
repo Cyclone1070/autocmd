@@ -10,7 +10,7 @@ import (
 func TestGoogleProviderAuthSpec(t *testing.T) {
 	p := NewGoogleProvider(nil)
 
-	assert.Equal(t, "google", p.ID())
+	assert.Equal(t, domain.ProviderGoogle, p.ID())
 
 	methods := p.SupportedAuthMethods()
 	assert.NotEmpty(t, methods)
@@ -18,7 +18,7 @@ func TestGoogleProviderAuthSpec(t *testing.T) {
 	foundAPIKey := false
 	for _, m := range methods {
 		if apiKeyMethod, ok := m.(domain.APIKeyAuthMethod); ok {
-			if apiKeyMethod.ID == "api_key" {
+			if apiKeyMethod.ID == domain.AuthMethodAPIKey {
 				foundAPIKey = true
 				assert.NotEmpty(t, apiKeyMethod.Fields)
 			}

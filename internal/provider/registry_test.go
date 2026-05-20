@@ -77,7 +77,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("List with Auto-Resolution", func(t *testing.T) {
-		store.creds["mock"] = &domain.Credential{APIKey: "auto", Type: "api_key"}
+		store.creds["mock"] = &domain.Credential{APIKey: "auto", Type: domain.AuthMethodAPIKey}
 		// No creds map argument
 		llms, err := r.List(context.Background())
 		assert.NoError(t, err)

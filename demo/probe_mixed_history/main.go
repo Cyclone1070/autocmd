@@ -138,6 +138,7 @@ func readReplayFileBytes(path string) ([]byte, error) {
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("replay path %q escapes cwd %q", abs, cwd)
 	}
+	// nosec G304 -- Path escapes are strictly prevented by validation checks above
 	return os.ReadFile(abs)
 }
 

@@ -66,15 +66,6 @@ linters:
       - legacy
       - std-error-handling
     rules:
-      # Demos and tests: allow repeated literals and numeric fixtures without goconst/mnd churn.
-      - path: (^|/)demo/
-        linters:
-          - goconst
-          - mnd
-      - path: _test\.go$
-        linters:
-          - goconst
-          - mnd
       - linters:
           - revive
         text: stutter
@@ -85,6 +76,7 @@ linters:
       - third_party$
       - builtin$
       - examples$
+      - (^|/)demo/
 formatters:
   exclusions:
     generated: lax
@@ -92,3 +84,4 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+      - (^|/)demo/

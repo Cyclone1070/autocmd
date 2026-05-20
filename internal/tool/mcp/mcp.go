@@ -51,6 +51,7 @@ func ResolveConfigPath() (string, error) {
 
 // LoadConfigPath loads the config from the given file path.
 func LoadConfigPath(path string) (*Config, error) {
+	// nosec G304 -- Config file path is resolved dynamically or specified via trusted user flags
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -84,7 +85,7 @@ func DefaultRemoteCreator(ctx context.Context, url string, headers map[string]st
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusMethodNotAllowed {
 				useStreamable = true
 			}

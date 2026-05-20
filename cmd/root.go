@@ -109,7 +109,9 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 		mcpCfg, err := mcp.LoadConfigPath(mcpPath)
 		if err == nil && len(mcpCfg.McpServers) > 0 {
 			mcpMgr := mcp.NewManager(mcpCfg, nil, nil)
-			defer mcpMgr.Close()
+			defer func() {
+				_ = mcpMgr.Close()
+			}()
 
 			fetchedTools, err := mcpMgr.Start(ctx)
 			if err != nil {

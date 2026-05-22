@@ -7,6 +7,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/permission"
+	"github.com/Cyclone1070/iav/internal/runtimectx"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -366,5 +367,120 @@ func TestExternalToolEventMiddleware_ForBuiltInTool(t *testing.T) {
 
 	// Since it's a built-in tool, it implements previewer, so the middleware should not emit events
 	require.Empty(t, events.updates)
+}
+
+func TestExternalToolEventMiddleware_ForExternalTool_Success_WritesToSink(t *testing.T) {
+	tl := &mockNonPreviewTool{name: "external_tool"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"external_tool": tl}}
+	events := &mockEventSender{}
+	mw := newExternalToolEventMiddleware(events, reg)
+
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		return &compose.ToolOutput{Result: "success result"}, nil
+	}
+
+	var sinkCallID string
+	var sinkDisplay domain.ToolDisplay
+	ctx := runtimectx.WithToolDisplaySink(context.Background(), func(callID string, display domain.ToolDisplay) {
+		sinkCallID = callID
+		sinkDisplay = display
+	})
+
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "external_tool",
+		Arguments: "{}",
+		CallID:    "c_success",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "success result", out.Result)
+
+	// Check UI update events
+	require.Len(t, events.updates, 2)
+
+	// Check sink persistence
+	require.Equal(t, "c_success", sinkCallID)
+	require.NotNil(t, sinkDisplay)
+	sd, ok := sinkDisplay.(domain.StringDisplay)
+	require.True(t, ok)
+	require.Equal(t, `Run "external_tool"`, sd.Description)
+	require.Equal(t, "", sd.Error)
+}
+
+func TestExternalToolEventMiddleware_ForExternalTool_GoError_RecoversAndWritesToSink(t *testing.T) {
+	tl := &mockNonPreviewTool{name: "external_tool"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"external_tool": tl}}
+	events := &mockEventSender{}
+	mw := newExternalToolEventMiddleware(events, reg)
+
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		return nil, fmt.Errorf("external tool execution failed")
+	}
+
+	var sinkCallID string
+	var sinkDisplay domain.ToolDisplay
+	ctx := runtimectx.WithToolDisplaySink(context.Background(), func(callID string, display domain.ToolDisplay) {
+		sinkCallID = callID
+		sinkDisplay = display
+	})
+
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "external_tool",
+		Arguments: "{}",
+		CallID:    "c_fail",
+	})
+	// In strict TDD, we assert it does NOT return a Go error but converts it to a result string
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, "Error: external tool execution failed", out.Result)
+
+	// UI update events should show the failure
+	require.Len(t, events.updates, 2)
+	endEvent, ok := events.updates[1].(domain.ToolEndEvent)
+	require.True(t, ok)
+	require.Equal(t, "external tool execution failed", endEvent.Display.GetError())
+
+	// Sink persistence should have the error
+	require.Equal(t, "c_fail", sinkCallID)
+	require.NotNil(t, sinkDisplay)
+	require.Equal(t, "external tool execution failed", sinkDisplay.GetError())
+}
+
+func TestExternalToolEventMiddleware_ForExternalTool_ContextCancelled_RecoversAndWritesToSink(t *testing.T) {
+	tl := &mockNonPreviewTool{name: "external_tool"}
+	reg := &mockToolRegistry{tools: map[string]tool.BaseTool{"external_tool": tl}}
+	events := &mockEventSender{}
+	mw := newExternalToolEventMiddleware(events, reg)
+
+	next := func(ctx context.Context, in *compose.ToolInput) (*compose.ToolOutput, error) {
+		return nil, context.Canceled
+	}
+
+	var sinkCallID string
+	var sinkDisplay domain.ToolDisplay
+	ctx := runtimectx.WithToolDisplaySink(context.Background(), func(callID string, display domain.ToolDisplay) {
+		sinkCallID = callID
+		sinkDisplay = display
+	})
+
+	out, err := mw.Invokable(next)(ctx, &compose.ToolInput{
+		Name:      "external_tool",
+		Arguments: "{}",
+		CallID:    "c_cancel",
+	})
+	// Should not return a Go error but instead recover and return ToolErrorCancelled
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, domain.ToolErrorCancelled, out.Result)
+
+	// UI events should show the cancellation
+	require.Len(t, events.updates, 2)
+	endEvent, ok := events.updates[1].(domain.ToolEndEvent)
+	require.True(t, ok)
+	require.Equal(t, domain.ToolErrorCancelled, endEvent.Display.GetError())
+
+	// Sink persistence should show cancellation
+	require.Equal(t, "c_cancel", sinkCallID)
+	require.NotNil(t, sinkDisplay)
+	require.Equal(t, domain.ToolErrorCancelled, sinkDisplay.GetError())
 }
 

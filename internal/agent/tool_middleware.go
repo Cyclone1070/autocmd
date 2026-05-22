@@ -207,20 +207,38 @@ func newExternalToolEventMiddleware(events eventSender, registry toolRegistry) c
 
 				out, err := next(ctx, input)
 				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+						cancelledDisplay := display.WithError(domain.ToolErrorCancelled)
+						events.SendUIUpdate(domain.ToolEndEvent{
+							CallID:  input.CallID,
+							Display: cancelledDisplay,
+						})
+						if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok {
+							sink(input.CallID, cancelledDisplay)
+						}
+						return &compose.ToolOutput{Result: domain.ToolErrorCancelled}, nil
+					}
+
+					failedDisplay := display.WithError(err.Error())
 					events.SendUIUpdate(domain.ToolEndEvent{
 						CallID:  input.CallID,
-						Display: display.WithError(err.Error()),
+						Display: failedDisplay,
 					})
-					return nil, err
+					if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok {
+						sink(input.CallID, failedDisplay)
+					}
+					return &compose.ToolOutput{Result: fmt.Sprintf("Error: %v", err)}, nil
 				}
 
 				events.SendUIUpdate(domain.ToolEndEvent{
 					CallID:  input.CallID,
-					Display: domain.NewStringDisplay(fmt.Sprintf("Run %q", input.Name), ""),
+					Display: display,
 				})
+				if sink, ok := runtimectx.ToolDisplaySinkFrom(ctx); ok {
+					sink(input.CallID, display)
+				}
 				return out, nil
 			}
 		},
 	}
 }
-

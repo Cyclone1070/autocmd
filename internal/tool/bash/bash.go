@@ -25,6 +25,8 @@ const (
 	defaultWaitDuration = 10 * time.Second
 	tailPreviewSize     = 2048
 	streamReadChunkSize = 1024 * 1024
+	toolGrep            = "grep"
+	toolReadFile        = "read_file"
 )
 
 type commandExecutor interface {
@@ -234,13 +236,13 @@ func validateCommand(cmd string) error {
 	blockedMap := map[string]string{
 		"find": "glob",
 		"fd":   "glob",
-		"grep": "grep",
-		"rg":   "grep",
-		"ag":   "grep",
-		"ack":  "grep",
-		"cat":  "read_file",
-		"head": "read_file",
-		"tail": "read_file",
+		"grep": toolGrep,
+		"rg":   toolGrep,
+		"ag":   toolGrep,
+		"ack":  toolGrep,
+		"cat":  toolReadFile,
+		"head": toolReadFile,
+		"tail": toolReadFile,
 	}
 
 	if suggested, blocked := blockedMap[baseCmd]; blocked {

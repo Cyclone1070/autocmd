@@ -123,6 +123,10 @@ func TestBashTool_Validate_AllowedCommands(t *testing.T) {
 		"git commit && nvim",
 		"nano -w file",
 		"tmux new -s test",
+		"git status | grep 'modified'",
+		"cat file | grep 'pattern'",
+		"cd dir; grep foo bar",
+		"find . -name '*.go' | xargs grep foo",
 	}
 	for _, cmd := range allowed {
 		t.Run(cmd, func(t *testing.T) {
@@ -130,6 +134,41 @@ func TestBashTool_Validate_AllowedCommands(t *testing.T) {
 			_, err := tool.validate(params)
 			if err != nil {
 				t.Errorf("Expected command %q to be allowed, but it was blocked: %v", cmd, err)
+			}
+		})
+	}
+}
+
+func TestBashTool_Validate_BlockedCommands(t *testing.T) {
+	mockFS := &mockFileSystem{}
+	mockExec := &mockExecutor{}
+	mockResolver := &mockPathResolver{root: "/workspace"}
+	tool := NewTool(mockFS, mockExec, mockResolver, nil)
+
+	blocked := map[string]string{
+		"find .":                 "glob",
+		"fd foo":                 "glob",
+		"grep foo file":          "grep",
+		"rg foo":                 "grep",
+		"ag foo":                 "grep",
+		"ack foo":                "grep",
+		"cat file":               "read_file",
+		"head -n 10 file":        "read_file",
+		"tail -f file":           "read_file",
+		"/usr/bin/cat file":      "read_file",
+		"./bin/rg pattern":       "grep",
+		"find":                   "glob",
+		" grep":                  "grep",
+	}
+
+	for cmd, expectedTool := range blocked {
+		t.Run(cmd, func(t *testing.T) {
+			params := fmt.Sprintf(`{"command": "%s", "description": "test"}`, cmd)
+			_, err := tool.validate(params)
+			if err == nil {
+				t.Errorf("Expected command %q to be blocked, but it was allowed", cmd)
+			} else {
+				assert.Contains(t, err.Error(), fmt.Sprintf("use the %q tool instead", expectedTool))
 			}
 		})
 	}

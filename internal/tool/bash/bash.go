@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -194,6 +196,11 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 	if req.Description == "" {
 		return nil, fmt.Errorf("description is required")
 	}
+
+	if err := validateCommand(req.Command); err != nil {
+		return nil, err
+	}
+
 	return &validatedRequest{
 		wd:              wd,
 		wdDisplay:       wdDisplay,
@@ -202,6 +209,45 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		timeoutMS:       req.Timeout,
 		runInBackground: req.RunInBackground,
 	}, nil
+}
+
+func validateCommand(cmd string) error {
+	trimmed := strings.TrimSpace(cmd)
+	if trimmed == "" {
+		return nil
+	}
+
+	// If the command contains shell command operators, allow it.
+	// Common operators: | (pipe), & (background/and), ; (sequence), \n, \r
+	if strings.ContainsAny(trimmed, "|&;\n\r") {
+		return nil
+	}
+
+	// Extract the first word (command name)
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return nil
+	}
+	baseCmd := filepath.Base(fields[0])
+
+	// Block list of raw singular search/read commands mapped to suggested tools
+	blockedMap := map[string]string{
+		"find": "glob",
+		"fd":   "glob",
+		"grep": "grep",
+		"rg":   "grep",
+		"ag":   "grep",
+		"ack":  "grep",
+		"cat":  "read_file",
+		"head": "read_file",
+		"tail": "read_file",
+	}
+
+	if suggested, blocked := blockedMap[baseCmd]; blocked {
+		return fmt.Errorf("raw search or read command %q is not allowed, use the %q tool instead", baseCmd, suggested)
+	}
+
+	return nil
 }
 
 func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {

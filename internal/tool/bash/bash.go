@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -192,11 +189,6 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		return nil, fmt.Errorf("failed to parse bash parameters: %w", err)
 	}
 
-	// Validate command against block list
-	if err := validateCommand(req.Command); err != nil {
-		return nil, err
-	}
-
 	wd := t.pathResolver.Root()
 	wdDisplay := t.pathResolver.DisplayPath(wd)
 	if req.Description == "" {
@@ -210,62 +202,6 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		timeoutMS:       req.Timeout,
 		runInBackground: req.RunInBackground,
 	}, nil
-}
-
-var forbiddenCommands = map[string]bool{
-	"vim":    true,
-	"vi":     true,
-	"nvim":   true,
-	"emacs":  true,
-	"nano":   true,
-	"pico":   true,
-	"ed":     true,
-	"less":   true,
-	"more":   true,
-	"most":   true,
-	"top":    true,
-	"htop":   true,
-	"ssh":    true,
-	"scp":    true,
-	"telnet": true,
-	"ftp":    true,
-	"screen": true,
-	"tmux":   true,
-	"watch":  true,
-}
-
-var (
-	operatorRegex = regexp.MustCompile(`^(&&|\|\||[&|;])$`)
-	paddingRegex  = regexp.MustCompile(`(&&|\|\||[&|;])`)
-)
-
-func validateCommand(cmd string) error {
-	// Inject spaces around operators to handle attached commands like &&vim
-	padded := paddingRegex.ReplaceAllString(cmd, " $1 ")
-	fields := strings.Fields(padded)
-	if len(fields) == 0 {
-		return nil
-	}
-
-	nextIsBaseCommand := true
-	for _, token := range fields {
-		if nextIsBaseCommand {
-			// Extract basename to handle /usr/bin/vim
-			base := filepath.Base(token)
-			if forbiddenCommands[base] {
-				return fmt.Errorf("command %q is interactive or forbidden for security reasons", base)
-			}
-			nextIsBaseCommand = false
-			continue
-		}
-
-		// If this token is an operator, the next one will be a base command
-		if operatorRegex.MatchString(token) {
-			nextIsBaseCommand = true
-		}
-	}
-
-	return nil
 }
 
 func (t *Tool) tryPromoteToBackground(req *validatedRequest, streamCmd *executor.StreamingCmd, taskCancel context.CancelFunc) (llmContent string, display domain.BashDisplay, ok bool) {

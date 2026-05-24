@@ -102,26 +102,34 @@ func (m *mockTaskManager) Register(id string, cmd *executor.StreamingCmd, logPat
 	return args.Error(0)
 }
 
-func TestBashTool_Validate_BlockedCommand(t *testing.T) {
+func TestBashTool_Validate_AllowedCommands(t *testing.T) {
 	mockFS := &mockFileSystem{}
 	mockExec := &mockExecutor{}
 	mockResolver := &mockPathResolver{root: "/workspace"}
 	tool := NewTool(mockFS, mockExec, mockResolver, nil)
 
-	forbidden := []string{
+	allowed := []string{
+		"ssh user@host 'ls'",
+		"scp file user@host:/path",
+		"echo hi | less",
+		"top -n 1; echo done",
+		"watch -n 1 date",
+		"htop",
+		"telnet host 80",
+		"ftp host",
 		"vim",
 		"ls && vim",
 		"ls &&vim",
-		"echo hi | less",
-		"top -n 1; echo done",
 		"git commit && nvim",
+		"nano -w file",
+		"tmux new -s test",
 	}
-	for _, cmd := range forbidden {
+	for _, cmd := range allowed {
 		t.Run(cmd, func(t *testing.T) {
 			params := fmt.Sprintf(`{"command": "%s", "description": "test"}`, cmd)
 			_, err := tool.validate(params)
-			if err == nil {
-				t.Errorf("Expected command %q to be blocked, but it was accepted", cmd)
+			if err != nil {
+				t.Errorf("Expected command %q to be allowed, but it was blocked: %v", cmd, err)
 			}
 		})
 	}

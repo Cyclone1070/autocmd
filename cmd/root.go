@@ -38,6 +38,7 @@ import (
 )
 
 var debug bool
+var newSession bool
 
 var rootCmd = &cobra.Command{
 	Use:          "iav [prompt]",
@@ -57,6 +58,12 @@ var rootCmd = &cobra.Command{
 			return cmd.Help()
 		}
 
+		if newSession {
+			if _, err := workflow.CreateSession(deps.SessionStore, deps.State); err != nil {
+				return wrapForUser(withCategory(errSetup, err))
+			}
+		}
+
 		input := strings.Join(args, " ")
 		return wrapForUser(runAgent(cmd.Context(), deps, input))
 	},
@@ -64,6 +71,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, fmt.Sprintf("Enable debug logging to ~/%s/%s/debug.log", domain.ConfigBaseDir, domain.AppName))
+	rootCmd.Flags().BoolVarP(&newSession, "new", "n", false, "Start a new session for this prompt")
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -38,11 +38,6 @@ func (m *infoMockState) Model() string {
 	return args.String(0)
 }
 
-func (m *infoMockState) CurrentSessionID() string {
-	args := m.Called()
-	return args.String(0)
-}
-
 type infoMockSessionStore struct {
 	mock.Mock
 }
@@ -81,7 +76,6 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		}, nil)
 
 		state.On("Model").Return("google/gemini-pro")
-		state.On("CurrentSessionID").Return("sess-123")
 
 		session := &domain.Session{
 			ID:   "sess-123",
@@ -104,9 +98,8 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		registry.On("Get", ctx, "google/gemini-pro").Return(llm, nil)
 		llm.On("DisplayName").Return("Gemini 1.5 Pro")
 		llm.On("ContextWindow").Return(128000)
-		llm.On("ContextWindow").Return(128000)
 
-		wf := NewInfoWorkflow(registry, registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store, "sess-123")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -124,9 +117,8 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
 		state.On("Model").Return("")
-		state.On("CurrentSessionID").Return("")
 
-		wf := NewInfoWorkflow(registry, registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store, "")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -142,10 +134,9 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
 		state.On("Model").Return("")
-		state.On("CurrentSessionID").Return("missing-sess")
 		store.On("Get", "missing-sess").Return(nil, fmt.Errorf("not found"))
 
-		wf := NewInfoWorkflow(registry, registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store, "missing-sess")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -159,7 +150,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, fmt.Errorf("registry fail"))
 
-		wf := NewInfoWorkflow(registry, registry, state, store)
+		wf := NewInfoWorkflow(registry, registry, state, store, "")
 		_, err := wf.gather(ctx)
 
 		assert.Error(t, err)

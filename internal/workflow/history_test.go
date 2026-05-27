@@ -36,14 +36,6 @@ func (f *fakeHistoryStore) List() ([]domain.SessionSummary, error) {
 	return f.summaries, nil
 }
 
-type fakeHistoryState struct {
-	currentID string
-}
-
-func (f *fakeHistoryState) CurrentSessionID() string {
-	return f.currentID
-}
-
 type mockHistoryBus struct {
 	mock.Mock
 }
@@ -59,7 +51,6 @@ func TestRunHistory(t *testing.T) {
 			"s1": {ID: "s1", Messages: []*schema.Message{{Role: schema.User, Content: "hi"}}},
 		},
 	}
-	state := &fakeHistoryState{currentID: "s1"}
 	bus := new(mockHistoryBus)
 
 	bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
@@ -69,8 +60,8 @@ func TestRunHistory(t *testing.T) {
 	bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
 
 	done := RunHistory(ctx, &HistoryDeps{
-		Store: store,
-		State: state,
+		Store:     store,
+		SessionID: "s1",
 	}, bus)
 
 	select {
@@ -82,3 +73,4 @@ func TestRunHistory(t *testing.T) {
 
 	bus.AssertExpectations(t)
 }
+

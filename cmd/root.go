@@ -58,14 +58,16 @@ var rootCmd = &cobra.Command{
 			return cmd.Help()
 		}
 
+		workingDir := getWorkingDir()
+
 		if newSession {
-			if _, err := workflow.CreateSession(deps.SessionStore, deps.State); err != nil {
+			if _, err := workflow.CreateSession(deps.SessionStore, workingDir); err != nil {
 				return wrapForUser(withCategory(errSetup, err))
 			}
 		}
 
 		input := strings.Join(args, " ")
-		return wrapForUser(runAgent(cmd.Context(), deps, input))
+		return wrapForUser(runAgent(cmd.Context(), deps, input, workingDir))
 	},
 }
 
@@ -82,9 +84,14 @@ func Execute() {
 	}
 }
 
-func runAgent(ctx context.Context, deps *Deps, input string) error {
+func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) error {
 	if deps.State.Model() == "" {
 		return withCategory(errSetup, errors.New("no model selected"))
+	}
+
+	sess, err := workflow.ResolveWorkspaceSession(deps.SessionStore, workingDir)
+	if err != nil {
+		return withCategory(errSetup, fmt.Errorf("failed to resolve workspace session: %w", err))
 	}
 
 	pathResolver, err := buildPathResolver()
@@ -94,7 +101,7 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 
 	fileSystem := fs.NewOSFileSystem(deps.Config.Tools().MaxFileSize())
 	cmdExecutor := executor.NewOSCommandExecutor(fileSystem)
-	checksumMgr := checksum.NewManager(deps.SessionStore, deps.State)
+	checksumMgr := checksum.NewManager(deps.SessionStore, sess.ID)
 
 	taskMgr := bash.NewTaskManager(fileSystem)
 
@@ -201,13 +208,13 @@ func runAgent(ctx context.Context, deps *Deps, input string) error {
 	)
 
 	depsWP := &workflow.PromptDeps{
-		State:        deps.State,
 		Store:        deps.SessionStore,
 		LLM:          llmInstance,
 		ToolRegistry: toolRegistry,
 		Agent:        graphRunner,
 		Bus:          bus,
 		Forwarder:    router,
+		Session:      sess,
 	}
 
 	done := workflow.RunPrompt(ctx, input, depsWP)

@@ -2,10 +2,12 @@ package workflow
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type mockSessionPickerStore struct {
@@ -15,6 +17,16 @@ type mockSessionPickerStore struct {
 func (m *mockSessionPickerStore) List() ([]domain.SessionSummary, error) {
 	args := m.Called()
 	return args.Get(0).([]domain.SessionSummary), args.Error(1)
+}
+
+func (m *mockSessionPickerStore) Get(id string) (*domain.Session, error) {
+	args := m.Called(id)
+	return args.Get(0).(*domain.Session), args.Error(1)
+}
+
+func (m *mockSessionPickerStore) Save(sess *domain.Session) error {
+	args := m.Called(sess)
+	return args.Error(0)
 }
 
 func (m *mockSessionPickerStore) Create() (*domain.Session, error) {
@@ -40,126 +52,86 @@ func (m *mockSessionPickerStore) Delete(id string) error {
 	return args.Error(0)
 }
 
-type mockSessionPickerState struct {
+type mockSessionPickerBus struct {
 	mock.Mock
 }
 
-func (m *mockSessionPickerState) CurrentSessionID() string {
-	args := m.Called()
-	return args.String(0)
+func (m *mockSessionPickerBus) SendUIUpdate(update domain.UIUpdate) {
+	m.Called(update)
 }
 
-func (m *mockSessionPickerState) SetCurrentSessionID(id string) {
-	m.Called(id)
-}
-
-func (m *mockSessionPickerState) Save() error {
+func (m *mockSessionPickerBus) WorkflowActions() <-chan domain.Action {
 	args := m.Called()
-	return args.Error(0)
+	return args.Get(0).(<-chan domain.Action)
 }
 
 func TestSessionPickerWorkflow(t *testing.T) {
+	now := time.Now()
 	summaries := []domain.SessionSummary{
-		{ID: "s1", Name: "Session 1"},
-		{ID: "s2", Name: "Session 2"},
+		{ID: "s1", Name: "S1", WorkingDir: "/dirB", Updated: now.Add(-10 * time.Minute)},
+		{ID: "s2", Name: "S2", WorkingDir: "/dirA", Updated: now.Add(-5 * time.Minute)},
+		{ID: "s3", Name: "S3", WorkingDir: "/current", Updated: now.Add(-2 * time.Minute)},
+		{ID: "s4", Name: "S4", WorkingDir: "/current", Updated: now},
+		{ID: "s5", Name: "S5", WorkingDir: "", Updated: now.Add(-20 * time.Minute)},
 	}
 
-	t.Run("prepareSelection returns summaries and current ID", func(t *testing.T) {
+	t.Run("prepareSelection groups and sorts correctly", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
-
 		store.On("List").Return(summaries, nil)
-		state.On("CurrentSessionID").Return("s1")
 
-		wf := newSessionPickerWorkflow(store, state)
+		wf := newSessionPickerWorkflow(store, "/current")
 		res, err := wf.prepareSelection()
 
 		assert.NoError(t, err)
-		assert.Equal(t, summaries, res.Sessions)
-		assert.Equal(t, "s1", res.CurrentSessionID)
-		store.AssertExpectations(t)
-		state.AssertExpectations(t)
+		require.Len(t, res.Sessions, 5)
+
+		// Assert group sorting:
+		// 1. Current directory (/current) first, sorted by updated desc: s4, then s3
+		assert.Equal(t, "s4", res.Sessions[0].ID)
+		assert.Equal(t, "s3", res.Sessions[1].ID)
+
+		// 2. Global ("") group, then other folders sorted alphabetically: "" is global, then /dirA, then /dirB
+		// Depending on how "" is sorted, if sorted alphabetically: "" (global) comes before "/"
+		// So groups: "" -> "/dirA" -> "/dirB"
+		assert.Equal(t, "s5", res.Sessions[2].ID) // WorkingDir: ""
+		assert.Equal(t, "s2", res.Sessions[3].ID) // WorkingDir: "/dirA"
+		assert.Equal(t, "s1", res.Sessions[4].ID) // WorkingDir: "/dirB"
+
+		// Active session should be the latest in current folder
+		assert.Equal(t, "s4", res.CurrentSessionID)
 	})
 
-	t.Run("applySelection updates state", func(t *testing.T) {
+	t.Run("applySelection touches and saves session", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
+		sess := &domain.Session{ID: "s1", WorkingDir: "/dirB", Updated: now.Add(-10 * time.Minute)}
+		store.On("Get", "s1").Return(sess, nil)
+		store.On("Save", mock.Anything).Run(func(args mock.Arguments) {
+			s := args.Get(0).(*domain.Session)
+			assert.WithinDuration(t, time.Now(), s.Updated, 1*time.Second)
+		}).Return(nil)
 
-		state.On("SetCurrentSessionID", "s2").Return()
-		state.On("Save").Return(nil)
-
-		wf := newSessionPickerWorkflow(store, state)
-		err := wf.applySelection("s2")
+		wf := newSessionPickerWorkflow(store, "/current")
+		targetCwd, err := wf.applySelection("s1")
 
 		assert.NoError(t, err)
-		state.AssertExpectations(t)
-	})
-
-	t.Run("createSession creates and updates state", func(t *testing.T) {
-		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
-
-		newSess := &domain.Session{ID: testNewSessionID}
-		store.On("FindBlank").Return((*domain.SessionSummary)(nil), nil)
-		store.On("Create").Return(newSess, nil)
-		state.On("SetCurrentSessionID", testNewSessionID).Return()
-		state.On("Save").Return(nil)
-
-		wf := newSessionPickerWorkflow(store, state)
-		id, err := wf.createSession()
-
-		assert.NoError(t, err)
-		assert.Equal(t, testNewSessionID, id)
-		store.AssertExpectations(t)
-		state.AssertExpectations(t)
-	})
-
-	t.Run("createSession reuses existing blank session", func(t *testing.T) {
-		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
-
-		blank := &domain.SessionSummary{ID: "existing-new", Name: "", MessageCount: 0}
-		store.On("FindBlank").Return(blank, nil)
-		state.On("SetCurrentSessionID", "existing-new").Return()
-		state.On("Save").Return(nil)
-
-		wf := newSessionPickerWorkflow(store, state)
-		id, err := wf.createSession()
-
-		assert.NoError(t, err)
-		assert.Equal(t, "existing-new", id)
-		store.AssertNotCalled(t, "Create")
-		store.AssertExpectations(t)
-		state.AssertExpectations(t)
-	})
-
-	t.Run("renameSession calls store", func(t *testing.T) {
-		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
-
-		store.On("Rename", "s1", "Better Name").Return(nil)
-
-		wf := newSessionPickerWorkflow(store, state)
-		err := wf.renameSession("s1", "Better Name")
-
-		assert.NoError(t, err)
+		assert.Equal(t, "/dirB", targetCwd)
 		store.AssertExpectations(t)
 	})
 
-	t.Run("deleteSession calls store and clears state if current", func(t *testing.T) {
+	t.Run("applySelection scopes global session to current folder", func(t *testing.T) {
 		store := new(mockSessionPickerStore)
-		state := new(mockSessionPickerState)
+		sess := &domain.Session{ID: "s5", WorkingDir: "", Updated: now.Add(-20 * time.Minute)}
+		store.On("Get", "s5").Return(sess, nil)
+		store.On("Save", mock.Anything).Run(func(args mock.Arguments) {
+			s := args.Get(0).(*domain.Session)
+			assert.Equal(t, "/current", s.WorkingDir)
+		}).Return(nil)
 
-		store.On("Delete", "s1").Return(nil)
-		state.On("CurrentSessionID").Return("s1")
-		state.On("SetCurrentSessionID", "").Return()
-		state.On("Save").Return(nil)
-
-		wf := newSessionPickerWorkflow(store, state)
-		err := wf.deleteSession("s1")
+		wf := newSessionPickerWorkflow(store, "/current")
+		targetCwd, err := wf.applySelection("s5")
 
 		assert.NoError(t, err)
+		assert.Equal(t, "", targetCwd)
 		store.AssertExpectations(t)
-		state.AssertExpectations(t)
 	})
 }

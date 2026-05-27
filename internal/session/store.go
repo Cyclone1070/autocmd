@@ -32,6 +32,7 @@ type sessionInfoDTO struct {
 	MessageCount int    `json:"messageCount"`
 	Created      int64  `json:"created"`
 	Updated      int64  `json:"updated"`
+	WorkingDir   string `json:"workingDir"`
 }
 
 // Store manages session creation, loading, saving, and listing.
@@ -160,6 +161,7 @@ func (st *Store) Get(id string) (*domain.Session, error) {
 		Updated:      time.UnixMilli(infoDTO.Updated),
 		Messages:     messages,
 		ToolDisplays: displays,
+		WorkingDir:   infoDTO.WorkingDir,
 	}, nil
 }
 
@@ -181,6 +183,7 @@ func (st *Store) Save(s *domain.Session) error {
 		MessageCount: len(s.Messages),
 		Created:      s.Created.UnixMilli(),
 		Updated:      s.Updated.UnixMilli(),
+		WorkingDir:   s.WorkingDir,
 	}
 	infoData, err := json.MarshalIndent(infoDTO, "", "  ")
 	if err != nil {
@@ -250,6 +253,7 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 			MessageCount: infoDTO.MessageCount,
 			Created:      time.UnixMilli(infoDTO.Created),
 			Updated:      time.UnixMilli(infoDTO.Updated),
+			WorkingDir:   infoDTO.WorkingDir,
 		})
 	}
 
@@ -260,6 +264,36 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 
 	return summaries, nil
 }
+
+// ListForDir returns summaries of sessions scoped to a working directory, sorted by update time (newest first).
+func (st *Store) ListForDir(dir string) ([]domain.SessionSummary, error) {
+	summaries, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []domain.SessionSummary
+	for _, s := range summaries {
+		if s.WorkingDir == dir {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered, nil
+}
+
+// FindLatestForDir returns the most recently updated session for a given working directory.
+// Returns nil if no session is found.
+func (st *Store) FindLatestForDir(dir string) (*domain.SessionSummary, error) {
+	summaries, err := st.ListForDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(summaries) == 0 {
+		return nil, nil
+	}
+	return &summaries[0], nil
+}
+
 
 // FindBlank returns the most recently updated session that has no name and no messages.
 // Returns nil if no blank session is found.

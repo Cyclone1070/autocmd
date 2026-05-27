@@ -2,14 +2,12 @@ package workflow
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
@@ -38,6 +36,33 @@ func (m *mockSessionStore) Save(s *domain.Session) error {
 func (m *mockSessionStore) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	args := m.Called(ctx, llm, target)
 	return args.String(0), args.Error(1)
+}
+
+type mockWorkspaceSessionStore struct {
+	mock.Mock
+}
+
+func (m *mockWorkspaceSessionStore) FindLatestForDir(dir string) (*domain.SessionSummary, error) {
+	args := m.Called(dir)
+	if v := args.Get(0); v != nil {
+		return v.(*domain.SessionSummary), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *mockWorkspaceSessionStore) Create() (*domain.Session, error) {
+	args := m.Called()
+	return args.Get(0).(*domain.Session), args.Error(1)
+}
+
+func (m *mockWorkspaceSessionStore) Get(id string) (*domain.Session, error) {
+	args := m.Called(id)
+	return args.Get(0).(*domain.Session), args.Error(1)
+}
+
+func (m *mockWorkspaceSessionStore) Save(s *domain.Session) error {
+	args := m.Called(s)
+	return args.Error(0)
 }
 
 type mockLLM struct {
@@ -89,6 +114,53 @@ func (m *mockActionForwarder) Deliver(act domain.Action) {
 	m.Called(act)
 }
 
+func TestResolveWorkspaceSession(t *testing.T) {
+	t.Run("Finds existing latest session", func(t *testing.T) {
+		store := new(mockWorkspaceSessionStore)
+		summary := &domain.SessionSummary{ID: "sess-123", WorkingDir: "/dir"}
+		sess := &domain.Session{ID: "sess-123", WorkingDir: "/dir"}
+
+		store.On("FindLatestForDir", "/dir").Return(summary, nil)
+		store.On("Get", "sess-123").Return(sess, nil)
+
+		res, err := ResolveWorkspaceSession(store, "/dir")
+		assert.NoError(t, err)
+		assert.Equal(t, "sess-123", res.ID)
+		store.AssertExpectations(t)
+	})
+
+	t.Run("Creates new session if none exists", func(t *testing.T) {
+		store := new(mockWorkspaceSessionStore)
+		sess := &domain.Session{ID: "sess-new"}
+
+		store.On("FindLatestForDir", "/dir").Return((*domain.SessionSummary)(nil), nil)
+		store.On("Create").Return(sess, nil)
+		store.On("Save", mock.Anything).Return(nil)
+
+		res, err := ResolveWorkspaceSession(store, "/dir")
+		assert.NoError(t, err)
+		assert.Equal(t, "sess-new", res.ID)
+		assert.Equal(t, "/dir", res.WorkingDir)
+		store.AssertExpectations(t)
+	})
+
+	t.Run("Creates new session if latest is corrupted/missing", func(t *testing.T) {
+		store := new(mockWorkspaceSessionStore)
+		summary := &domain.SessionSummary{ID: "sess-corrupted", WorkingDir: "/dir"}
+		sess := &domain.Session{ID: "sess-new"}
+
+		store.On("FindLatestForDir", "/dir").Return(summary, nil)
+		store.On("Get", "sess-corrupted").Return((*domain.Session)(nil), os.ErrNotExist)
+		store.On("Create").Return(sess, nil)
+		store.On("Save", mock.Anything).Return(nil)
+
+		res, err := ResolveWorkspaceSession(store, "/dir")
+		assert.NoError(t, err)
+		assert.Equal(t, "sess-new", res.ID)
+		store.AssertExpectations(t)
+	})
+}
+
 func TestRunPrompt_ActionForwarding(t *testing.T) {
 	ctx := t.Context()
 
@@ -98,17 +170,17 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 	bus := eventbus.New()
 	forwarder := new(mockActionForwarder)
 
+	sess := &domain.Session{ID: "id"}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        &state.State{},
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Forwarder:    forwarder,
+		Session:      sess,
 	}
 
-	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("Name", nil)
 
@@ -138,40 +210,31 @@ func TestRunPrompt_GREEN(t *testing.T) {
 
 	store := new(mockSessionStore)
 	llm := new(mockLLM)
-
-	appState := &state.State{}
-	// cfg is not needed by PromptDeps
-
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
+	sess := &domain.Session{ID: "sess-123"}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        appState,
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
+		Session:      sess,
 	}
 
-	// 1. Session Lifecycle Expectations
-	store.On("Create").Return(&domain.Session{ID: testNewSessionID}, nil)
 	store.On("Save", mock.Anything).Return(nil)
-
-	// 2. Auto-naming expectations
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").Return("New Session", nil)
 
-	// 3. Agent Loop expectations
 	agent.On("Run", mock.MatchedBy(func(ctx context.Context) bool {
 		id, ok := domain.GetSessionID(ctx)
-		return ok && id == testNewSessionID
+		return ok && id == "sess-123"
 	}), mock.Anything, "hello").Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
 	err := <-done
 
 	assert.NoError(t, err)
-	assert.Equal(t, testNewSessionID, appState.CurrentSessionID())
 	store.AssertExpectations(t)
 	llm.AssertExpectations(t)
 }
@@ -185,23 +248,18 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
-	appState := &state.State{}
-	appState.SetCurrentSessionID("existing-id")
-
 	sess := &domain.Session{ID: "existing-id", Name: "Existing Session"}
 
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        appState,
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
+		Session:      sess,
 	}
 
-	store.On("Get", "existing-id").Return(sess, nil)
 	store.On("Save", mock.Anything).Return(nil)
-
 	agent.On("Run", mock.Anything, sess, "hello").Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
@@ -210,7 +268,7 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	case err := <-done:
 		assert.NoError(t, err)
 	case <-ctx.Done():
-		t.Fatal("RunPrompt did not complete for existing named session (possible deadlock on nameChan)")
+		t.Fatal("RunPrompt did not complete for existing named session")
 	}
 
 	// Verify no WaitingForNamingEvent was sent because session already had a name
@@ -230,18 +288,6 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 		}
 	}
 	assert.False(t, receivedWaiting, "Should not receive WaitingForNamingEvent when session already named")
-
-	store.AssertNotCalled(t, "GenerateName", mock.Anything, mock.Anything, mock.Anything)
-}
-
-type trackableBus struct {
-	*eventbus.EventBus
-	closed bool
-}
-
-func (b *trackableBus) Close() {
-	b.closed = true
-	b.EventBus.Close()
 }
 
 func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
@@ -252,18 +298,22 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 	agent := new(mockAgent)
 
 	eb := eventbus.New()
+	type trackableBus struct {
+		*eventbus.EventBus
+		closed bool
+	}
 	bus := &trackableBus{EventBus: eb}
 
+	sess := &domain.Session{ID: "id"}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        &state.State{},
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus.EventBus,
+		Session:      sess,
 	}
 
-	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
 	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Return(nil)
@@ -271,9 +321,7 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 	err := <-done
 	assert.NoError(t, err)
 
-	// In the NEW architecture, the bus should still be open here
-	// because RunPrompt no longer calls Close().
-	assert.False(t, bus.closed, "RunPrompt should NOT close the bus; that is now wiring responsibility")
+	assert.False(t, bus.closed, "RunPrompt should NOT close the bus")
 }
 
 func TestRunPrompt_NamingRace(t *testing.T) {
@@ -285,17 +333,16 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
+	sess := &domain.Session{ID: "race-id"}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        &state.State{},
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
+		Session:      sess,
 	}
 
-	sess := &domain.Session{ID: "race-id"}
-	store.On("Create").Return(sess, nil)
 	store.On("Save", mock.Anything).Return(nil)
 
 	// Sync channels to force interleaving
@@ -304,7 +351,7 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	// Simulate GenerateName waiting for agent to start appending
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").
 		Run(func(_ mock.Arguments) {
-			<-agentStartedAppending // Wait until agent says it started appending
+			<-agentStartedAppending
 		}).
 		Return("Named Session", nil)
 
@@ -312,11 +359,10 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	agent.On("Run", mock.Anything, mock.Anything, "hello").
 		Run(func(args mock.Arguments) {
 			s := args.Get(1).(*domain.Session)
-			// Append some messages to simulate work and race
 			for i := range 10 {
 				s.Messages = append(s.Messages, &schema.Message{Role: schema.User, Content: "msg"})
 				if i == 5 {
-					close(agentStartedAppending) // Signal that we've started appending
+					close(agentStartedAppending)
 				}
 			}
 		}).
@@ -328,45 +374,8 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	case err := <-done:
 		assert.NoError(t, err)
 	case <-ctx.Done():
-		t.Fatal("Test timed out - possible deadlock in deterministic synchronization")
+		t.Fatal("Test timed out")
 	}
-}
-
-func TestRunPrompt_MissingSession_ShouldFallbackToCreate(t *testing.T) {
-	ctx := t.Context()
-
-	store := new(mockSessionStore)
-	llm := new(mockLLM)
-	agent := new(mockAgent)
-	bus := eventbus.New()
-
-	appState := &state.State{}
-	appState.SetCurrentSessionID("non-existent-id")
-
-	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		State:        appState,
-		ToolRegistry: nil,
-		Agent:        agent,
-		Bus:          bus,
-	}
-
-	// Mocking the "not found" error - wrapped as it is in the real store
-	store.On("Get", "non-existent-id").Return((*domain.Session)(nil), fmt.Errorf("read session info: %w", os.ErrNotExist))
-
-	// Fallback expectations
-	store.On("Create").Return(&domain.Session{ID: testNewSessionID}, nil)
-	store.On("Save", mock.Anything).Return(nil)
-	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
-	agent.On("Run", mock.Anything, mock.Anything, "hello").Return(nil)
-
-	done := RunPrompt(ctx, "hello", deps)
-	err := <-done
-
-	assert.NoError(t, err)
-	assert.Equal(t, testNewSessionID, appState.CurrentSessionID(), "Should have fallen back to a new session ID")
-	store.AssertExpectations(t)
 }
 
 func TestRunPrompt_EmitsIndicators(t *testing.T) {
@@ -377,60 +386,54 @@ func TestRunPrompt_EmitsIndicators(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
+	sess := &domain.Session{ID: "id"}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		State:        &state.State{},
 		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
+		Session:      sess,
 	}
 
-	store.On("Create").Return(&domain.Session{ID: "id"}, nil)
 	store.On("Save", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
-		time.Sleep(50 * time.Millisecond) // Ensure it blocks nameChan
+		time.Sleep(50 * time.Millisecond)
 	}).Return("Name", nil)
 
-	// Keep the agent running for a bit so we can see the connecting event
 	agentRunStarted := make(chan struct{})
 	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
 		close(agentRunStarted)
-		time.Sleep(10 * time.Millisecond) // Simulate work
+		time.Sleep(10 * time.Millisecond)
 	}).Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
 
-	// We should receive ConnectingEvent first
 	select {
 	case ev := <-bus.UIUpdates():
 		_, ok := ev.(domain.ConnectingEvent)
-		assert.True(t, ok, "Expected ConnectingEvent")
+		assert.True(t, ok)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Timed out waiting for ConnectingEvent")
+		t.Fatal("ConnectingEvent timeout")
 	}
 
-	// Wait for agent to start
 	<-agentRunStarted
 
-	// We should receive WaitingForNamingEvent after agent finishes but before done
 	select {
 	case ev := <-bus.UIUpdates():
 		_, ok := ev.(domain.WaitingForNamingEvent)
-		assert.True(t, ok, "Expected WaitingForNamingEvent")
+		assert.True(t, ok)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Timed out waiting for WaitingForNamingEvent")
+		t.Fatal("WaitingForNamingEvent timeout")
 	}
 
-	// Finally DoneEvent
 	select {
 	case ev := <-bus.UIUpdates():
 		_, ok := ev.(domain.DoneEvent)
-		assert.True(t, ok, "Expected DoneEvent")
+		assert.True(t, ok)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("Timed out waiting for DoneEvent")
+		t.Fatal("DoneEvent timeout")
 	}
 
 	<-done
 }
-

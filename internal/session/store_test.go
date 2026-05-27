@@ -989,3 +989,71 @@ func TestDefaultStorageDir(t *testing.T) {
 	}
 }
 
+func TestStore_ListForDir(t *testing.T) {
+	store, fs := newTestStore()
+
+	now := time.Now()
+
+	// Create session metadata with different WorkingDirs
+	info1DTO := sessionInfoDTO{
+		ID:         "sess-1",
+		Name:       "Session 1",
+		WorkingDir: "/home/user/projectA",
+		Created:    now.Add(-2 * time.Hour).UnixMilli(),
+		Updated:    now.Add(-1 * time.Hour).UnixMilli(),
+	}
+	info1Data, _ := json.Marshal(info1DTO)
+	fs.files[filepath.Join(store.storageDir, "sess-1", "metadata.json")] = info1Data
+
+	info2DTO := sessionInfoDTO{
+		ID:         "sess-2",
+		Name:       "Session 2",
+		WorkingDir: "/home/user/projectA",
+		Created:    now.Add(-1 * time.Hour).UnixMilli(),
+		Updated:    now.UnixMilli(),
+	}
+	info2Data, _ := json.Marshal(info2DTO)
+	fs.files[filepath.Join(store.storageDir, "sess-2", "metadata.json")] = info2Data
+
+	info3DTO := sessionInfoDTO{
+		ID:         "sess-3",
+		Name:       "Session 3",
+		WorkingDir: "/home/user/projectB",
+		Created:    now.UnixMilli(),
+		Updated:    now.UnixMilli(),
+	}
+	info3Data, _ := json.Marshal(info3DTO)
+	fs.files[filepath.Join(store.storageDir, "sess-3", "metadata.json")] = info3Data
+
+	// Populate directories so List() can traverse them
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: "sess-1", isDir: true},
+		&mockDirEntry{name: "sess-2", isDir: true},
+		&mockDirEntry{name: "sess-3", isDir: true},
+	}
+
+	// List sessions for projectA
+	summaries, err := store.ListForDir("/home/user/projectA")
+	if err != nil {
+		t.Fatalf("ListForDir failed: %v", err)
+	}
+
+	if len(summaries) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(summaries))
+	}
+
+	// Verify they are sorted by Updated descending (sess-2 first, then sess-1)
+	if summaries[0].ID != "sess-2" {
+		t.Errorf("expected summaries[0].ID to be 'sess-2', got '%s'", summaries[0].ID)
+	}
+	if summaries[1].ID != "sess-1" {
+		t.Errorf("expected summaries[1].ID to be 'sess-1', got '%s'", summaries[1].ID)
+	}
+
+	// Verify working dirs are parsed
+	if summaries[0].WorkingDir != "/home/user/projectA" {
+		t.Errorf("expected WorkingDir '/home/user/projectA', got '%s'", summaries[0].WorkingDir)
+	}
+}
+
+

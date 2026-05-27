@@ -46,7 +46,6 @@ func TestLoad_NoFile_ReturnsDefault(t *testing.T) {
 	s, err := mgr.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "", s.Model()) // Default model should be empty
-	assert.Equal(t, "", s.CurrentSessionID())
 }
 
 func TestSave_PersistsToFile(t *testing.T) {
@@ -55,7 +54,6 @@ func TestSave_PersistsToFile(t *testing.T) {
 
 	s, _ := mgr.Load()
 	s.SetModel("custom-model")
-	s.SetCurrentSessionID("session-123")
 
 	err := mgr.Save(s)
 	require.NoError(t, err)
@@ -64,17 +62,16 @@ func TestSave_PersistsToFile(t *testing.T) {
 	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
 	assert.Contains(t, fs.Files, statePath)
 	assert.Contains(t, string(fs.Files[statePath]), "custom-model")
-	assert.Contains(t, string(fs.Files[statePath]), "session-123")
 }
 
 func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
 	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
-	fs.Files[statePath] = []byte(`{"model": "saved-model", "current_session_id": "999"}`)
+	fs.Files[statePath] = []byte(`{"model": "saved-model"}`)
 
 	mgr := state.NewManager(fs)
 	s, err := mgr.Load()
 	require.NoError(t, err)
 	assert.Equal(t, "saved-model", s.Model())
-	assert.Equal(t, "999", s.CurrentSessionID())
 }
+

@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/Cyclone1070/iav/internal/auth"
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -66,3 +69,25 @@ func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {
 	}
 	return auth.NewManager(osFS, storePath), nil
 }
+
+func getWorkingDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+
+	dir := filepath.Clean(wd)
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return wd
+}
+

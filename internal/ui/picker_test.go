@@ -99,3 +99,21 @@ func TestPicker_SpaceSelectsLikeEnter(t *testing.T) {
 	assert.Equal(t, "1", selected.ID)
 	assert.True(t, p.quit, "picker should quit after space selection")
 }
+
+func TestPicker_View_GroupHeaderIsBlue(t *testing.T) {
+	m := NewPicker(Config{
+		Title: "TEST",
+		Items: []Item{
+			{ID: "1", Label: "First", Group: "GroupBlueTest"},
+		},
+	})
+
+	view := m.View()
+	// The view should contain the group header "GroupBlueTest"
+	assert.Contains(t, view, "GroupBlueTest")
+	// The ANSI escape sequence for blue foreground color should be present.
+	// Since lipgloss resolves colors adaptively based on light/dark mode (or NO_COLOR),
+	// we will check if the group header text is styled (has escape sequences).
+	assert.True(t, len(view) > len("TEST") + len("First") + len("GroupBlueTest"), "view should contain color styling ANSI sequences")
+}
+

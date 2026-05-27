@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
@@ -39,10 +42,12 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		return err
 	}
 
+	workingDir := getWorkingDir()
+
 	done := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
-		Bus:   bus,
-		Store: store,
-		State: deps.State,
+		Bus:        bus,
+		Store:      store,
+		WorkingDir: workingDir,
 	})
 
 	themeCfg := ui.ThemeConfig{
@@ -61,5 +66,39 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		return fmt.Errorf("picker failed: %w", err)
 	}
 
-	return <-done
+	res := <-done
+	if res.Err != nil && !errors.Is(res.Err, context.Canceled) {
+		return res.Err
+	}
+
+	if res.SwitchCwd != "" {
+		created := false
+		if _, err := os.Stat(res.SwitchCwd); os.IsNotExist(err) {
+			if err := os.MkdirAll(res.SwitchCwd, 0755); err != nil {
+				return fmt.Errorf("failed to create directory: %w", err)
+			}
+			created = true
+		}
+
+		if created {
+			fmt.Printf("Created directory: %s\n", res.SwitchCwd)
+		}
+		fmt.Printf("Workspace directory changed to: %s\n", res.SwitchCwd)
+
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+
+		subshell := exec.Command(shell)
+		subshell.Dir = res.SwitchCwd
+		subshell.Stdin = os.Stdin
+		subshell.Stdout = os.Stdout
+		subshell.Stderr = os.Stderr
+		if err := subshell.Run(); err != nil {
+			return fmt.Errorf("failed to spawn subshell: %w", err)
+		}
+	}
+
+	return nil
 }

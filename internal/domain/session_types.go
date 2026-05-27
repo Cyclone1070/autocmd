@@ -18,6 +18,7 @@ type Session struct {
 	ID           string
 	Name         string
 	Messages     []*schema.Message
+	WorkingDir   string
 }
 
 // SessionSummary contains metadata about a session without messages.
@@ -28,6 +29,7 @@ type SessionSummary struct {
 	ID           string
 	Name         string
 	MessageCount int
+	WorkingDir   string
 }
 
 // TotalTokens returns the factual total tokens in the session as of the last model response.

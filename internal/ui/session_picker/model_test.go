@@ -1,6 +1,7 @@
 package session_picker
 
 import (
+	"os"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -8,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type mockBus struct {
@@ -188,4 +190,33 @@ func TestSessionPickerUI(t *testing.T) {
 		_ = cmd()
 		assert.Equal(t, prevPicker, m.picker)
 	})
+
+	t.Run("Home directory path is replaced with ~", func(t *testing.T) {
+		home, err := os.UserHomeDir()
+		require.NoError(t, err)
+
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+
+		targetDir := home + "/repos/projectA"
+		event := domain.SessionListEvent{
+			Sessions: []domain.SessionSummary{
+				{
+					ID:         "s1",
+					Name:       "Session 1",
+					WorkingDir: targetDir,
+				},
+			},
+			CurrentSessionID: "",
+		}
+
+		m.initializePicker(&event)
+		require.NotNil(t, m.picker)
+
+		// Get item from picker and check Group field
+		item, ok := m.picker.CursorItem()
+		require.True(t, ok)
+		assert.Equal(t, "~/repos/projectA", item.Group)
+	})
 }
+

@@ -13,11 +13,7 @@ type historySessionStore interface {
 	Get(id string) (*domain.Session, error)
 }
 
-// historyStateStore defines the subset of state operations needed
-// by the history workflow.
-type historyStateStore interface {
-	CurrentSessionID() string
-}
+
 
 type historyBus interface {
 	SendUIUpdate(domain.UIUpdate)
@@ -25,8 +21,8 @@ type historyBus interface {
 
 // HistoryDeps contains the dependencies required to run the history workflow.
 type HistoryDeps struct {
-	Store historySessionStore
-	State historyStateStore
+	Store     historySessionStore
+	SessionID string
 }
 
 // RunHistory starts the history gathering workflow asynchronously.
@@ -57,19 +53,15 @@ type HistoryResult struct {
 
 // ResolveSession resolves which session's history should be displayed and loads it.
 func ResolveSession(deps *HistoryDeps) (*HistoryResult, error) {
-	if deps == nil || deps.Store == nil || deps.State == nil {
+	if deps == nil || deps.Store == nil || deps.SessionID == "" {
 		return nil, fmt.Errorf("invalid history dependencies")
 	}
 
-	sessionID := deps.State.CurrentSessionID()
-	if sessionID == "" {
-		return nil, fmt.Errorf("no current session found in state")
-	}
-
-	sess, err := deps.Store.Get(sessionID)
+	sess, err := deps.Store.Get(deps.SessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load session %s from state: %w", sessionID, err)
+		return nil, fmt.Errorf("failed to load session %s: %w", deps.SessionID, err)
 	}
 
 	return &HistoryResult{Session: sess}, nil
 }
+

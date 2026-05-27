@@ -3,8 +3,6 @@ package workflow
 import (
 	"context"
 	"errors"
-	"log/slog"
-	"os"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
@@ -17,11 +15,11 @@ type sessionStore interface {
 	GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error)
 }
 
-// stateStore defines the persistence operations for application state.
-type stateStore interface {
-	CurrentSessionID() string
-	SetCurrentSessionID(string)
-	Save() error
+type workspaceSessionStore interface {
+	FindLatestForDir(dir string) (*domain.SessionSummary, error)
+	Create() (*domain.Session, error)
+	Get(id string) (*domain.Session, error)
+	Save(s *domain.Session) error
 }
 
 type agentRunner interface {
@@ -41,61 +39,22 @@ type bus interface {
 
 // PromptDeps contains the dependencies required to run the agent prompt workflow.
 type PromptDeps struct {
-	State        stateStore
 	Store        sessionStore
 	LLM          domain.LLM
 	ToolRegistry any // retained for backward compatibility; unused in prompt workflow
 	Agent        agentRunner
 	Bus          bus
-	// Forwarder is used to route structured tool actions (like QuestionAnswerAction)
-	// to the blocked tool executor.
-	Forwarder ActionForwarder
+	Forwarder    ActionForwarder
+	Session      *domain.Session
 }
 
-// RunPrompt executes the full agentic flow: session resolution, agent loop,
-// and UI synchronization. It returns a channel that will receive the result
-// when the agent loop completes.
 func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error {
 	done := make(chan error, 1)
 
-	sessionID := deps.State.CurrentSessionID()
-
-	var sess *domain.Session
-	var err error
-	if sessionID == "" {
-		sess, err = deps.Store.Create()
-		if err != nil {
-			done <- err
-			return done
-		}
-		deps.State.SetCurrentSessionID(sess.ID)
-		if err := deps.State.Save(); err != nil {
-			slog.Warn("failed to save state", "error", err)
-		}
-	} else {
-		sess, err = deps.Store.Get(sessionID)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				slog.Warn("current session not found, creating new one", "session_id", sessionID)
-				sess, err = deps.Store.Create()
-				if err != nil {
-					done <- err
-					return done
-				}
-				deps.State.SetCurrentSessionID(sess.ID)
-				if err := deps.State.Save(); err != nil {
-					slog.Warn("failed to save state", "error", err)
-				}
-			} else {
-				done <- err
-				return done
-			}
-		} else if deps.State.CurrentSessionID() != sess.ID {
-			deps.State.SetCurrentSessionID(sess.ID)
-			if err := deps.State.Save(); err != nil {
-				slog.Warn("failed to save state", "error", err)
-			}
-		}
+	sess := deps.Session
+	if sess == nil {
+		done <- errors.New("session is required")
+		return done
 	}
 
 	workflowCtx, cancel := context.WithCancel(ctx)
@@ -162,4 +121,30 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 	}()
 
 	return done
+}
+
+// ResolveWorkspaceSession finds or creates the active session for a working directory.
+func ResolveWorkspaceSession(store workspaceSessionStore, workingDir string) (*domain.Session, error) {
+	latest, err := store.FindLatestForDir(workingDir)
+	if err != nil {
+		return nil, err
+	}
+
+	if latest != nil {
+		sess, err := store.Get(latest.ID)
+		if err == nil {
+			return sess, nil
+		}
+	}
+
+	// Create new session scoped to workingDir
+	sess, err := store.Create()
+	if err != nil {
+		return nil, err
+	}
+	sess.WorkingDir = workingDir
+	if err := store.Save(sess); err != nil {
+		return nil, err
+	}
+	return sess, nil
 }

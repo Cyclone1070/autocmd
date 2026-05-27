@@ -17,7 +17,6 @@ type infoLLMRegistry interface {
 
 type infoState interface {
 	Model() string
-	CurrentSessionID() string
 }
 
 type infoSessionStore interface {
@@ -34,6 +33,7 @@ type InfoWorkflow struct {
 	llmRegistry      infoLLMRegistry
 	state            infoState
 	store            infoSessionStore
+	sessionID        string
 }
 
 // InfoDeps contains the dependencies for the system information workflow.
@@ -43,6 +43,7 @@ type InfoDeps struct {
 	LLMRegistry      infoLLMRegistry
 	State            infoState
 	Store            infoSessionStore
+	SessionID        string
 }
 
 // RunInfo executes the info gathering process asynchronously.
@@ -50,7 +51,7 @@ func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		wf := NewInfoWorkflow(deps.ProviderRegistry, deps.LLMRegistry, deps.State, deps.Store)
+		wf := NewInfoWorkflow(deps.ProviderRegistry, deps.LLMRegistry, deps.State, deps.Store, deps.SessionID)
 		res, err := wf.gather(ctx)
 		if err != nil {
 			done <- err
@@ -64,12 +65,13 @@ func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
 }
 
 // NewInfoWorkflow creates a new InfoWorkflow.
-func NewInfoWorkflow(pRegistry infoProviderRegistry, lRegistry infoLLMRegistry, state infoState, store infoSessionStore) *InfoWorkflow {
+func NewInfoWorkflow(pRegistry infoProviderRegistry, lRegistry infoLLMRegistry, state infoState, store infoSessionStore, sessionID string) *InfoWorkflow {
 	return &InfoWorkflow{
 		providerRegistry: pRegistry,
 		llmRegistry:      lRegistry,
 		state:            state,
 		store:            store,
+		sessionID:        sessionID,
 	}
 }
 
@@ -92,7 +94,7 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 	modelID := w.state.Model()
 
 	// 3. Session Info
-	sessionID := w.state.CurrentSessionID()
+	sessionID := w.sessionID
 	var sess *domain.Session
 	if sessionID != "" {
 		var err error
@@ -126,3 +128,4 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 
 	return res, nil
 }
+

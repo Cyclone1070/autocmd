@@ -7,7 +7,7 @@ import (
 )
 
 func TestChecksumManager(t *testing.T) {
-	manager := NewManager(nil, nil)
+	manager := NewManager(nil, "")
 
 	path := "/test/path.txt"
 	checksum := "abc123"
@@ -53,7 +53,7 @@ func TestChecksumManager(t *testing.T) {
 }
 
 func TestCompute(t *testing.T) {
-	manager := NewManager(nil, nil)
+	manager := NewManager(nil, "")
 
 	t.Run("EmptyData", func(t *testing.T) {
 		data := []byte("")
@@ -74,14 +74,6 @@ func TestCompute(t *testing.T) {
 			t.Errorf("got %s, want %s", hash, expected)
 		}
 	})
-}
-
-type mockSessionState struct {
-	sessionID string
-}
-
-func (m *mockSessionState) CurrentSessionID() string {
-	return m.sessionID
 }
 
 type mockChecksumStore struct {
@@ -112,16 +104,15 @@ func (m *mockChecksumStore) SaveChecksums(sessionID string, checksums map[string
 }
 
 func TestPersistentChecksumManager(t *testing.T) {
-	state := &mockSessionState{sessionID: "session-123"}
 	store := &mockChecksumStore{}
 
-	manager1 := NewManager(store, state)
+	manager1 := NewManager(store, "session-123")
 
 	// Update (should save dynamically to store)
 	manager1.Update("/file1.txt", "hash1")
 
 	// Create manager2 sharing the same store and state
-	manager2 := NewManager(store, state)
+	manager2 := NewManager(store, "session-123")
 
 	// Get (should load dynamically from store)
 	h1, ok := manager2.Get("/file1.txt")
@@ -129,3 +120,4 @@ func TestPersistentChecksumManager(t *testing.T) {
 		t.Errorf("expected hash1, got %q (ok=%t)", h1, ok)
 	}
 }
+

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/config"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/state"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	"github.com/spf13/cobra"
@@ -27,18 +26,13 @@ var newCmd = &cobra.Command{
 			return err
 		}
 
-		stateMgr := state.NewManager(bootstrapFS)
-		appState, err := stateMgr.Load()
-		if err != nil {
-			return err
-		}
-
 		store, err := buildSessionStore(bootstrapFS)
 		if err != nil {
 			return err
 		}
 
-		if _, err := workflow.CreateSession(store, appState); err != nil {
+		workingDir := getWorkingDir()
+		if _, err := workflow.CreateSession(store, workingDir); err != nil {
 			return err
 		}
 

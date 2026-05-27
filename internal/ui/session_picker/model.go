@@ -3,6 +3,7 @@ package session_picker
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -180,12 +181,22 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 			m.selectedName = name
 		}
 
+		groupName := s.WorkingDir
+		if groupName == "" {
+			groupName = "(global)"
+		} else {
+			home, err := os.UserHomeDir()
+			if err == nil && strings.HasPrefix(groupName, home) {
+				groupName = "~" + strings.TrimPrefix(groupName, home)
+			}
+		}
+
 		items = append(items, ui.Item{
 			ID:     s.ID,
 			Label:  name,
 			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
 			Active: s.ID == data.CurrentSessionID,
-			Group:  getDateGroup(s.Updated),
+			Group:  groupName,
 		})
 	}
 

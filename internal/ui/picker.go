@@ -147,7 +147,8 @@ func (m *Picker) View() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(primary).MarginBottom(1)
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(primary)
 	descStyle := lipgloss.NewStyle().Foreground(muted)
-	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(muted).Margin(1, 0, 0, groupLeftMargin)
+	blueColor := lipgloss.AdaptiveColor{Light: "#005FDF", Dark: "#38BDF8"}
+	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(blueColor).Margin(1, 0, 0, groupLeftMargin)
 
 	activeStyle := lipgloss.NewStyle().Foreground(active)
 	cursorStyle := lipgloss.NewStyle().Foreground(primary).Bold(true)

@@ -39,12 +39,19 @@ func runInfo(ctx context.Context, deps *Deps) error {
 		return err
 	}
 
+	workingDir := getWorkingDir()
+	sess, err := workflow.ResolveWorkspaceSession(store, workingDir)
+	if err != nil {
+		return err
+	}
+
 	done := workflow.RunInfo(ctx, &workflow.InfoDeps{
 		Bus:              bus,
 		ProviderRegistry: deps.ProviderRegistry,
 		LLMRegistry:      deps.LLMRegistry,
 		State:            deps.State,
 		Store:            store,
+		SessionID:        sess.ID,
 	})
 
 	themeCfg := ui.ThemeConfig{

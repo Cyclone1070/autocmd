@@ -8,11 +8,6 @@ import (
 	"sync"
 )
 
-// SessionState defines the interface for retrieving the current session ID.
-type SessionState interface {
-	CurrentSessionID() string
-}
-
 // Store defines the interface for loading and saving checksums.
 type Store interface {
 	LoadChecksums(sessionID string) (map[string]string, error)
@@ -24,16 +19,16 @@ type Manager struct {
 	store         map[string]string
 	mu            sync.RWMutex
 	checksumStore Store
-	state         SessionState
-	loadedSession string
+	sessionID     string
+	loaded        bool
 }
 
 // NewManager creates a new Checksum Manager.
-func NewManager(store Store, state SessionState) *Manager {
+func NewManager(store Store, sessionID string) *Manager {
 	return &Manager{
 		store:         make(map[string]string),
 		checksumStore: store,
-		state:         state,
+		sessionID:     sessionID,
 	}
 }
 
@@ -66,31 +61,21 @@ func (m *Manager) Update(path string, checksum string) {
 }
 
 func (m *Manager) ensureLoaded() {
-	if m.state == nil || m.checksumStore == nil {
+	if m.loaded || m.checksumStore == nil || m.sessionID == "" {
 		return
 	}
-	sessionID := m.state.CurrentSessionID()
-	if sessionID == "" {
-		return
-	}
-	if m.loadedSession == sessionID {
-		return
-	}
-	m.loadedSession = sessionID
+	m.loaded = true
 	m.store = make(map[string]string)
-	loaded, err := m.checksumStore.LoadChecksums(sessionID)
+	loaded, err := m.checksumStore.LoadChecksums(m.sessionID)
 	if err == nil {
 		maps.Copy(m.store, loaded)
 	}
 }
 
 func (m *Manager) save() {
-	if m.state == nil || m.checksumStore == nil {
+	if m.checksumStore == nil || m.sessionID == "" {
 		return
 	}
-	sessionID := m.state.CurrentSessionID()
-	if sessionID == "" {
-		return
-	}
-	_ = m.checksumStore.SaveChecksums(sessionID, m.store)
+	_ = m.checksumStore.SaveChecksums(m.sessionID, m.store)
 }
+

@@ -30,9 +30,15 @@ var historyCmd = &cobra.Command{
 		bus := eventbus.New()
 		defer bus.Close()
 
+		workingDir := getWorkingDir()
+		sess, err := workflow.ResolveWorkspaceSession(deps.SessionStore, workingDir)
+		if err != nil {
+			return err
+		}
+
 		done := workflow.RunHistory(cmd.Context(), &workflow.HistoryDeps{
-			Store: deps.SessionStore,
-			State: deps.State,
+			Store:     deps.SessionStore,
+			SessionID: sess.ID,
 		}, bus)
 
 		themeCfg := ui.ThemeConfig{

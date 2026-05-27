@@ -36,9 +36,8 @@ func NewManager(fs FileSystem) *Manager {
 
 // State holds application persistent state.
 type State struct {
-	saveFn           func() error
-	currentSessionID string
-	model            string
+	saveFn func() error
+	model  string
 }
 
 // Model returns the current model.
@@ -51,16 +50,6 @@ func (s *State) SetModel(m string) {
 	s.model = m
 }
 
-// CurrentSessionID returns the current session ID.
-func (s *State) CurrentSessionID() string {
-	return s.currentSessionID
-}
-
-// SetCurrentSessionID sets the current session ID.
-func (s *State) SetCurrentSessionID(id string) {
-	s.currentSessionID = id
-}
-
 // Save persists the state using the manager it was loaded from.
 func (s *State) Save() error {
 	if s.saveFn == nil {
@@ -71,8 +60,7 @@ func (s *State) Save() error {
 
 // stateDTO is used for JSON persistence.
 type stateDTO struct {
-	CurrentSessionID string `json:"current_session_id"`
-	Model            string `json:"model"`
+	Model string `json:"model"`
 }
 
 // Default returns the default application state.
@@ -106,7 +94,6 @@ func (m *Manager) Load() (*State, error) {
 		return nil, err
 	}
 
-	s.currentSessionID = dto.CurrentSessionID
 	s.model = dto.Model
 	s.saveFn = func() error { return m.Save(s) }
 
@@ -132,9 +119,9 @@ func (m *Manager) Save(s *State) error {
 	}
 
 	dto := stateDTO{
-		CurrentSessionID: s.currentSessionID,
-		Model:            s.model,
+		Model: s.model,
 	}
+
 
 	data, err := json.MarshalIndent(dto, "", "  ")
 	if err != nil {

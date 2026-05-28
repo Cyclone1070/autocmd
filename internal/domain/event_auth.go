@@ -74,3 +74,17 @@ type OAuthDeviceFlowEvent struct {
 }
 
 func (OAuthDeviceFlowEvent) isUIUpdate() {}
+
+// AuthProviderListEvent contains the data needed for the auth management UI.
+type AuthProviderListEvent struct {
+	Providers []ProviderSummary
+}
+
+func (AuthProviderListEvent) isUIUpdate() {}
+
+// ProviderSummary provides a snapshot of a provider's auth status.
+type ProviderSummary struct {
+	ID         string
+	AuthMethod string
+	Authorized bool
+}

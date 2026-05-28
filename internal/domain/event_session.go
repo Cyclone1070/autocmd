@@ -28,3 +28,21 @@ type DeleteSessionAction struct {
 }
 
 func (DeleteSessionAction) isAction() {}
+
+// SessionListEvent contains the data needed for session selection UI.
+type SessionListEvent struct {
+	CurrentSessionID string
+	Sessions         []SessionSummary
+	WorkingDir       string
+}
+
+func (SessionListEvent) isUIUpdate() {}
+
+// SessionSelectedEvent is emitted when a session is chosen, indicating if a directory switch is required.
+type SessionSelectedEvent struct {
+	ID             string
+	SwitchRequired bool
+	TargetDir      string
+}
+
+func (SessionSelectedEvent) isUIUpdate() {}

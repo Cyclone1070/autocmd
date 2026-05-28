@@ -1,7 +1,6 @@
 package session_picker
 
 import (
-	"os"
 	"testing"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -25,6 +24,17 @@ func (m *mockBus) SendAction(act domain.Action) {
 	m.Called(act)
 }
 
+type mockPathResolver struct {
+	displayPath func(string) string
+}
+
+func (m *mockPathResolver) DisplayPath(path string) string {
+	if m.displayPath != nil {
+		return m.displayPath(path)
+	}
+	return path
+}
+
 func TestSessionPickerUI(t *testing.T) {
 	summaries := []domain.SessionSummary{
 		{ID: "s1", Name: "Session 1"},
@@ -37,13 +47,13 @@ func TestSessionPickerUI(t *testing.T) {
 
 	t.Run("Initial view is empty", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		assert.Empty(t, m.View())
 	})
 
 	t.Run("Snapshot received -> List view", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 
 		m.Update(result)
 
@@ -53,7 +63,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 	t.Run("Snapshot with blank name shows new session label", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		blank := domain.SessionListEvent{
 			Sessions:         []domain.SessionSummary{{ID: "s-new", Name: ""}},
 			CurrentSessionID: "s-new",
@@ -68,7 +78,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.CreateSessionAction{}).Return()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
@@ -79,7 +89,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 	t.Run("Rename session start: 'r'", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
@@ -90,7 +100,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.RenameSessionAction{ID: "s1", Name: "Edited"}).Return()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
@@ -104,7 +114,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.DeleteSessionAction{ID: "s1"}).Return()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
@@ -115,7 +125,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.SelectSessionAction{ID: "s1"}).Return()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -126,7 +136,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		bus.On("SendAction", domain.SelectSessionAction{ID: "s1"}).Return()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -136,7 +146,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 	t.Run("DoneEvent -> Quitting", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		m.Update(domain.DoneEvent{})
@@ -151,7 +161,7 @@ func TestSessionPickerUI(t *testing.T) {
 		ch <- domain.DoneEvent{}
 		close(ch)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch))
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -172,7 +182,7 @@ func TestSessionPickerUI(t *testing.T) {
 		close(ch1)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch1)).Once()
 
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 		m.Update(result)
 		assert.NotNil(t, m.picker)
 
@@ -191,20 +201,24 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Equal(t, prevPicker, m.picker)
 	})
 
-	t.Run("Home directory path is replaced with ~", func(t *testing.T) {
-		home, err := os.UserHomeDir()
-		require.NoError(t, err)
-
+	t.Run("Group header uses pathResolver.DisplayPath", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		pr := &mockPathResolver{
+			displayPath: func(p string) string {
+				if p == "/home/user/repos/projectA" {
+					return "~/repos/projectA"
+				}
+				return p
+			},
+		}
+		m := NewModel(bus, theme, pr)
 
-		targetDir := home + "/repos/projectA"
 		event := domain.SessionListEvent{
 			Sessions: []domain.SessionSummary{
 				{
 					ID:         "s1",
 					Name:       "Session 1",
-					WorkingDir: targetDir,
+					WorkingDir: "/home/user/repos/projectA",
 				},
 			},
 			CurrentSessionID: "",
@@ -213,7 +227,6 @@ func TestSessionPickerUI(t *testing.T) {
 		m.initializePicker(&event)
 		require.NotNil(t, m.picker)
 
-		// Get item from picker and check Group field
 		item, ok := m.picker.CursorItem()
 		require.True(t, ok)
 		assert.Equal(t, "~/repos/projectA", item.Group)
@@ -221,7 +234,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 	t.Run("Cross-directory sessions are faded", func(t *testing.T) {
 		bus := new(mockBus)
-		m := NewModel(bus, theme)
+		m := NewModel(bus, theme, &mockPathResolver{})
 
 		event := domain.SessionListEvent{
 			WorkingDir: "/current-dir",
@@ -253,6 +266,83 @@ func TestSessionPickerUI(t *testing.T) {
 		item2, ok := m.picker.CursorItem()
 		require.True(t, ok)
 		assert.True(t, item2.Faded)
+	})
+
+	t.Run("DoneEvent with current-directory session succeeds", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectSessionAction{ID: "s2"}).Return()
+		m := NewModel(bus, theme, &mockPathResolver{})
+
+		event := domain.SessionListEvent{
+			WorkingDir: "/current-dir",
+			Sessions: []domain.SessionSummary{
+				{
+					ID:         "s2",
+					Name:       "Session 2",
+					WorkingDir: "/current-dir",
+				},
+			},
+			CurrentSessionID: "",
+		}
+
+		m.Update(event)
+
+		// Select the session
+		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		assert.Equal(t, "s2", m.selectedID)
+
+		// Receive SessionSelectedEvent
+		m.Update(domain.SessionSelectedEvent{
+			ID:             "s2",
+			SwitchRequired: false,
+			TargetDir:      "",
+		})
+
+		// Receive DoneEvent
+		_, cmd := m.Update(domain.DoneEvent{})
+		assert.NotNil(t, cmd)
+		assert.True(t, m.quitting)
+	})
+
+	t.Run("DoneEvent with cross-directory session uses DisplayPath", func(t *testing.T) {
+		bus := new(mockBus)
+		bus.On("SendAction", domain.SelectSessionAction{ID: "s2"}).Return()
+
+		var calledWith string
+		pr := &mockPathResolver{
+			displayPath: func(p string) string {
+				calledWith = p
+				return "~/repos/334-Repository"
+			},
+		}
+		m := NewModel(bus, theme, pr)
+
+		event := domain.SessionListEvent{
+			WorkingDir: "/home/user/repos/current",
+			Sessions: []domain.SessionSummary{
+				{
+					ID:         "s2",
+					Name:       "Session 2",
+					WorkingDir: "/home/user/repos/334-Repository",
+				},
+			},
+			CurrentSessionID: "",
+		}
+
+		m.Update(event)
+		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		assert.Equal(t, "s2", m.selectedID)
+
+		m.Update(domain.SessionSelectedEvent{
+			ID:             "s2",
+			SwitchRequired: true,
+			TargetDir:      "/home/user/repos/334-Repository",
+		})
+
+		_, cmd := m.Update(domain.DoneEvent{})
+		assert.NotNil(t, cmd)
+		assert.True(t, m.quitting)
+		assert.Equal(t, "/home/user/repos/334-Repository", calledWith, "should delegate to pathResolver.DisplayPath")
 	})
 }
 

@@ -3,7 +3,6 @@ package session_picker
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/Cyclone1070/iav/internal/domain"
@@ -11,6 +10,12 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// pathResolver formats paths for user-facing display.
+type pathResolver interface {
+	DisplayPath(path string) string
+}
+
 
 const keyEsc = "esc"
 
@@ -22,6 +27,7 @@ type bus interface {
 // Model is an autonomous UI component for managing chat sessions.
 type Model struct {
 	bus             bus
+	pathResolver    pathResolver
 	err             error
 	picker          *ui.Picker
 	theme           *ui.Theme
@@ -32,17 +38,20 @@ type Model struct {
 	renaming        bool
 	quitting        bool
 	cancelRequested bool
+	switchRequired  bool
+	targetDir       string
 }
 
-// NewModel creates a new session picker UI Model with a bus and theme.
-func NewModel(b bus, theme *ui.Theme) *Model {
+// NewModel creates a new session picker UI Model with a bus, theme, and path resolver.
+func NewModel(b bus, theme *ui.Theme, pr pathResolver) *Model {
 	ti := textinput.New()
 	ti.Placeholder = "New session name..."
 
 	return &Model{
-		bus:       b,
-		theme:     theme,
-		textInput: ti,
+		bus:          b,
+		pathResolver: pr,
+		theme:        theme,
+		textInput:    ti,
 	}
 }
 
@@ -80,10 +89,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.initializePicker(&msg)
 		return m, m.pollBus()
 
+	case domain.SessionSelectedEvent:
+		m.switchRequired = msg.SwitchRequired
+		m.targetDir = msg.TargetDir
+		return m, m.pollBus()
+
 	case domain.DoneEvent:
 		m.quitting = true
 		if m.selectedID == "" {
 			return m, tea.Quit
+		}
+		if m.switchRequired {
+			displayPath := m.pathResolver.DisplayPath(m.targetDir)
+			msgStr := fmt.Sprintf("\nUnable to select session. To continue this session, switch to its directory:\n  cd %s\n\n", displayPath)
+			return m, tea.Sequence(
+				tea.Printf("%s", msgStr),
+				tea.Quit,
+			)
 		}
 		return m, tea.Sequence(
 			tea.Printf("\nSelected session: %s\n", m.theme.Success(m.selectedName)),
@@ -184,10 +206,7 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 		if groupName == "" {
 			groupName = "(global)"
 		} else {
-			home, err := os.UserHomeDir()
-			if err == nil && strings.HasPrefix(groupName, home) {
-				groupName = "~" + strings.TrimPrefix(groupName, home)
-			}
+			groupName = m.pathResolver.DisplayPath(groupName)
 		}
 
 		items = append(items, ui.Item{

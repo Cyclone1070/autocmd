@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
+	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/ui/session_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -44,36 +44,27 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 
 	workingDir := getWorkingDir()
 
-	done := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
+	errCh := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
 		Bus:        bus,
 		Store:      store,
 		WorkingDir: workingDir,
 	})
 
 	theme := newTheme(deps.Config.UI())
+	pathResolver := path.NewResolver(workingDir)
 
-	m := session_picker.NewModel(bus, theme)
+	m := session_picker.NewModel(bus, theme, pathResolver)
 	p := tea.NewProgram(m)
 
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("picker failed: %w", err)
 	}
 
-	res := <-done
-	if res.Err != nil && !errors.Is(res.Err, context.Canceled) {
-		return res.Err
+	err = <-errCh
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return err
 	}
 
-	return handleSwitchResult(res.SwitchCwd, os.Stdout)
-}
-
-func handleSwitchResult(switchCwd string, w io.Writer) error {
-	if switchCwd != "" {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "To continue this session, switch to its directory:")
-		fmt.Fprintf(w, "  cd %s\n", switchCwd)
-		fmt.Fprintln(w)
-	}
 	return nil
 }
 

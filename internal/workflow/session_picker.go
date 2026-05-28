@@ -30,24 +30,17 @@ type SessionPickerDeps struct {
 	WorkingDir string
 }
 
-// PickerResult represents the result of running the session picker.
-type PickerResult struct {
-	SwitchCwd string
-	Created   bool
-	Err       error
-}
-
 // RunSessionPicker starts the session management workflow asynchronously.
-func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan PickerResult {
-	done := make(chan PickerResult, 1)
+func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error {
+	errCh := make(chan error, 1)
 	go func() {
-		defer close(done)
+		defer close(errCh)
 		wf := newSessionPickerWorkflow(deps.Store, deps.WorkingDir)
 
 		// 1. Send initial snapshot
 		snapshot, err := wf.prepareSelection()
 		if err != nil {
-			done <- PickerResult{Err: err}
+			errCh <- err
 			return
 		}
 		deps.Bus.SendUIUpdate(snapshot)
@@ -56,11 +49,11 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan Picke
 		for {
 			select {
 			case <-ctx.Done():
-				done <- PickerResult{Err: ctx.Err()}
+				errCh <- ctx.Err()
 				return
 			case act, ok := <-deps.Bus.WorkflowActions():
 				if !ok {
-					done <- PickerResult{}
+					errCh <- nil
 					return
 				}
 
@@ -68,58 +61,59 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan Picke
 				case domain.SelectSessionAction:
 					targetDir, err := wf.applySelection(a.ID)
 					if err != nil {
-						done <- PickerResult{Err: err}
+						errCh <- err
 						return
 					}
+					deps.Bus.SendUIUpdate(domain.SessionSelectedEvent{
+						ID:             a.ID,
+						SwitchRequired: targetDir != "",
+						TargetDir:      targetDir,
+					})
 					deps.Bus.SendUIUpdate(domain.DoneEvent{})
-					done <- PickerResult{SwitchCwd: targetCwdClean(targetDir)}
+					errCh <- nil
 					return
 
 				case domain.CreateSessionAction:
 					id, err := wf.createSession()
 					if err != nil {
-						done <- PickerResult{Err: err}
+						errCh <- err
 						return
 					}
 					// If the new session is successfully created, we don't switch cwd
 					_ = id
 					deps.Bus.SendUIUpdate(domain.DoneEvent{})
-					done <- PickerResult{}
+					errCh <- nil
 					return
 
 				case domain.RenameSessionAction:
 					if err := wf.renameSession(a.ID, a.Name); err != nil {
-						done <- PickerResult{Err: err}
+						errCh <- err
 						return
 					}
 
 				case domain.DeleteSessionAction:
 					if err := wf.deleteSession(a.ID); err != nil {
-						done <- PickerResult{Err: err}
+						errCh <- err
 						return
 					}
 
 				case domain.StopAction:
 					deps.Bus.SendUIUpdate(domain.DoneEvent{})
-					done <- PickerResult{Err: context.Canceled}
+					errCh <- context.Canceled
 					return
 				}
 
 				// After any mutation (or if we need to refresh), send a new snapshot
 				snapshot, err := wf.prepareSelection()
 				if err != nil {
-					done <- PickerResult{Err: err}
+					errCh <- err
 					return
 				}
 				deps.Bus.SendUIUpdate(snapshot)
 			}
 		}
 	}()
-	return done
-}
-
-func targetCwdClean(dir string) string {
-	return dir
+	return errCh
 }
 
 // CreateSession is a public helper to create a new session and update state.

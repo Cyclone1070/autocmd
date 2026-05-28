@@ -36,7 +36,7 @@ var newCmd = &cobra.Command{
 		}
 
 		theme := newTheme(cfg.UI())
-		fmt.Printf("\nSelected session: %s\n\n", theme.Success("(new session)"))
+		fmt.Printf("\nSelected session: %s\n\n", theme.Success("Untitled"))
 		return nil
 	},
 }

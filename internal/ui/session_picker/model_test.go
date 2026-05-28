@@ -61,7 +61,7 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Contains(t, m.View(), "Session 1")
 	})
 
-	t.Run("Snapshot with blank name shows new session label", func(t *testing.T) {
+	t.Run("Snapshot with blank name shows Untitled label", func(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme, &mockPathResolver{})
 		blank := domain.SessionListEvent{
@@ -70,7 +70,7 @@ func TestSessionPickerUI(t *testing.T) {
 		}
 
 		m.Update(blank)
-		assert.Contains(t, m.View(), "(new session)")
+		assert.Contains(t, m.View(), "Untitled")
 		assert.NotContains(t, m.View(), "(untitled)")
 	})
 
@@ -83,7 +83,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
 		assert.Nil(t, cmd)
-		assert.Equal(t, "(new session)", m.selectedName)
+		assert.Equal(t, "Untitled", m.selectedName)
 		bus.AssertExpectations(t)
 	})
 

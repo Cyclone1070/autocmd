@@ -148,7 +148,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "n":
-			m.selectedName = "(new session)"
+			m.selectedName = "Untitled"
 			m.bus.SendAction(domain.CreateSessionAction{})
 			return m, nil
 		case "r":
@@ -194,7 +194,7 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 	for _, s := range data.Sessions {
 		name := s.Name
 		if name == "" {
-			name = "(new session)"
+			name = "Untitled"
 		}
 
 		if s.ID == data.CurrentSessionID {

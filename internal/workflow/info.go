@@ -102,7 +102,7 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 		if err == nil {
 			res.SessionDisplay = sess.Name
 			if res.SessionDisplay == "" {
-				res.SessionDisplay = sess.ID
+				res.SessionDisplay = "Untitled"
 			}
 		} else {
 			res.SessionDisplay = fmt.Sprintf("%s (not found)", sessionID)

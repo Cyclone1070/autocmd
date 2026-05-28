@@ -22,20 +22,20 @@ func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
 	cfg := config.DefaultConfig().UI()
 	cfg.SetShortToolBlock(false) // Default tests to full mode
-	themeCfg := ThemeConfig{
-		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
+	theme := &Theme{
+		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ToAdaptiveColor(cfg.TextColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
-	theme := NewTheme(themeCfg)
 	// For testing, we inject a gater that uses the standard 12 lines
 	return NewToolRenderer(theme, 80, NewToolOutputGater(12))
 }
 
 func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
 		return append(lines, "_gated"), 0
 	}}
@@ -47,7 +47,7 @@ func TestToolRenderer_RenderStringDoesNotUseGater(t *testing.T) {
 }
 
 func TestToolRenderer_RespectsGaterOnBashOutput(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
 		return append(lines, "_gated"), 0
 	}}
@@ -58,7 +58,7 @@ func TestToolRenderer_RespectsGaterOnBashOutput(t *testing.T) {
 }
 
 func TestToolRenderer_RenderQuestionDoesNotUseGater(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
 		return append(lines, "_gated"), 0
 	}}
@@ -175,7 +175,7 @@ func TestRenderBash_LongOutputTruncation(t *testing.T) {
 }
 
 func TestRenderBash_TruncatesByVisualLinesAfterWrap(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	tr := NewToolRenderer(theme, 30, NewToolOutputGater(2))
 	display := domain.BashDisplay{
 		Description: "Run",
@@ -190,13 +190,15 @@ func TestRenderBash_TruncatesByVisualLinesAfterWrap(t *testing.T) {
 
 func TestRenderBash_TruncationIndicatorIsMutedInToolContent(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
-	theme := NewTheme(ThemeConfig{
-		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
-		ShortToolBlock: false,
-	})
+	cfg.SetShortToolBlock(false)
+	theme := &Theme{
+		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ToAdaptiveColor(cfg.TextColor()),
+		ShortToolBlock: cfg.ShortToolBlock(),
+	}
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	display := domain.BashDisplay{
 		Description: "Slow Shell",
@@ -233,7 +235,7 @@ func TestRenderBash_ShowsCwdWhenPresent(t *testing.T) {
 }
 
 func TestRenderDiff_LongDiffTruncation(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
 		Description: "Massive Change",
@@ -245,7 +247,7 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 }
 
 func TestRenderDiff_TruncatesByVisualLinesAfterWrap(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	tr := NewToolRenderer(theme, 30, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
 		Description: "Big",
@@ -381,7 +383,7 @@ func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
 	assert.Contains(t, got, "x")
 }
 func TestToolRenderer_DiffNoTruncateDuringPermission(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	// Gater with very small budget
 	g := NewTruncatingGater(3)
 	r := NewToolRenderer(theme, 80, g)
@@ -397,7 +399,7 @@ func TestToolRenderer_DiffNoTruncateDuringPermission(t *testing.T) {
 }
 
 func TestToolRenderer_BashTruncateDuringPermissionIfHuge(t *testing.T) {
-	theme := NewTheme(ThemeConfig{})
+	theme := &Theme{}
 	// Gater with budget 5
 	g := NewToolOutputGater(5)
 	r := NewToolRenderer(theme, 80, g)

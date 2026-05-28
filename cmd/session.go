@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
+	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
 	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/session_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -50,14 +50,7 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		WorkingDir: workingDir,
 	})
 
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-		ShortToolBlock: deps.Config.UI().ShortToolBlock(),
-	}
-	theme := ui.NewTheme(themeCfg)
+	theme := newTheme(deps.Config.UI())
 
 	m := session_picker.NewModel(bus, theme)
 	p := tea.NewProgram(m)
@@ -71,34 +64,36 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		return res.Err
 	}
 
-	if res.SwitchCwd != "" {
-		created := false
-		if _, err := os.Stat(res.SwitchCwd); os.IsNotExist(err) {
-			if err := os.MkdirAll(res.SwitchCwd, 0755); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-			created = true
-		}
+	return handleSwitchResult(res.SwitchCwd, os.Stdout)
+}
 
-		if created {
-			fmt.Printf("Created directory: %s\n", res.SwitchCwd)
-		}
-		fmt.Printf("Workspace directory changed to: %s\n", res.SwitchCwd)
+func handleSwitchResult(switchCwd string, w io.Writer) error {
+	if switchCwd != "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "To continue this session, switch to its directory:")
+		fmt.Fprintf(w, "  cd %s\n", switchCwd)
+		fmt.Fprintln(w)
+	}
+	return nil
+}
 
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "/bin/sh"
-		}
-
-		subshell := exec.Command(shell)
-		subshell.Dir = res.SwitchCwd
-		subshell.Stdin = os.Stdin
-		subshell.Stdout = os.Stdout
-		subshell.Stderr = os.Stderr
-		if err := subshell.Run(); err != nil {
-			return fmt.Errorf("failed to spawn subshell: %w", err)
-		}
+func getWorkingDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
 	}
 
-	return nil
+	dir := filepath.Clean(wd)
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return wd
 }

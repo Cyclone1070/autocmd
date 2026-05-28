@@ -73,7 +73,7 @@ func (t *mockThinkingRecorder) RenderThinking(status ui.ToolStatus, _ time.Time,
 func TestModel_SummaryCompaction_Lifecycle(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
@@ -107,7 +107,7 @@ func TestModel_SummaryCompaction_Lifecycle(t *testing.T) {
 func TestModel_SummaryCompaction_EndError_OneLineUserMessage(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
@@ -136,7 +136,7 @@ func TestModel_SummaryCompaction_EndError_OneLineUserMessage(t *testing.T) {
 
 func TestModel_SyncPolling(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 
 	// pollBus delivers events as busEventMsg
@@ -155,7 +155,7 @@ func TestModel_SyncPolling(t *testing.T) {
 // TestModel_SpinnerIncrementsOncePerTick guards against duplicate tea.Tick chains (regression).
 func TestModel_SpinnerIncrementsOncePerTick(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.spinnerFrame = 0
@@ -168,7 +168,7 @@ func TestModel_SpinnerIncrementsOncePerTick(t *testing.T) {
 
 func TestModel_CancelRequested_ThinkingFlushUsesErrorStatusOnNextBusEvent(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	th := &mockThinkingRecorder{}
 	m := NewModel(bus, th, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
@@ -193,7 +193,7 @@ func TestModel_CancelRequested_ThinkingFlushUsesErrorStatusOnNextBusEvent(t *tes
 
 func TestModel_HandleCancel_DoesNotStartDuplicatePollWhenAlreadyPolling(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateTooling
 	m.isPolling = true // simulate pollBus goroutine already in flight
@@ -209,7 +209,7 @@ func TestModel_HandleCancel_DoesNotStartDuplicatePollWhenAlreadyPolling(t *testi
 func TestModel_HandleCancel_FlushesPendingStreamBuffer(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	s := &mockStream{flushReturns: []string{"pending tail"}}
 	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, s, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
@@ -230,7 +230,7 @@ func TestModel_HandleCancel_FlushesPendingStreamBuffer(t *testing.T) {
 
 func TestModel_CancelProcessesDoneEvent(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.thinkingStart = time.Now()
@@ -258,7 +258,7 @@ func TestModel_CancelProcessesDoneEvent(t *testing.T) {
 
 func TestModel_CancelRequested_IgnoresQueuedTextAndThoughtEventsInStreaming(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	th := &mockThinkingRecorder{lastStatus: ui.StatusSuccess}
 
 	m := NewModel(bus, th, nil, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -301,7 +301,7 @@ func TestModel_CancelRequested_IgnoresQueuedTextAndThoughtEventsInStreaming(t *t
 
 func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.spinnerFrame = 10
@@ -314,7 +314,7 @@ func TestModel_SpinnerAdvancesDuringEvents(t *testing.T) {
 func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, &mockThinkingRenderer{}, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
 		return nil
@@ -329,7 +329,7 @@ func TestModel_ThinkingResultFlushedOnTransition(t *testing.T) {
 }
 
 func TestModel_HandleBusEvent_SystemNotificationEvent(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	stream := &mockStream{}
 	m := NewModel(&mockBus{}, &mockThinkingRenderer{}, nil, &mockSpinner{}, theme, stream, ui.NewTruncatingGater(10), 80)
 	m.state = stateThinking
@@ -346,7 +346,7 @@ func TestModel_HandleBusEvent_SystemNotificationEvent(t *testing.T) {
 }
 
 func TestModel_ConnectingEvent(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{flushReturns: []string{}}, ui.NewNoOpGater(), 80)
@@ -362,7 +362,7 @@ func TestModel_ConnectingEvent(t *testing.T) {
 
 func TestModel_WaitingForNamingEvent(t *testing.T) {
 	var flushed []string
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{p: "some pending text"}, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
@@ -387,14 +387,14 @@ func TestModel_WaitingForNamingEvent(t *testing.T) {
 }
 
 func TestModel_ViewportTruncation(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(3), 80)
 	v := m.View()
 	assert.Contains(t, v, "above", "View should be truncated with indicator")
 }
 
 func TestModel_ScrollBoundaries(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	sp := &mockSpinner{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	// 10 lines of content
@@ -425,7 +425,7 @@ func TestModel_ScrollBoundaries(t *testing.T) {
 }
 
 func TestModel_NoTruncationIfHeightZero(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(nil, nil, nil, nil, theme, &mockStream{p: "L1\nL2\nL3\nL4\nL5"}, ui.NewTruncatingGater(0), 80)
 	v := m.View()
 	assert.NotContains(t, v, "above", "View should not be truncated when height is 0")
@@ -442,7 +442,7 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 func TestModel_ExplicitGater(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(nil, nil, nil, nil, theme, nil, ui.NewNoOpGater(), 80)
 	// Success if constructor accepts it
 	assert.NotNil(t, m.gater)
@@ -459,14 +459,14 @@ func TestModel_ViewUsesGater(t *testing.T) {
 	g := &mockGater{gateFunc: func(lines []string) ([]string, int) {
 		return append(lines, "_gated"), 0
 	}}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{p: "raw"}, g, 80)
 
 	assert.Equal(t, "raw\n_gated", m.View())
 }
 
 func TestModel_ToolsViewSpacing(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(nil, nil, tr, sp, theme, nil, ui.NewNoOpGater(), 80)
@@ -483,7 +483,7 @@ func TestModel_ToolsViewSpacing(t *testing.T) {
 
 func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, nil, tr, sp, theme, nil, ui.NewNoOpGater(), 80)
@@ -511,7 +511,7 @@ func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
 
 func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, nil, tr, sp, theme, nil, ui.NewNoOpGater(), 80)
@@ -533,7 +533,7 @@ func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
 
 func TestModel_HandleCancel_ToolEndEventSetsCancelledDisplay(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 
@@ -568,7 +568,7 @@ func TestModel_BusClosedUnexpectedly(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate)}
 	close(bus.updates) // Close channel immediately
 
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	tickr := &mockThinkingRenderer{}
 	sp := &mockSpinner{}
@@ -601,7 +601,7 @@ func TestModel_BusClosedUnexpectedly(t *testing.T) {
 
 func TestModel_ToolStart_QuestionDisplayInitializesQuestionState(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -619,7 +619,7 @@ func TestModel_ToolStart_QuestionDisplayInitializesQuestionState(t *testing.T) {
 
 func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -646,7 +646,7 @@ func TestModel_Question_EnterSubmitsSendsQuestionAnswerAction(t *testing.T) {
 
 func TestModel_Question_EscSendsStopAction(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -667,7 +667,7 @@ func TestModel_Question_EscSendsStopAction(t *testing.T) {
 
 func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -689,7 +689,7 @@ func TestModel_Question_AfterSubmitIgnoresDuplicateKeys(t *testing.T) {
 
 func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -714,7 +714,7 @@ func TestModel_PermissionApproval_YKeySendsApproveAction(t *testing.T) {
 
 func TestModel_PermissionApproval_SpaceKeySendsApproveAction(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -738,7 +738,7 @@ func TestModel_PermissionApproval_SpaceKeySendsApproveAction(t *testing.T) {
 
 func TestModel_ToolApprovalRequestEvent_MarksRunningTool(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -759,7 +759,7 @@ func TestModel_ToolApprovalRequestEvent_MarksRunningTool(t *testing.T) {
 
 func TestModel_PermissionApproval_UsesFirstAwaitingApprovalNotFirstSlot(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewNoOpGater(), 80)
@@ -798,7 +798,7 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 	}
 
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	renderer := ui.NewGlamourRenderer(80, true)
 	stream := NewStream(renderer)
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
@@ -849,7 +849,7 @@ func TestModel_FlushSpacingRegression(t *testing.T) {
 func TestModel_TextEvent_AppendsImmediatelyAndFlushesReturnedBlocks(t *testing.T) {
 	var flushed []string
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	s := &mockStream{appendReturns: []string{"blk"}}
 	m := NewModel(bus, nil, nil, nil, theme, s, ui.NewNoOpGater(), 80, WithFlush(func(c string) tea.Cmd {
 		flushed = append(flushed, c)
@@ -868,7 +868,7 @@ func TestModel_TextEvent_AppendsImmediatelyAndFlushesReturnedBlocks(t *testing.T
 
 func TestModel_TextEvent_DoesNotEnterStreamingState(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(bus, nil, nil, nil, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.isPolling = true
 
@@ -880,7 +880,7 @@ func TestModel_TextEvent_DoesNotEnterStreamingState(t *testing.T) {
 
 func TestModel_ThoughtChunks_StreamIntoThinkingView(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	th := &mockThinkingRecorder{}
 	m := NewModel(bus, th, nil, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 
@@ -896,7 +896,7 @@ func TestModel_ThoughtChunks_StreamIntoThinkingView(t *testing.T) {
 }
 
 func TestModel_ViewThinking_NormalizesLeadingBlankLines(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(nil, &mockThinkingRendererWithLeadingGap{}, nil, &mockSpinner{}, theme, &mockStream{}, ui.NewNoOpGater(), 80)
 	m.state = stateThinking
 	m.thinkingStart = time.Now()
@@ -932,7 +932,7 @@ func TestNormalization_ANSI_GapLines(t *testing.T) {
 }
 
 func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	renderer := ui.NewGlamourRenderer(80, true)
 	stream := NewStream(renderer)
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
@@ -961,7 +961,7 @@ func TestSpacing_ToolboxBatchNormalization(t *testing.T) {
 }
 
 func TestDeepCheck(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	renderer := ui.NewGlamourRenderer(80, true)
 	stream := NewStream(renderer)
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
@@ -984,7 +984,7 @@ func TestDeepCheck(t *testing.T) {
 }
 
 func TestView_StrictToolboxSpacing(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	renderer := ui.NewGlamourRenderer(80, true)
 	stream := NewStream(renderer)
 	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
@@ -1034,7 +1034,7 @@ func TestView_StrictToolboxSpacing(t *testing.T) {
 
 func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
@@ -1084,7 +1084,7 @@ func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
 
 func TestModel_PermissionApproval_ReturnsRepaintCommand(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)

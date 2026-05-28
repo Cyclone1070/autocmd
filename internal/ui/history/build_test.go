@@ -32,14 +32,14 @@ const testHistoryWidth = 80
 func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig().UI()
 	cfg.SetShortToolBlock(false)
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
+	return &ui.Theme{
+		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
-	return ui.NewTheme(themeCfg)
 }
 
 func TestBuildHistory_AssistantWithReasoningDuration_RendersThoughtLine(t *testing.T) {
@@ -454,14 +454,14 @@ func TestDivider_Color(t *testing.T) {
 	defer lipgloss.SetColorProfile(termenv.Ascii) // Reset after test
 
 	cfg := config.DefaultConfig().UI()
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
+	theme := &ui.Theme{
+		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
-	theme := ui.NewTheme(themeCfg)
 
 	// Expected USER first-line gutter (primary color, bold so the pipe pops)
 	userStyle := lipgloss.NewStyle().Foreground(theme.PrimaryColor()).Bold(true)

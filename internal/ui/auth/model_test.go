@@ -30,7 +30,7 @@ func (m *mockBus) SendAction(act domain.Action) {
 }
 
 func TestAuthUI_Interactive(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	bus := new(mockBus)
 
 	t.Run("StopAction on 'q'", func(t *testing.T) {

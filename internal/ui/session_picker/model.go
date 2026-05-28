@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/Cyclone1070/iav/internal/ui"
@@ -197,6 +196,7 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
 			Active: s.ID == data.CurrentSessionID,
 			Group:  groupName,
+			Faded:  s.WorkingDir != data.WorkingDir && s.WorkingDir != "",
 		})
 	}
 
@@ -213,23 +213,6 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 	m.picker = ui.NewPicker(cfg)
 }
 
-func getDateGroup(t time.Time) string {
-	now := time.Now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	yesterday := today.AddDate(0, 0, -1)
-	thisWeek := today.AddDate(0, 0, -7)
-
-	if t.After(today) {
-		return "Today"
-	}
-	if t.After(yesterday) {
-		return "Yesterday"
-	}
-	if t.After(thisWeek) {
-		return "This Week"
-	}
-	return "Earlier"
-}
 
 // View determines what content to display based on the internal state.
 func (m *Model) View() string {

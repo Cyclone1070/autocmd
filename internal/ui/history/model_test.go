@@ -25,7 +25,7 @@ func (m *mockBus) SendAction(act domain.Action) {
 }
 
 func TestModel_EventFlow(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	bus := new(mockBus)
 
 	t.Run("Snapshot received -> Renders content", func(t *testing.T) {

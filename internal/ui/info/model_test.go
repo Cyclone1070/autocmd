@@ -31,7 +31,7 @@ func TestModel(t *testing.T) {
 		eventChan := make(chan domain.UIUpdate, 1)
 		bus.On("UIUpdates").Return(eventChan)
 
-		theme := ui.NewTheme(ui.ThemeConfig{})
+		theme := &ui.Theme{}
 		m := NewModel(bus, theme)
 
 		info := domain.InfoEvent{Model: "gpt-4"}
@@ -49,7 +49,7 @@ func TestModel(t *testing.T) {
 		eventChan := make(chan domain.UIUpdate, 1)
 		bus.On("UIUpdates").Return(eventChan)
 
-		theme := ui.NewTheme(ui.ThemeConfig{})
+		theme := &ui.Theme{}
 		m := NewModel(bus, theme)
 
 		_, cmd := m.Update(domain.DoneEvent{})
@@ -64,7 +64,7 @@ func TestModel(t *testing.T) {
 		close(eventChan)
 		bus.On("UIUpdates").Return(eventChan)
 
-		theme := ui.NewTheme(ui.ThemeConfig{})
+		theme := &ui.Theme{}
 		m := NewModel(bus, theme)
 
 		cmd := m.pollBus()
@@ -74,7 +74,7 @@ func TestModel(t *testing.T) {
 }
 
 func TestRenderInfo(t *testing.T) {
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 	m := NewModel(nil, theme)
 
 	t.Run("Full Success Scenario", func(t *testing.T) {
@@ -115,7 +115,7 @@ func TestRenderInfo(t *testing.T) {
 		defer lipgloss.SetColorProfile(termenv.Ascii)
 
 		successColor := lipgloss.AdaptiveColor{Light: "10", Dark: "10"}
-		theme := ui.NewTheme(ui.ThemeConfig{SuccessColor: successColor})
+		theme := &ui.Theme{SuccessCol: successColor}
 		m := NewModel(nil, theme)
 
 		data := &domain.InfoEvent{

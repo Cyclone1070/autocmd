@@ -196,6 +196,7 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 	return domain.SessionListEvent{
 		Sessions:         sortedSummaries,
 		CurrentSessionID: activeSessionID,
+		WorkingDir:       w.workingDir,
 	}, nil
 }
 

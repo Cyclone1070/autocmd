@@ -167,13 +167,6 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 		return withCategory(errSetup, err)
 	}
 
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-		ShortToolBlock: deps.Config.UI().ShortToolBlock(),
-	}
 	// Calculate width and height capping at terminal size
 	chatWidth := deps.Config.UI().ChatWindowWidth()
 	termHeight := 0 // Fallback (0 disables global truncation)
@@ -191,7 +184,7 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 	glamour := ui.NewGlamourRenderer(chatWidth, true)
 	stream := prompt.NewStream(glamour)
 
-	theme := ui.NewTheme(themeCfg)
+	theme := newTheme(deps.Config.UI())
 	spinner := ui.NewSpinnerRenderer(lipgloss.NewStyle().Foreground(theme.PrimaryColor()))
 	thinking := prompt.NewThinkingRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().ThinkingHeight()))
 	tooling := ui.NewToolRenderer(theme, chatWidth, ui.NewToolOutputGater(deps.Config.UI().BashOutputHeight()))

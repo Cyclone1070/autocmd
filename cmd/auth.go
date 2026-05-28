@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/ui"
 	authui "github.com/Cyclone1070/iav/internal/ui/auth"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,14 +36,7 @@ var authCmd = &cobra.Command{
 			State:    deps.State,
 		})
 
-		themeCfg := ui.ThemeConfig{
-			PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-			SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-			ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-			MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-			ShortToolBlock: deps.Config.UI().ShortToolBlock(),
-		}
-		theme := ui.NewTheme(themeCfg)
+		theme := newTheme(deps.Config.UI())
 
 		m := authui.NewModel(bus, theme)
 		p := tea.NewProgram(m)

@@ -39,11 +39,11 @@ func TestThinkingRenderer_Styling(t *testing.T) {
 	success := ui.ToAdaptiveColor(mockColor{light: "#00FF00"})
 	errColor := ui.ToAdaptiveColor(mockColor{light: "#FF0000"})
 
-	theme := ui.NewTheme(ui.ThemeConfig{
-		PrimaryColor: primary,
-		SuccessColor: success,
-		ErrorColor:   errColor,
-	})
+	theme := &ui.Theme{
+		PrimaryCol: primary,
+		SuccessCol: success,
+		ErrorCol:   errColor,
+	}
 	r := NewThinkingRenderer(theme, 80, &passThroughGater{})
 	sp := &mockSpinner{}
 

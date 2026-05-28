@@ -17,6 +17,7 @@ type Item struct {
 	Detail string
 	Group  string
 	Active bool
+	Faded  bool
 }
 
 // Action defines a keybinding the caller can register.
@@ -135,7 +136,7 @@ func (m *Picker) View() string {
 		primary = m.theme.PrimaryColor()
 		muted = m.theme.MutedColor()
 		active = m.theme.SuccessColor()
-		text = m.theme.MutedColor()
+		text = m.theme.TextColor()
 	} else {
 		primary = lipgloss.AdaptiveColor{Light: "27", Dark: "86"}
 		muted = lipgloss.AdaptiveColor{Light: "246", Dark: "240"}
@@ -188,7 +189,12 @@ func (m *Picker) View() string {
 			if len(displayGroup) > 0 {
 				displayGroup = strings.ToUpper(displayGroup[:1]) + displayGroup[1:]
 			}
-			s.WriteString(groupStyle.Render(displayGroup) + "\n")
+			if item.Faded {
+				fadedGroupStyle := lipgloss.NewStyle().Italic(true).Foreground(muted).Margin(1, 0, 0, groupLeftMargin)
+				s.WriteString(fadedGroupStyle.Render(displayGroup) + "\n")
+			} else {
+				s.WriteString(groupStyle.Render(displayGroup) + "\n")
+			}
 			lastGroup = item.Group
 		}
 
@@ -208,6 +214,8 @@ func (m *Picker) View() string {
 		var labelText string
 		if item.Active {
 			labelText = activeStyle.Bold(true).Render(item.Label)
+		} else if item.Faded {
+			labelText = fadedStyle.Render(item.Label)
 		} else {
 			labelText = inactiveStyle.Render(item.Label)
 		}
@@ -222,7 +230,12 @@ func (m *Picker) View() string {
 
 		detailText := fadedStyle.Render(item.Detail)
 
-		line := fmt.Sprintf(" %s %s%s  %s\n", icon, labelText, strings.Repeat(" ", padding), detailText)
+		var line string
+		if isCursor {
+			line = fmt.Sprintf("  %s  %s%s  %s\n", icon, labelText, strings.Repeat(" ", padding), detailText)
+		} else {
+			line = fmt.Sprintf("     %s%s  %s\n", labelText, strings.Repeat(" ", padding), detailText)
+		}
 		s.WriteString(line)
 	}
 

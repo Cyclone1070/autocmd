@@ -2,8 +2,6 @@
 package config
 
 import (
-	"maps"
-
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
@@ -33,60 +31,11 @@ type Config struct {
 // Tools returns the configuration for tools.
 func (c *Config) Tools() ToolsConfig { return c.tools }
 
-
 // UI returns the configuration for the terminal UI.
 func (c *Config) UI() UIConfig { return c.ui }
 
 // Providers returns the configuration for AI providers.
 func (c *Config) Providers() ProviderConfig { return c.providers }
-
-
-// ToolsConfig holds tool-specific configuration.
-type ToolsConfig struct {
-	toolPermissions   map[string]string
-	permissionDefault string
-	maxFileSize       int64
-	maxIterations     int
-}
-
-// MaxFileSize returns the maximum file size allowed for tool operations.
-func (c ToolsConfig) MaxFileSize() int64 { return c.maxFileSize }
-
-// MaxIterations returns the maximum number of tool iterations per request.
-func (c ToolsConfig) MaxIterations() int { return c.maxIterations }
-
-// PermissionDefault returns the default permission level for tools.
-func (c ToolsConfig) PermissionDefault() string { return c.permissionDefault }
-
-// ToolPermissions returns a copy of the tool-specific permission levels.
-func (c ToolsConfig) ToolPermissions() map[string]string {
-	out := make(map[string]string, len(c.toolPermissions))
-	maps.Copy(out, c.toolPermissions)
-	return out
-}
-
-// ModelConfig represents an AI model configuration.
-type ModelConfig struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	ContextWindow int    `json:"context_window"`
-}
-
-// ProviderConfig maps provider names to their available models.
-type ProviderConfig map[string][]ModelConfig
-
-// DTOs for JSON persistence.
-
-type toolsDTO struct {
-	Permissions   permissionsDTO `json:"permissions"`
-	MaxFileSize   int64          `json:"max_file_size"`
-	MaxIterations int            `json:"max_iterations"`
-}
-
-type permissionsDTO struct {
-	ByTool  map[string]string `json:"by_tool"`
-	Default string            `json:"default"`
-}
 
 type configDTO struct {
 	Tools     toolsDTO       `json:"tools"`
@@ -112,6 +61,7 @@ func DefaultConfig() *Config {
 			successColor:     ColorConfig{light: "#43BF6D", dark: "#73F59F"},
 			errorColor:       ColorConfig{light: "#F05D5E", dark: "#FF6666"},
 			mutedColor:       ColorConfig{light: "#D9DCCF", dark: "#888888"},
+			textColor:        ColorConfig{light: "#1C1C1C", dark: "#D0D0D0"},
 			chatWindowWidth:  defaultChatWindowWidth,
 			bashOutputHeight: defaultBashOutputHeight,
 			thinkingHeight:   defaultThinkingHeight,

@@ -157,14 +157,14 @@ func (d dummyBus) SendAction(domain.Action) {}
 
 func renderPromptToGolden(w *bytes.Buffer, name string, cfg config.UIConfig, renderer ui.Renderer, width int, elems ...PromptElement) {
 	var signals []string
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
+	theme := &ui.Theme{
+		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
-	theme := ui.NewTheme(themeCfg)
 	s := NewStream(renderer)
 	thinking := NewThinkingRenderer(theme, width, ui.NewToolOutputGater(5))
 	tooling := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))

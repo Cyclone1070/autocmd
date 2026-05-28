@@ -33,7 +33,7 @@ func TestSessionPickerUI(t *testing.T) {
 		Sessions:         summaries,
 		CurrentSessionID: "s1",
 	}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 
 	t.Run("Initial view is empty", func(t *testing.T) {
 		bus := new(mockBus)
@@ -217,6 +217,42 @@ func TestSessionPickerUI(t *testing.T) {
 		item, ok := m.picker.CursorItem()
 		require.True(t, ok)
 		assert.Equal(t, "~/repos/projectA", item.Group)
+	})
+
+	t.Run("Cross-directory sessions are faded", func(t *testing.T) {
+		bus := new(mockBus)
+		m := NewModel(bus, theme)
+
+		event := domain.SessionListEvent{
+			WorkingDir: "/current-dir",
+			Sessions: []domain.SessionSummary{
+				{
+					ID:         "s1",
+					Name:       "Session 1",
+					WorkingDir: "/current-dir",
+				},
+				{
+					ID:         "s2",
+					Name:       "Session 2",
+					WorkingDir: "/other-dir",
+				},
+			},
+			CurrentSessionID: "s1",
+		}
+
+		m.initializePicker(&event)
+		require.NotNil(t, m.picker)
+
+		// Cursor is at s1 (current dir), should not be faded
+		item1, ok := m.picker.CursorItem()
+		require.True(t, ok)
+		assert.False(t, item1.Faded)
+
+		// Move cursor to s2, should be faded
+		m.picker.Update(tea.KeyMsg{Type: tea.KeyDown})
+		item2, ok := m.picker.CursorItem()
+		require.True(t, ok)
+		assert.True(t, item2.Faded)
 	})
 }
 

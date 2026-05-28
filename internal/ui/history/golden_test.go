@@ -109,14 +109,14 @@ func getHistoryElements() []TestElement {
 func TestHistory_GoldenCombinations(t *testing.T) {
 	elements := getHistoryElements()
 	cfg := config.DefaultConfig().UI()
-	themeCfg := ui.ThemeConfig{
-		PrimaryColor:   ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ui.ToAdaptiveColor(cfg.MutedColor()),
+	theme := &ui.Theme{
+		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
 	}
-	theme := ui.NewTheme(themeCfg)
 	width := 80
 	isDark := true
 	renderer := ui.NewGlamourRenderer(width, isDark)

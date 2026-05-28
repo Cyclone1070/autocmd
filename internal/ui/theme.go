@@ -34,34 +34,14 @@ func ToAdaptiveColor(c ColorInfo) lipgloss.AdaptiveColor {
 	return lipgloss.AdaptiveColor{Light: c.Light(), Dark: c.Dark()}
 }
 
-// ThemeConfig holds the colors and styling needed for the theme.
-type ThemeConfig struct {
-	PrimaryColor   lipgloss.AdaptiveColor
-	SuccessColor   lipgloss.AdaptiveColor
-	ErrorColor     lipgloss.AdaptiveColor
-	MutedColor     lipgloss.AdaptiveColor
-	ShortToolBlock bool
-}
-
-// Theme provides styling for the UI.
+// Theme provides styling and configuration for the UI.
 type Theme struct {
-	muted   lipgloss.AdaptiveColor
-	primary lipgloss.AdaptiveColor
-	success lipgloss.AdaptiveColor
-	err     lipgloss.AdaptiveColor
-
+	PrimaryCol     lipgloss.AdaptiveColor
+	SuccessCol     lipgloss.AdaptiveColor
+	ErrorCol       lipgloss.AdaptiveColor
+	MutedCol       lipgloss.AdaptiveColor
+	TextCol        lipgloss.AdaptiveColor
 	ShortToolBlock bool
-}
-
-// NewTheme creates a theme from config.
-func NewTheme(cfg ThemeConfig) *Theme {
-	return &Theme{
-		muted:          cfg.MutedColor,
-		primary:        cfg.PrimaryColor,
-		success:        cfg.SuccessColor,
-		err:            cfg.ErrorColor,
-		ShortToolBlock: cfg.ShortToolBlock,
-	}
 }
 
 // StatusPrefix returns a styled icon with a trailing space.
@@ -82,14 +62,14 @@ func (t *Theme) Success(s string) string {
 	if s == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(t.success).Render(s)
+	return lipgloss.NewStyle().Foreground(t.SuccessCol).Render(s)
 }
 
 func (t *Theme) Error(s string) string {
 	if s == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(t.err).Render(s)
+	return lipgloss.NewStyle().Foreground(t.ErrorCol).Render(s)
 }
 
 // Muted styles a string with the theme's muted color.
@@ -97,7 +77,7 @@ func (t *Theme) Muted(s string) string {
 	if s == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(t.muted).Render(s)
+	return lipgloss.NewStyle().Foreground(t.MutedCol).Render(s)
 }
 
 // Primary styles a string with the theme's primary color.
@@ -105,7 +85,7 @@ func (t *Theme) Primary(s string) string {
 	if s == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(t.primary).Render(s)
+	return lipgloss.NewStyle().Foreground(t.PrimaryCol).Render(s)
 }
 
 // Separator returns a styled horizontal line.
@@ -181,13 +161,13 @@ func (t *Theme) Box(content string, _ int, status ToolStatus) string {
 func (t *Theme) colorForStatus(status ToolStatus) lipgloss.AdaptiveColor {
 	switch status {
 	case StatusRunning, StatusAwaitingApproval:
-		return t.primary
+		return t.PrimaryCol
 	case StatusSuccess:
-		return t.success
+		return t.SuccessCol
 	case StatusError:
-		return t.err
+		return t.ErrorCol
 	default:
-		return t.muted
+		return t.MutedCol
 	}
 }
 
@@ -203,13 +183,16 @@ func trimEmptyLines(lines []string) []string {
 }
 
 // PrimaryColor returns the theme's primary adaptive color.
-func (t *Theme) PrimaryColor() lipgloss.AdaptiveColor { return t.primary }
+func (t *Theme) PrimaryColor() lipgloss.AdaptiveColor { return t.PrimaryCol }
 
 // SuccessColor returns the theme's success adaptive color.
-func (t *Theme) SuccessColor() lipgloss.AdaptiveColor { return t.success }
+func (t *Theme) SuccessColor() lipgloss.AdaptiveColor { return t.SuccessCol }
 
 // ErrorColor returns the theme's error adaptive color.
-func (t *Theme) ErrorColor() lipgloss.AdaptiveColor { return t.err }
+func (t *Theme) ErrorColor() lipgloss.AdaptiveColor { return t.ErrorCol }
 
 // MutedColor returns the theme's muted adaptive color.
-func (t *Theme) MutedColor() lipgloss.AdaptiveColor { return t.muted }
+func (t *Theme) MutedColor() lipgloss.AdaptiveColor { return t.MutedCol }
+
+// TextColor returns the theme's text adaptive color.
+func (t *Theme) TextColor() lipgloss.AdaptiveColor { return t.TextCol }

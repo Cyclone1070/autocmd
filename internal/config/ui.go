@@ -17,6 +17,7 @@ type UIConfig struct {
 	successColor     ColorConfig
 	errorColor       ColorConfig
 	mutedColor       ColorConfig
+	textColor        ColorConfig
 	chatWindowWidth  int
 	bashOutputHeight int
 	thinkingHeight   int
@@ -31,6 +32,8 @@ func (c UIConfig) SuccessColor() ColorConfig { return c.successColor }
 func (c UIConfig) ErrorColor() ColorConfig   { return c.errorColor }
 // MutedColor returns the color used for secondary or less important text.
 func (c UIConfig) MutedColor() ColorConfig   { return c.mutedColor }
+// TextColor returns the color used for primary body text.
+func (c UIConfig) TextColor() ColorConfig   { return c.textColor }
 // ChatWindowWidth returns the width of the chat UI in characters.
 func (c UIConfig) ChatWindowWidth() int      { return c.chatWindowWidth }
 // BashOutputHeight returns the maximum height of bash output blocks.
@@ -58,6 +61,7 @@ type uiDTO struct {
 	SuccessColor     colorDTO `json:"success_color"`
 	ErrorColor       colorDTO `json:"error_color"`
 	MutedColor       colorDTO `json:"muted_color"`
+	TextColor        colorDTO `json:"text_color"`
 	ChatWindowWidth  int      `json:"chat_window_width"`
 	BashOutputHeight int      `json:"bash_output_height"`
 	ThinkingHeight   int      `json:"thinking_height"`

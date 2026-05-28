@@ -32,7 +32,7 @@ func TestModelSelection(t *testing.T) {
 		},
 		ActiveModelID: "m1",
 	}
-	theme := ui.NewTheme(ui.ThemeConfig{})
+	theme := &ui.Theme{}
 
 	t.Run("Selection triggers SelectModelAction", func(t *testing.T) {
 		bus := new(mockBus)

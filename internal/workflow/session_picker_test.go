@@ -99,6 +99,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 
 		// Active session should be the latest in current folder
 		assert.Equal(t, "s4", res.CurrentSessionID)
+		assert.Equal(t, "/current", res.WorkingDir)
 	})
 
 	t.Run("applySelection touches and saves session", func(t *testing.T) {

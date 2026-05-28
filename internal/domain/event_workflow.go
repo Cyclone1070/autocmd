@@ -27,6 +27,7 @@ func (ModelListEvent) isUIUpdate() {}
 type SessionListEvent struct {
 	CurrentSessionID string
 	Sessions         []SessionSummary
+	WorkingDir       string
 }
 
 func (SessionListEvent) isUIUpdate() {}

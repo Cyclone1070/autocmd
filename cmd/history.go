@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/history"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,14 +40,7 @@ var historyCmd = &cobra.Command{
 			SessionID: sess.ID,
 		}, bus)
 
-		themeCfg := ui.ThemeConfig{
-			PrimaryColor:   ui.ToAdaptiveColor(deps.Config.UI().PrimaryColor()),
-			SuccessColor:   ui.ToAdaptiveColor(deps.Config.UI().SuccessColor()),
-			ErrorColor:     ui.ToAdaptiveColor(deps.Config.UI().ErrorColor()),
-			MutedColor:     ui.ToAdaptiveColor(deps.Config.UI().MutedColor()),
-			ShortToolBlock: deps.Config.UI().ShortToolBlock(),
-		}
-		theme := ui.NewTheme(themeCfg)
+		theme := newTheme(deps.Config.UI())
 
 		width, height, _ := term.GetSize(int(os.Stdout.Fd()))
 		m := history.NewModel(bus, theme, deps.Config.UI().ChatWindowWidth(), deps.Config.UI().BashOutputHeight(), width, height)

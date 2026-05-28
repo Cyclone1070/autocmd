@@ -46,6 +46,7 @@ func (c *Config) Validate() error {
 	validateColor("success_color", c.ui.successColor)
 	validateColor("error_color", c.ui.errorColor)
 	validateColor("muted_color", c.ui.mutedColor)
+	validateColor("text_color", c.ui.textColor)
 
 	if c.ui.chatWindowWidth < 1 {
 		errs = append(errs, "ui.chat_window_width must be >= 1")

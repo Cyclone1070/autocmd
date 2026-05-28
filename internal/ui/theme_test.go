@@ -9,13 +9,13 @@ import (
 
 func TestTheme_RenderActionBlock_HeaderAndGutter(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
-	th := NewTheme(ThemeConfig{
-		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
+	th := &Theme{
+		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
-	})
+	}
 	spec := ActionBlockSpec{
 		HeaderLines:  []string{"Read \"main.go\""},
 		ContentLines: []string{"first line", "second line"},
@@ -29,13 +29,13 @@ func TestTheme_RenderActionBlock_HeaderAndGutter(t *testing.T) {
 
 func TestTheme_RenderActionBlock_HeaderContinuationIndented(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
-	th := NewTheme(ThemeConfig{
-		PrimaryColor:   ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessColor:   ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorColor:     ToAdaptiveColor(cfg.ErrorColor()),
-		MutedColor:     ToAdaptiveColor(cfg.MutedColor()),
+	th := &Theme{
+		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
 		ShortToolBlock: cfg.ShortToolBlock(),
-	})
+	}
 	spec := ActionBlockSpec{
 		HeaderLines: []string{"Read \"main.go\"", "with extra context"},
 		Status:      StatusSuccess,

@@ -94,6 +94,10 @@ func newConfig(dto configDTO) (*Config, error) {
 				light: dto.UI.MutedColor.Light,
 				dark:  dto.UI.MutedColor.Dark,
 			},
+			textColor: ColorConfig{
+				light: dto.UI.TextColor.Light,
+				dark:  dto.UI.TextColor.Dark,
+			},
 			chatWindowWidth:  dto.UI.ChatWindowWidth,
 			bashOutputHeight: dto.UI.BashOutputHeight,
 			thinkingHeight:   dto.UI.ThinkingHeight,
@@ -127,6 +131,7 @@ func (m *Manager) Load() (*Config, error) {
 			SuccessColor:     colorDTO{Light: defaults.ui.successColor.light, Dark: defaults.ui.successColor.dark},
 			ErrorColor:       colorDTO{Light: defaults.ui.errorColor.light, Dark: defaults.ui.errorColor.dark},
 			MutedColor:       colorDTO{Light: defaults.ui.mutedColor.light, Dark: defaults.ui.mutedColor.dark},
+			TextColor:        colorDTO{Light: defaults.ui.textColor.light, Dark: defaults.ui.textColor.dark},
 			ChatWindowWidth:  defaults.ui.chatWindowWidth,
 			BashOutputHeight: defaults.ui.bashOutputHeight,
 			ThinkingHeight:   defaults.ui.thinkingHeight,

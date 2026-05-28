@@ -52,6 +52,9 @@ type Picker struct {
 
 // NewPicker creates a new Picker with the given configuration.
 func NewPicker(cfg Config) *Picker {
+	if cfg.Theme == nil {
+		panic("ui.Picker: theme is required and must not be nil")
+	}
 	indices := make([]int, 0, len(cfg.Items))
 	for i := range cfg.Items {
 		indices = append(indices, i)
@@ -125,24 +128,11 @@ func (m *Picker) View() string {
 
 	var s strings.Builder
 
-	// Resolve colors from theme, falling back to fixed palette if theme is nil.
-	var (
-		primary lipgloss.AdaptiveColor
-		muted   lipgloss.AdaptiveColor
-		active  lipgloss.AdaptiveColor
-		text    lipgloss.AdaptiveColor
-	)
-	if m.theme != nil {
-		primary = m.theme.PrimaryColor()
-		muted = m.theme.MutedColor()
-		active = m.theme.SuccessColor()
-		text = m.theme.TextColor()
-	} else {
-		primary = lipgloss.AdaptiveColor{Light: "27", Dark: "86"}
-		muted = lipgloss.AdaptiveColor{Light: "246", Dark: "240"}
-		active = lipgloss.AdaptiveColor{Light: "34", Dark: "86"}
-		text = lipgloss.AdaptiveColor{Light: "235", Dark: "250"}
-	}
+	// Resolve colors from theme.
+	primary := m.theme.PrimaryColor()
+	muted := m.theme.MutedColor()
+	active := m.theme.SuccessColor()
+	text := m.theme.TextColor()
 
 	// Styles
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(primary).MarginBottom(1)

@@ -26,6 +26,7 @@ func TestPicker_Actions_Quit(t *testing.T) {
 	m := NewPicker(Config{
 		Items:   items,
 		Actions: actions,
+		Theme:   testTheme(),
 	})
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
@@ -47,6 +48,7 @@ func TestPicker_RegularAction_DoesNotQuit(t *testing.T) {
 	m := NewPicker(Config{
 		Items:   items,
 		Actions: actions,
+		Theme:   testTheme(),
 	})
 
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
@@ -60,6 +62,7 @@ func TestPicker_View_CursorIsBlueCircleNotTriangle(t *testing.T) {
 			{ID: "1", Label: "First"},
 			{ID: "2", Label: "Second"},
 		},
+		Theme: testTheme(),
 	})
 
 	view := m.View()
@@ -74,6 +77,7 @@ func TestPicker_View_ActiveItemIsHighlightedIndependentlyOfCursor(t *testing.T) 
 			{ID: "1", Label: "First"},
 			{ID: "2", Label: "Second", Active: true},
 		},
+		Theme: testTheme(),
 	})
 
 	viewAtTop := m.View()
@@ -91,6 +95,7 @@ func TestPicker_SpaceSelectsLikeEnter(t *testing.T) {
 			{ID: "1", Label: "First"},
 			{ID: "2", Label: "Second"},
 		},
+		Theme: testTheme(),
 	})
 
 	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -109,6 +114,7 @@ func TestPicker_View_GroupHeaderIsBlue(t *testing.T) {
 		Items: []Item{
 			{ID: "1", Label: "First", Group: "GroupBlueTest"},
 		},
+		Theme: testTheme(),
 	})
 
 	view := m.View()
@@ -126,6 +132,7 @@ func TestPicker_View_FadedItem(t *testing.T) {
 		Items: []Item{
 			{ID: "1", Label: "FadedItem", Faded: true},
 		},
+		Theme: testTheme(),
 	})
 	view := m.View()
 	assert.Contains(t, view, "FadedItem")
@@ -141,6 +148,7 @@ func TestPicker_View_FadedGroupHeader(t *testing.T) {
 			{ID: "1", Label: "First", Group: "GroupBlue", Faded: false},
 			{ID: "2", Label: "Second", Group: "GroupFaded", Faded: true},
 		},
+		Theme: testTheme(),
 	})
 
 	view := m.View()
@@ -216,6 +224,7 @@ func TestPicker_View_NestingAndItalicsLayout(t *testing.T) {
 			{ID: "1", Label: "ActiveDirItem1", Group: "active-group", Faded: false},
 			{ID: "2", Label: "FadedDirItem2", Group: "faded-group", Faded: true},
 		},
+		Theme: testTheme(),
 	})
 
 	view := m.View()
@@ -265,6 +274,15 @@ func TestPicker_View_NestingAndItalicsLayout(t *testing.T) {
 
 	cleanFadedItem := stripANSI(fadedItemLine)
 	assert.True(t, strings.HasPrefix(cleanFadedItem, "     FadedDirItem2"), "Inactive item should have 5 spaces of nested indentation prefix")
+}
+
+func testTheme() *Theme {
+	return &Theme{
+		PrimaryCol: lipgloss.AdaptiveColor{Light: "27", Dark: "86"},
+		MutedCol:   lipgloss.AdaptiveColor{Light: "246", Dark: "240"},
+		SuccessCol: lipgloss.AdaptiveColor{Light: "34", Dark: "86"},
+		TextCol:    lipgloss.AdaptiveColor{Light: "235", Dark: "250"},
+	}
 }
 
 

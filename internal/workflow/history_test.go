@@ -99,4 +99,3 @@ func TestRunHistory_EmptySessionID(t *testing.T) {
 
 	bus.AssertExpectations(t)
 }
-

@@ -53,7 +53,6 @@ func TestLoadConfigPath_NonExistent(t *testing.T) {
 	assert.Empty(t, cfg.McpServers)
 }
 
-
 type mockMCPClient struct {
 	initialized bool
 	closed      bool
@@ -78,35 +77,51 @@ func (m *mockMCPClient) Close() error {
 
 // Implement other methods of client.MCPClient interface as no-ops.
 func (m *mockMCPClient) Ping(ctx context.Context) error { return nil }
+
 func (m *mockMCPClient) ListResourcesByPage(ctx context.Context, request mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ListResources(ctx context.Context, request mcp.ListResourcesRequest) (*mcp.ListResourcesResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ListResourceTemplatesByPage(ctx context.Context, request mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ListResourceTemplates(ctx context.Context, request mcp.ListResourceTemplatesRequest) (*mcp.ListResourceTemplatesResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ReadResource(ctx context.Context, request mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	return nil, nil
 }
-func (m *mockMCPClient) Subscribe(ctx context.Context, request mcp.SubscribeRequest) error   { return nil }
-func (m *mockMCPClient) Unsubscribe(ctx context.Context, request mcp.UnsubscribeRequest) error { return nil }
+
+func (m *mockMCPClient) Subscribe(ctx context.Context, request mcp.SubscribeRequest) error {
+	return nil
+}
+
+func (m *mockMCPClient) Unsubscribe(ctx context.Context, request mcp.UnsubscribeRequest) error {
+	return nil
+}
+
 func (m *mockMCPClient) ListPromptsByPage(ctx context.Context, request mcp.ListPromptsRequest) (*mcp.ListPromptsResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ListPrompts(ctx context.Context, request mcp.ListPromptsRequest) (*mcp.ListPromptsResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) GetPrompt(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) ListToolsByPage(ctx context.Context, request mcp.ListToolsRequest) (*mcp.ListToolsResult, error) {
 	return nil, nil
 }
+
 func (m *mockMCPClient) CallTool(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return nil, nil
 }
@@ -119,7 +134,7 @@ func (m *mockMCPClient) OnNotification(handler func(notification mcp.JSONRPCNoti
 func TestManager_Lifecycle(t *testing.T) {
 	ctx := context.Background()
 	cfg := &Config{
-		McpServers: map[string]McpServerConfig{
+		McpServers: map[string]ServerConfig{
 			"test-server": {
 				Command: "node",
 				Args:    []string{"server.js"},
@@ -168,7 +183,7 @@ func TestManager_Lifecycle(t *testing.T) {
 func TestManager_SSERemoteLifecycle(t *testing.T) {
 	ctx := context.Background()
 	cfg := &Config{
-		McpServers: map[string]McpServerConfig{
+		McpServers: map[string]ServerConfig{
 			"remote-server": {
 				URL: "http://localhost:8080/sse",
 			},
@@ -214,7 +229,7 @@ func TestManager_SSERemoteLifecycle(t *testing.T) {
 func TestManager_StartError(t *testing.T) {
 	ctx := context.Background()
 	cfg := &Config{
-		McpServers: map[string]McpServerConfig{
+		McpServers: map[string]ServerConfig{
 			"error-server": {
 				Command: "bad-cmd",
 			},
@@ -270,4 +285,3 @@ func TestManager_RemoteHeaders(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, calledRemote)
 }
-

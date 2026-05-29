@@ -4,9 +4,10 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Cyclone1070/iav/internal/domain"
 	"os"
 	"path/filepath"
+
+	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 const (
@@ -121,7 +122,6 @@ func (m *Manager) Save(s *State) error {
 	dto := stateDTO{
 		Model: s.model,
 	}
-
 
 	data, err := json.MarshalIndent(dto, "", "  ")
 	if err != nil {

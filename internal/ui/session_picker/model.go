@@ -16,7 +16,6 @@ type pathResolver interface {
 	DisplayPath(path string) string
 }
 
-
 const keyEsc = "esc"
 
 type bus interface {
@@ -231,7 +230,6 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 	}
 	m.picker = ui.NewPicker(cfg)
 }
-
 
 // View determines what content to display based on the internal state.
 func (m *Model) View() string {

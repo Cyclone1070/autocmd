@@ -13,8 +13,6 @@ type historySessionStore interface {
 	GetSession(id string) (*domain.Session, error)
 }
 
-
-
 type historyBus interface {
 	SendUIUpdate(domain.UIUpdate)
 }
@@ -67,4 +65,3 @@ func ResolveSession(deps *HistoryDeps) (*HistoryResult, error) {
 
 	return &HistoryResult{Session: sess}, nil
 }
-

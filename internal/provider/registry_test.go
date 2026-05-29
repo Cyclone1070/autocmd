@@ -17,6 +17,7 @@ func (m *mockProvider) SupportedAuthMethods() []domain.AuthMethod { return nil }
 func (m *mockProvider) List() []domain.LLMInfo {
 	return []domain.LLMInfo{{ID: m.id + "/" + "model", DisplayName: "Model"}}
 }
+
 func (m *mockProvider) GetLLM(_ context.Context, _ *domain.Credential, _ domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }

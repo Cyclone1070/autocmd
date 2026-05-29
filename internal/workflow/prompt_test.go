@@ -126,8 +126,6 @@ func TestResolveWorkspaceSession(t *testing.T) {
 		assert.True(t, res.Active)
 		store.AssertExpectations(t)
 	})
-
-
 }
 
 func TestRunPrompt_ActionForwarding(t *testing.T) {
@@ -141,12 +139,12 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus,
-		Forwarder:    forwarder,
-		Session:      sess,
+		Store:     store,
+		LLM:       llm,
+		Agent:     agent,
+		Bus:       bus,
+		Forwarder: forwarder,
+		Session:   sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)
@@ -183,11 +181,11 @@ func TestRunPrompt_GREEN(t *testing.T) {
 
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-123"}}
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus,
-		Session:      sess,
+		Store:   store,
+		LLM:     llm,
+		Agent:   agent,
+		Bus:     bus,
+		Session: sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)
@@ -218,11 +216,11 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "existing-id", Name: "Existing Session"}}
 
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus,
-		Session:      sess,
+		Store:   store,
+		LLM:     llm,
+		Agent:   agent,
+		Bus:     bus,
+		Session: sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)
@@ -272,11 +270,11 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus.EventBus,
-		Session:      sess,
+		Store:   store,
+		LLM:     llm,
+		Agent:   agent,
+		Bus:     bus.EventBus,
+		Session: sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)
@@ -300,11 +298,11 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "race-id"}}
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus,
-		Session:      sess,
+		Store:   store,
+		LLM:     llm,
+		Agent:   agent,
+		Bus:     bus,
+		Session: sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)
@@ -352,11 +350,11 @@ func TestRunPrompt_EmitsIndicators(t *testing.T) {
 
 	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
-		Store:        store,
-		LLM:          llm,
-		Agent:        agent,
-		Bus:          bus,
-		Session:      sess,
+		Store:   store,
+		LLM:     llm,
+		Agent:   agent,
+		Bus:     bus,
+		Session: sess,
 	}
 
 	store.On("SaveSession", mock.Anything).Return(nil)

@@ -180,13 +180,11 @@ func (m *statefulMockTaskNotifier) HasRunning() bool {
 	return m.hasRunning
 }
 
-
-
 func TestGraphRunner_Run_TurnGuardPreventsExitWithRunningTasks(t *testing.T) {
 	ctx := context.Background()
 	greet := &greetTool{}
 	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: greet}}
-	
+
 	mockNotifier := &statefulMockTaskNotifier{hasRunning: true}
 	mockEvents := &mockEventSender{}
 
@@ -279,7 +277,7 @@ func TestGraphRunner_Run_ParallelToolCalls_Race(t *testing.T) {
 	require.NoError(t, err)
 
 	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
-	
+
 	err = runner.Run(ctx, sess, "use sink_tool")
 	require.NoError(t, err)
 }

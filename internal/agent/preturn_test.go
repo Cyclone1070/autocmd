@@ -93,7 +93,7 @@ func TestGraphRunner_PreTurn_LogsCompactionTriggered(t *testing.T) {
 				Messages: []*schema.Message{
 					{Role: schema.User, Content: "u1"},
 					{
-						Role: schema.Assistant,
+						Role:    schema.Assistant,
 						Content: "a1",
 						ResponseMeta: &schema.ResponseMeta{
 							Usage: &schema.TokenUsage{TotalTokens: 200},
@@ -219,9 +219,9 @@ func TestGraphPreTurn_Compaction_ToolTailSummarizesFullHistory(t *testing.T) {
 func TestGraphPreTurn_Compaction_EmitsSummaryLifecycleEventsOnSuccess(t *testing.T) {
 	events := &captureEventSender{}
 	r := &GraphRunner{
-		llm:        &mockLLM{contextWindow: 100},
-		summarizer: &Summarizer{runnable: mockSummaryRunnable{}},
-		events:     events,
+		llm:          &mockLLM{contextWindow: 100},
+		summarizer:   &Summarizer{runnable: mockSummaryRunnable{}},
+		events:       events,
 		maxIteration: 10,
 	}
 	st := &graphRunState{

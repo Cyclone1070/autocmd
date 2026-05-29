@@ -5,7 +5,5 @@ import (
 	"errors"
 )
 
-var (
-	// ErrModel failure originating from model transport/stream/provider layers.
-	ErrModel = errors.New("model failure")
-)
+// ErrModel failure originating from model transport/stream/provider layers.
+var ErrModel = errors.New("model failure")

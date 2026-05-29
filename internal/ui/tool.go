@@ -278,7 +278,6 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	return spec
 }
 
-
 func (r *ToolRenderer) renderApprovalFooter() string {
 	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(r.Theme.PrimaryColor())
 	return r.Theme.Primary("Permission required:  ") + keyStyle.Render("y") + " " + r.Theme.Muted("allow") + "   " + keyStyle.Render("n") + " " + r.Theme.Muted("deny")

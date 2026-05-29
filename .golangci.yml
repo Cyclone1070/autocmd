@@ -8,6 +8,7 @@ linters:
     - bodyclose
     - dogsled
     - durationcheck
+    - errcheck
     - errname
     - errorlint
     - goconst
@@ -56,7 +57,6 @@ linters:
         - name: errorf
         - name: empty-block
         - name: superfluous-else
-        - name: unused-parameter
         - name: redefines-builtin-id
   exclusions:
     generated: lax
@@ -71,18 +71,15 @@ linters:
         linters:
           - goconst
           - mnd
-      - linters:
-          - revive
-        text: stutter
-      - linters:
-          - revive
-        text: unused-parameter
     paths:
       - third_party$
       - builtin$
       - examples$
       - (^|/)demo/
 formatters:
+  enable:
+    - goimports
+    - gofumpt
   exclusions:
     generated: lax
     paths:

@@ -36,16 +36,16 @@ func TestWriteFile(t *testing.T) {
 
 		out, dispErr := tool.InvokableRun(context.Background(), string(params))
 		require.NoError(t, dispErr)
-		assert.Contains(t, out, "file " + testWorkspaceRoot + "/new.txt created successfully")
-		assert.Equal(t, "hello", string(fs.files[testWorkspaceRoot + "/new.txt"]))
+		assert.Contains(t, out, "file "+testWorkspaceRoot+"/new.txt created successfully")
+		assert.Equal(t, "hello", string(fs.files[testWorkspaceRoot+"/new.txt"]))
 	})
 
 	t.Run("Overwrite existing file after read", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		fs.files[testWorkspaceRoot + "/exists.txt"] = []byte("old")
+		fs.files[testWorkspaceRoot+"/exists.txt"] = []byte("old")
 		// Simulate read
-		checksumManager.Update(testWorkspaceRoot + "/exists.txt", checksumManager.Compute([]byte("old")))
+		checksumManager.Update(testWorkspaceRoot+"/exists.txt", checksumManager.Compute([]byte("old")))
 
 		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
@@ -61,14 +61,14 @@ func TestWriteFile(t *testing.T) {
 
 		out, runErr := tool.InvokableRun(context.Background(), string(params))
 		require.NoError(t, runErr)
-		assert.Contains(t, out, "The file " + testWorkspaceRoot + "/exists.txt has been updated successfully.")
-		assert.Equal(t, "new", string(fs.files[testWorkspaceRoot + "/exists.txt"]))
+		assert.Contains(t, out, "The file "+testWorkspaceRoot+"/exists.txt has been updated successfully.")
+		assert.Equal(t, "new", string(fs.files[testWorkspaceRoot+"/exists.txt"]))
 	})
 
 	t.Run("Rejects write if never read", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		fs.files[testWorkspaceRoot + "/exists.txt"] = []byte("old")
+		fs.files[testWorkspaceRoot+"/exists.txt"] = []byte("old")
 		// NO checksumManager.Update here
 
 		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
@@ -87,9 +87,9 @@ func TestWriteFile(t *testing.T) {
 	t.Run("Rejects write if stale (mismatch checksum)", func(t *testing.T) {
 		fs := newMockFileOps()
 		checksumManager := newMockChecksumManagerShared()
-		fs.files[testWorkspaceRoot + "/exists.txt"] = []byte("modified-externally")
+		fs.files[testWorkspaceRoot+"/exists.txt"] = []byte("modified-externally")
 		// Cache has "old"
-		checksumManager.Update(testWorkspaceRoot + "/exists.txt", checksumManager.Compute([]byte("old")))
+		checksumManager.Update(testWorkspaceRoot+"/exists.txt", checksumManager.Compute([]byte("old")))
 
 		tool := NewTool(fs, checksumManager, &mockPathResolver{workspaceRoot: workspaceRoot}, maxFileSize)
 
@@ -120,7 +120,7 @@ func TestWriteFile(t *testing.T) {
 		require.NoError(t, err)
 		_, _ = tool.InvokableRun(context.Background(), string(params))
 
-		assert.Equal(t, "line1\nline2", string(fs.files[testWorkspaceRoot + "/crlf.txt"]))
+		assert.Equal(t, "line1\nline2", string(fs.files[testWorkspaceRoot+"/crlf.txt"]))
 	})
 
 	t.Run("Rejects relative path", func(t *testing.T) {

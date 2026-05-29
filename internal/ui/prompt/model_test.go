@@ -36,6 +36,7 @@ func (s *mockStream) Append(t string) []string {
 	s.lastAppend = t
 	return s.appendReturns
 }
+
 func (s *mockStream) Flush() []string {
 	s.flushCalls++
 	if s.flushReturns != nil {
@@ -340,7 +341,7 @@ func TestModel_HandleBusEvent_SystemNotificationEvent(t *testing.T) {
 	// Verify that the state becomes stateFlushing (and will transition to stateIdle)
 	assert.Equal(t, stateFlushing, m.state)
 	assert.Equal(t, stateIdle, m.nextState)
-	
+
 	// Verify that the stream received newlines
 	assert.Equal(t, "\n\n", stream.lastAppend, "Stream should receive newlines on SystemNotificationEvent")
 }
@@ -355,7 +356,7 @@ func TestModel_ConnectingEvent(t *testing.T) {
 	res, _ := m.Update(busEventMsg{event: domain.ConnectingEvent{}})
 	m = res.(*Model)
 	assert.Equal(t, stateConnecting, m.state)
-	
+
 	v := m.View()
 	assert.Contains(t, v, "Connecting to provider")
 }
@@ -411,14 +412,14 @@ func TestModel_ScrollBoundaries(t *testing.T) {
 	for range 100 {
 		m.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
 	}
-	
+
 	// Should be clamped to maxScroll
 	assert.Equal(t, m.maxScroll, m.scrollOffset, "scrollOffset should be clamped to maxScroll")
-	
+
 	// Should be at the top
 	vTop := m.View()
 	assert.Contains(t, vTop, "LINE_01")
-	
+
 	// Scroll down ONCE.
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
 	assert.Equal(t, m.maxScroll-1, m.scrollOffset, "scrollOffset should decrease immediately")
@@ -441,6 +442,7 @@ func TestModel_FlushDoneMsgSequencing(t *testing.T) {
 	// Verified in code: return m, tea.Sequence(cmds...)
 	assert.NotNil(t, cmd)
 }
+
 func TestModel_ExplicitGater(t *testing.T) {
 	theme := &ui.Theme{}
 	m := NewModel(nil, nil, nil, nil, theme, nil, ui.NewNoOpGater(), 80)
@@ -452,7 +454,9 @@ type mockGater struct {
 	gateFunc func([]string) ([]string, int)
 }
 
-func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) { return m.gateFunc(lines) }
+func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) {
+	return m.gateFunc(lines)
+}
 
 func TestModel_ViewUsesGater(t *testing.T) {
 	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
@@ -506,7 +510,6 @@ func TestModel_ToolEndEvent_ReplacesDisplayWhenNotFlushedYet(t *testing.T) {
 	assert.Empty(t, sd.GetError())
 	assert.Equal(t, ui.StatusSuccess, newM.tools[1].status)
 	assert.Empty(t, newM.tools[1].errorMsg, "atomic swap clears stale slot errorMsg")
-
 }
 
 func TestModel_ToolEndEvent_ReplacesDisplayWithBakedError(t *testing.T) {
@@ -766,9 +769,9 @@ func TestModel_PermissionApproval_UsesFirstAwaitingApprovalNotFirstSlot(t *testi
 	m.state = stateTooling
 	m.tools = []toolSlot{
 		{
-			callID:           "done-slot",
-			display:          domain.NewStringDisplay("Done", ""),
-			status:           ui.StatusSuccess,
+			callID:  "done-slot",
+			display: domain.NewStringDisplay("Done", ""),
+			status:  ui.StatusSuccess,
 		},
 		{
 			callID:  "await-slot",
@@ -1038,48 +1041,46 @@ func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
-	
+
 	cwd := "~/repos/iav"
 	cmd := "for i in {1..5}; do date; sleep 1; done"
 	t.Logf("stateIdle: %v, stateThinking: %v, stateTooling: %v, stateFlushing: %v", stateIdle, stateThinking, stateTooling, stateFlushing)
 	d := domain.NewBashDisplay("Run a loop", cmd, cwd, "")
 	m.handleBusEvent(domain.ToolStartEvent{CallID: "bash-1", Display: d})
 	m.Update(flushDoneMsg{})
-	
+
 	m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "bash-1"})
-	
+
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	
+
 	viewBeforeStream := m.View()
 	t.Logf("View before stream:\n%q", viewBeforeStream)
-	
+
 	hugeOutput := "out\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\nout\n"
 	m.handleBusEvent(domain.ToolStreamEvent{CallID: "bash-1", Chunk: hugeOutput})
 	m.Update(flushDoneMsg{})
-	
+
 	rawTools := strings.Join(m.renderAllTools(), "")
 	t.Logf("rawTools: %q", rawTools)
-	
+
 	norm := ui.NormalizeBlock(rawTools)
 	t.Logf("norm: %q", norm)
-	
+
 	split := strings.Split(norm, "\n")
 	t.Logf("split length: %d", len(split))
-	
+
 	isInteractive := m.isInteractiveOrAwaitingApproval()
 	t.Logf("isInteractive: %v", isInteractive)
-	
+
 	gated8, _ := m.gater.Gate(split, 8, isInteractive, m.theme)
 	t.Logf("Gate(8): %q", strings.Join(gated8, "\n"))
-	
+
 	gated, maxScroll := m.gater.Gate(split, m.scrollOffset, isInteractive, m.theme)
 	t.Logf("gated length: %d, maxScroll: %d", len(gated), maxScroll)
-	
+
 	view := strings.Join(gated, "\n")
 	t.Logf("Manual View: %q", view)
 	t.Logf("Actual m.View() output: %q", m.View())
-
-
 }
 
 func TestModel_PermissionApproval_ReturnsRepaintCommand(t *testing.T) {
@@ -1088,18 +1089,18 @@ func TestModel_PermissionApproval_ReturnsRepaintCommand(t *testing.T) {
 	tr := ui.NewToolRenderer(theme, 80, ui.NewToolOutputGater(12))
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
-	
+
 	d := domain.NewBashDisplay("Run a loop", "ls", "", "")
 	m.handleBusEvent(domain.ToolStartEvent{CallID: "bash-1", Display: d})
 	m.Update(flushDoneMsg{})
 	m.handleBusEvent(domain.ToolApprovalRequestEvent{CallID: "bash-1"})
-	
+
 	// Pre-condition: status should be awaiting approval
 	assert.Equal(t, ui.StatusAwaitingApproval, m.tools[0].status)
-	
+
 	// Action: press 'y'
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	
+
 	// Post-condition: should return a command that yields WindowSizeMsg
 	assert.NotNil(t, cmd, "Command should not be nil on state change")
 	if cmd != nil {
@@ -1107,4 +1108,3 @@ func TestModel_PermissionApproval_ReturnsRepaintCommand(t *testing.T) {
 		assert.IsType(t, tea.WindowSizeMsg{}, msg, "Command should return WindowSizeMsg")
 	}
 }
-

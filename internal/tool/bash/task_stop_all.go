@@ -29,14 +29,13 @@ func NewTaskStopAllTool(manager taskStopAller) *TaskStopAllTool {
 	}
 }
 
-
 // IsConcurrentSafe indicates if the tool can be run concurrently.
 func (t *TaskStopAllTool) IsConcurrentSafe() bool { return true }
 
 func (t *TaskStopAllTool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: taskStopAllToolName,
-		Desc: `Terminates all active background tasks immediately. Use this tool when you decide you no longer need running tasks, or when you are ready to finish your response and need to clean up active tasks.`,
+		Name:        taskStopAllToolName,
+		Desc:        `Terminates all active background tasks immediately. Use this tool when you decide you no longer need running tasks, or when you are ready to finish your response and need to clean up active tasks.`,
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
 	}, nil
 }

@@ -16,7 +16,9 @@ func (m *mockSpinner) Frame(_ int) string { return "*" }
 
 type passThroughGater struct{}
 
-func (g *passThroughGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) { return lines, 0 }
+func (g *passThroughGater) Gate(lines []string, _ int, _ bool, _ *ui.Theme) ([]string, int) {
+	return lines, 0
+}
 
 type truncatingMockGater struct {
 	called bool

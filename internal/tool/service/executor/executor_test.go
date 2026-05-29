@@ -18,9 +18,9 @@ import (
 )
 
 type mockFileSystem struct {
-	files        map[string]*bytes.Buffer
-	removedFiles []string
-	createdPaths []string
+	files           map[string]*bytes.Buffer
+	removedFiles    []string
+	createdPaths    []string
 	createAtomicErr error
 }
 
@@ -90,8 +90,6 @@ func (m *mockCommandFactory) Command(ctx context.Context, name string, args ...s
 	// #nosec G702 - Intentional in test mock
 	return exec.CommandContext(ctx, "true")
 }
-
-
 
 type mockFile struct {
 	*bytes.Reader
@@ -363,4 +361,3 @@ func TestStreamingCmd_DisableAutoCleanup(t *testing.T) {
 		t.Error("Expected log file to survive because auto-cleanup was disabled")
 	}
 }
-

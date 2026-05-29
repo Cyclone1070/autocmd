@@ -86,7 +86,6 @@ func NewTool(
 	}
 }
 
-
 // IsConcurrentSafe indicates if the grep tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 

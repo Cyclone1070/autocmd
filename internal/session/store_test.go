@@ -113,8 +113,6 @@ func newTestStore() (*Store, *mockFileSystem) {
 	return NewStore(fs, "/test/sessions"), fs
 }
 
-
-
 func TestCreate_Success(t *testing.T) {
 	store, fs := newTestStore()
 
@@ -231,7 +229,6 @@ func TestGetSession_SplitSuccess(t *testing.T) {
 		t.Errorf("Session ToolDisplays mismatch: got %v", sess.ToolDisplays)
 	}
 }
-
 
 func TestGetSession_NotFound(t *testing.T) {
 	store, _ := newTestStore()
@@ -394,8 +391,8 @@ func TestSaveSession_InfoWriteFails(t *testing.T) {
 
 	sess := &domain.Session{
 		SessionMetadata: domain.SessionMetadata{
-			ID:     testSessionID,
-			Name:   "Test",
+			ID:   testSessionID,
+			Name: "Test",
 		},
 		SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}},
 		SessionDisplays: domain.SessionDisplays{ToolDisplays: map[string]domain.ToolDisplay{}},
@@ -415,8 +412,8 @@ func TestSaveSession_MessagesWriteFails(t *testing.T) {
 
 	sess := &domain.Session{
 		SessionMetadata: domain.SessionMetadata{
-			ID:     testSessionID,
-			Name:   "Test",
+			ID:   testSessionID,
+			Name: "Test",
 		},
 		SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}},
 		SessionDisplays: domain.SessionDisplays{ToolDisplays: map[string]domain.ToolDisplay{}},
@@ -707,7 +704,7 @@ func TestCreateSaveGetSessionRoundtrip(t *testing.T) {
 	store, _ := newTestStore()
 
 	// Create
-	sess, err := 	store.Create("")
+	sess, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create() failed: %v", err)
 	}
@@ -935,7 +932,7 @@ func TestFindBlank(t *testing.T) {
 
 func TestRename(t *testing.T) {
 	store, _ := newTestStore()
-	sess, _ := 	store.Create("")
+	sess, _ := store.Create("")
 
 	err := store.Rename(sess.ID, "New Name")
 	if err != nil {
@@ -1009,11 +1006,11 @@ func TestStore_SetActive(t *testing.T) {
 	store, fs := newTestStore()
 
 	// Create 2 sessions in the same directory, both inactive
-	s1, err := 	store.Create("")
+	s1, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create s1 failed: %v", err)
 	}
-	s2, err := 	store.Create("")
+	s2, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create s2 failed: %v", err)
 	}
@@ -1096,15 +1093,15 @@ func TestStore_FindActiveForDir(t *testing.T) {
 	store, fs := newTestStore()
 
 	// Create 3 sessions and set Active flags manually
-	s1, err := 	store.Create("")
+	s1, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create s1 failed: %v", err)
 	}
-	s2, err := 	store.Create("")
+	s2, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create s2 failed: %v", err)
 	}
-	s3, err := 	store.Create("")
+	s3, err := store.Create("")
 	if err != nil {
 		t.Fatalf("Create s3 failed: %v", err)
 	}

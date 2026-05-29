@@ -20,7 +20,7 @@ const channelBufferSize = 100
 // New creates a new action router.
 func New() *Router {
 	r := &Router{
-	in:   make(chan domain.Action, channelBufferSize),
+		in:   make(chan domain.Action, channelBufferSize),
 		out:  make(chan domain.Action, channelBufferSize),
 		done: make(chan struct{}),
 	}

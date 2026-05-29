@@ -146,19 +146,19 @@ func TestBashTool_Validate_BlockedCommands(t *testing.T) {
 	tool := NewTool(mockFS, mockExec, mockResolver, nil)
 
 	blocked := map[string]string{
-		"find .":                 "glob",
-		"fd foo":                 "glob",
-		"grep foo file":          "grep",
-		"rg foo":                 "grep",
-		"ag foo":                 "grep",
-		"ack foo":                "grep",
-		"cat file":               "read_file",
-		"head -n 10 file":        "read_file",
-		"tail -f file":           "read_file",
-		"/usr/bin/cat file":      "read_file",
-		"./bin/rg pattern":       "grep",
-		"find":                   "glob",
-		" grep":                  "grep",
+		"find .":            "glob",
+		"fd foo":            "glob",
+		"grep foo file":     "grep",
+		"rg foo":            "grep",
+		"ag foo":            "grep",
+		"ack foo":           "grep",
+		"cat file":          "read_file",
+		"head -n 10 file":   "read_file",
+		"tail -f file":      "read_file",
+		"/usr/bin/cat file": "read_file",
+		"./bin/rg pattern":  "grep",
+		"find":              "glob",
+		" grep":             "grep",
 	}
 
 	for cmd, expectedTool := range blocked {
@@ -406,6 +406,7 @@ func TestBashTool_Validate_EmptyDescription(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "description is required")
 }
+
 func TestBashTool_DeadlineExceeded_TreatedAsFailure(t *testing.T) {
 	fs := &mockFileSystem{}
 	exec := &mockExecutor{}

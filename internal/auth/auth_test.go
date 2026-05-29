@@ -170,6 +170,7 @@ func (p *authMockProvider) SupportedAuthMethods() []domain.AuthMethod { return p
 func (p *authMockProvider) List() []domain.LLMInfo {
 	return nil
 }
+
 func (p *authMockProvider) GetLLM(context.Context, *domain.Credential, domain.LLMInfo) (domain.LLM, error) {
 	return nil, nil
 }

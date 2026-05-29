@@ -146,7 +146,6 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt", Offset: 0, Limit: 100}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -175,7 +174,6 @@ func TestReadFile(t *testing.T) {
 		// Read lines 2 and 3 (Offset=1, Limit=2)
 		readReq := &Request{FilePath: "/workspace/test.txt", Offset: 1, Limit: 2}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -196,7 +194,6 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt", Offset: offset, Limit: 10}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -276,7 +273,6 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt", Offset: -1, Limit: 1}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -294,7 +290,6 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt", Limit: 0}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -315,7 +310,6 @@ func TestReadFile(t *testing.T) {
 
 		readReq := &Request{FilePath: "/workspace/test.txt", Limit: 100000}
 		output, err := executeRead(t, readTool, readReq)
-
 		if err != nil {
 			t.Fatalf("Execute failed: %v", err)
 		}
@@ -431,9 +425,6 @@ func assertContains(t *testing.T, s, substr string) {
 		t.Errorf("expected %q to contain %q", s, substr)
 	}
 }
-
-
-
 
 type mockPathResolver struct {
 	workspaceRoot string

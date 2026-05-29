@@ -505,6 +505,7 @@ func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 	assert.NotContains(t, rendered, "\n\n\n", "There should be no triple-blank-line spacing in history output")
 	assert.NotContains(t, rendered, "should not render", "Tool messages should not be rendered in history")
 }
+
 func TestIssue_History_ToolBlockHeaderAppearsInline(t *testing.T) {
 	theme := newTestTheme()
 	width := 80
@@ -646,6 +647,7 @@ func (m *mockRenderer) Render(s string) string {
 	// Real Glamour renderer adds a leading newline
 	return "\n" + s + "[rendered]"
 }
+
 func TestHistory_TaskNotification_IsNotRendered(t *testing.T) {
 	theme := newTestTheme()
 	b := NewBuilder(nil, theme, testHistoryWidth, 12)

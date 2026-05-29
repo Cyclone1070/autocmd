@@ -131,9 +131,9 @@ func TestPrompt_GoldenCombinations(t *testing.T) {
 
 	goldenPath := filepath.Join("testdata", "prompt_combos.golden")
 	if *update {
-		err := os.MkdirAll("testdata", 0750)
+		err := os.MkdirAll("testdata", 0o750)
 		assert.NoError(t, err)
-		err = os.WriteFile(goldenPath, goldenOutput.Bytes(), 0600)
+		err = os.WriteFile(goldenPath, goldenOutput.Bytes(), 0o600)
 		assert.NoError(t, err)
 		t.Logf("Updated golden file: %s", goldenPath)
 	} else {

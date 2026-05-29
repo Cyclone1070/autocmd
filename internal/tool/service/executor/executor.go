@@ -23,9 +23,9 @@ const (
 	defaultMaxOutputSize       = 500 * 1024 * 1024 // 500MB default limit
 	defaultSmartDrainThreshold = 16 * 1024         // 16KB
 	defaultBufferSize          = 4096              // 4KB standard buffer
-	numPipes                   = 2 // stdout, stderr
+	numPipes                   = 2                 // stdout, stderr
 
-	kvParts                    = 2
+	kvParts = 2
 )
 
 type signalKiller interface {
@@ -59,16 +59,16 @@ type Result struct {
 
 // StreamingCmd represents a running command with real-time output streaming.
 type StreamingCmd struct {
-	lastActivityAt     time.Time
-	output             io.Reader
-	err                error
-	result             *Result
-	wait               func() (*Result, error)
+	lastActivityAt      time.Time
+	output              io.Reader
+	err                 error
+	result              *Result
+	wait                func() (*Result, error)
 	logPath             string
 	id                  string
 	autoCleanupDisabled bool
 	once                sync.Once
-	mu                 sync.Mutex
+	mu                  sync.Mutex
 }
 
 // NewStreamingCmd creates a new StreamingCmd instance.
@@ -153,7 +153,6 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 		commander:           &osCommandFactory{},
 	}
 }
-
 
 // Run executes a command and waits for its completion.
 func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, enableLogging bool) (*Result, error) {

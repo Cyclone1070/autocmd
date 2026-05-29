@@ -201,11 +201,12 @@ func (m *Picker) View() string {
 		}
 
 		var labelText string
-		if item.Active {
+		switch {
+		case item.Active:
 			labelText = activeStyle.Bold(true).Render(item.Label)
-		} else if item.Faded {
+		case item.Faded:
 			labelText = fadedStyle.Render(item.Label)
-		} else {
+		default:
 			labelText = inactiveStyle.Render(item.Label)
 		}
 

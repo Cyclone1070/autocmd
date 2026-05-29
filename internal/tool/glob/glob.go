@@ -61,7 +61,6 @@ func NewTool(
 	}
 }
 
-
 // IsConcurrentSafe indicates if the glob tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 
@@ -264,4 +263,3 @@ func (t *Tool) countLines(path string) (int, error) {
 	}
 	return count, nil
 }
-

@@ -20,6 +20,7 @@ type mockLLM struct {
 func (m *mockLLM) ComputeTokens(_ context.Context, _ []*schema.Message) (int, error) {
 	return 0, nil
 }
+
 func (m *mockLLM) Model() model.ToolCallingChatModel {
 	return &mockEinoModelBridge{llm: m}
 }

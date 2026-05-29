@@ -10,15 +10,15 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 
-	einotool "github.com/cloudwego/eino/components/tool"
 	mcpp "github.com/cloudwego/eino-ext/components/tool/mcp"
+	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// McpServerConfig defines how to run an MCP server.
-type McpServerConfig struct {
+// ServerConfig defines how to run an MCP server.
+type ServerConfig struct {
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     []string          `json:"env,omitempty"`
@@ -28,7 +28,7 @@ type McpServerConfig struct {
 
 // Config represents the mcp.json format.
 type Config struct {
-	McpServers map[string]McpServerConfig `json:"mcpServers"`
+	McpServers map[string]ServerConfig `json:"mcpServers"`
 }
 
 // ParseConfig parses the mcp.json contents.
@@ -55,14 +55,12 @@ func LoadConfigPath(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{McpServers: make(map[string]McpServerConfig)}, nil
+			return &Config{McpServers: make(map[string]ServerConfig)}, nil
 		}
 		return nil, err
 	}
 	return ParseConfig(data)
 }
-
-
 
 // StdioCreator defines a function type for creating stdio MCPClient.
 type StdioCreator func(command string, env []string, args ...string) (client.MCPClient, error)

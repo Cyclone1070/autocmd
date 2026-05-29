@@ -31,7 +31,6 @@ func NewTaskStopTool(manager taskStopper) *TaskStopTool {
 	}
 }
 
-
 // IsConcurrentSafe indicates if the task stop tool can be run concurrently.
 func (t *TaskStopTool) IsConcurrentSafe() bool { return true }
 

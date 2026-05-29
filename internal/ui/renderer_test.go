@@ -68,8 +68,8 @@ func TestRenderer_BlockquoteAlignment(t *testing.T) {
 
 	lines := strings.Split(rendered, "\n")
 
-	var quoteBarPos = -1
-	var codeBarPos = -1
+	quoteBarPos := -1
+	codeBarPos := -1
 
 	for _, line := range lines {
 		stripped := stripANSI(line)
@@ -97,7 +97,7 @@ func TestRenderer_CodeBlockTrailingSpacing(t *testing.T) {
 	// Follow up text.
 
 	lines := strings.Split(rendered, "\n")
-	var lastBarIdx = -1
+	lastBarIdx := -1
 	for i, line := range lines {
 		if strings.Contains(line, "┃") {
 			lastBarIdx = i
@@ -155,17 +155,18 @@ func TestRenderer_InlineCodePadding(t *testing.T) {
 	markdown := "use `read_file` tool"
 	rendered := r.Render(markdown)
 	stripped := stripANSI(rendered)
-	
+
 	// If padding is present, it will have "use  read_file  tool" (double spaces)
 	assert.Contains(t, stripped, "use read_file tool", "Inline code should not have padding")
 	assert.NotContains(t, stripped, "use  read_file  tool", "Inline code should not have double spaces from padding")
 }
+
 func TestRenderer_LaTeXSanitization(t *testing.T) {
 	r := NewGlamourRenderer(80, true)
 	// Common LLM symbols
 	markdown := "Step 1 $\\rightarrow$ Step 2 $\\checkmark$"
 	rendered := r.Render(markdown)
 	stripped := stripANSI(rendered)
-	
+
 	assert.Contains(t, stripped, "Step 1 → Step 2 ✓")
 }

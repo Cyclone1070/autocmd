@@ -55,19 +55,6 @@ func (m *mockSessionPickerStore) SetActive(id, workingDir string) error {
 	return args.Error(0)
 }
 
-type mockSessionPickerBus struct {
-	mock.Mock
-}
-
-func (m *mockSessionPickerBus) SendUIUpdate(update domain.UIUpdate) {
-	m.Called(update)
-}
-
-func (m *mockSessionPickerBus) WorkflowActions() <-chan domain.Action {
-	args := m.Called()
-	return args.Get(0).(<-chan domain.Action)
-}
-
 func TestSessionPickerWorkflow(t *testing.T) {
 	now := time.Now()
 	summaries := []domain.SessionMetadata{

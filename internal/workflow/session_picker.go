@@ -189,7 +189,6 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 				break
 			}
 		}
-
 	}
 
 	return domain.SessionListEvent{

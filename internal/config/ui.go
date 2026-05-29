@@ -8,8 +8,9 @@ type ColorConfig struct {
 
 // Light returns the hex code for light mode.
 func (c ColorConfig) Light() string { return c.light }
+
 // Dark returns the hex code for dark mode.
-func (c ColorConfig) Dark() string  { return c.dark }
+func (c ColorConfig) Dark() string { return c.dark }
 
 // UIConfig holds styling configuration for the terminal UI.
 type UIConfig struct {
@@ -26,27 +27,36 @@ type UIConfig struct {
 
 // PrimaryColor returns the primary brand color.
 func (c UIConfig) PrimaryColor() ColorConfig { return c.primaryColor }
+
 // SuccessColor returns the color used for success indicators.
 func (c UIConfig) SuccessColor() ColorConfig { return c.successColor }
+
 // ErrorColor returns the color used for error indicators.
-func (c UIConfig) ErrorColor() ColorConfig   { return c.errorColor }
+func (c UIConfig) ErrorColor() ColorConfig { return c.errorColor }
+
 // MutedColor returns the color used for secondary or less important text.
-func (c UIConfig) MutedColor() ColorConfig   { return c.mutedColor }
+func (c UIConfig) MutedColor() ColorConfig { return c.mutedColor }
+
 // TextColor returns the color used for primary body text.
-func (c UIConfig) TextColor() ColorConfig   { return c.textColor }
+func (c UIConfig) TextColor() ColorConfig { return c.textColor }
+
 // ChatWindowWidth returns the width of the chat UI in characters.
-func (c UIConfig) ChatWindowWidth() int      { return c.chatWindowWidth }
+func (c UIConfig) ChatWindowWidth() int { return c.chatWindowWidth }
+
 // BashOutputHeight returns the maximum height of bash output blocks.
-func (c UIConfig) BashOutputHeight() int     { return c.bashOutputHeight }
+func (c UIConfig) BashOutputHeight() int { return c.bashOutputHeight }
+
 // ThinkingHeight returns the height of the thinking/process indicator.
-func (c UIConfig) ThinkingHeight() int       { return c.thinkingHeight }
+func (c UIConfig) ThinkingHeight() int { return c.thinkingHeight }
+
 // ShortToolBlock returns whether tool outputs should be rendered in a compact format.
-func (c UIConfig) ShortToolBlock() bool      { return c.shortToolBlock }
+func (c UIConfig) ShortToolBlock() bool { return c.shortToolBlock }
 
 // Setters for testing
 
 // SetChatWindowWidth updates the chat window width.
 func (c *UIConfig) SetChatWindowWidth(w int) { c.chatWindowWidth = w }
+
 // SetShortToolBlock updates the short tool block setting.
 func (c *UIConfig) SetShortToolBlock(b bool) { c.shortToolBlock = b }
 

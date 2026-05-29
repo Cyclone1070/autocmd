@@ -123,7 +123,7 @@ func TestPicker_View_GroupHeaderIsBlue(t *testing.T) {
 	// The ANSI escape sequence for blue foreground color should be present.
 	// Since lipgloss resolves colors adaptively based on light/dark mode (or NO_COLOR),
 	// we will check if the group header text is styled (has escape sequences).
-	assert.True(t, len(view) > len("TEST") + len("First") + len("GroupBlueTest"), "view should contain color styling ANSI sequences")
+	assert.True(t, len(view) > len("TEST")+len("First")+len("GroupBlueTest"), "view should contain color styling ANSI sequences")
 }
 
 func TestPicker_View_FadedItem(t *testing.T) {
@@ -158,10 +158,10 @@ func TestPicker_View_FadedGroupHeader(t *testing.T) {
 	// Get the substring of the rendered GroupBlue header (with ANSI sequences)
 	// and assert it is styled differently from the GroupFaded header.
 	// Since both are bold and have the same margins, they will only differ in the ANSI color codes.
-	
+
 	// We can find the styled headers by looking at the lines containing GroupBlue and GroupFaded.
 	var lineBlue, lineFaded string
-	for _, line := range strings.Split(view, "\n") {
+	for line := range strings.SplitSeq(view, "\n") {
 		if strings.Contains(line, "GroupBlue") {
 			lineBlue = line
 		}
@@ -172,11 +172,11 @@ func TestPicker_View_FadedGroupHeader(t *testing.T) {
 
 	require.NotEmpty(t, lineBlue)
 	require.NotEmpty(t, lineFaded)
-	
+
 	// Strip the actual text so we only compare the ANSI wrapper sequences
 	wrapperBlue := strings.Replace(lineBlue, "GroupBlue", "", 1)
 	wrapperFaded := strings.Replace(lineFaded, "GroupFaded", "", 1)
-	
+
 	assert.NotEqual(t, wrapperBlue, wrapperFaded, "Faded group header should be styled with a different color (gray) than the blue group header")
 }
 
@@ -201,9 +201,9 @@ func TestPicker_View_InactiveItemUsesTextColor(t *testing.T) {
 	view := m.View()
 	// The rendered view should contain the item label "NormalTextItem"
 	assert.Contains(t, view, "NormalTextItem")
-	
+
 	var itemLine string
-	for _, line := range strings.Split(view, "\n") {
+	for line := range strings.SplitSeq(view, "\n") {
 		if strings.Contains(line, "NormalTextItem") {
 			itemLine = line
 			break
@@ -284,6 +284,3 @@ func testTheme() *Theme {
 		TextCol:    lipgloss.AdaptiveColor{Light: "235", Dark: "250"},
 	}
 }
-
-
-

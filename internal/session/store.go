@@ -286,10 +286,7 @@ func (st *Store) SaveSession(s *domain.Session) error {
 	if err := st.SaveMessages(s.ID, &s.SessionMessages); err != nil {
 		return err
 	}
-	if err := st.SaveDisplays(s.ID, &s.SessionDisplays); err != nil {
-		return err
-	}
-	return nil
+	return st.SaveDisplays(s.ID, &s.SessionDisplays)
 }
 
 // List returns metadata for all sessions sorted by update time (newest first).

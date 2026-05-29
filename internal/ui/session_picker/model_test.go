@@ -345,4 +345,3 @@ func TestSessionPickerUI(t *testing.T) {
 		assert.Equal(t, "/home/user/repos/334-Repository", calledWith, "should delegate to pathResolver.DisplayPath")
 	})
 }
-

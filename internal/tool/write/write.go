@@ -66,7 +66,6 @@ func NewTool(
 	}
 }
 
-
 // IsConcurrentSafe indicates if the write file tool can be run concurrently.
 func (t *Tool) IsConcurrentSafe() bool { return true }
 

@@ -50,4 +50,3 @@ func (ConnectingEvent) isUIUpdate() {}
 type WaitingForNamingEvent struct{}
 
 func (WaitingForNamingEvent) isUIUpdate() {}
-

@@ -78,4 +78,3 @@ func (m *Manager) save() {
 	}
 	_ = m.checksumStore.SaveChecksums(m.sessionID, m.store)
 }
-

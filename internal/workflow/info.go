@@ -128,4 +128,3 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 
 	return res, nil
 }
-

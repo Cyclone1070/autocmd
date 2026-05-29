@@ -77,4 +77,3 @@ func TestRegistry_Tools_SupportsBaseToolWithoutNameMethod(t *testing.T) {
 	require.True(t, ok, "should find mcp_tool in registry")
 	require.Equal(t, tools[0], got)
 }
-

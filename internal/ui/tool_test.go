@@ -16,7 +16,9 @@ type mockGater struct {
 	gateFunc func([]string) ([]string, int)
 }
 
-func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *Theme) ([]string, int) { return m.gateFunc(lines) }
+func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *Theme) ([]string, int) {
+	return m.gateFunc(lines)
+}
 
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
@@ -382,6 +384,7 @@ func TestRenderQuestion_MultiCustomRowShowsCheckbox(t *testing.T) {
 	assert.Contains(t, got, "[ ]")
 	assert.Contains(t, got, "x")
 }
+
 func TestToolRenderer_DiffNoTruncateDuringPermission(t *testing.T) {
 	theme := &Theme{}
 	// Gater with very small budget
@@ -411,4 +414,3 @@ func TestToolRenderer_BashTruncateDuringPermissionIfHuge(t *testing.T) {
 	// Should contain truncation indicator because output (8 lines) exceeds budget (5 lines)
 	assert.Contains(t, got, "▲ [")
 }
-

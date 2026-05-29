@@ -35,7 +35,6 @@ func NewTaskListTool(manager taskLister) *TaskListTool {
 	}
 }
 
-
 // IsConcurrentSafe indicates if the task list tool can be run concurrently.
 func (t *TaskListTool) IsConcurrentSafe() bool { return true }
 

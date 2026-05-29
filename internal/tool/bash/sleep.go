@@ -32,7 +32,6 @@ func NewSleepTool(notifier completionNotifier) *SleepTool {
 	}
 }
 
-
 // IsConcurrentSafe returns true as sleep is safe to run concurrently.
 func (t *SleepTool) IsConcurrentSafe() bool { return true }
 

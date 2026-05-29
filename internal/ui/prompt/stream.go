@@ -130,7 +130,7 @@ func (s *Stream) findSafeSplit() int {
 		return 0
 	}
 
-	// Special case: If the buffer ends with double newlines and the last node 
+	// Special case: If the buffer ends with double newlines and the last node
 	// is a paragraph, it is definitively finished. Safe to flush everything!
 	if strings.HasSuffix(s.buffer, "\n\n") && last != nil && last.Kind() == ast.KindParagraph {
 		return len(s.buffer)

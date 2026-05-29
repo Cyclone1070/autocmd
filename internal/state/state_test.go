@@ -74,4 +74,3 @@ func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "saved-model", s.Model())
 }
-

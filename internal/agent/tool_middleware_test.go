@@ -48,9 +48,11 @@ func (m *mockPreviewTool) Name() string { return m.name }
 func (m *mockPreviewTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{Name: m.name}, nil
 }
+
 func (m *mockPreviewTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
 	return "", nil
 }
+
 func (m *mockPreviewTool) Preview(input *compose.ToolInput) domain.ToolDisplay {
 	m.previewN++
 	return domain.NewStringDisplay("preview", "content")
@@ -305,6 +307,7 @@ func (m *mockNonPreviewTool) Name() string { return m.name }
 func (m *mockNonPreviewTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{Name: m.name}, nil
 }
+
 func (m *mockNonPreviewTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
 	return "external tool result", nil
 }
@@ -483,4 +486,3 @@ func TestExternalToolEventMiddleware_ForExternalTool_ContextCancelled_RecoversAn
 	require.NotNil(t, sinkDisplay)
 	require.Equal(t, domain.ToolErrorCancelled, sinkDisplay.GetError())
 }
-

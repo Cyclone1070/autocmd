@@ -30,7 +30,6 @@ func (c *Config) Validate() error {
 		}
 	}
 
-
 	// UI validation
 	hexRegex := regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`)
 	validateColor := func(path string, col ColorConfig) {

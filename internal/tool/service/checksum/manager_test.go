@@ -120,4 +120,3 @@ func TestPersistentChecksumManager(t *testing.T) {
 		t.Errorf("expected hash1, got %q (ok=%t)", h1, ok)
 	}
 }
-

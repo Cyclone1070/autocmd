@@ -94,8 +94,6 @@ func TestTaskManager_NotifyChan(t *testing.T) {
 	}
 }
 
-
-
 func TestTaskManager_HandleCompletion_Constants(t *testing.T) {
 	tm := NewTaskManager(nil)
 

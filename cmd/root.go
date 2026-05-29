@@ -24,9 +24,9 @@ import (
 	"github.com/Cyclone1070/iav/internal/tool/mcp"
 	"github.com/Cyclone1070/iav/internal/tool/question"
 	"github.com/Cyclone1070/iav/internal/tool/read"
-	"github.com/Cyclone1070/iav/internal/tool/write"
-	"github.com/Cyclone1070/iav/internal/tool/service/executor"
 	"github.com/Cyclone1070/iav/internal/tool/service/checksum"
+	"github.com/Cyclone1070/iav/internal/tool/service/executor"
+	"github.com/Cyclone1070/iav/internal/tool/write"
 	"github.com/Cyclone1070/iav/internal/ui"
 	"github.com/Cyclone1070/iav/internal/ui/prompt"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -37,8 +37,10 @@ import (
 	"golang.org/x/term"
 )
 
-var debug bool
-var newSession bool
+var (
+	debug      bool
+	newSession bool
+)
 
 var rootCmd = &cobra.Command{
 	Use:          "iav [prompt]",

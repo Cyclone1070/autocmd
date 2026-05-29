@@ -5,6 +5,7 @@ import (
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
+
 type ActionWaiter interface {
 	Wait(ctx context.Context, callID string) (domain.Action, error)
 }

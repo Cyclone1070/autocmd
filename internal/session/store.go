@@ -29,6 +29,7 @@ type sessionInfoDTO struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
 	MessageCount int    `json:"messageCount"`
+	TokenCount   int    `json:"tokenCount"`
 	Created      int64  `json:"created"`
 	Updated      int64  `json:"updated"`
 	WorkingDir   string `json:"workingDir"`
@@ -129,6 +130,7 @@ func (st *Store) GetMetadata(id string) (*domain.SessionMetadata, error) {
 		ID:           dto.ID,
 		Name:         dto.Name,
 		MessageCount: dto.MessageCount,
+		TokenCount:   dto.TokenCount,
 		Created:      time.UnixMilli(dto.Created),
 		Updated:      time.UnixMilli(dto.Updated),
 		WorkingDir:   dto.WorkingDir,
@@ -147,6 +149,7 @@ func (st *Store) SaveMetadata(m *domain.SessionMetadata) error {
 		ID:           m.ID,
 		Name:         m.Name,
 		MessageCount: m.MessageCount,
+		TokenCount:   m.TokenCount,
 		Created:      m.Created.UnixMilli(),
 		Updated:      m.Updated.UnixMilli(),
 		Active:       m.Active,
@@ -164,8 +167,8 @@ func (st *Store) SaveMetadata(m *domain.SessionMetadata) error {
 	return nil
 }
 
-// GetMessages reads only the messages.json for a session.
-func (st *Store) GetMessages(id string) (*domain.SessionMessages, error) {
+// getMessages reads only the messages.json for a session.
+func (st *Store) getMessages(id string) (*domain.SessionMessages, error) {
 	sessionDir := st.sessionDir(id)
 	messagesPath := filepath.Join(sessionDir, "messages.json")
 
@@ -190,8 +193,8 @@ func (st *Store) GetMessages(id string) (*domain.SessionMessages, error) {
 	return &domain.SessionMessages{Messages: messages}, nil
 }
 
-// SaveMessages persists only the messages.json for a session.
-func (st *Store) SaveMessages(id string, msgs *domain.SessionMessages) error {
+// saveMessages persists only the messages.json for a session.
+func (st *Store) saveMessages(id string, msgs *domain.SessionMessages) error {
 	sessionDir := st.sessionDir(id)
 	if err := st.fs.EnsureDirs(sessionDir); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
@@ -208,8 +211,8 @@ func (st *Store) SaveMessages(id string, msgs *domain.SessionMessages) error {
 	return nil
 }
 
-// GetDisplays reads only the displays.json for a session.
-func (st *Store) GetDisplays(id string) (*domain.SessionDisplays, error) {
+// getDisplays reads only the displays.json for a session.
+func (st *Store) getDisplays(id string) (*domain.SessionDisplays, error) {
 	sessionDir := st.sessionDir(id)
 	displaysPath := filepath.Join(sessionDir, "displays.json")
 
@@ -234,8 +237,8 @@ func (st *Store) GetDisplays(id string) (*domain.SessionDisplays, error) {
 	return &sd, nil
 }
 
-// SaveDisplays persists only the displays.json for a session.
-func (st *Store) SaveDisplays(id string, displays *domain.SessionDisplays) error {
+// saveDisplays persists only the displays.json for a session.
+func (st *Store) saveDisplays(id string, displays *domain.SessionDisplays) error {
 	sessionDir := st.sessionDir(id)
 	if err := st.fs.EnsureDirs(sessionDir); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
@@ -259,12 +262,12 @@ func (st *Store) GetSession(id string) (*domain.Session, error) {
 		return nil, err
 	}
 
-	msgs, err := st.GetMessages(id)
+	msgs, err := st.getMessages(id)
 	if err != nil {
 		return nil, err
 	}
 
-	displays, err := st.GetDisplays(id)
+	displays, err := st.getDisplays(id)
 	if err != nil {
 		return nil, err
 	}
@@ -280,13 +283,14 @@ func (st *Store) GetSession(id string) (*domain.Session, error) {
 func (st *Store) SaveSession(s *domain.Session) error {
 	s.Updated = time.Now()
 	s.MessageCount = len(s.Messages)
+	s.TokenCount = s.TotalTokens()
 	if err := st.SaveMetadata(&s.SessionMetadata); err != nil {
 		return err
 	}
-	if err := st.SaveMessages(s.ID, &s.SessionMessages); err != nil {
+	if err := st.saveMessages(s.ID, &s.SessionMessages); err != nil {
 		return err
 	}
-	return st.SaveDisplays(s.ID, &s.SessionDisplays)
+	return st.saveDisplays(s.ID, &s.SessionDisplays)
 }
 
 // List returns metadata for all sessions sorted by update time (newest first).
@@ -322,6 +326,7 @@ func (st *Store) List() ([]domain.SessionMetadata, error) {
 			ID:           infoDTO.ID,
 			Name:         infoDTO.Name,
 			MessageCount: infoDTO.MessageCount,
+			TokenCount:   infoDTO.TokenCount,
 			Created:      time.UnixMilli(infoDTO.Created),
 			Updated:      time.UnixMilli(infoDTO.Updated),
 			Active:       infoDTO.Active,

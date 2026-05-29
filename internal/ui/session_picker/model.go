@@ -208,10 +208,12 @@ func (m *Model) initializePicker(data *domain.SessionListEvent) {
 			groupName = m.pathResolver.DisplayPath(groupName)
 		}
 
+		detail := fmt.Sprintf("%s tokens  %s", ui.ShortNum(s.TokenCount), s.Updated.Format("2.Jan 2006"))
+
 		items = append(items, ui.Item{
 			ID:     s.ID,
 			Label:  name,
-			Detail: fmt.Sprintf("%d msgs  %s", s.MessageCount, s.Updated.Format("2.Jan 15:04")),
+			Detail: detail,
 			Active: s.ID == data.CurrentSessionID,
 			Group:  groupName,
 			Faded:  s.WorkingDir != data.WorkingDir && s.WorkingDir != "",

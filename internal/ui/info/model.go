@@ -100,10 +100,10 @@ func (m *Model) renderInfo(data *domain.InfoEvent) string {
 	if data.Model != "" && data.ContextWindow > 0 {
 		if data.SessionTokens > 0 {
 			usagePct := float64(data.SessionTokens) / float64(data.ContextWindow) * percentMultiplier
-			usage := fmt.Sprintf("%d tokens (%.1f%% of %d context)", data.SessionTokens, usagePct, data.ContextWindow)
+			usage := fmt.Sprintf("%s tokens (%.1f%% of %s context)", ui.ShortNum(data.SessionTokens), usagePct, ui.ShortNum(data.ContextWindow))
 			sb.WriteString(formatLine("Session Usage:", usage))
 		} else {
-			sb.WriteString(formatLine("Context Window:", fmt.Sprintf("%d tokens", data.ContextWindow)))
+			sb.WriteString(formatLine("Context Window:", fmt.Sprintf("%s tokens", ui.ShortNum(data.ContextWindow))))
 		}
 	}
 

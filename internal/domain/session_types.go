@@ -14,6 +14,7 @@ type SessionMetadata struct {
 	ID           string
 	Name         string
 	MessageCount int
+	TokenCount   int
 	Created      time.Time
 	Updated      time.Time
 	WorkingDir   string

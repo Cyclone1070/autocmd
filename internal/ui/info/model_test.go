@@ -93,7 +93,7 @@ func TestRenderInfo(t *testing.T) {
 		assert.Contains(t, output, "Test Session")
 		assert.Contains(t, output, "Session Usage:")
 		assert.Contains(t, output, "100 tokens")
-		assert.Contains(t, output, "0.1% of 128000 context")
+		assert.Contains(t, output, "0.1% of 128k context")
 		assert.Contains(t, output, "Authorized Providers:")
 		assert.Contains(t, output, "google (env)")
 	})

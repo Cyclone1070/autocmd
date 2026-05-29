@@ -32,7 +32,7 @@ type Model struct {
 	theme            *ui.Theme
 	renderedMessages map[int]string
 	builder          *Builder
-	displays         domain.ToolDisplays
+	displays         map[string]domain.ToolDisplay
 	renderedBlock    string
 	messages         []*schema.Message
 	items            []renderItem

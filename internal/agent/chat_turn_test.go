@@ -36,8 +36,10 @@ func TestGraphRunner_ChatTurn_LogsSpecificLLMRecvError(t *testing.T) {
 
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "hi"},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "hi"},
+				},
 			},
 		},
 	}
@@ -142,8 +144,10 @@ func TestGraphRunner_ChatTurn_EmitsOnlyThoughtTextEvents(t *testing.T) {
 
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "think first"},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "think first"},
+				},
 			},
 		},
 	}

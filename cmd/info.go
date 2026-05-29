@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/ui/info"
 	"github.com/Cyclone1070/iav/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,14 +31,8 @@ func runInfo(ctx context.Context, deps *Deps) error {
 	bus := eventbus.New()
 	defer bus.Close()
 
-	fileSystem := fs.NewOSFileSystem(-1)
-	store, err := buildSessionStore(fileSystem)
-	if err != nil {
-		return err
-	}
-
 	workingDir := getWorkingDir()
-	sess, err := workflow.ResolveWorkspaceSession(store, workingDir)
+	sess, err := workflow.ResolveWorkspaceSession(deps.SessionStore, workingDir)
 	if err != nil {
 		return err
 	}
@@ -49,7 +42,7 @@ func runInfo(ctx context.Context, deps *Deps) error {
 		ProviderRegistry: deps.ProviderRegistry,
 		LLMRegistry:      deps.LLMRegistry,
 		State:            deps.State,
-		Store:            store,
+		Store:            deps.SessionStore,
 		SessionID:        sess.ID,
 	})
 

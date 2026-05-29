@@ -98,7 +98,7 @@ func (h *Builder) BuildSession(session *domain.Session) string {
 	return sb.String()
 }
 
-func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) string {
+func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistantIndices []int, displays map[string]domain.ToolDisplay) string {
 	var sb strings.Builder
 	// Exactly one blank line before and after each message.
 	sb.WriteString("\n")
@@ -107,7 +107,7 @@ func (h *Builder) renderCoalescedAssistant(messages []*schema.Message, assistant
 	return sb.String()
 }
 
-func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays domain.ToolDisplays) {
+func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schema.Message, assistantIndices []int, displays map[string]domain.ToolDisplay) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -152,7 +152,7 @@ func (h *Builder) renderAssistantSequence(sb *strings.Builder, messages []*schem
 
 // RenderMessage renders a single message at the given index.
 // If includeLeadingNewline is true, it prepends a newline before the divider.
-func (h *Builder) RenderMessage(messages []*schema.Message, idx int, displays domain.ToolDisplays, _ bool) string {
+func (h *Builder) RenderMessage(messages []*schema.Message, idx int, displays map[string]domain.ToolDisplay, _ bool) string {
 	var sb strings.Builder
 	msg := messages[idx]
 
@@ -183,7 +183,7 @@ func (h *Builder) renderUserMessage(sb *strings.Builder, msg *schema.Message) {
 	writeFramedWithGutter(sb, roleLine, contPrefix, ui.NormalizeBlock(content))
 }
 
-func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays domain.ToolDisplays) {
+func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message, displays map[string]domain.ToolDisplay) {
 	contentWidth := h.contentWidth()
 
 	var parts []string
@@ -217,7 +217,7 @@ func (h *Builder) renderAssistantMessage(sb *strings.Builder, am *schema.Message
 	h.writeAssistantFramedWithGutter(sb, body)
 }
 
-func (h *Builder) renderToolCall(tc *schema.ToolCall, displays domain.ToolDisplays, contentWidth int) string {
+func (h *Builder) renderToolCall(tc *schema.ToolCall, displays map[string]domain.ToolDisplay, contentWidth int) string {
 	display, ok := displays[tc.ID]
 	if !ok {
 		return ""

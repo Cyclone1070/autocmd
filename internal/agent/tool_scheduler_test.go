@@ -97,20 +97,22 @@ func TestGraphRunner_RunTools_UnsafeCallIsBarrierAndDoesNotOverlap(t *testing.T)
 	runner, err := NewGraphRunner(llm, reg, nil, 5, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	st := &graphRunState{
-		session: &domain.Session{
-			Messages: []*schema.Message{
-				{
-					Role: schema.Assistant,
-					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe1, Arguments: `{}`}},
-						{ID: "c2", Function: schema.FunctionCall{Name: testConcurrencyProbeUnsafe, Arguments: `{}`}},
-						{ID: "c3", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe2, Arguments: `{}`}},
+		st := &graphRunState{
+			session: &domain.Session{
+				SessionMessages: domain.SessionMessages{
+					Messages: []*schema.Message{
+						{
+							Role: schema.Assistant,
+							ToolCalls: []schema.ToolCall{
+								{ID: "c1", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe1, Arguments: `{}`}},
+								{ID: "c2", Function: schema.FunctionCall{Name: testConcurrencyProbeUnsafe, Arguments: `{}`}},
+								{ID: "c3", Function: schema.FunctionCall{Name: testConcurrencyProbeSafe2, Arguments: `{}`}},
+							},
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 	_, err = runner.graphRunTools(context.Background(), st)
 	require.NoError(t, err)
 	require.False(t, unsafeOverlap.Load(), "unsafe tool must not overlap with other tool runs")

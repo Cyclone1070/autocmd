@@ -3,19 +3,18 @@ package workflow
 import (
 	"context"
 	"slices"
-	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
 type sessionPickerStore interface {
-	List() ([]domain.SessionSummary, error)
-	Get(id string) (*domain.Session, error)
-	Save(sess *domain.Session) error
+	List() ([]domain.SessionMetadata, error)
+	GetMetadata(id string) (*domain.SessionMetadata, error)
 	Create() (*domain.Session, error)
-	FindBlank() (*domain.SessionSummary, error)
+	FindBlank() (*domain.SessionMetadata, error)
 	Rename(id, name string) error
 	Delete(id string) error
+	SetActive(id, workingDir string) error
 }
 
 type sessionPickerBus interface {
@@ -142,14 +141,14 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 	}
 
 	// 1. Group sessions by WorkingDir
-	groups := make(map[string][]domain.SessionSummary)
+	groups := make(map[string][]domain.SessionMetadata)
 	for _, s := range summaries {
 		groups[s.WorkingDir] = append(groups[s.WorkingDir], s)
 	}
 
 	// 2. Sort sessions within each group by Updated descending
 	for g := range groups {
-		slices.SortFunc(groups[g], func(a, b domain.SessionSummary) int {
+		slices.SortFunc(groups[g], func(a, b domain.SessionMetadata) int {
 			if a.Updated.After(b.Updated) {
 				return -1
 			}
@@ -173,7 +172,7 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 	slices.Sort(otherDirs)
 
 	// 4. Flatten groups: current directory first, then other folders sorted alphabetically
-	var sortedSummaries []domain.SessionSummary
+	var sortedSummaries []domain.SessionMetadata
 	if currentDirExists {
 		sortedSummaries = append(sortedSummaries, groups[w.workingDir]...)
 	}
@@ -181,10 +180,16 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 		sortedSummaries = append(sortedSummaries, groups[dir]...)
 	}
 
-	// Active session is the latest session in the current working directory
+	// Active session is the one with Active=true in the current working directory
 	var activeSessionID string
-	if currentDirExists && len(groups[w.workingDir]) > 0 {
-		activeSessionID = groups[w.workingDir][0].ID
+	if currentDirExists {
+		for _, s := range groups[w.workingDir] {
+			if s.Active {
+				activeSessionID = s.ID
+				break
+			}
+		}
+
 	}
 
 	return domain.SessionListEvent{
@@ -195,20 +200,17 @@ func (w *sessionPickerWorkflow) prepareSelection() (domain.SessionListEvent, err
 }
 
 func (w *sessionPickerWorkflow) applySelection(id string) (string, error) {
-	sess, err := w.store.Get(id)
+	meta, err := w.store.GetMetadata(id)
 	if err != nil {
 		return "", err
 	}
 
 	var targetDir string
-	if sess.WorkingDir == "" {
-		sess.WorkingDir = w.workingDir
-	} else if sess.WorkingDir != w.workingDir {
-		targetDir = sess.WorkingDir
+	if meta.WorkingDir != "" && meta.WorkingDir != w.workingDir {
+		targetDir = meta.WorkingDir
 	}
 
-	sess.Updated = time.Now()
-	if err := w.store.Save(sess); err != nil {
+	if err := w.store.SetActive(id, w.workingDir); err != nil {
 		return "", err
 	}
 
@@ -222,13 +224,8 @@ func (w *sessionPickerWorkflow) createSession() (string, error) {
 	}
 	// Blank sessions with no directory or matching directory can be reused
 	if existingBlank != nil && (existingBlank.WorkingDir == "" || existingBlank.WorkingDir == w.workingDir) {
-		sess, err := w.store.Get(existingBlank.ID)
-		if err == nil {
-			sess.WorkingDir = w.workingDir
-			sess.Updated = time.Now()
-			if err := w.store.Save(sess); err == nil {
-				return sess.ID, nil
-			}
+		if err := w.store.SetActive(existingBlank.ID, w.workingDir); err == nil {
+			return existingBlank.ID, nil
 		}
 	}
 
@@ -237,8 +234,7 @@ func (w *sessionPickerWorkflow) createSession() (string, error) {
 		return "", err
 	}
 
-	sess.WorkingDir = w.workingDir
-	if err := w.store.Save(sess); err != nil {
+	if err := w.store.SetActive(sess.ID, w.workingDir); err != nil {
 		return "", err
 	}
 

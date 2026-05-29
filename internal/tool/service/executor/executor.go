@@ -3,8 +3,6 @@ package executor
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/randutil"
 	"github.com/Cyclone1070/iav/internal/tool/helper/follow"
 )
 
@@ -25,7 +24,7 @@ const (
 	defaultSmartDrainThreshold = 16 * 1024         // 16KB
 	defaultBufferSize          = 4096              // 4KB standard buffer
 	numPipes                   = 2 // stdout, stderr
-	hexRatio                   = 2
+
 	kvParts                    = 2
 )
 
@@ -156,14 +155,6 @@ func NewOSCommandExecutor(fs fileSystem) *OSCommandExecutor {
 }
 
 
-func randomShortID(length int) string {
-	bytes := make([]byte, length/hexRatio)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(fmt.Sprintf("failed to generate random ID: %v", err))
-	}
-	return hex.EncodeToString(bytes)
-}
-
 // Run executes a command and waits for its completion.
 func (f *OSCommandExecutor) Run(ctx context.Context, command string, dir string, enableLogging bool) (*Result, error) {
 	s, err := f.RunStreaming(ctx, command, dir, enableLogging)
@@ -241,7 +232,7 @@ func (f *OSCommandExecutor) RunStreaming(ctx context.Context, command string, di
 	_ = f.fs.MkdirAll(logDir, domain.DefaultDirPerm)
 	var tmpID string
 	for i := range domain.MaxCollisionRetries {
-		tmpID = randomShortID(domain.ShortIDLength)
+		tmpID = randutil.ShortID(domain.ShortIDLength)
 		tmpPath := filepath.Join(logDir, tmpID+".output.log")
 		fl, err := f.fs.CreateAtomic(tmpPath)
 		if err == nil {

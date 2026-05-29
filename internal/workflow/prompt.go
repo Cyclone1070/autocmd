@@ -10,16 +10,16 @@ import (
 // sessionStore defines the persistence operations for chat sessions.
 type sessionStore interface {
 	Create() (*domain.Session, error)
-	Get(id string) (*domain.Session, error)
-	Save(s *domain.Session) error
+	GetSession(id string) (*domain.Session, error)
+	SaveSession(s *domain.Session) error
 	GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error)
 }
 
 type workspaceSessionStore interface {
-	FindLatestForDir(dir string) (*domain.SessionSummary, error)
+	FindActiveForDir(dir string) (*domain.SessionMetadata, error)
 	Create() (*domain.Session, error)
-	Get(id string) (*domain.Session, error)
-	Save(s *domain.Session) error
+	GetSession(id string) (*domain.Session, error)
+	SaveSession(s *domain.Session) error
 }
 
 type agentRunner interface {
@@ -39,13 +39,12 @@ type bus interface {
 
 // PromptDeps contains the dependencies required to run the agent prompt workflow.
 type PromptDeps struct {
-	Store        sessionStore
-	LLM          domain.LLM
-	ToolRegistry any // retained for backward compatibility; unused in prompt workflow
-	Agent        agentRunner
-	Bus          bus
-	Forwarder    ActionForwarder
-	Session      *domain.Session
+	Store     sessionStore
+	LLM       domain.LLM
+	Agent     agentRunner
+	Bus       bus
+	Forwarder ActionForwarder
+	Session   *domain.Session
 }
 
 func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error {
@@ -114,7 +113,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 			}
 		}
 
-		_ = deps.Store.Save(sess)
+		_ = deps.Store.SaveSession(sess)
 
 		deps.Bus.SendUIUpdate(domain.DoneEvent{})
 		done <- err
@@ -125,13 +124,12 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 
 // ResolveWorkspaceSession finds or creates the active session for a working directory.
 func ResolveWorkspaceSession(store workspaceSessionStore, workingDir string) (*domain.Session, error) {
-	latest, err := store.FindLatestForDir(workingDir)
+	active, err := store.FindActiveForDir(workingDir)
 	if err != nil {
 		return nil, err
 	}
-
-	if latest != nil {
-		sess, err := store.Get(latest.ID)
+	if active != nil {
+		sess, err := store.GetSession(active.ID)
 		if err == nil {
 			return sess, nil
 		}
@@ -143,7 +141,7 @@ func ResolveWorkspaceSession(store workspaceSessionStore, workingDir string) (*d
 		return nil, err
 	}
 	sess.WorkingDir = workingDir
-	if err := store.Save(sess); err != nil {
+	if err := store.SaveSession(sess); err != nil {
 		return nil, err
 	}
 	return sess, nil

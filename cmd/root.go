@@ -201,13 +201,12 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 	)
 
 	depsWP := &workflow.PromptDeps{
-		Store:        deps.SessionStore,
-		LLM:          llmInstance,
-		ToolRegistry: toolRegistry,
-		Agent:        graphRunner,
-		Bus:          bus,
-		Forwarder:    router,
-		Session:      sess,
+		Store:     deps.SessionStore,
+		LLM:       llmInstance,
+		Agent:     graphRunner,
+		Bus:       bus,
+		Forwarder: router,
+		Session:   sess,
 	}
 
 	done := workflow.RunPrompt(ctx, input, depsWP)

@@ -42,7 +42,7 @@ type infoMockSessionStore struct {
 	mock.Mock
 }
 
-func (m *infoMockSessionStore) Get(id string) (*domain.Session, error) {
+func (m *infoMockSessionStore) GetSession(id string) (*domain.Session, error) {
 	args := m.Called(id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -78,9 +78,8 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		state.On("Model").Return("google/gemini-pro")
 
 		session := &domain.Session{
-			ID:   "sess-123",
-			Name: "Test Session",
-			Messages: []*schema.Message{
+			SessionMetadata: domain.SessionMetadata{ID: "sess-123", Name: "Test Session"},
+			SessionMessages: domain.SessionMessages{Messages: []*schema.Message{
 				{Role: schema.User, Content: "Hello"},
 				{
 					Role:    schema.Assistant,
@@ -91,9 +90,9 @@ func TestInfoWorkflow_Run(t *testing.T) {
 						},
 					},
 				},
-			},
+			}},
 		}
-		store.On("Get", "sess-123").Return(session, nil)
+		store.On("GetSession", "sess-123").Return(session, nil)
 
 		registry.On("Get", ctx, "google/gemini-pro").Return(llm, nil)
 		llm.On("DisplayName").Return("Gemini 1.5 Pro")
@@ -134,7 +133,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
 		state.On("Model").Return("")
-		store.On("Get", "missing-sess").Return(nil, fmt.Errorf("not found"))
+		store.On("GetSession", "missing-sess").Return(nil, fmt.Errorf("not found"))
 
 		wf := NewInfoWorkflow(registry, registry, state, store, "missing-sess")
 		res, err := wf.gather(ctx)

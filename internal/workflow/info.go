@@ -20,7 +20,7 @@ type infoState interface {
 }
 
 type infoSessionStore interface {
-	Get(id string) (*domain.Session, error)
+	GetSession(id string) (*domain.Session, error)
 }
 
 type infoBus interface {
@@ -98,7 +98,7 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 	var sess *domain.Session
 	if sessionID != "" {
 		var err error
-		sess, err = w.store.Get(sessionID)
+		sess, err = w.store.GetSession(sessionID)
 		if err == nil {
 			res.SessionDisplay = sess.Name
 			if res.SessionDisplay == "" {

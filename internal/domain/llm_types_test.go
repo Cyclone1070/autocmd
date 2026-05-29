@@ -37,7 +37,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 		},
 	}
 
-	displays := ToolDisplays{
+	displays := map[string]ToolDisplay{
 		"call-1": BashDisplay{
 			TypeField:      "bash",
 			Description:    "Listing files",
@@ -66,7 +66,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	dataDisp, err := json.Marshal(displays)
 	require.NoError(t, err)
 
-	var decodedDisplays ToolDisplays
+	var decodedDisplays SessionDisplays
 	err = json.Unmarshal(dataDisp, &decodedDisplays)
 	require.NoError(t, err)
 
@@ -79,7 +79,7 @@ func TestMessageJSON_RoundTrip(t *testing.T) {
 	assert.Equal(t, "Assistant response", decodedMessages[1].Content)
 	assert.Equal(t, "call-1", decodedMessages[2].ToolCallID)
 
-	require.Len(t, decodedDisplays, 1)
-	assert.IsType(t, BashDisplay{}, decodedDisplays["call-1"])
-	assert.Equal(t, "Listing files", decodedDisplays["call-1"].(BashDisplay).Description)
+	require.Len(t, decodedDisplays.ToolDisplays, 1)
+	assert.IsType(t, BashDisplay{}, decodedDisplays.ToolDisplays["call-1"])
+	assert.Equal(t, "Listing files", decodedDisplays.ToolDisplays["call-1"].(BashDisplay).Description)
 }

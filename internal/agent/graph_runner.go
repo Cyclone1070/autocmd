@@ -253,7 +253,7 @@ func (r *GraphRunner) Run(ctx context.Context, session *domain.Session, input st
 		mu.Lock()
 		defer mu.Unlock()
 		if session.ToolDisplays == nil {
-			session.ToolDisplays = make(domain.ToolDisplays)
+			session.ToolDisplays = make(map[string]domain.ToolDisplay)
 		}
 		session.ToolDisplays[callID] = display
 	})

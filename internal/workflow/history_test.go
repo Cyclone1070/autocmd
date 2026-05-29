@@ -16,10 +16,10 @@ type fakeHistoryStore struct {
 	listErr   error
 	getErr    error
 	sessions  map[string]*domain.Session
-	summaries []domain.SessionSummary
+	summaries []domain.SessionMetadata
 }
 
-func (f *fakeHistoryStore) Get(id string) (*domain.Session, error) {
+func (f *fakeHistoryStore) GetSession(id string) (*domain.Session, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -29,7 +29,7 @@ func (f *fakeHistoryStore) Get(id string) (*domain.Session, error) {
 	return nil, errors.New("not found")
 }
 
-func (f *fakeHistoryStore) List() ([]domain.SessionSummary, error) {
+func (f *fakeHistoryStore) List() ([]domain.SessionMetadata, error) {
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -48,7 +48,7 @@ func TestRunHistory(t *testing.T) {
 	ctx := context.Background()
 	store := &fakeHistoryStore{
 		sessions: map[string]*domain.Session{
-			"s1": {ID: "s1", Messages: []*schema.Message{{Role: schema.User, Content: "hi"}}},
+			"s1": {SessionMetadata: domain.SessionMetadata{ID: "s1"}, SessionMessages: domain.SessionMessages{Messages: []*schema.Message{{Role: schema.User, Content: "hi"}}}},
 		},
 	}
 	bus := new(mockHistoryBus)

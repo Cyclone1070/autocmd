@@ -18,14 +18,14 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 			}
 		}`
 
-		var m ToolDisplays
-		err := json.Unmarshal([]byte(data), &m)
+		var d SessionDisplays
+		err := json.Unmarshal([]byte(data), &d)
 		assert.NoError(t, err)
 
-		d, ok := m["call-1"].(StringDisplay)
+		disp, ok := d.ToolDisplays["call-1"].(StringDisplay)
 		assert.True(t, ok)
-		assert.Equal(t, "some content", d.Content)
-		assert.Equal(t, "some comment", d.Description)
+		assert.Equal(t, "some content", disp.Content)
+		assert.Equal(t, "some comment", disp.Description)
 	})
 	t.Run("QuestionDisplay", func(t *testing.T) {
 		data := `{
@@ -41,11 +41,11 @@ func TestToolDisplays_UnmarshalJSON(t *testing.T) {
 			}
 		}`
 
-		var m ToolDisplays
-		err := json.Unmarshal([]byte(data), &m)
+		var s SessionDisplays
+		err := json.Unmarshal([]byte(data), &s)
 		require.NoError(t, err)
 
-		d, ok := m["call-1"].(QuestionDisplay)
+		d, ok := s.ToolDisplays["call-1"].(QuestionDisplay)
 		require.True(t, ok)
 		assert.Equal(t, toolDisplayTypeQuestion, d.Type())
 		assert.Len(t, d.Questions, 1)

@@ -60,7 +60,7 @@ func TestBuildHistory_AssistantWithReasoningDuration_RendersThoughtLine(t *testi
 		},
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 	assert.Contains(t, out, "Thought for 2s")
 	assert.Contains(t, out, "✔")
 	assert.Contains(t, out, "Hello user.")
@@ -86,7 +86,7 @@ func TestBashHistory_UseCapturedOutput(t *testing.T) {
 		},
 	}
 
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.BashDisplay{
 			TypeField:      "bash",
 			Command:        "ls",
@@ -94,7 +94,7 @@ func TestBashHistory_UseCapturedOutput(t *testing.T) {
 		},
 	}
 
-	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
+	rendered := b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}, SessionDisplays: domain.SessionDisplays{ToolDisplays: displays}})
 
 	// Should contain the captured output
 	assert.Contains(t, rendered, "output line 1")
@@ -121,7 +121,7 @@ func TestBashHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		},
 	}
 
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.BashDisplay{
 			TypeField:      "bash",
 			Command:        "touch t.txt",
@@ -129,7 +129,7 @@ func TestBashHistory_EmptyStdout_NoExitCode(t *testing.T) {
 		},
 	}
 
-	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
+	rendered := b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}, SessionDisplays: domain.SessionDisplays{ToolDisplays: displays}})
 
 	assert.NotContains(t, rendered, "(Exit code: 0)", "History should not leak exit code for successful empty stdout commands")
 }
@@ -152,14 +152,14 @@ func TestBashHistory_EmptyCapturedOutput_DoesNotReadToolMessage(t *testing.T) {
 		},
 	}
 
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.BashDisplay{
 			TypeField: "bash",
 			Command:   "ls",
 		},
 	}
 
-	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
+	rendered := b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}, SessionDisplays: domain.SessionDisplays{ToolDisplays: displays}})
 
 	assert.NotContains(t, rendered, "only in tool message")
 	assert.Contains(t, rendered, "ls", "command still comes from display")
@@ -183,7 +183,7 @@ func TestBashHistory_ErrorStatus(t *testing.T) {
 		},
 	}
 
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.BashDisplay{
 			TypeField:      "bash",
 			Command:        "false",
@@ -192,7 +192,7 @@ func TestBashHistory_ErrorStatus(t *testing.T) {
 		},
 	}
 
-	rendered := b.BuildSession(&domain.Session{Messages: messages, ToolDisplays: displays})
+	rendered := b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}, SessionDisplays: domain.SessionDisplays{ToolDisplays: displays}})
 
 	// Should contain the error prefix indicator (X or similar depending on theme)
 	assert.Contains(t, rendered, "✘")
@@ -316,7 +316,7 @@ func TestBuildHistory_ExactlyTwoUngutteredBlankLines_BetweenRenderedMessages_Com
 		}
 
 		t.Run(strings.Join(nameParts, ""), func(t *testing.T) {
-			out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+			out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 
 			// No triple unguttered blank lines anywhere.
 			assert.NotContains(t, out, "\n\n\n", "must not contain triple unguttered blank lines")
@@ -360,11 +360,11 @@ func TestBuildHistory_CoalescesAssistantToolCallWithSummary(t *testing.T) {
 			Content: "Okay, I ran ls.",
 		},
 	}
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.NewBashDisplay("List directory contents", "ls", "", ""),
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs, ToolDisplays: displays}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}, SessionDisplays: domain.SessionDisplays{ToolDisplays: displays}}))
 
 	// Should include the tool block and the summary text, but only a single assistant role line.
 	assert.Contains(t, out, "✔", "tool block status header should be present")
@@ -382,7 +382,7 @@ func TestBuildHistory_CoalescesConsecutiveAssistantMessages(t *testing.T) {
 		{Role: schema.Assistant, Content: "part2"},
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 
 	assert.Contains(t, out, "part1")
 	assert.Contains(t, out, "part2")
@@ -404,7 +404,7 @@ func TestBuildHistory_CoalescesAssistantMessagesSeparatedByNotification(t *testi
 		{Role: schema.Assistant, Content: "part2"},
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 
 	assert.Contains(t, out, "part1")
 	assert.Contains(t, out, "part2")
@@ -422,7 +422,7 @@ func TestBuildHistory_SessionInterruptLineShownAsNormalUserMessage(t *testing.T)
 		{Role: schema.User, Content: interruptLine},
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 
 	assert.Contains(t, out, "last assistant response")
 	assert.Contains(t, out, interruptLine)
@@ -441,7 +441,7 @@ func TestBuildHistory_MergedInterruptAndFollowUpShownVerbatim(t *testing.T) {
 		{Role: schema.User, Content: interruptLine + "\n\nfollow-up question"},
 	}
 
-	out := stripANSI(b.BuildSession(&domain.Session{Messages: msgs}))
+	out := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: msgs}}))
 	assert.Contains(t, out, interruptLine)
 	assert.Contains(t, out, "follow-up question")
 	assert.NotContains(t, out, "✘│")
@@ -496,7 +496,7 @@ func TestMessageSpacing_ExactlyTwoBlankLinesBetweenMessages(t *testing.T) {
 		{Role: schema.Assistant, Content: "two"},
 	}
 
-	rendered := b.BuildSession(&domain.Session{Messages: messages})
+	rendered := b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}})
 
 	// With one blank line before+after each message, adjacent messages must have exactly
 	// two blank lines between them, not three or more.
@@ -521,7 +521,7 @@ func TestIssue_History_ToolBlockHeaderAppearsInline(t *testing.T) {
 			},
 		},
 	}
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"1": domain.NewBashDisplay("header", "ls", "", ""),
 	}
 
@@ -546,7 +546,7 @@ func TestHistory_ToolBlocks_HaveSingleBlankLineBetweenThem(t *testing.T) {
 			{ID: "tc-2", Function: schema.FunctionCall{Name: "todo_read"}},
 		},
 	}
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"tc-1": domain.NewStringDisplay("", "Listing iav"),
 		"tc-2": domain.NewStringDisplay("", "Reading todos"),
 	}
@@ -603,7 +603,7 @@ func TestMessageHeaders(t *testing.T) {
 				ToolCalls: []schema.ToolCall{{ID: tcID, Function: schema.FunctionCall{Name: "bash"}}},
 			},
 		}
-		displays := domain.ToolDisplays{
+		displays := map[string]domain.ToolDisplay{
 			tcID: domain.NewBashDisplay("header", "ls", "", ""),
 		}
 
@@ -658,7 +658,7 @@ func TestHistory_TaskNotification_IsNotRendered(t *testing.T) {
 		},
 	}
 
-	rendered := stripANSI(b.BuildSession(&domain.Session{Messages: messages}))
+	rendered := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}}))
 
 	assert.Equal(t, "", rendered)
 }
@@ -677,7 +677,7 @@ func TestHistory_TaskNotification_OmittedFromMixedConversation(t *testing.T) {
 		{Role: schema.Assistant, Content: "real assistant response"},
 	}
 
-	rendered := stripANSI(b.BuildSession(&domain.Session{Messages: messages}))
+	rendered := stripANSI(b.BuildSession(&domain.Session{SessionMessages: domain.SessionMessages{Messages: messages}}))
 
 	assert.Contains(t, rendered, "real user prompt")
 	assert.Contains(t, rendered, "real assistant response")

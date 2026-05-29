@@ -10,7 +10,7 @@ import (
 // historySessionStore defines the subset of session store operations needed
 // by the history workflow.
 type historySessionStore interface {
-	Get(id string) (*domain.Session, error)
+	GetSession(id string) (*domain.Session, error)
 }
 
 
@@ -57,7 +57,7 @@ func ResolveSession(deps *HistoryDeps) (*HistoryResult, error) {
 		return nil, fmt.Errorf("invalid history dependencies")
 	}
 
-	sess, err := deps.Store.Get(deps.SessionID)
+	sess, err := deps.Store.GetSession(deps.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load session %s: %w", deps.SessionID, err)
 	}

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/fs"
 	"github.com/Cyclone1070/iav/internal/tool/service/path"
 	"github.com/Cyclone1070/iav/internal/ui/session_picker"
 	"github.com/Cyclone1070/iav/internal/workflow"
@@ -36,17 +35,11 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 	bus := eventbus.New()
 	defer bus.Close()
 
-	fileSystem := fs.NewOSFileSystem(-1)
-	store, err := buildSessionStore(fileSystem)
-	if err != nil {
-		return err
-	}
-
 	workingDir := getWorkingDir()
 
 	errCh := workflow.RunSessionPicker(ctx, &workflow.SessionPickerDeps{
 		Bus:        bus,
-		Store:      store,
+		Store:      deps.SessionStore,
 		WorkingDir: workingDir,
 	})
 
@@ -60,8 +53,7 @@ func runSessionPicker(ctx context.Context, deps *Deps) error {
 		return fmt.Errorf("picker failed: %w", err)
 	}
 
-	err = <-errCh
-	if err != nil && !errors.Is(err, context.Canceled) {
+	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 

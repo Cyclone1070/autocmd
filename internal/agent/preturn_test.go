@@ -59,7 +59,7 @@ func TestGraphPreTurn_Compaction_SummarizeErrorStopsAndPreservesMessages(t *test
 		{Role: schema.User, Content: "u2"},
 	}
 	st := &graphRunState{
-		session: &domain.Session{Messages: append([]*schema.Message(nil), orig...)},
+		session: &domain.Session{SessionMessages: domain.SessionMessages{Messages: append([]*schema.Message(nil), orig...)}},
 	}
 
 	_, err := r.graphPreTurn(context.Background(), st)
@@ -89,16 +89,18 @@ func TestGraphRunner_PreTurn_LogsCompactionTriggered(t *testing.T) {
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "u1"},
-				{
-					Role: schema.Assistant,
-					Content: "a1",
-					ResponseMeta: &schema.ResponseMeta{
-						Usage: &schema.TokenUsage{TotalTokens: 200},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "u1"},
+					{
+						Role: schema.Assistant,
+						Content: "a1",
+						ResponseMeta: &schema.ResponseMeta{
+							Usage: &schema.TokenUsage{TotalTokens: 200},
+						},
 					},
+					{Role: schema.User, Content: "u2"},
 				},
-				{Role: schema.User, Content: "u2"},
 			},
 		},
 	}
@@ -119,16 +121,18 @@ func TestGraphPreTurn_Compaction_UserTailSingleUserMessage(t *testing.T) {
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "u1"},
-				{
-					Role:    schema.Assistant,
-					Content: "a1",
-					ResponseMeta: &schema.ResponseMeta{
-						Usage: &schema.TokenUsage{TotalTokens: 200},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "u1"},
+					{
+						Role:    schema.Assistant,
+						Content: "a1",
+						ResponseMeta: &schema.ResponseMeta{
+							Usage: &schema.TokenUsage{TotalTokens: 200},
+						},
 					},
+					{Role: schema.User, Content: "current ask"},
 				},
-				{Role: schema.User, Content: "current ask"},
 			},
 		},
 	}
@@ -152,13 +156,15 @@ func TestGraphPreTurn_Compaction_AssistantTailSummarizesFullHistory(t *testing.T
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "u1"},
-				{
-					Role:    schema.Assistant,
-					Content: "a1",
-					ResponseMeta: &schema.ResponseMeta{
-						Usage: &schema.TokenUsage{TotalTokens: 200},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "u1"},
+					{
+						Role:    schema.Assistant,
+						Content: "a1",
+						ResponseMeta: &schema.ResponseMeta{
+							Usage: &schema.TokenUsage{TotalTokens: 200},
+						},
 					},
 				},
 			},
@@ -183,19 +189,21 @@ func TestGraphPreTurn_Compaction_ToolTailSummarizesFullHistory(t *testing.T) {
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "u1"},
-				{
-					Role:    schema.Assistant,
-					Content: "",
-					ToolCalls: []schema.ToolCall{
-						{ID: "c1", Function: schema.FunctionCall{Name: "x", Arguments: "{}"}},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "u1"},
+					{
+						Role:    schema.Assistant,
+						Content: "",
+						ToolCalls: []schema.ToolCall{
+							{ID: "c1", Function: schema.FunctionCall{Name: "x", Arguments: "{}"}},
+						},
+						ResponseMeta: &schema.ResponseMeta{
+							Usage: &schema.TokenUsage{TotalTokens: 200},
+						},
 					},
-					ResponseMeta: &schema.ResponseMeta{
-						Usage: &schema.TokenUsage{TotalTokens: 200},
-					},
+					{Role: schema.Tool, Content: "tool-out", ToolCallID: "c1"},
 				},
-				{Role: schema.Tool, Content: "tool-out", ToolCallID: "c1"},
 			},
 		},
 	}
@@ -218,16 +226,18 @@ func TestGraphPreTurn_Compaction_EmitsSummaryLifecycleEventsOnSuccess(t *testing
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "u1"},
-				{
-					Role:    schema.Assistant,
-					Content: "a1",
-					ResponseMeta: &schema.ResponseMeta{
-						Usage: &schema.TokenUsage{TotalTokens: 200},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "u1"},
+					{
+						Role:    schema.Assistant,
+						Content: "a1",
+						ResponseMeta: &schema.ResponseMeta{
+							Usage: &schema.TokenUsage{TotalTokens: 200},
+						},
 					},
+					{Role: schema.User, Content: "u2"},
 				},
-				{Role: schema.User, Content: "u2"},
 			},
 		},
 	}
@@ -269,9 +279,11 @@ func TestGraphPreTurn_TaskCompletion_AppendsNotification(t *testing.T) {
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "hello"},
-				{Role: schema.Assistant, Content: "world"},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "hello"},
+					{Role: schema.Assistant, Content: "world"},
+				},
 			},
 		},
 	}
@@ -311,9 +323,11 @@ func TestGraphPreTurn_TaskCompletion_EscapesXML(t *testing.T) {
 	}
 	st := &graphRunState{
 		session: &domain.Session{
-			Messages: []*schema.Message{
-				{Role: schema.User, Content: "hello"},
-				{Role: schema.Assistant, Content: "world"},
+			SessionMessages: domain.SessionMessages{
+				Messages: []*schema.Message{
+					{Role: schema.User, Content: "hello"},
+					{Role: schema.Assistant, Content: "world"},
+				},
 			},
 		},
 	}

@@ -36,7 +36,7 @@ func (m *mockPathResolver) DisplayPath(path string) string {
 }
 
 func TestSessionPickerUI(t *testing.T) {
-	summaries := []domain.SessionSummary{
+	summaries := []domain.SessionMetadata{
 		{ID: "s1", Name: "Session 1"},
 	}
 	result := domain.SessionListEvent{
@@ -65,7 +65,7 @@ func TestSessionPickerUI(t *testing.T) {
 		bus := new(mockBus)
 		m := NewModel(bus, theme, &mockPathResolver{})
 		blank := domain.SessionListEvent{
-			Sessions:         []domain.SessionSummary{{ID: "s-new", Name: ""}},
+			Sessions:         []domain.SessionMetadata{{ID: "s-new", Name: ""}},
 			CurrentSessionID: "s-new",
 		}
 
@@ -191,11 +191,11 @@ func TestSessionPickerUI(t *testing.T) {
 
 		prevPicker := m.picker
 		ch2 := make(chan domain.UIUpdate, 1)
-		ch2 <- domain.SessionListEvent{Sessions: []domain.SessionSummary{{ID: "sx", Name: "X"}}, CurrentSessionID: ""}
+		ch2 <- domain.SessionListEvent{Sessions: []domain.SessionMetadata{{ID: "sx", Name: "X"}}, CurrentSessionID: ""}
 		close(ch2)
 		bus.On("UIUpdates").Return((<-chan domain.UIUpdate)(ch2)).Once()
 
-		_, cmd := m.Update(domain.SessionListEvent{Sessions: []domain.SessionSummary{{ID: "sx", Name: "X"}}, CurrentSessionID: ""})
+		_, cmd := m.Update(domain.SessionListEvent{Sessions: []domain.SessionMetadata{{ID: "sx", Name: "X"}}, CurrentSessionID: ""})
 		assert.NotNil(t, cmd)
 		_ = cmd()
 		assert.Equal(t, prevPicker, m.picker)
@@ -214,7 +214,7 @@ func TestSessionPickerUI(t *testing.T) {
 		m := NewModel(bus, theme, pr)
 
 		event := domain.SessionListEvent{
-			Sessions: []domain.SessionSummary{
+			Sessions: []domain.SessionMetadata{
 				{
 					ID:         "s1",
 					Name:       "Session 1",
@@ -238,7 +238,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 		event := domain.SessionListEvent{
 			WorkingDir: "/current-dir",
-			Sessions: []domain.SessionSummary{
+			Sessions: []domain.SessionMetadata{
 				{
 					ID:         "s1",
 					Name:       "Session 1",
@@ -275,7 +275,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 		event := domain.SessionListEvent{
 			WorkingDir: "/current-dir",
-			Sessions: []domain.SessionSummary{
+			Sessions: []domain.SessionMetadata{
 				{
 					ID:         "s2",
 					Name:       "Session 2",
@@ -319,7 +319,7 @@ func TestSessionPickerUI(t *testing.T) {
 
 		event := domain.SessionListEvent{
 			WorkingDir: "/home/user/repos/current",
-			Sessions: []domain.SessionSummary{
+			Sessions: []domain.SessionMetadata{
 				{
 					ID:         "s2",
 					Name:       "Session 2",

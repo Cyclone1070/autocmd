@@ -2,8 +2,6 @@ package session
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/iav/internal/randutil"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -33,6 +32,7 @@ type sessionInfoDTO struct {
 	Created      int64  `json:"created"`
 	Updated      int64  `json:"updated"`
 	WorkingDir   string `json:"workingDir"`
+	Active       bool   `json:"active"`
 }
 
 // Store manages session creation, loading, saving, and listing.
@@ -58,19 +58,14 @@ func NewStore(fs fileSystem, storageDir string) *Store {
 	}
 }
 
-const hexRatio = 2
-
-func randomShortID(length int) string {
-	bytes := make([]byte, length/hexRatio)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(fmt.Sprintf("failed to generate random ID: %v", err))
-	}
-	return hex.EncodeToString(bytes)
-}
-
 // GenerateName is a facade for the session.GenerateName function.
 func (st *Store) GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error) {
 	return GenerateName(ctx, llm, target)
+}
+
+// sessionDir returns the directory path for a given session ID.
+func (st *Store) sessionDir(id string) string {
+	return filepath.Join(st.storageDir, id)
 }
 
 // Create creates a new session with a unique ID and saves it.
@@ -81,13 +76,13 @@ func (st *Store) Create() (*domain.Session, error) {
 	now := time.Now()
 	var id string
 	for i := range domain.MaxCollisionRetries {
-		id = randomShortID(domain.ShortIDLength)
-		sessionDir := filepath.Join(st.storageDir, id)
+		id = randutil.ShortID(domain.ShortIDLength)
+		sessionDir := st.sessionDir(id)
 		infoPath := filepath.Join(sessionDir, "metadata.json")
 		_, err := st.fs.ReadFile(infoPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				break // Found a unique ID
+				break
 			}
 			return nil, fmt.Errorf("check session existence: %w", err)
 		}
@@ -96,138 +91,217 @@ func (st *Store) Create() (*domain.Session, error) {
 		}
 	}
 	s := &domain.Session{
-		ID:       id,
-		Name:     "",
-		Created:  now,
-		Updated:  now,
-		Messages: []*schema.Message{},
+		SessionMetadata: domain.SessionMetadata{
+			ID:      id,
+			Created: now,
+			Updated: now,
+		},
+		SessionMessages: domain.SessionMessages{
+			Messages: []*schema.Message{},
+		},
+		SessionDisplays: domain.SessionDisplays{
+			ToolDisplays: map[string]domain.ToolDisplay{},
+		},
 	}
-	if err := st.Save(s); err != nil {
+	if err := st.SaveSession(s); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-// Get loads a session from disk by ID (loads both info and messages).
-func (st *Store) Get(id string) (*domain.Session, error) {
-	sessionDir := filepath.Join(st.storageDir, id)
-
-	// Read info file
+// GetMetadata reads only the metadata.json for a session.
+func (st *Store) GetMetadata(id string) (*domain.SessionMetadata, error) {
+	sessionDir := st.sessionDir(id)
 	infoPath := filepath.Join(sessionDir, "metadata.json")
-	infoData, err := st.fs.ReadFile(infoPath)
+
+	data, err := st.fs.ReadFile(infoPath)
 	if err != nil {
 		return nil, fmt.Errorf("read session info: %w", err)
 	}
 
-	var infoDTO sessionInfoDTO
-	if err := json.Unmarshal(infoData, &infoDTO); err != nil {
+	var dto sessionInfoDTO
+	if err := json.Unmarshal(data, &dto); err != nil {
 		return nil, fmt.Errorf("unmarshal session info: %w", err)
 	}
 
-	// Read messages file
-	messagesPath := filepath.Join(sessionDir, "messages.json")
-	messagesData, err := st.fs.ReadFile(messagesPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read session messages: %w", err)
-	}
-
-	var messages []*schema.Message
-	if len(messagesData) > 0 {
-		if err := json.Unmarshal(messagesData, &messages); err != nil {
-			return nil, fmt.Errorf("unmarshal session messages: %w", err)
-		}
-	} else {
-		messages = []*schema.Message{}
-	}
-
-	// Read displays file
-	displaysPath := filepath.Join(sessionDir, "displays.json")
-	displaysData, err := st.fs.ReadFile(displaysPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read session displays: %w", err)
-	}
-
-	displays := make(domain.ToolDisplays)
-	if len(displaysData) > 0 {
-		if err := json.Unmarshal(displaysData, &displays); err != nil {
-			return nil, fmt.Errorf("unmarshal session displays: %w", err)
-		}
-	}
-
-	return &domain.Session{
-		ID:           infoDTO.ID,
-		Name:         infoDTO.Name,
-		Created:      time.UnixMilli(infoDTO.Created),
-		Updated:      time.UnixMilli(infoDTO.Updated),
-		Messages:     messages,
-		ToolDisplays: displays,
-		WorkingDir:   infoDTO.WorkingDir,
+	return &domain.SessionMetadata{
+		ID:           dto.ID,
+		Name:         dto.Name,
+		MessageCount: dto.MessageCount,
+		Created:      time.UnixMilli(dto.Created),
+		Updated:      time.UnixMilli(dto.Updated),
+		WorkingDir:   dto.WorkingDir,
+		Active:       dto.Active,
 	}, nil
 }
 
-// Save persists a session to disk (both info and messages files).
-func (st *Store) Save(s *domain.Session) error {
-	sessionDir := filepath.Join(st.storageDir, s.ID)
+// SaveMetadata persists only the metadata.json for a session.
+func (st *Store) SaveMetadata(m *domain.SessionMetadata) error {
+	m.Updated = time.Now()
+	sessionDir := st.sessionDir(m.ID)
 	if err := st.fs.EnsureDirs(sessionDir); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
 	}
 
-	// Update the updated timestamp
-	s.Updated = time.Now()
-
-	// Write info file
-	infoPath := filepath.Join(sessionDir, "metadata.json")
 	infoDTO := sessionInfoDTO{
-		ID:           s.ID,
-		Name:         s.Name,
-		MessageCount: len(s.Messages),
-		Created:      s.Created.UnixMilli(),
-		Updated:      s.Updated.UnixMilli(),
-		WorkingDir:   s.WorkingDir,
+		ID:           m.ID,
+		Name:         m.Name,
+		MessageCount: m.MessageCount,
+		Created:      m.Created.UnixMilli(),
+		Updated:      m.Updated.UnixMilli(),
+		Active:       m.Active,
+		WorkingDir:   m.WorkingDir,
 	}
-	infoData, err := json.MarshalIndent(infoDTO, "", "  ")
+	data, err := json.MarshalIndent(infoDTO, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal session info: %w", err)
 	}
-	if err := st.fs.WriteFileAtomic(infoPath, infoData, domain.DefaultFilePerm); err != nil {
+
+	infoPath := filepath.Join(sessionDir, "metadata.json")
+	if err := st.fs.WriteFileAtomic(infoPath, data, domain.DefaultFilePerm); err != nil {
 		return fmt.Errorf("write session info: %w", err)
 	}
-
-	// Write messages file
-	messagesPath := filepath.Join(sessionDir, "messages.json")
-	messagesData, err := json.MarshalIndent(s.Messages, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal session messages: %w", err)
-	}
-	if err := st.fs.WriteFileAtomic(messagesPath, messagesData, domain.DefaultFilePerm); err != nil {
-		return fmt.Errorf("write session messages: %w", err)
-	}
-
-	// Write displays file
-	displaysPath := filepath.Join(sessionDir, "displays.json")
-	displaysData, err := json.MarshalIndent(s.ToolDisplays, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal session displays: %w", err)
-	}
-	if err := st.fs.WriteFileAtomic(displaysPath, displaysData, domain.DefaultFilePerm); err != nil {
-		return fmt.Errorf("write session displays: %w", err)
-	}
-
 	return nil
 }
 
-// List returns summaries of all sessions sorted by update time (newest first).
-// Only loads metadata, NOT messages. Use Get() for full session data.
-func (st *Store) List() ([]domain.SessionSummary, error) {
+// GetMessages reads only the messages.json for a session.
+func (st *Store) GetMessages(id string) (*domain.SessionMessages, error) {
+	sessionDir := st.sessionDir(id)
+	messagesPath := filepath.Join(sessionDir, "messages.json")
+
+	data, err := st.fs.ReadFile(messagesPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &domain.SessionMessages{Messages: []*schema.Message{}}, nil
+		}
+		return nil, fmt.Errorf("read session messages: %w", err)
+	}
+
+	var messages []*schema.Message
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &messages); err != nil {
+			return nil, fmt.Errorf("unmarshal session messages: %w", err)
+		}
+	}
+	if messages == nil {
+		messages = []*schema.Message{}
+	}
+
+	return &domain.SessionMessages{Messages: messages}, nil
+}
+
+// SaveMessages persists only the messages.json for a session.
+func (st *Store) SaveMessages(id string, msgs *domain.SessionMessages) error {
+	sessionDir := st.sessionDir(id)
+	if err := st.fs.EnsureDirs(sessionDir); err != nil {
+		return fmt.Errorf("create session dir: %w", err)
+	}
+
+	messagesPath := filepath.Join(sessionDir, "messages.json")
+	data, err := json.MarshalIndent(msgs.Messages, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session messages: %w", err)
+	}
+	if err := st.fs.WriteFileAtomic(messagesPath, data, domain.DefaultFilePerm); err != nil {
+		return fmt.Errorf("write session messages: %w", err)
+	}
+	return nil
+}
+
+// GetDisplays reads only the displays.json for a session.
+func (st *Store) GetDisplays(id string) (*domain.SessionDisplays, error) {
+	sessionDir := st.sessionDir(id)
+	displaysPath := filepath.Join(sessionDir, "displays.json")
+
+	data, err := st.fs.ReadFile(displaysPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &domain.SessionDisplays{ToolDisplays: map[string]domain.ToolDisplay{}}, nil
+		}
+		return nil, fmt.Errorf("read session displays: %w", err)
+	}
+
+	var sd domain.SessionDisplays
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &sd); err != nil {
+			return nil, fmt.Errorf("unmarshal session displays: %w", err)
+		}
+	}
+	if sd.ToolDisplays == nil {
+		sd.ToolDisplays = map[string]domain.ToolDisplay{}
+	}
+
+	return &sd, nil
+}
+
+// SaveDisplays persists only the displays.json for a session.
+func (st *Store) SaveDisplays(id string, displays *domain.SessionDisplays) error {
+	sessionDir := st.sessionDir(id)
+	if err := st.fs.EnsureDirs(sessionDir); err != nil {
+		return fmt.Errorf("create session dir: %w", err)
+	}
+
+	displaysPath := filepath.Join(sessionDir, "displays.json")
+	data, err := json.MarshalIndent(displays.ToolDisplays, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session displays: %w", err)
+	}
+	if err := st.fs.WriteFileAtomic(displaysPath, data, domain.DefaultFilePerm); err != nil {
+		return fmt.Errorf("write session displays: %w", err)
+	}
+	return nil
+}
+
+// GetSession loads a full session from disk by ID (metadata, messages, displays).
+func (st *Store) GetSession(id string) (*domain.Session, error) {
+	meta, err := st.GetMetadata(id)
+	if err != nil {
+		return nil, err
+	}
+
+	msgs, err := st.GetMessages(id)
+	if err != nil {
+		return nil, err
+	}
+
+	displays, err := st.GetDisplays(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.Session{
+		SessionMetadata: *meta,
+		SessionMessages: *msgs,
+		SessionDisplays: *displays,
+	}, nil
+}
+
+// SaveSession persists a full session to disk (metadata, messages, displays).
+func (st *Store) SaveSession(s *domain.Session) error {
+	s.MessageCount = len(s.Messages)
+	if err := st.SaveMetadata(&s.SessionMetadata); err != nil {
+		return err
+	}
+	if err := st.SaveMessages(s.ID, &s.SessionMessages); err != nil {
+		return err
+	}
+	if err := st.SaveDisplays(s.ID, &s.SessionDisplays); err != nil {
+		return err
+	}
+	return nil
+}
+
+// List returns metadata for all sessions sorted by update time (newest first).
+func (st *Store) List() ([]domain.SessionMetadata, error) {
 	entries, err := st.fs.ListDir(st.storageDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return []domain.SessionSummary{}, nil
+			return []domain.SessionMetadata{}, nil
 		}
 		return nil, fmt.Errorf("read storage dir: %w", err)
 	}
 
-	var summaries []domain.SessionSummary
+	var summaries []domain.SessionMetadata
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -235,29 +309,28 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 		}
 		sessionID := entry.Name()
 
-		// Read only the info file
 		infoPath := filepath.Join(st.storageDir, sessionID, "metadata.json")
 		infoData, err := st.fs.ReadFile(infoPath)
 		if err != nil {
-			continue // skip corrupted
+			continue
 		}
 
 		var infoDTO sessionInfoDTO
 		if err := json.Unmarshal(infoData, &infoDTO); err != nil {
-			continue // skip corrupted
+			continue
 		}
 
-		summaries = append(summaries, domain.SessionSummary{
+		summaries = append(summaries, domain.SessionMetadata{
 			ID:           infoDTO.ID,
 			Name:         infoDTO.Name,
 			MessageCount: infoDTO.MessageCount,
 			Created:      time.UnixMilli(infoDTO.Created),
 			Updated:      time.UnixMilli(infoDTO.Updated),
+			Active:       infoDTO.Active,
 			WorkingDir:   infoDTO.WorkingDir,
 		})
 	}
 
-	// Sort by updated time, newest first
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Updated.After(summaries[j].Updated)
 	})
@@ -265,39 +338,60 @@ func (st *Store) List() ([]domain.SessionSummary, error) {
 	return summaries, nil
 }
 
-// ListForDir returns summaries of sessions scoped to a working directory, sorted by update time (newest first).
-func (st *Store) ListForDir(dir string) ([]domain.SessionSummary, error) {
+// SetActive marks the session with the given ID as active, deactivating any
+// other active sessions in the same working directory. The workingDir parameter
+// is used for scoping — it does not modify the session's own WorkingDir field.
+func (st *Store) SetActive(id, workingDir string) error {
+	summaries, err := st.List()
+	if err != nil {
+		return err
+	}
+
+	var found bool
+	for i := range summaries {
+		s := &summaries[i]
+		if s.ID == id {
+			if s.Active {
+				found = true
+				continue
+			}
+			s.Active = true
+			if err := st.SaveMetadata(s); err != nil {
+				return err
+			}
+			found = true
+			continue
+		}
+		if s.WorkingDir == workingDir && s.Active {
+			s.Active = false
+			if err := st.SaveMetadata(s); err != nil {
+				return err
+			}
+		}
+	}
+	if !found {
+		return fmt.Errorf("session %s not found", id)
+	}
+	return nil
+}
+
+// FindActiveForDir returns the active session metadata for the given working directory.
+func (st *Store) FindActiveForDir(dir string) (*domain.SessionMetadata, error) {
 	summaries, err := st.List()
 	if err != nil {
 		return nil, err
 	}
 
-	var filtered []domain.SessionSummary
 	for _, s := range summaries {
-		if s.WorkingDir == dir {
-			filtered = append(filtered, s)
+		if s.WorkingDir == dir && s.Active {
+			return &s, nil
 		}
 	}
-	return filtered, nil
+	return nil, nil
 }
 
-// FindLatestForDir returns the most recently updated session for a given working directory.
-// Returns nil if no session is found.
-func (st *Store) FindLatestForDir(dir string) (*domain.SessionSummary, error) {
-	summaries, err := st.ListForDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	if len(summaries) == 0 {
-		return nil, nil
-	}
-	return &summaries[0], nil
-}
-
-
-// FindBlank returns the most recently updated session that has no name and no messages.
-// Returns nil if no blank session is found.
-func (st *Store) FindBlank() (*domain.SessionSummary, error) {
+// FindBlank returns the most recently updated session metadata that has no name and no messages.
+func (st *Store) FindBlank() (*domain.SessionMetadata, error) {
 	summaries, err := st.List()
 	if err != nil {
 		return nil, err
@@ -313,18 +407,17 @@ func (st *Store) FindBlank() (*domain.SessionSummary, error) {
 
 // Rename updates the name of a session.
 func (st *Store) Rename(id, name string) error {
-	s, err := st.Get(id)
+	meta, err := st.GetMetadata(id)
 	if err != nil {
 		return err
 	}
-	s.Name = name
-	return st.Save(s)
+	meta.Name = name
+	return st.SaveMetadata(meta)
 }
 
 // Delete removes a session from disk by ID (entire session directory).
 func (st *Store) Delete(id string) error {
-	sessionDir := filepath.Join(st.storageDir, id)
-
+	sessionDir := st.sessionDir(id)
 	if err := st.fs.RemoveAll(sessionDir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -333,7 +426,7 @@ func (st *Store) Delete(id string) error {
 
 // LoadChecksums retrieves the stored checksums for a session.
 func (st *Store) LoadChecksums(sessionID string) (map[string]string, error) {
-	sessionDir := filepath.Join(st.storageDir, sessionID)
+	sessionDir := st.sessionDir(sessionID)
 	checksumsPath := filepath.Join(sessionDir, "checksums.json")
 
 	data, err := st.fs.ReadFile(checksumsPath)
@@ -354,7 +447,7 @@ func (st *Store) LoadChecksums(sessionID string) (map[string]string, error) {
 
 // SaveChecksums persists the checksums for a session.
 func (st *Store) SaveChecksums(sessionID string, checksums map[string]string) error {
-	sessionDir := filepath.Join(st.storageDir, sessionID)
+	sessionDir := st.sessionDir(sessionID)
 	if err := st.fs.EnsureDirs(sessionDir); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
 	}

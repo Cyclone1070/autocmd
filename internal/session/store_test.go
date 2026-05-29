@@ -170,7 +170,7 @@ func TestCreate_SaveFails(t *testing.T) {
 	}
 }
 
-func TestGet_SplitSuccess(t *testing.T) {
+func TestGetSession_SplitSuccess(t *testing.T) {
 	store, fs := newTestStore()
 
 	sessID := testSessionID
@@ -193,7 +193,7 @@ func TestGet_SplitSuccess(t *testing.T) {
 	messagesData, _ := json.MarshalIndent(messages, "", "  ")
 
 	// Displays as separate displays.json
-	displays := domain.ToolDisplays{
+	displays := map[string]domain.ToolDisplay{
 		"call-1": domain.NewStringDisplay("desc", "content"),
 	}
 	displaysData, _ := json.MarshalIndent(displays, "", "  ")
@@ -206,9 +206,9 @@ func TestGet_SplitSuccess(t *testing.T) {
 	fs.files[messagesPath] = messagesData
 	fs.files[displaysPath] = displaysData
 
-	sess, err := store.Get(sessID)
+	sess, err := store.GetSession(sessID)
 	if err != nil {
-		t.Fatalf("Get() failed: %v", err)
+		t.Fatalf("GetSession() failed: %v", err)
 	}
 
 	if sess.ID != sessID {
@@ -230,35 +230,35 @@ func TestGet_SplitSuccess(t *testing.T) {
 }
 
 
-func TestGet_NotFound(t *testing.T) {
+func TestGetSession_NotFound(t *testing.T) {
 	store, _ := newTestStore()
 
-	_, err := store.Get("nonexistent")
+	_, err := store.GetSession("nonexistent")
 	if err == nil {
-		t.Fatal("Get() should have failed")
+		t.Fatal("GetSession() should have failed")
 	}
 	if err.Error() != "read session info: file does not exist" {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
-func TestGet_CorruptedInfoJSON(t *testing.T) {
+func TestGetSession_CorruptedInfoJSON(t *testing.T) {
 	store, fs := newTestStore()
 
 	sessID := testSessionID
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = []byte("invalid json{")
 
-	_, err := store.Get(sessID)
+	_, err := store.GetSession(sessID)
 	if err == nil {
-		t.Fatal("Get() should have failed")
+		t.Fatal("GetSession() should have failed")
 	}
 	if err.Error() != "unmarshal session info: invalid character 'i' looking for beginning of value" {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
-func TestGet_CorruptedMessagesJSON(t *testing.T) {
+func TestGetSession_CorruptedMessagesJSON(t *testing.T) {
 	store, fs := newTestStore()
 
 	sessID := testSessionID
@@ -279,16 +279,16 @@ func TestGet_CorruptedMessagesJSON(t *testing.T) {
 	fs.files[infoPath] = infoData
 	fs.files[messagesPath] = []byte("invalid json{")
 
-	_, err := store.Get(sessID)
+	_, err := store.GetSession(sessID)
 	if err == nil {
-		t.Fatal("Get() should have failed")
+		t.Fatal("GetSession() should have failed")
 	}
 	if err.Error() != "unmarshal session messages: invalid character 'i' looking for beginning of value" {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
-func TestGet_MessagesFileMissing(t *testing.T) {
+func TestGetSession_MessagesFileMissing(t *testing.T) {
 	store, fs := newTestStore()
 
 	sessID := testSessionID
@@ -306,9 +306,9 @@ func TestGet_MessagesFileMissing(t *testing.T) {
 	infoPath := filepath.Join(store.storageDir, sessID, "metadata.json")
 	fs.files[infoPath] = infoData
 
-	sess, err := store.Get(sessID)
+	sess, err := store.GetSession(sessID)
 	if err != nil {
-		t.Fatalf("Get() failed: %v", err)
+		t.Fatalf("GetSession() failed: %v", err)
 	}
 
 	if len(sess.Messages) != 0 {
@@ -316,25 +316,31 @@ func TestGet_MessagesFileMissing(t *testing.T) {
 	}
 }
 
-func TestSave_Success(t *testing.T) {
+func TestSaveSession_Success(t *testing.T) {
 	store, fs := newTestStore()
 
 	sess := &domain.Session{
-		ID:      testSessionID,
-		Name:    "Test Session",
-		Created: time.Now(),
-		Updated: time.Now(),
-		Messages: []*schema.Message{
-			{Role: schema.User, Content: "Hello"},
+		SessionMetadata: domain.SessionMetadata{
+			ID:      testSessionID,
+			Name:    "Test Session",
+			Created: time.Now(),
+			Updated: time.Now(),
 		},
-		ToolDisplays: domain.ToolDisplays{
-			"call-1": domain.NewStringDisplay("desc", "content"),
+		SessionMessages: domain.SessionMessages{
+			Messages: []*schema.Message{
+				{Role: schema.User, Content: "Hello"},
+			},
+		},
+		SessionDisplays: domain.SessionDisplays{
+			ToolDisplays: map[string]domain.ToolDisplay{
+				"call-1": domain.NewStringDisplay("desc", "content"),
+			},
 		},
 	}
 
-	err := store.Save(sess)
+	err := store.SaveSession(sess)
 	if err != nil {
-		t.Fatalf("Save() failed: %v", err)
+		t.Fatalf("SaveSession() failed: %v", err)
 	}
 
 	infoPath := filepath.Join(store.storageDir, sess.ID, "metadata.json")
@@ -352,16 +358,16 @@ func TestSave_Success(t *testing.T) {
 	}
 
 	// Verify displays content
-	var savedDisplays domain.ToolDisplays
+	var savedDisplays domain.SessionDisplays
 	if err := json.Unmarshal(fs.files[displaysPath], &savedDisplays); err != nil {
 		t.Fatalf("failed to unmarshal displays: %v", err)
 	}
-	if len(savedDisplays) != 1 {
-		t.Fatalf("saved displays count mismatch: %d", len(savedDisplays))
+	if len(savedDisplays.ToolDisplays) != 1 {
+		t.Fatalf("saved displays count mismatch: %d", len(savedDisplays.ToolDisplays))
 	}
-	d, ok := savedDisplays["call-1"].(domain.StringDisplay)
+	d, ok := savedDisplays.ToolDisplays["call-1"].(domain.StringDisplay)
 	if !ok || d.Content != "content" {
-		t.Errorf("saved displays mismatch: %v", savedDisplays)
+		t.Errorf("saved displays mismatch: %v", savedDisplays.ToolDisplays)
 	}
 
 	// Verify messages content (should be direct array)
@@ -379,38 +385,46 @@ func TestSave_Success(t *testing.T) {
 	}
 }
 
-func TestSave_InfoWriteFails(t *testing.T) {
+func TestSaveSession_InfoWriteFails(t *testing.T) {
 	store, fs := newTestStore()
 	fs.writeErr = errors.New("write failed")
 
 	sess := &domain.Session{
-		ID:   testSessionID,
-		Name: "Test",
+		SessionMetadata: domain.SessionMetadata{
+			ID:     testSessionID,
+			Name:   "Test",
+		},
+		SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}},
+		SessionDisplays: domain.SessionDisplays{ToolDisplays: map[string]domain.ToolDisplay{}},
 	}
 
-	err := store.Save(sess)
+	err := store.SaveSession(sess)
 	if err == nil {
-		t.Fatal("Save() should have failed")
+		t.Fatal("SaveSession() should have failed")
 	}
 	if err.Error() != "write session info: write failed" {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
-func TestSave_MessagesWriteFails(t *testing.T) {
+func TestSaveSession_MessagesWriteFails(t *testing.T) {
 	store, fs := newTestStore()
 
 	sess := &domain.Session{
-		ID:   testSessionID,
-		Name: "Test",
+		SessionMetadata: domain.SessionMetadata{
+			ID:     testSessionID,
+			Name:   "Test",
+		},
+		SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}},
+		SessionDisplays: domain.SessionDisplays{ToolDisplays: map[string]domain.ToolDisplay{}},
 	}
 
 	// First write succeeds, second fails
 	fs.failWriteAfter = 1
 
-	err := store.Save(sess)
+	err := store.SaveSession(sess)
 	if err == nil {
-		t.Fatal("Save() should have failed")
+		t.Fatal("SaveSession() should have failed")
 	}
 	if err.Error() != "write session messages: write failed" {
 		t.Errorf("Unexpected error: %v", err)
@@ -686,7 +700,7 @@ func TestDelete_RemoveFails(t *testing.T) {
 	}
 }
 
-func TestCreateSaveGetRoundtrip(t *testing.T) {
+func TestCreateSaveGetSessionRoundtrip(t *testing.T) {
 	store, _ := newTestStore()
 
 	// Create
@@ -702,15 +716,15 @@ func TestCreateSaveGetRoundtrip(t *testing.T) {
 	}
 
 	// Save
-	err = store.Save(sess)
+	err = store.SaveSession(sess)
 	if err != nil {
-		t.Fatalf("Save() failed: %v", err)
+		t.Fatalf("SaveSession() failed: %v", err)
 	}
 
 	// Get
-	loaded, err := store.Get(sess.ID)
+	loaded, err := store.GetSession(sess.ID)
 	if err != nil {
-		t.Fatalf("Get() failed: %v", err)
+		t.Fatalf("GetSession() failed: %v", err)
 	}
 
 	// Verify
@@ -880,7 +894,7 @@ func TestFindBlank(t *testing.T) {
 
 	// 3. Add a message - should no longer be blank
 	sess.Messages = append(sess.Messages, &schema.Message{Role: schema.User, Content: "hi"})
-	_ = store.Save(sess)
+	_ = store.SaveSession(sess)
 
 	blank, err = store.FindBlank()
 	if err != nil {
@@ -893,7 +907,7 @@ func TestFindBlank(t *testing.T) {
 	// 4. Add a name - should no longer be blank
 	sess.Messages = []*schema.Message{}
 	sess.Name = "Named Session"
-	_ = store.Save(sess)
+	_ = store.SaveSession(sess)
 
 	blank, err = store.FindBlank()
 	if err != nil {
@@ -914,7 +928,7 @@ func TestRename(t *testing.T) {
 	}
 
 	// Load and verify
-	loaded, _ := store.Get(sess.ID)
+	loaded, _ := store.GetSession(sess.ID)
 	if loaded.Name != "New Name" {
 		t.Errorf("Expected name %q, got %q", "New Name", loaded.Name)
 	}
@@ -976,6 +990,214 @@ func TestStore_LoadSaveChecksums(t *testing.T) {
 	}
 }
 
+func TestStore_SetActive(t *testing.T) {
+	store, fs := newTestStore()
+
+	// Create 2 sessions in the same directory, both inactive
+	s1, err := store.Create()
+	if err != nil {
+		t.Fatalf("Create s1 failed: %v", err)
+	}
+	s2, err := store.Create()
+	if err != nil {
+		t.Fatalf("Create s2 failed: %v", err)
+	}
+
+	// Set both to same WorkingDir via get+modify+save
+	s1.WorkingDir = "/dir"
+	s1.Active = false
+	if err := store.SaveSession(s1); err != nil {
+		t.Fatalf("Save s1 failed: %v", err)
+	}
+	s2.WorkingDir = "/dir"
+	s2.Active = false
+	if err := store.SaveSession(s2); err != nil {
+		t.Fatalf("Save s2 failed: %v", err)
+	}
+
+	// Make dirs visible to List()
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: s1.ID, isDir: true},
+		&mockDirEntry{name: s2.ID, isDir: true},
+	}
+
+	// Activate s1 in /dir
+	if err := store.SetActive(s1.ID, "/dir"); err != nil {
+		t.Fatalf("SetActive(s1) failed: %v", err)
+	}
+
+	// Verify s1 is now active
+	loaded, err := store.GetSession(s1.ID)
+	if err != nil {
+		t.Fatalf("Get s1 failed: %v", err)
+	}
+	if !loaded.Active {
+		t.Error("s1 should be Active=true after SetActive")
+	}
+	if loaded.WorkingDir != "/dir" {
+		t.Errorf("s1 WorkingDir should be /dir, got %s", loaded.WorkingDir)
+	}
+
+	// Verify s2 is still inactive
+	loaded, err = store.GetSession(s2.ID)
+	if err != nil {
+		t.Fatalf("Get s2 failed: %v", err)
+	}
+	if loaded.Active {
+		t.Error("s2 should still be Active=false after s1 activated")
+	}
+
+	// Activate s2 in /dir (should deactivate s1)
+	if err := store.SetActive(s2.ID, "/dir"); err != nil {
+		t.Fatalf("SetActive(s2) failed: %v", err)
+	}
+
+	// Verify s2 is now active
+	loaded, err = store.GetSession(s2.ID)
+	if err != nil {
+		t.Fatalf("Get s2 failed: %v", err)
+	}
+	if !loaded.Active {
+		t.Error("s2 should be Active=true after SetActive")
+	}
+
+	// Verify s1 is now inactive
+	loaded, err = store.GetSession(s1.ID)
+	if err != nil {
+		t.Fatalf("Get s1 failed: %v", err)
+	}
+	if loaded.Active {
+		t.Error("s1 should be Active=false after s2 activated")
+	}
+
+	// SetActive with nonexistent ID should return error
+	err = store.SetActive("nonexistent", "/dir")
+	if err == nil {
+		t.Error("SetActive with nonexistent ID should return error")
+	}
+}
+
+func TestStore_FindActiveForDir(t *testing.T) {
+	store, fs := newTestStore()
+
+	// Create 3 sessions and set Active flags manually
+	s1, err := store.Create()
+	if err != nil {
+		t.Fatalf("Create s1 failed: %v", err)
+	}
+	s2, err := store.Create()
+	if err != nil {
+		t.Fatalf("Create s2 failed: %v", err)
+	}
+	s3, err := store.Create()
+	if err != nil {
+		t.Fatalf("Create s3 failed: %v", err)
+	}
+
+	// Manually set WorkingDir and Active via get+modify+save
+	s1.WorkingDir = "/dir1"
+	s1.Active = true
+	if err := store.SaveSession(s1); err != nil {
+		t.Fatalf("Save s1 failed: %v", err)
+	}
+
+	s2.WorkingDir = "/dir1"
+	s2.Active = false
+	if err := store.SaveSession(s2); err != nil {
+		t.Fatalf("Save s2 failed: %v", err)
+	}
+
+	s3.WorkingDir = "/dir2"
+	s3.Active = true
+	if err := store.SaveSession(s3); err != nil {
+		t.Fatalf("Save s3 failed: %v", err)
+	}
+
+	// Register all session dirs so List() can find them
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: s1.ID, isDir: true},
+		&mockDirEntry{name: s2.ID, isDir: true},
+		&mockDirEntry{name: s3.ID, isDir: true},
+	}
+
+	// FindActiveForDir /dir1 should return s1's summary
+	summary, err := store.FindActiveForDir("/dir1")
+	if err != nil {
+		t.Fatalf("FindActiveForDir(/dir1) failed: %v", err)
+	}
+	if summary == nil {
+		t.Fatal("FindActiveForDir(/dir1) should not return nil")
+	}
+	if summary.ID != s1.ID {
+		t.Errorf("expected s1 (%s), got %s", s1.ID, summary.ID)
+	}
+	if !summary.Active {
+		t.Error("summary should be Active=true")
+	}
+	if summary.WorkingDir != "/dir1" {
+		t.Errorf("expected WorkingDir /dir1, got %s", summary.WorkingDir)
+	}
+
+	// FindActiveForDir /dir2 should return s3's summary
+	summary, err = store.FindActiveForDir("/dir2")
+	if err != nil {
+		t.Fatalf("FindActiveForDir(/dir2) failed: %v", err)
+	}
+	if summary == nil {
+		t.Fatal("FindActiveForDir(/dir2) should not return nil")
+	}
+	if summary.ID != s3.ID {
+		t.Errorf("expected s3 (%s), got %s", s3.ID, summary.ID)
+	}
+
+	// FindActiveForDir /nonexistent should return nil
+	summary, err = store.FindActiveForDir("/nonexistent")
+	if err != nil {
+		t.Fatalf("FindActiveForDir(/nonexistent) failed: %v", err)
+	}
+	if summary != nil {
+		t.Errorf("expected nil for nonexistent dir, got %v", summary)
+	}
+}
+
+func TestStore_ActiveFieldPreserved(t *testing.T) {
+	store, fs := newTestStore()
+
+	sess := &domain.Session{
+		SessionMetadata: domain.SessionMetadata{
+			ID:      "active-test",
+			Name:    "Active Test",
+			Created: time.Now(),
+			Updated: time.Now(),
+			Active:  true,
+		},
+		SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}},
+	}
+
+	if err := store.SaveSession(sess); err != nil {
+		t.Fatalf("SaveSession() failed: %v", err)
+	}
+
+	loaded, err := store.GetSession("active-test")
+	if err != nil {
+		t.Fatalf("GetSession() failed: %v", err)
+	}
+	if !loaded.Active {
+		t.Error("Session.Active should be true after save/get roundtrip")
+	}
+
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: "active-test", isDir: true},
+	}
+	summaries, err := store.List()
+	if err != nil {
+		t.Fatalf("List() failed: %v", err)
+	}
+	if len(summaries) > 0 && !summaries[0].Active {
+		t.Error("SessionSummary.Active should be true")
+	}
+}
+
 func TestDefaultStorageDir(t *testing.T) {
 	dir, err := DefaultStorageDir()
 	if err != nil {
@@ -989,71 +1211,5 @@ func TestDefaultStorageDir(t *testing.T) {
 	}
 }
 
-func TestStore_ListForDir(t *testing.T) {
-	store, fs := newTestStore()
-
-	now := time.Now()
-
-	// Create session metadata with different WorkingDirs
-	info1DTO := sessionInfoDTO{
-		ID:         "sess-1",
-		Name:       "Session 1",
-		WorkingDir: "/home/user/projectA",
-		Created:    now.Add(-2 * time.Hour).UnixMilli(),
-		Updated:    now.Add(-1 * time.Hour).UnixMilli(),
-	}
-	info1Data, _ := json.Marshal(info1DTO)
-	fs.files[filepath.Join(store.storageDir, "sess-1", "metadata.json")] = info1Data
-
-	info2DTO := sessionInfoDTO{
-		ID:         "sess-2",
-		Name:       "Session 2",
-		WorkingDir: "/home/user/projectA",
-		Created:    now.Add(-1 * time.Hour).UnixMilli(),
-		Updated:    now.UnixMilli(),
-	}
-	info2Data, _ := json.Marshal(info2DTO)
-	fs.files[filepath.Join(store.storageDir, "sess-2", "metadata.json")] = info2Data
-
-	info3DTO := sessionInfoDTO{
-		ID:         "sess-3",
-		Name:       "Session 3",
-		WorkingDir: "/home/user/projectB",
-		Created:    now.UnixMilli(),
-		Updated:    now.UnixMilli(),
-	}
-	info3Data, _ := json.Marshal(info3DTO)
-	fs.files[filepath.Join(store.storageDir, "sess-3", "metadata.json")] = info3Data
-
-	// Populate directories so List() can traverse them
-	fs.dirs[store.storageDir] = []os.DirEntry{
-		&mockDirEntry{name: "sess-1", isDir: true},
-		&mockDirEntry{name: "sess-2", isDir: true},
-		&mockDirEntry{name: "sess-3", isDir: true},
-	}
-
-	// List sessions for projectA
-	summaries, err := store.ListForDir("/home/user/projectA")
-	if err != nil {
-		t.Fatalf("ListForDir failed: %v", err)
-	}
-
-	if len(summaries) != 2 {
-		t.Fatalf("expected 2 sessions, got %d", len(summaries))
-	}
-
-	// Verify they are sorted by Updated descending (sess-2 first, then sess-1)
-	if summaries[0].ID != "sess-2" {
-		t.Errorf("expected summaries[0].ID to be 'sess-2', got '%s'", summaries[0].ID)
-	}
-	if summaries[1].ID != "sess-1" {
-		t.Errorf("expected summaries[1].ID to be 'sess-1', got '%s'", summaries[1].ID)
-	}
-
-	// Verify working dirs are parsed
-	if summaries[0].WorkingDir != "/home/user/projectA" {
-		t.Errorf("expected WorkingDir '/home/user/projectA', got '%s'", summaries[0].WorkingDir)
-	}
-}
 
 

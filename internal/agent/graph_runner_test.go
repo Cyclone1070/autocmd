@@ -42,7 +42,7 @@ func TestGraphRunner_Run_ReActToolThenFinalMessage(t *testing.T) {
 	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	require.NoError(t, runner.Run(ctx, sess, "say hi"))
 
 	require.GreaterOrEqual(t, greet.invokeCount, 1)
@@ -82,7 +82,7 @@ func TestGraphRunner_Run_TextChunkBeforeToolCallStillInvokesTool(t *testing.T) {
 	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	require.NoError(t, runner.Run(ctx, sess, "greet Bob"))
 
 	require.Equal(t, 1, greet.invokeCount, "scan-all checker must route to tools when text precedes tool calls")
@@ -105,7 +105,7 @@ func TestGraphRunner_Run_EmitsAssistantTextEvents(t *testing.T) {
 	runner, err := NewGraphRunner(llm, reg, nil, 20, events, nil, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	require.NoError(t, runner.Run(ctx, sess, "say hi"))
 
 	foundText := false
@@ -149,7 +149,7 @@ func TestGraphRunner_Run_EmitsAssistantTextEvents_WhenToolCallTurnContainsText(t
 	runner, err := NewGraphRunner(llm, reg, nil, 20, events, nil, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	require.NoError(t, runner.Run(ctx, sess, "say hi"))
 
 	foundToolTurnText := false
@@ -203,7 +203,7 @@ func TestGraphRunner_Run_TurnGuardPreventsExitWithRunningTasks(t *testing.T) {
 	runner, err := NewGraphRunner(llm, reg, nil, 20, mockEvents, mockNotifier, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	require.NoError(t, runner.Run(ctx, sess, "do something"))
 
 	// We expect 4 messages: User, Assistant 1, Synthetic User, Assistant 2
@@ -278,7 +278,7 @@ func TestGraphRunner_Run_ParallelToolCalls_Race(t *testing.T) {
 	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	sess := &domain.Session{Messages: []*schema.Message{}}
+	sess := &domain.Session{SessionMessages: domain.SessionMessages{Messages: []*schema.Message{}}}
 	
 	err = runner.Run(ctx, sess, "use sink_tool")
 	require.NoError(t, err)

@@ -77,7 +77,7 @@ func TestSession_TotalTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &Session{Messages: tt.messages}
+			s := &Session{SessionMessages: SessionMessages{Messages: tt.messages}}
 			assert.Equal(t, tt.expected, s.TotalTokens())
 		})
 	}

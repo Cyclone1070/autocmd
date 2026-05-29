@@ -124,7 +124,7 @@ func (fs *OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-// EnsureDirs is a legacy alias for MkdirAll on specific paths.
+// EnsureDirs creates the given directory path if it does not exist.
 func (fs *OSFileSystem) EnsureDirs(path string) error {
 	return fs.MkdirAll(path, domain.DefaultDirPerm)
 }

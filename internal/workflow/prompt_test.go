@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -23,12 +22,12 @@ func (m *mockSessionStore) Create() (*domain.Session, error) {
 	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockSessionStore) Get(id string) (*domain.Session, error) {
+func (m *mockSessionStore) GetSession(id string) (*domain.Session, error) {
 	args := m.Called(id)
 	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockSessionStore) Save(s *domain.Session) error {
+func (m *mockSessionStore) SaveSession(s *domain.Session) error {
 	args := m.Called(s)
 	return args.Error(0)
 }
@@ -42,10 +41,10 @@ type mockWorkspaceSessionStore struct {
 	mock.Mock
 }
 
-func (m *mockWorkspaceSessionStore) FindLatestForDir(dir string) (*domain.SessionSummary, error) {
+func (m *mockWorkspaceSessionStore) FindActiveForDir(dir string) (*domain.SessionMetadata, error) {
 	args := m.Called(dir)
 	if v := args.Get(0); v != nil {
-		return v.(*domain.SessionSummary), args.Error(1)
+		return v.(*domain.SessionMetadata), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
@@ -55,12 +54,12 @@ func (m *mockWorkspaceSessionStore) Create() (*domain.Session, error) {
 	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockWorkspaceSessionStore) Get(id string) (*domain.Session, error) {
+func (m *mockWorkspaceSessionStore) GetSession(id string) (*domain.Session, error) {
 	args := m.Called(id)
 	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockWorkspaceSessionStore) Save(s *domain.Session) error {
+func (m *mockWorkspaceSessionStore) SaveSession(s *domain.Session) error {
 	args := m.Called(s)
 	return args.Error(0)
 }
@@ -115,13 +114,13 @@ func (m *mockActionForwarder) Deliver(act domain.Action) {
 }
 
 func TestResolveWorkspaceSession(t *testing.T) {
-	t.Run("Finds existing latest session", func(t *testing.T) {
+	t.Run("Finds active session", func(t *testing.T) {
 		store := new(mockWorkspaceSessionStore)
-		summary := &domain.SessionSummary{ID: "sess-123", WorkingDir: "/dir"}
-		sess := &domain.Session{ID: "sess-123", WorkingDir: "/dir"}
+		summary := &domain.SessionMetadata{ID: "sess-123", WorkingDir: "/dir", Active: true}
+		sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-123", WorkingDir: "/dir", Active: true}}
 
-		store.On("FindLatestForDir", "/dir").Return(summary, nil)
-		store.On("Get", "sess-123").Return(sess, nil)
+		store.On("FindActiveForDir", "/dir").Return(summary, nil)
+		store.On("GetSession", "sess-123").Return(sess, nil)
 
 		res, err := ResolveWorkspaceSession(store, "/dir")
 		assert.NoError(t, err)
@@ -131,11 +130,11 @@ func TestResolveWorkspaceSession(t *testing.T) {
 
 	t.Run("Creates new session if none exists", func(t *testing.T) {
 		store := new(mockWorkspaceSessionStore)
-		sess := &domain.Session{ID: "sess-new"}
+		sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-new"}}
 
-		store.On("FindLatestForDir", "/dir").Return((*domain.SessionSummary)(nil), nil)
+		store.On("FindActiveForDir", "/dir").Return((*domain.SessionMetadata)(nil), nil)
 		store.On("Create").Return(sess, nil)
-		store.On("Save", mock.Anything).Return(nil)
+		store.On("SaveSession", mock.Anything).Return(nil)
 
 		res, err := ResolveWorkspaceSession(store, "/dir")
 		assert.NoError(t, err)
@@ -144,21 +143,7 @@ func TestResolveWorkspaceSession(t *testing.T) {
 		store.AssertExpectations(t)
 	})
 
-	t.Run("Creates new session if latest is corrupted/missing", func(t *testing.T) {
-		store := new(mockWorkspaceSessionStore)
-		summary := &domain.SessionSummary{ID: "sess-corrupted", WorkingDir: "/dir"}
-		sess := &domain.Session{ID: "sess-new"}
 
-		store.On("FindLatestForDir", "/dir").Return(summary, nil)
-		store.On("Get", "sess-corrupted").Return((*domain.Session)(nil), os.ErrNotExist)
-		store.On("Create").Return(sess, nil)
-		store.On("Save", mock.Anything).Return(nil)
-
-		res, err := ResolveWorkspaceSession(store, "/dir")
-		assert.NoError(t, err)
-		assert.Equal(t, "sess-new", res.ID)
-		store.AssertExpectations(t)
-	})
 }
 
 func TestRunPrompt_ActionForwarding(t *testing.T) {
@@ -170,18 +155,17 @@ func TestRunPrompt_ActionForwarding(t *testing.T) {
 	bus := eventbus.New()
 	forwarder := new(mockActionForwarder)
 
-	sess := &domain.Session{ID: "id"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Forwarder:    forwarder,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("Name", nil)
 
 	// Keep the agent running so we can send an action
@@ -213,17 +197,16 @@ func TestRunPrompt_GREEN(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
-	sess := &domain.Session{ID: "sess-123"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-123"}}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, "hello").Return("New Session", nil)
 
 	agent.On("Run", mock.MatchedBy(func(ctx context.Context) bool {
@@ -248,18 +231,17 @@ func TestRunPrompt_ExistingNamedSession_DoesNotHang(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
-	sess := &domain.Session{ID: "existing-id", Name: "Existing Session"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "existing-id", Name: "Existing Session"}}
 
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 	agent.On("Run", mock.Anything, sess, "hello").Return(nil)
 
 	done := RunPrompt(ctx, "hello", deps)
@@ -304,17 +286,16 @@ func TestRunPrompt_DoesNotCloseBus(t *testing.T) {
 	}
 	bus := &trackableBus{EventBus: eb}
 
-	sess := &domain.Session{ID: "id"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus.EventBus,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Return("New Session", nil)
 	agent.On("Run", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	done := RunPrompt(ctx, "hello", deps)
@@ -333,17 +314,16 @@ func TestRunPrompt_NamingRace(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
-	sess := &domain.Session{ID: "race-id"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "race-id"}}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 
 	// Sync channels to force interleaving
 	agentStartedAppending := make(chan struct{})
@@ -386,17 +366,16 @@ func TestRunPrompt_EmitsIndicators(t *testing.T) {
 	agent := new(mockAgent)
 	bus := eventbus.New()
 
-	sess := &domain.Session{ID: "id"}
+	sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "id"}}
 	deps := &PromptDeps{
 		Store:        store,
 		LLM:          llm,
-		ToolRegistry: nil,
 		Agent:        agent,
 		Bus:          bus,
 		Session:      sess,
 	}
 
-	store.On("Save", mock.Anything).Return(nil)
+	store.On("SaveSession", mock.Anything).Return(nil)
 	store.On("GenerateName", mock.Anything, mock.Anything, mock.Anything).Run(func(_ mock.Arguments) {
 		time.Sleep(50 * time.Millisecond)
 	}).Return("Name", nil)

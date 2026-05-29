@@ -22,7 +22,7 @@ var update = flag.Bool("update", false, "update golden files")
 type TestElement struct {
 	ID       string
 	Msg      *schema.Message
-	Displays domain.ToolDisplays
+	Displays map[string]domain.ToolDisplay
 	Desc     string
 }
 
@@ -71,7 +71,7 @@ func getHistoryElements() []TestElement {
 					{ID: "tc-ok", Function: schema.FunctionCall{Name: "bash"}},
 				},
 			},
-			Displays: domain.ToolDisplays{
+			Displays: map[string]domain.ToolDisplay{
 				"tc-ok": domain.BashDisplay{
 					TypeField:      "bash",
 					Description:    "Running Tests",
@@ -88,7 +88,7 @@ func getHistoryElements() []TestElement {
 					{ID: "tc-err", Function: schema.FunctionCall{Name: "bash"}},
 				},
 			},
-			Displays: domain.ToolDisplays{
+			Displays: map[string]domain.ToolDisplay{
 				"tc-err": domain.BashDisplay{
 					TypeField:   "bash",
 					Description: "Failing Command",
@@ -167,10 +167,10 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	}
 }
 
-func createHistoryData(elems ...TestElement) ([]*schema.Message, domain.ToolDisplays) {
+func createHistoryData(elems ...TestElement) ([]*schema.Message, map[string]domain.ToolDisplay) {
 	var contents []string
 	var calls []schema.ToolCall
-	displays := make(domain.ToolDisplays)
+	displays := make(map[string]domain.ToolDisplay)
 
 	for _, e := range elems {
 		if e.Msg.Role == schema.Assistant {
@@ -190,7 +190,7 @@ func createHistoryData(elems ...TestElement) ([]*schema.Message, domain.ToolDisp
 	return []*schema.Message{msg}, displays
 }
 
-func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message, displays domain.ToolDisplays, renderer ui.Renderer, theme *ui.Theme, width int) {
+func renderHistoryToGolden(w *bytes.Buffer, name string, msgs []*schema.Message, displays map[string]domain.ToolDisplay, renderer ui.Renderer, theme *ui.Theme, width int) {
 	var sb strings.Builder
 	am := msgs[0]
 	if am.Role != schema.Assistant {

@@ -1,12 +1,5 @@
 package domain
 
-// Tool contract, invocations, JSON-serializable tool displays, and question-tool user actions.
-
-import (
-	"encoding/json"
-	"fmt"
-)
-
 // ToolErrorCancelled is ToolDisplay.Error when Execute returns because the context was cancelled.
 const ToolErrorCancelled = "execution cancelled"
 
@@ -188,56 +181,3 @@ func (PermissionDecisionAction) isAction() {}
 
 // GetCallID implements CallIDer for action routing.
 func (a PermissionDecisionAction) GetCallID() string { return a.CallID }
-
-// ToolDisplays is a helper type for polymorphic JSON unmarshaling of ToolDisplay maps.
-type ToolDisplays map[string]ToolDisplay
-
-// UnmarshalJSON implements custom JSON unmarshaling for the polymorphic ToolDisplays map.
-func (m *ToolDisplays) UnmarshalJSON(data []byte) error {
-	var raws map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raws); err != nil {
-		return err
-	}
-
-	*m = make(ToolDisplays)
-	for id, raw := range raws {
-		var peek struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(raw, &peek); err != nil {
-			return err
-		}
-
-		var display ToolDisplay
-		switch peek.Type {
-		case toolDisplayTypeString:
-			var d StringDisplay
-			if err := json.Unmarshal(raw, &d); err != nil {
-				return err
-			}
-			display = d
-		case toolDisplayTypeDiff:
-			var d DiffDisplay
-			if err := json.Unmarshal(raw, &d); err != nil {
-				return err
-			}
-			display = d
-		case toolDisplayTypeBash:
-			var d BashDisplay
-			if err := json.Unmarshal(raw, &d); err != nil {
-				return err
-			}
-			display = d
-		case toolDisplayTypeQuestion:
-			var d QuestionDisplay
-			if err := json.Unmarshal(raw, &d); err != nil {
-				return err
-			}
-			display = d
-		default:
-			return fmt.Errorf("unknown display type: %s", peek.Type)
-		}
-		(*m)[id] = display
-	}
-	return nil
-}

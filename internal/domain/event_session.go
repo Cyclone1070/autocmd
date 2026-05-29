@@ -32,7 +32,7 @@ func (DeleteSessionAction) isAction() {}
 // SessionListEvent contains the data needed for session selection UI.
 type SessionListEvent struct {
 	CurrentSessionID string
-	Sessions         []SessionSummary
+	Sessions         []SessionMetadata
 	WorkingDir       string
 }
 

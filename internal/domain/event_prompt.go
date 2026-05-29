@@ -1,7 +1,7 @@
 package domain
 
 // Prompt workflow→UI events: UIUpdate marker, text/done.
-// Used by the main agent prompt run (iav <args>).
+// Used by the main agent prompt run (cmd <args>).
 
 // UIUpdate is the interface for all events flowing from Workflow to UI.
 type UIUpdate interface {

@@ -2,7 +2,7 @@
 package config
 
 import (
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 const (

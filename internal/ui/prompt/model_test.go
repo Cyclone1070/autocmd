@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
@@ -1042,7 +1042,7 @@ func TestModel_PermissionApproval_BashCommandLineDisappears(t *testing.T) {
 	sp := &mockSpinner{}
 	m := NewModel(bus, &mockThinkingRenderer{}, tr, sp, theme, &mockStream{}, ui.NewTruncatingGater(10), 80)
 
-	cwd := "~/repos/iav"
+	cwd := "~/repos/autocmd"
 	cmd := "for i in {1..5}; do date; sleep 1; done"
 	t.Logf("stateIdle: %v, stateThinking: %v, stateTooling: %v, stateFlushing: %v", stateIdle, stateThinking, stateTooling, stateFlushing)
 	d := domain.NewBashDisplay("Run a loop", cmd, cwd, "")

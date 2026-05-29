@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/randutil"
-	"github.com/Cyclone1070/iav/internal/tool/helper/follow"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/randutil"
+	"github.com/Cyclone1070/autocmd/internal/tool/helper/follow"
 )
 
 const (

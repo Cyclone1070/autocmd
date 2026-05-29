@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 
 	mcpp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	einotool "github.com/cloudwego/eino/components/tool"
@@ -186,7 +186,7 @@ func (m *Manager) Start(ctx context.Context) ([]einotool.BaseTool, error) {
 			initReq := mcp.InitializeRequest{}
 			initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 			initReq.Params.ClientInfo = mcp.Implementation{
-				Name:    "iav",
+				Name:    "autocmd",
 				Version: "1.0.0",
 			}
 			_, err = cli.Initialize(ctx, initReq)

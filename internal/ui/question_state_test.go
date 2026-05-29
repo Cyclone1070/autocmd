@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

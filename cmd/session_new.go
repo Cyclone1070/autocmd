@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/autocmd/internal/workflow"
 	"github.com/spf13/cobra"
 )
 

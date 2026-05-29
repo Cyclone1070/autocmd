@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/autocmd/internal/config"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/ui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cloudwego/eino/schema"
 	"github.com/muesli/termenv"
@@ -548,7 +548,7 @@ func TestHistory_ToolBlocks_HaveSingleBlankLineBetweenThem(t *testing.T) {
 		},
 	}
 	displays := map[string]domain.ToolDisplay{
-		"tc-1": domain.NewStringDisplay("", "Listing iav"),
+		"tc-1": domain.NewStringDisplay("", "Listing files"),
 		"tc-2": domain.NewStringDisplay("", "Reading todos"),
 	}
 
@@ -557,7 +557,7 @@ func TestHistory_ToolBlocks_HaveSingleBlankLineBetweenThem(t *testing.T) {
 	rendered := stripANSI(sb.String())
 
 	// Adjacent tool blocks should remain compact with one line per header-only block.
-	assert.Contains(t, rendered, "│    ✔ \n │       ⎿ Listing iav")
+	assert.Contains(t, rendered, "│    ✔ \n │       ⎿ Listing files")
 	assert.Contains(t, rendered, "\n │    ✔ \n │       ⎿ Reading todos")
 	assert.NotContains(t, rendered, "╭")
 }

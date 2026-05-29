@@ -1,4 +1,4 @@
-// Package domain defines the core domain models and interfaces for the IAV system.
+// Package domain defines the core domain models and interfaces for the AutoCmd system.
 package domain
 
 // User actions: Action marker and StopAction.

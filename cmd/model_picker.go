@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/ui/model_picker"
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/autocmd/internal/eventbus"
+	"github.com/Cyclone1070/autocmd/internal/ui/model_picker"
+	"github.com/Cyclone1070/autocmd/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )

@@ -1,3 +1,3 @@
-# IaV
+# AutoCmd
 
-Infrastructure as Vibe
+Terminal-native AI assistant with tool execution and bash access.

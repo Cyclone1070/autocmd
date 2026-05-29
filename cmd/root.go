@@ -9,27 +9,27 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Cyclone1070/iav/internal/actionrouter"
-	"github.com/Cyclone1070/iav/internal/agent"
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/logging"
-	"github.com/Cyclone1070/iav/internal/permission"
-	"github.com/Cyclone1070/iav/internal/tool"
-	"github.com/Cyclone1070/iav/internal/tool/bash"
-	"github.com/Cyclone1070/iav/internal/tool/edit"
-	"github.com/Cyclone1070/iav/internal/tool/glob"
-	"github.com/Cyclone1070/iav/internal/tool/grep"
-	"github.com/Cyclone1070/iav/internal/tool/mcp"
-	"github.com/Cyclone1070/iav/internal/tool/question"
-	"github.com/Cyclone1070/iav/internal/tool/read"
-	"github.com/Cyclone1070/iav/internal/tool/service/checksum"
-	"github.com/Cyclone1070/iav/internal/tool/service/executor"
-	"github.com/Cyclone1070/iav/internal/tool/write"
-	"github.com/Cyclone1070/iav/internal/ui"
-	"github.com/Cyclone1070/iav/internal/ui/prompt"
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/autocmd/internal/actionrouter"
+	"github.com/Cyclone1070/autocmd/internal/agent"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/eventbus"
+	"github.com/Cyclone1070/autocmd/internal/fs"
+	"github.com/Cyclone1070/autocmd/internal/logging"
+	"github.com/Cyclone1070/autocmd/internal/permission"
+	"github.com/Cyclone1070/autocmd/internal/tool"
+	"github.com/Cyclone1070/autocmd/internal/tool/bash"
+	"github.com/Cyclone1070/autocmd/internal/tool/edit"
+	"github.com/Cyclone1070/autocmd/internal/tool/glob"
+	"github.com/Cyclone1070/autocmd/internal/tool/grep"
+	"github.com/Cyclone1070/autocmd/internal/tool/mcp"
+	"github.com/Cyclone1070/autocmd/internal/tool/question"
+	"github.com/Cyclone1070/autocmd/internal/tool/read"
+	"github.com/Cyclone1070/autocmd/internal/tool/service/checksum"
+	"github.com/Cyclone1070/autocmd/internal/tool/service/executor"
+	"github.com/Cyclone1070/autocmd/internal/tool/write"
+	"github.com/Cyclone1070/autocmd/internal/ui"
+	"github.com/Cyclone1070/autocmd/internal/ui/prompt"
+	"github.com/Cyclone1070/autocmd/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	einotool "github.com/cloudwego/eino/components/tool"
@@ -43,8 +43,8 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:          "iav [prompt]",
-	Short:        "IAV is an agentic AI coding assistant",
+	Use:          "cmd [prompt]",
+	Short:        "AutoCmd is a terminal-native AI assistant",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,
 	PersistentPreRun: func(_ *cobra.Command, _ []string) {

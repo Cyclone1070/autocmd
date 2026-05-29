@@ -1,6 +1,6 @@
 package prompt
 
-import "github.com/Cyclone1070/iav/internal/domain"
+import "github.com/Cyclone1070/autocmd/internal/domain"
 
 // tickMsg signals an animation tick for non-text UI animation.
 type tickMsg struct{}

@@ -24,7 +24,7 @@ func TestArchitecture(t *testing.T) {
 	cwd, _ := os.Getwd()
 	fmt.Printf("Debug: Working Dir: %s\n", cwd)
 
-	module := "github.com/Cyclone1070/iav"
+	module := "github.com/Cyclone1070/autocmd"
 	var rules []*arctest.DependencyRule
 	toolServices := []string{
 		"internal/tool/bash",
@@ -40,7 +40,7 @@ func TestArchitecture(t *testing.T) {
 	sourcePkg := func(p string) string {
 		return fmt.Sprintf("^%s(/.*)?$", regexp.QuoteMeta(p))
 	}
-	// Imported targets are full import paths like "github.com/Cyclone1070/iav/internal/permission".
+	// Imported targets are full import paths like "github.com/Cyclone1070/autocmd/internal/permission".
 	targetPkg := func(p string) string {
 		if !strings.HasPrefix(p, module) {
 			p = module + "/" + strings.TrimPrefix(p, "/")

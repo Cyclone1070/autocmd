@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 type sessionPickerStore interface {
@@ -116,7 +116,7 @@ func RunSessionPicker(ctx context.Context, deps *SessionPickerDeps) <-chan error
 }
 
 // CreateSession is a public helper to create a new session and update state.
-// Used by the 'iav session new' command.
+// Used by the 'autocmd session new' command.
 func CreateSession(store sessionPickerStore, workingDir string) (string, error) {
 	wf := newSessionPickerWorkflow(store, workingDir)
 	return wf.createSession()

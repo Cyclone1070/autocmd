@@ -3,7 +3,7 @@ package ui
 import (
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/config"
+	"github.com/Cyclone1070/autocmd/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 

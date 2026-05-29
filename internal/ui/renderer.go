@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	codeStartMarker = "_IAV_CODE_START_"
-	codeEndMarker   = "_IAV_CODE_END_"
+	codeStartMarker = "_AUTOCMD_CODE_START_"
+	codeEndMarker   = "_AUTOCMD_CODE_END_"
 	expectedGroups  = 4
 )
 

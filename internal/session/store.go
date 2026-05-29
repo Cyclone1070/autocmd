@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/randutil"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/randutil"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -42,7 +42,7 @@ type Store struct {
 	storageDir string
 }
 
-// DefaultStorageDir returns the default session storage path (~/.config/iav/sessions).
+// DefaultStorageDir returns the default session storage path (~/.config/autocmd/sessions).
 func DefaultStorageDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

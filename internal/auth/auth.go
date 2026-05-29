@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 const privateDirPerm os.FileMode = 0o700
@@ -37,7 +37,7 @@ func NewManager(fs FileSystem, storePath string) *Manager {
 	}
 }
 
-// DefaultStorePath returns the standard ~/.config/iav/auth.json path.
+// DefaultStorePath returns the standard ~/.config/autocmd/auth.json path.
 func DefaultStorePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

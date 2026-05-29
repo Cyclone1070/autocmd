@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 	"github.com/cloudwego/eino-ext/components/model/gemini"
 	"github.com/cloudwego/eino/components/model"
 	"google.golang.org/genai"

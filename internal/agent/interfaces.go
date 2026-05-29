@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 	einotool "github.com/cloudwego/eino/components/tool"
 )
 

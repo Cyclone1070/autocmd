@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/testutil"
+	"github.com/Cyclone1070/autocmd/internal/testutil"
 )
 
 func TestAbs(t *testing.T) {

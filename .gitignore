@@ -3,7 +3,8 @@
 /node_modules
 /build
 /bin
-iav
+cmd
+autocmd
 
 # Go build artifacts
 *.test

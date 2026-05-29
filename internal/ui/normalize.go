@@ -1,4 +1,4 @@
-// Package ui provides shared UI components and utilities for the IAV terminal interface.
+// Package ui provides shared UI components and utilities for the AutoCmd terminal interface.
 package ui
 
 import (

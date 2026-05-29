@@ -3,7 +3,7 @@ package workflow
 import (
 	"context"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 // modelLLMRegistry defines the interface for model discovery.

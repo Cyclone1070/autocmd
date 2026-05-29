@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/autocmd/internal/ui"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 )

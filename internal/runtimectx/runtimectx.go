@@ -3,7 +3,7 @@ package runtimectx
 import (
 	"context"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 type ActionWaiter interface {
@@ -19,9 +19,9 @@ type ToolDisplaySink func(callID string, display domain.ToolDisplay)
 type contextKey string
 
 const (
-	keyActionWaiter    contextKey = "iav/action_waiter"
-	keyEventSender     contextKey = "iav/event_sender"
-	keyToolDisplaySink contextKey = "iav/tool_display_sink"
+	keyActionWaiter    contextKey = "autocmd/action_waiter"
+	keyEventSender     contextKey = "autocmd/event_sender"
+	keyToolDisplaySink contextKey = "autocmd/tool_display_sink"
 )
 
 func WithActionWaiter(ctx context.Context, waiter ActionWaiter) context.Context {

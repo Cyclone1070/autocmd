@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Cyclone1070/iav/internal/eventbus"
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
-	"github.com/Cyclone1070/iav/internal/ui/session_picker"
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/autocmd/internal/eventbus"
+	"github.com/Cyclone1070/autocmd/internal/tool/service/path"
+	"github.com/Cyclone1070/autocmd/internal/ui/session_picker"
+	"github.com/Cyclone1070/autocmd/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )

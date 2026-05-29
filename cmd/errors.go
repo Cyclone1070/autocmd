@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/Cyclone1070/iav/internal/agent"
+	"github.com/Cyclone1070/autocmd/internal/agent"
 )
 
 var (

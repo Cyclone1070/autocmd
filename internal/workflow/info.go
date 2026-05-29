@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 type infoProviderRegistry interface {

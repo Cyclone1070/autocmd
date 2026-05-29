@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +38,7 @@ func (m *mockFileSystem) MkdirAll(_ string, _ os.FileMode) error {
 
 func TestAuth(t *testing.T) {
 	mockFS := &mockFileSystem{files: make(map[string][]byte)}
-	storePath := "/home/user/.config/iav/auth.json"
+	storePath := "/home/user/.config/autocmd/auth.json"
 
 	t.Run("Get_NotFound", func(t *testing.T) {
 		mgr := NewManager(mockFS, storePath)
@@ -177,7 +177,7 @@ func (p *authMockProvider) GetLLM(context.Context, *domain.Credential, domain.LL
 
 func TestManager_GetWithFallback_RED(t *testing.T) {
 	mockFS := &mockFileSystem{files: make(map[string][]byte)}
-	storePath := "/home/user/.config/iav/auth.json"
+	storePath := "/home/user/.config/autocmd/auth.json"
 	mgr := NewManager(mockFS, storePath)
 
 	provider := &authMockProvider{

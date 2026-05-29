@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Cyclone1070/iav/internal/agent"
+	"github.com/Cyclone1070/autocmd/internal/agent"
 	"github.com/stretchr/testify/assert"
 )
 

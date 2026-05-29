@@ -3,15 +3,15 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/auth"
-	"github.com/Cyclone1070/iav/internal/config"
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/fs"
-	"github.com/Cyclone1070/iav/internal/provider"
-	"github.com/Cyclone1070/iav/internal/session"
-	"github.com/Cyclone1070/iav/internal/state"
-	"github.com/Cyclone1070/iav/internal/tool/service/path"
-	"github.com/Cyclone1070/iav/internal/ui"
+	"github.com/Cyclone1070/autocmd/internal/auth"
+	"github.com/Cyclone1070/autocmd/internal/config"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/fs"
+	"github.com/Cyclone1070/autocmd/internal/provider"
+	"github.com/Cyclone1070/autocmd/internal/session"
+	"github.com/Cyclone1070/autocmd/internal/state"
+	"github.com/Cyclone1070/autocmd/internal/tool/service/path"
+	"github.com/Cyclone1070/autocmd/internal/ui"
 )
 
 // Deps holds the core dependencies for the CLI commands.

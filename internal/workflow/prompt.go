@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Cyclone1070/iav/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/domain"
 )
 
 // sessionStore defines the persistence operations for sessions.

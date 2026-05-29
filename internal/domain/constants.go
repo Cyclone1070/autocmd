@@ -21,14 +21,14 @@ const (
 
 // Message metadata keys.
 const (
-	NotificationMessageExtraKey = "iav/is_notification"
+	NotificationMessageExtraKey = "autocmd/is_notification"
 	// ThoughtDurationMsExtraKey is Message.Extra: ms from first reasoning chunk to stream end (persisted for history UI).
-	ThoughtDurationMsExtraKey = "iav/reasoning_phase_duration_ms"
+	ThoughtDurationMsExtraKey = "autocmd/reasoning_phase_duration_ms"
 )
 
 // Application Metadata.
 const (
-	AppName       = "iav"
+	AppName       = "autocmd"
 	ConfigBaseDir = ".config"
 )
 

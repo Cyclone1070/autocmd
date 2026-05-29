@@ -169,7 +169,7 @@ We follow a **Constant Promotion Strategy** to decide where a literal should liv
 *   **Tier 3: Domain-Level Constants**
     *   **Rule**: Use for values that define application identity, shared infrastructure, or cross-package protocols.
     *   **Examples**: `AppName`, `ConfigBaseDir`, standard Unix permissions (`DefaultFilePerm`).
-    *   **File**: [internal/domain/constants.go](file:///Users/mac/Desktop/repos/iav/internal/domain/constants.go).
+    *   **File**: [internal/domain/constants.go](file:///Users/mac/Desktop/repos/autocmd/internal/domain/constants.go).
     *   **Why**: Provides a single source of truth for cross-cutting concerns, preventing drift across the codebase.
 
 > [!IMPORTANT]

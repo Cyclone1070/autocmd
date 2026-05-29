@@ -4,9 +4,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/Cyclone1070/iav/internal/eventbus"
-	authui "github.com/Cyclone1070/iav/internal/ui/auth"
-	"github.com/Cyclone1070/iav/internal/workflow"
+	"github.com/Cyclone1070/autocmd/internal/eventbus"
+	authui "github.com/Cyclone1070/autocmd/internal/ui/auth"
+	"github.com/Cyclone1070/autocmd/internal/workflow"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )

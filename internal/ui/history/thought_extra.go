@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Cyclone1070/iav/internal/domain"
-	"github.com/Cyclone1070/iav/internal/ui/prompt"
+	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/Cyclone1070/autocmd/internal/ui/prompt"
 	"github.com/cloudwego/eino/schema"
 )
 

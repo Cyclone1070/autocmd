@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -84,6 +85,18 @@ func buildConcatenatedAssistantMessage(chunks []*schema.Message) (*schema.Messag
 	if err != nil {
 		return nil, fmt.Errorf("ConcatMessages: %w", err)
 	}
+
+	valid := make([]schema.ToolCall, 0, len(msg.ToolCalls))
+	for _, tc := range msg.ToolCalls {
+		if json.Valid([]byte(tc.Function.Arguments)) {
+			valid = append(valid, tc)
+		} else {
+			slog.Debug("discarding incomplete tool call from concatenated message",
+				"tool_call_id", tc.ID, "tool_name", tc.Function.Name)
+		}
+	}
+	msg.ToolCalls = valid
+
 	return msg, nil
 }
 

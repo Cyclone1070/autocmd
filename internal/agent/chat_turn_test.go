@@ -184,6 +184,67 @@ func TestBuildConcatenatedAssistantMessage_EmptyChunks(t *testing.T) {
 	require.Nil(t, msg)
 }
 
+func TestBuildConcatenatedAssistantMessage_StripsIncompleteToolCalls(t *testing.T) {
+	idx0 := 0
+	chunks := []*schema.Message{
+		{Role: schema.Assistant, Content: "Let me check that file:"},
+		{Role: schema.Assistant, ToolCalls: []schema.ToolCall{
+			{ID: "call_incomplete", Type: "function", Index: &idx0, Function: schema.FunctionCall{
+				Name:      testToolNameReadFile,
+				Arguments: `{"description": "Remove in`,
+			}},
+		}},
+	}
+	msg, err := buildConcatenatedAssistantMessage(chunks)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	require.Equal(t, "Let me check that file:", msg.Content)
+	require.Empty(t, msg.ToolCalls, "incomplete tool call should be stripped")
+}
+
+func TestBuildConcatenatedAssistantMessage_PreservesCompleteToolCalls(t *testing.T) {
+	idx0 := 0
+	chunks := []*schema.Message{
+		{Role: schema.Assistant, Content: "Let me check that file:"},
+		{Role: schema.Assistant, ToolCalls: []schema.ToolCall{
+			{ID: "call_valid", Type: "function", Index: &idx0, Function: schema.FunctionCall{
+				Name:      testToolNameReadFile,
+				Arguments: testReadFileArgsJSON,
+			}},
+		}},
+	}
+	msg, err := buildConcatenatedAssistantMessage(chunks)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	require.Equal(t, "Let me check that file:", msg.Content)
+	require.Len(t, msg.ToolCalls, 1)
+	require.Equal(t, "call_valid", msg.ToolCalls[0].ID)
+}
+
+func TestBuildConcatenatedAssistantMessage_PreservesTextOnMixedChunks(t *testing.T) {
+	idx0 := 0
+	idx1 := 1
+	chunks := []*schema.Message{
+		{Role: schema.Assistant, Content: "Let me check that file:"},
+		{Role: schema.Assistant, ToolCalls: []schema.ToolCall{
+			{ID: "call_valid", Type: "function", Index: &idx0, Function: schema.FunctionCall{
+				Name:      testToolNameReadFile,
+				Arguments: testReadFileArgsJSON,
+			}},
+			{ID: "call_incomplete", Type: "function", Index: &idx1, Function: schema.FunctionCall{
+				Name:      testToolNameGrep,
+				Arguments: `{"pattern": "foo`,
+			}},
+		}},
+	}
+	msg, err := buildConcatenatedAssistantMessage(chunks)
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	require.Equal(t, "Let me check that file:", msg.Content)
+	require.Len(t, msg.ToolCalls, 1)
+	require.Equal(t, "call_valid", msg.ToolCalls[0].ID)
+}
+
 func TestApplyThoughtDurationExtra_SetsExtraOnConcatenatedMessage(t *testing.T) {
 	chunks := []*schema.Message{
 		{Role: schema.Assistant, ReasoningContent: "a"},

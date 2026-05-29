@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 	"github.com/mark3labs/mcp-go/client"
@@ -244,6 +246,76 @@ func TestManager_StartError(t *testing.T) {
 	_, err := mgr.Start(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to start process")
+}
+
+func TestManager_ParallelStart_TwoServers(t *testing.T) {
+	ctx := context.Background()
+	cfg := &Config{
+		McpServers: map[string]ServerConfig{
+			"server-a": {Command: "node", Args: []string{"a.js"}},
+			"server-b": {Command: "node", Args: []string{"b.js"}},
+		},
+	}
+
+	creator := func(command string, env []string, args ...string) (client.MCPClient, error) {
+		time.Sleep(50 * time.Millisecond)
+		return &mockMCPClient{
+			tools: []mcp.Tool{
+				{Name: args[0], InputSchema: mcp.ToolInputSchema{Type: "object"}},
+			},
+		}, nil
+	}
+
+	start := time.Now()
+	mgr := NewManager(cfg, creator, nil)
+	tools, err := mgr.Start(ctx)
+	elapsed := time.Since(start)
+
+	assert.NoError(t, err)
+	assert.Len(t, tools, 2)
+	// Parallel should take ~50ms, not ~100ms (sequential)
+	assert.Less(t, elapsed, 95*time.Millisecond, "servers should start in parallel")
+
+	_ = mgr.Close()
+}
+
+func TestManager_ParallelStart_OneFails(t *testing.T) {
+	ctx := context.Background()
+	cfg := &Config{
+		McpServers: map[string]ServerConfig{
+			"good-server": {Command: "good", Args: []string{"good.js"}},
+			"bad-server":  {Command: "bad", Args: []string{"bad.js"}},
+		},
+	}
+
+	var goodCli *mockMCPClient
+	var mu sync.Mutex
+
+	creator := func(command string, env []string, args ...string) (client.MCPClient, error) {
+		if command == "bad" {
+			return nil, errors.New("failed to start")
+		}
+		time.Sleep(20 * time.Millisecond)
+		cli := &mockMCPClient{
+			tools: []mcp.Tool{
+				{Name: "good_tool", InputSchema: mcp.ToolInputSchema{Type: "object"}},
+			},
+		}
+		mu.Lock()
+		goodCli = cli
+		mu.Unlock()
+		return cli, nil
+	}
+
+	mgr := NewManager(cfg, creator, nil)
+	_, err := mgr.Start(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to start")
+	mu.Lock()
+	if goodCli != nil {
+		assert.True(t, goodCli.closed, "good client should be closed on error")
+	}
+	mu.Unlock()
 }
 
 func TestManager_RemoteHeaders(t *testing.T) {

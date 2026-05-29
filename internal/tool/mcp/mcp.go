@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/Cyclone1070/iav/internal/domain"
 
@@ -128,67 +129,114 @@ func NewManager(cfg *Config, stdioCreator StdioCreator, remoteCreator RemoteCrea
 	}
 }
 
-// Start spawns all configured MCP servers, initializes them, and returns Eino tools.
+type serverResult struct {
+	name  string
+	tools []einotool.BaseTool
+	cli   client.MCPClient
+	err   error
+}
+
+// Start spawns all configured MCP servers in parallel, initializes them,
+// and returns Eino tools.
 func (m *Manager) Start(ctx context.Context) ([]einotool.BaseTool, error) {
-	var allTools []einotool.BaseTool
-
-	for name, serverCfg := range m.cfg.McpServers {
-		var cli client.MCPClient
-		var err error
-
-		if serverCfg.URL != "" {
-			if m.remoteCreator == nil {
-				_ = m.Close()
-				return nil, fmt.Errorf("no remote client creator configured for remote server %s", name)
-			}
-			cli, err = m.remoteCreator(ctx, serverCfg.URL, serverCfg.Headers)
-		} else {
-			if m.stdioCreator == nil {
-				_ = m.Close()
-				return nil, fmt.Errorf("no stdio client creator configured for server %s", name)
-			}
-			cli, err = m.stdioCreator(serverCfg.Command, serverCfg.Env, serverCfg.Args...)
-		}
-
-		if err != nil {
-			_ = m.Close() // Clean up any clients started so far
-			return nil, fmt.Errorf("failed to start mcp server %s: %w", name, err)
-		}
-		m.clients = append(m.clients, cli)
-
-		// Start client connection if required (e.g. for SSE clients)
-		if starter, ok := cli.(interface{ Start(context.Context) error }); ok {
-			if err := starter.Start(ctx); err != nil {
-				_ = m.Close()
-				return nil, fmt.Errorf("failed to start connection for mcp server %s: %w", name, err)
-			}
-		}
-
-		// Handshake/Initialize
-		initReq := mcp.InitializeRequest{}
-		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-		initReq.Params.ClientInfo = mcp.Implementation{
-			Name:    "iav",
-			Version: "1.0.0",
-		}
-		_, err = cli.Initialize(ctx, initReq)
-		if err != nil {
-			_ = m.Close()
-			return nil, fmt.Errorf("failed to initialize mcp server %s: %w", name, err)
-		}
-
-		// Retrieve tools via Eino MCP component
-		tools, err := mcpp.GetTools(ctx, &mcpp.Config{
-			Cli: cli,
-		})
-		if err != nil {
-			_ = m.Close()
-			return nil, fmt.Errorf("failed to get tools from mcp server %s: %w", name, err)
-		}
-
-		allTools = append(allTools, tools...)
+	if len(m.cfg.McpServers) == 0 {
+		return nil, nil
 	}
 
+	results := make(chan serverResult, len(m.cfg.McpServers))
+	var wg sync.WaitGroup
+
+	for name, serverCfg := range m.cfg.McpServers {
+		wg.Add(1)
+		go func(name string, serverCfg ServerConfig) {
+			defer wg.Done()
+
+			var cli client.MCPClient
+			var err error
+
+			if serverCfg.URL != "" {
+				if m.remoteCreator == nil {
+					results <- serverResult{name: name, err: fmt.Errorf("no remote client creator configured for remote server %s", name)}
+					return
+				}
+				cli, err = m.remoteCreator(ctx, serverCfg.URL, serverCfg.Headers)
+			} else {
+				if m.stdioCreator == nil {
+					results <- serverResult{name: name, err: fmt.Errorf("no stdio client creator configured for server %s", name)}
+					return
+				}
+				cli, err = m.stdioCreator(serverCfg.Command, serverCfg.Env, serverCfg.Args...)
+			}
+
+			if err != nil {
+				results <- serverResult{name: name, err: fmt.Errorf("failed to start mcp server %s: %w", name, err)}
+				return
+			}
+
+			// Start client connection if required (e.g. for SSE clients)
+			if starter, ok := cli.(interface{ Start(context.Context) error }); ok {
+				if err := starter.Start(ctx); err != nil {
+					cli.Close()
+					results <- serverResult{name: name, err: fmt.Errorf("failed to start connection for mcp server %s: %w", name, err)}
+					return
+				}
+			}
+
+			// Handshake/Initialize
+			initReq := mcp.InitializeRequest{}
+			initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+			initReq.Params.ClientInfo = mcp.Implementation{
+				Name:    "iav",
+				Version: "1.0.0",
+			}
+			_, err = cli.Initialize(ctx, initReq)
+			if err != nil {
+				cli.Close()
+				results <- serverResult{name: name, err: fmt.Errorf("failed to initialize mcp server %s: %w", name, err)}
+				return
+			}
+
+			// Retrieve tools via Eino MCP component
+			tools, err := mcpp.GetTools(ctx, &mcpp.Config{Cli: cli})
+			if err != nil {
+				cli.Close()
+				results <- serverResult{name: name, err: fmt.Errorf("failed to get tools from mcp server %s: %w", name, err)}
+				return
+			}
+
+			results <- serverResult{name: name, tools: tools, cli: cli}
+		}(name, serverCfg)
+	}
+
+	wg.Wait()
+	close(results)
+
+	var allClients []client.MCPClient
+	var allTools []einotool.BaseTool
+	var firstErr error
+
+	for res := range results {
+		if res.err != nil {
+			if firstErr == nil {
+				firstErr = res.err
+			}
+			if res.cli != nil {
+				res.cli.Close()
+			}
+			continue
+		}
+		allClients = append(allClients, res.cli)
+		allTools = append(allTools, res.tools...)
+	}
+
+	if firstErr != nil {
+		for _, cli := range allClients {
+			cli.Close()
+		}
+		return nil, firstErr
+	}
+
+	m.clients = allClients
 	return allTools, nil
 }
 

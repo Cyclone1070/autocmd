@@ -53,8 +53,11 @@ type HistoryResult struct {
 
 // ResolveSession resolves which session's history should be displayed and loads it.
 func ResolveSession(deps *HistoryDeps) (*HistoryResult, error) {
-	if deps == nil || deps.Store == nil || deps.SessionID == "" {
+	if deps == nil || deps.Store == nil {
 		return nil, fmt.Errorf("invalid history dependencies")
+	}
+	if deps.SessionID == "" {
+		return &HistoryResult{Session: &domain.Session{}}, nil
 	}
 
 	sess, err := deps.Store.GetSession(deps.SessionID)

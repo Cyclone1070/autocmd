@@ -32,9 +32,11 @@ func runInfo(ctx context.Context, deps *Deps) error {
 	defer bus.Close()
 
 	workingDir := getWorkingDir()
-	sess, err := workflow.ResolveWorkspaceSession(deps.SessionStore, workingDir)
-	if err != nil {
-		return err
+
+	var sessionID string
+	active, err := deps.SessionStore.FindActiveForDir(workingDir)
+	if err == nil && active != nil {
+		sessionID = active.ID
 	}
 
 	done := workflow.RunInfo(ctx, &workflow.InfoDeps{
@@ -43,7 +45,7 @@ func runInfo(ctx context.Context, deps *Deps) error {
 		LLMRegistry:      deps.LLMRegistry,
 		State:            deps.State,
 		Store:            deps.SessionStore,
-		SessionID:        sess.ID,
+		SessionID:        sessionID,
 	})
 
 	theme := newTheme(deps.Config.UI())

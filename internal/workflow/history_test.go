@@ -74,3 +74,29 @@ func TestRunHistory(t *testing.T) {
 	bus.AssertExpectations(t)
 }
 
+func TestRunHistory_EmptySessionID(t *testing.T) {
+	ctx := context.Background()
+	store := &fakeHistoryStore{}
+	bus := new(mockHistoryBus)
+
+	bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
+		snapshot, ok := ev.(domain.HistoryEvent)
+		return ok && len(snapshot.Messages) == 0
+	})).Return()
+	bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
+
+	done := RunHistory(ctx, &HistoryDeps{
+		Store:     store,
+		SessionID: "",
+	}, bus)
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("workflow timed out")
+	}
+
+	bus.AssertExpectations(t)
+}
+

@@ -109,7 +109,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		meta := &domain.SessionMetadata{ID: "s1", WorkingDir: "/dirB", Updated: now.Add(-10 * time.Minute)}
 		store.On("GetMetadata", "s1").Return(meta, nil)
-		store.On("SetActive", "s1", "/current").Return(nil)
+		store.On("SetActive", "s1", "/dirB").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, "/current")
 		targetCwd, err := wf.applySelection("s1")
@@ -123,7 +123,7 @@ func TestSessionPickerWorkflow(t *testing.T) {
 		store := new(mockSessionPickerStore)
 		meta := &domain.SessionMetadata{ID: "s5", WorkingDir: "", Updated: now.Add(-20 * time.Minute)}
 		store.On("GetMetadata", "s5").Return(meta, nil)
-		store.On("SetActive", "s5", "/current").Return(nil)
+		store.On("SetActive", "s5", "").Return(nil)
 
 		wf := newSessionPickerWorkflow(store, "/current")
 		targetCwd, err := wf.applySelection("s5")

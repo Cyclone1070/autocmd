@@ -1226,5 +1226,47 @@ func TestDefaultStorageDir(t *testing.T) {
 	}
 }
 
+func TestSetActive_DoesNotChangeUpdated(t *testing.T) {
+	store, fs := newTestStore()
 
+	s1, _ := store.Create("/dir")
+	s2, _ := store.Create("/dir")
 
+	fs.dirs[store.storageDir] = []os.DirEntry{
+		&mockDirEntry{name: s1.ID, isDir: true},
+		&mockDirEntry{name: s2.ID, isDir: true},
+	}
+
+	// Make s1 active
+	if err := store.SetActive(s1.ID, "/dir"); err != nil {
+		t.Fatalf("first SetActive: %v", err)
+	}
+
+	// Wait to ensure timestamp would differ if incorrectly bumped
+	time.Sleep(2 * time.Millisecond)
+
+	// Record timestamps before swapping active session
+	s1Before, _ := store.GetSession(s1.ID)
+	s2Before, _ := store.GetSession(s2.ID)
+
+	// Activate s2 — deactivates s1, activates s2
+	if err := store.SetActive(s2.ID, "/dir"); err != nil {
+		t.Fatalf("second SetActive: %v", err)
+	}
+
+	s1After, err := store.GetSession(s1.ID)
+	if err != nil {
+		t.Fatalf("GetSession s1: %v", err)
+	}
+	s2After, err := store.GetSession(s2.ID)
+	if err != nil {
+		t.Fatalf("GetSession s2: %v", err)
+	}
+
+	if !s1After.Updated.Equal(s1Before.Updated) {
+		t.Errorf("s1 Updated changed from %v to %v after deactivation", s1Before.Updated, s1After.Updated)
+	}
+	if !s2After.Updated.Equal(s2Before.Updated) {
+		t.Errorf("s2 Updated changed from %v to %v after activation", s2Before.Updated, s2After.Updated)
+	}
+}

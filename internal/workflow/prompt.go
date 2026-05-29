@@ -134,5 +134,9 @@ func ResolveWorkspaceSession(store sessionStore, workingDir string) (*domain.Ses
 	if err != nil {
 		return nil, err
 	}
+	sess.Active = true
+	if err := store.SaveSession(sess); err != nil {
+		return nil, err
+	}
 	return sess, nil
 }

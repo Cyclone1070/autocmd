@@ -115,11 +115,15 @@ func TestResolveWorkspaceSession(t *testing.T) {
 
 		store.On("FindActiveForDir", "/dir").Return((*domain.SessionMetadata)(nil), nil)
 		store.On("Create", "/dir").Return(sess, nil)
+		store.On("SaveSession", mock.MatchedBy(func(s *domain.Session) bool {
+			return s.Active
+		})).Return(nil)
 
 		res, err := ResolveWorkspaceSession(store, "/dir")
 		assert.NoError(t, err)
 		assert.Equal(t, "sess-new", res.ID)
 		assert.Equal(t, "/dir", res.WorkingDir)
+		assert.True(t, res.Active)
 		store.AssertExpectations(t)
 	})
 

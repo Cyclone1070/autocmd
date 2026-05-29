@@ -138,7 +138,6 @@ func (st *Store) GetMetadata(id string) (*domain.SessionMetadata, error) {
 
 // SaveMetadata persists only the metadata.json for a session.
 func (st *Store) SaveMetadata(m *domain.SessionMetadata) error {
-	m.Updated = time.Now()
 	sessionDir := st.sessionDir(m.ID)
 	if err := st.fs.EnsureDirs(sessionDir); err != nil {
 		return fmt.Errorf("create session dir: %w", err)
@@ -279,6 +278,7 @@ func (st *Store) GetSession(id string) (*domain.Session, error) {
 
 // SaveSession persists a full session to disk (metadata, messages, displays).
 func (st *Store) SaveSession(s *domain.Session) error {
+	s.Updated = time.Now()
 	s.MessageCount = len(s.Messages)
 	if err := st.SaveMetadata(&s.SessionMetadata); err != nil {
 		return err

@@ -210,7 +210,7 @@ func (w *sessionPickerWorkflow) applySelection(id string) (string, error) {
 		targetDir = meta.WorkingDir
 	}
 
-	if err := w.store.SetActive(id, w.workingDir); err != nil {
+	if err := w.store.SetActive(id, meta.WorkingDir); err != nil {
 		return "", err
 	}
 

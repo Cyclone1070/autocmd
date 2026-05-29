@@ -17,11 +17,6 @@ type mockSessionStore struct {
 	mock.Mock
 }
 
-func (m *mockSessionStore) Create() (*domain.Session, error) {
-	args := m.Called()
-	return args.Get(0).(*domain.Session), args.Error(1)
-}
-
 func (m *mockSessionStore) GetSession(id string) (*domain.Session, error) {
 	args := m.Called(id)
 	return args.Get(0).(*domain.Session), args.Error(1)
@@ -37,31 +32,17 @@ func (m *mockSessionStore) GenerateName(ctx context.Context, llm domain.LLM, tar
 	return args.String(0), args.Error(1)
 }
 
-type mockWorkspaceSessionStore struct {
-	mock.Mock
+func (m *mockSessionStore) Create(workingDir string) (*domain.Session, error) {
+	args := m.Called(workingDir)
+	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockWorkspaceSessionStore) FindActiveForDir(dir string) (*domain.SessionMetadata, error) {
+func (m *mockSessionStore) FindActiveForDir(dir string) (*domain.SessionMetadata, error) {
 	args := m.Called(dir)
 	if v := args.Get(0); v != nil {
 		return v.(*domain.SessionMetadata), args.Error(1)
 	}
 	return nil, args.Error(1)
-}
-
-func (m *mockWorkspaceSessionStore) Create() (*domain.Session, error) {
-	args := m.Called()
-	return args.Get(0).(*domain.Session), args.Error(1)
-}
-
-func (m *mockWorkspaceSessionStore) GetSession(id string) (*domain.Session, error) {
-	args := m.Called(id)
-	return args.Get(0).(*domain.Session), args.Error(1)
-}
-
-func (m *mockWorkspaceSessionStore) SaveSession(s *domain.Session) error {
-	args := m.Called(s)
-	return args.Error(0)
 }
 
 type mockLLM struct {
@@ -115,7 +96,7 @@ func (m *mockActionForwarder) Deliver(act domain.Action) {
 
 func TestResolveWorkspaceSession(t *testing.T) {
 	t.Run("Finds active session", func(t *testing.T) {
-		store := new(mockWorkspaceSessionStore)
+		store := new(mockSessionStore)
 		summary := &domain.SessionMetadata{ID: "sess-123", WorkingDir: "/dir", Active: true}
 		sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-123", WorkingDir: "/dir", Active: true}}
 
@@ -129,12 +110,11 @@ func TestResolveWorkspaceSession(t *testing.T) {
 	})
 
 	t.Run("Creates new session if none exists", func(t *testing.T) {
-		store := new(mockWorkspaceSessionStore)
-		sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-new"}}
+		store := new(mockSessionStore)
+		sess := &domain.Session{SessionMetadata: domain.SessionMetadata{ID: "sess-new", WorkingDir: "/dir"}}
 
 		store.On("FindActiveForDir", "/dir").Return((*domain.SessionMetadata)(nil), nil)
-		store.On("Create").Return(sess, nil)
-		store.On("SaveSession", mock.Anything).Return(nil)
+		store.On("Create", "/dir").Return(sess, nil)
 
 		res, err := ResolveWorkspaceSession(store, "/dir")
 		assert.NoError(t, err)

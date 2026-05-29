@@ -69,7 +69,7 @@ func (st *Store) sessionDir(id string) string {
 }
 
 // Create creates a new session with a unique ID and saves it.
-func (st *Store) Create() (*domain.Session, error) {
+func (st *Store) Create(workingDir string) (*domain.Session, error) {
 	if err := st.fs.EnsureDirs(st.storageDir); err != nil {
 		return nil, fmt.Errorf("create storage dir: %w", err)
 	}
@@ -92,9 +92,10 @@ func (st *Store) Create() (*domain.Session, error) {
 	}
 	s := &domain.Session{
 		SessionMetadata: domain.SessionMetadata{
-			ID:      id,
-			Created: now,
-			Updated: now,
+			ID:         id,
+			WorkingDir: workingDir,
+			Created:    now,
+			Updated:    now,
 		},
 		SessionMessages: domain.SessionMessages{
 			Messages: []*schema.Message{},
@@ -391,14 +392,14 @@ func (st *Store) FindActiveForDir(dir string) (*domain.SessionMetadata, error) {
 }
 
 // FindBlank returns the most recently updated session metadata that has no name and no messages.
-func (st *Store) FindBlank() (*domain.SessionMetadata, error) {
+func (st *Store) FindBlank(workingDir string) (*domain.SessionMetadata, error) {
 	summaries, err := st.List()
 	if err != nil {
 		return nil, err
 	}
 
 	for _, s := range summaries {
-		if s.Name == "" && s.MessageCount == 0 {
+		if s.Name == "" && s.MessageCount == 0 && s.WorkingDir == workingDir {
 			return &s, nil
 		}
 	}

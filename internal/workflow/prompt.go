@@ -7,19 +7,13 @@ import (
 	"github.com/Cyclone1070/iav/internal/domain"
 )
 
-// sessionStore defines the persistence operations for chat sessions.
+// sessionStore defines the persistence operations for sessions.
 type sessionStore interface {
-	Create() (*domain.Session, error)
+	FindActiveForDir(dir string) (*domain.SessionMetadata, error)
+	Create(workingDir string) (*domain.Session, error)
 	GetSession(id string) (*domain.Session, error)
 	SaveSession(s *domain.Session) error
 	GenerateName(ctx context.Context, llm domain.LLM, target string) (string, error)
-}
-
-type workspaceSessionStore interface {
-	FindActiveForDir(dir string) (*domain.SessionMetadata, error)
-	Create() (*domain.Session, error)
-	GetSession(id string) (*domain.Session, error)
-	SaveSession(s *domain.Session) error
 }
 
 type agentRunner interface {
@@ -123,7 +117,7 @@ func RunPrompt(ctx context.Context, input string, deps *PromptDeps) <-chan error
 }
 
 // ResolveWorkspaceSession finds or creates the active session for a working directory.
-func ResolveWorkspaceSession(store workspaceSessionStore, workingDir string) (*domain.Session, error) {
+func ResolveWorkspaceSession(store sessionStore, workingDir string) (*domain.Session, error) {
 	active, err := store.FindActiveForDir(workingDir)
 	if err != nil {
 		return nil, err
@@ -136,12 +130,8 @@ func ResolveWorkspaceSession(store workspaceSessionStore, workingDir string) (*d
 	}
 
 	// Create new session scoped to workingDir
-	sess, err := store.Create()
+	sess, err := store.Create(workingDir)
 	if err != nil {
-		return nil, err
-	}
-	sess.WorkingDir = workingDir
-	if err := store.SaveSession(sess); err != nil {
 		return nil, err
 	}
 	return sess, nil

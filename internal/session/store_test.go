@@ -118,7 +118,7 @@ func newTestStore() (*Store, *mockFileSystem) {
 func TestCreate_Success(t *testing.T) {
 	store, fs := newTestStore()
 
-	sess, err := store.Create()
+	sess, err := store.Create("/my/project")
 	if err != nil {
 		t.Fatalf("Create() failed: %v", err)
 	}
@@ -128,6 +128,9 @@ func TestCreate_Success(t *testing.T) {
 	}
 	if sess.Name != "" {
 		t.Errorf("Session Name should be empty, got %q", sess.Name)
+	}
+	if sess.WorkingDir != "/my/project" {
+		t.Errorf("Session WorkingDir should be %q, got %q", "/my/project", sess.WorkingDir)
 	}
 	if len(sess.Messages) != 0 {
 		t.Errorf("Session Messages should be empty, got %d", len(sess.Messages))
@@ -148,7 +151,7 @@ func TestCreate_EnsureDirsFails(t *testing.T) {
 	store, fs := newTestStore()
 	fs.ensureErr = errors.New("mkdir failed")
 
-	_, err := store.Create()
+	_, err := store.Create("/dir")
 	if err == nil {
 		t.Fatal("Create() should have failed")
 	}
@@ -161,7 +164,7 @@ func TestCreate_SaveFails(t *testing.T) {
 	store, fs := newTestStore()
 	fs.writeErr = errors.New("write failed")
 
-	_, err := store.Create()
+	_, err := store.Create("/dir")
 	if err == nil {
 		t.Fatal("Create() should have failed")
 	}
@@ -704,7 +707,7 @@ func TestCreateSaveGetSessionRoundtrip(t *testing.T) {
 	store, _ := newTestStore()
 
 	// Create
-	sess, err := store.Create()
+	sess, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create() failed: %v", err)
 	}
@@ -863,9 +866,10 @@ func TestList_SkipsDirectoriesWithoutMetadata(t *testing.T) {
 
 func TestFindBlank(t *testing.T) {
 	store, fs := newTestStore()
+	workingDir := "/project"
 
 	// 1. Initially no blanks
-	blank, err := store.FindBlank()
+	blank, err := store.FindBlank(workingDir)
 	if err != nil {
 		t.Fatalf("FindBlank() failed: %v", err)
 	}
@@ -873,15 +877,14 @@ func TestFindBlank(t *testing.T) {
 		t.Errorf("Expected no blank session initially, got %v", blank.ID)
 	}
 
-	// 2. Add an empty session
-	sess, _ := store.Create()
+	// 2. Add an empty session in our dir
+	sess, _ := store.Create(workingDir)
 
-	// Add it to directory list for store.List()
 	fs.dirs[store.storageDir] = []os.DirEntry{
 		&mockDirEntry{name: sess.ID, isDir: true},
 	}
 
-	blank, err = store.FindBlank()
+	blank, err = store.FindBlank(workingDir)
 	if err != nil {
 		t.Fatalf("FindBlank() failed: %v", err)
 	}
@@ -892,11 +895,23 @@ func TestFindBlank(t *testing.T) {
 		t.Errorf("Expected to find session %s, got %s", sess.ID, blank.ID)
 	}
 
-	// 3. Add a message - should no longer be blank
+	// 3. Session in another dir should not be found
+	other, _ := store.Create("/other")
+	fs.dirs[store.storageDir] = append(fs.dirs[store.storageDir], &mockDirEntry{name: other.ID, isDir: true})
+
+	blank, err = store.FindBlank(workingDir)
+	if err != nil {
+		t.Fatalf("FindBlank() failed: %v", err)
+	}
+	if blank == nil || blank.ID != sess.ID {
+		t.Errorf("Expected to find %s, not a session from another dir", sess.ID)
+	}
+
+	// 4. Add a message - should no longer be blank
 	sess.Messages = append(sess.Messages, &schema.Message{Role: schema.User, Content: "hi"})
 	_ = store.SaveSession(sess)
 
-	blank, err = store.FindBlank()
+	blank, err = store.FindBlank(workingDir)
 	if err != nil {
 		t.Fatalf("FindBlank() failed: %v", err)
 	}
@@ -904,12 +919,12 @@ func TestFindBlank(t *testing.T) {
 		t.Errorf("Expected no blank session after adding message, got %v", blank.ID)
 	}
 
-	// 4. Add a name - should no longer be blank
+	// 5. Add a name - should no longer be blank
 	sess.Messages = []*schema.Message{}
 	sess.Name = "Named Session"
 	_ = store.SaveSession(sess)
 
-	blank, err = store.FindBlank()
+	blank, err = store.FindBlank(workingDir)
 	if err != nil {
 		t.Fatalf("FindBlank() failed: %v", err)
 	}
@@ -920,7 +935,7 @@ func TestFindBlank(t *testing.T) {
 
 func TestRename(t *testing.T) {
 	store, _ := newTestStore()
-	sess, _ := store.Create()
+	sess, _ := 	store.Create("")
 
 	err := store.Rename(sess.ID, "New Name")
 	if err != nil {
@@ -994,11 +1009,11 @@ func TestStore_SetActive(t *testing.T) {
 	store, fs := newTestStore()
 
 	// Create 2 sessions in the same directory, both inactive
-	s1, err := store.Create()
+	s1, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create s1 failed: %v", err)
 	}
-	s2, err := store.Create()
+	s2, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create s2 failed: %v", err)
 	}
@@ -1081,15 +1096,15 @@ func TestStore_FindActiveForDir(t *testing.T) {
 	store, fs := newTestStore()
 
 	// Create 3 sessions and set Active flags manually
-	s1, err := store.Create()
+	s1, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create s1 failed: %v", err)
 	}
-	s2, err := store.Create()
+	s2, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create s2 failed: %v", err)
 	}
-	s3, err := store.Create()
+	s3, err := 	store.Create("")
 	if err != nil {
 		t.Fatalf("Create s3 failed: %v", err)
 	}

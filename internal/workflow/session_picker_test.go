@@ -27,13 +27,13 @@ func (m *mockSessionPickerStore) GetMetadata(id string) (*domain.SessionMetadata
 	return args.Get(0).(*domain.SessionMetadata), args.Error(1)
 }
 
-func (m *mockSessionPickerStore) Create() (*domain.Session, error) {
-	args := m.Called()
+func (m *mockSessionPickerStore) Create(workingDir string) (*domain.Session, error) {
+	args := m.Called(workingDir)
 	return args.Get(0).(*domain.Session), args.Error(1)
 }
 
-func (m *mockSessionPickerStore) FindBlank() (*domain.SessionMetadata, error) {
-	args := m.Called()
+func (m *mockSessionPickerStore) FindBlank(workingDir string) (*domain.SessionMetadata, error) {
+	args := m.Called(workingDir)
 	if v := args.Get(0); v != nil {
 		return v.(*domain.SessionMetadata), args.Error(1)
 	}

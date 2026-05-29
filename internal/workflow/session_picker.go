@@ -10,8 +10,8 @@ import (
 type sessionPickerStore interface {
 	List() ([]domain.SessionMetadata, error)
 	GetMetadata(id string) (*domain.SessionMetadata, error)
-	Create() (*domain.Session, error)
-	FindBlank() (*domain.SessionMetadata, error)
+	Create(workingDir string) (*domain.Session, error)
+	FindBlank(workingDir string) (*domain.SessionMetadata, error)
 	Rename(id, name string) error
 	Delete(id string) error
 	SetActive(id, workingDir string) error
@@ -218,18 +218,17 @@ func (w *sessionPickerWorkflow) applySelection(id string) (string, error) {
 }
 
 func (w *sessionPickerWorkflow) createSession() (string, error) {
-	existingBlank, err := w.store.FindBlank()
+	existingBlank, err := w.store.FindBlank(w.workingDir)
 	if err != nil {
 		return "", err
 	}
-	// Blank sessions with no directory or matching directory can be reused
-	if existingBlank != nil && (existingBlank.WorkingDir == "" || existingBlank.WorkingDir == w.workingDir) {
+	if existingBlank != nil {
 		if err := w.store.SetActive(existingBlank.ID, w.workingDir); err == nil {
 			return existingBlank.ID, nil
 		}
 	}
 
-	sess, err := w.store.Create()
+	sess, err := w.store.Create(w.workingDir)
 	if err != nil {
 		return "", err
 	}

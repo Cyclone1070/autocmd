@@ -64,6 +64,22 @@ func TestSave_PersistsToFile(t *testing.T) {
 	assert.Contains(t, string(fs.Files[statePath]), "custom-model")
 }
 
+func TestSave_DefaultLoaded_SavesWithoutError(t *testing.T) {
+	fs := &MockFS{Files: make(map[string][]byte)}
+	mgr := state.NewManager(fs)
+
+	s, err := mgr.Load()
+	require.NoError(t, err)
+	s.SetModel("new-model")
+
+	err = s.Save()
+	require.NoError(t, err)
+
+	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
+	assert.Contains(t, fs.Files, statePath)
+	assert.Contains(t, string(fs.Files[statePath]), "new-model")
+}
+
 func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	fs := &MockFS{Files: make(map[string][]byte)}
 	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")

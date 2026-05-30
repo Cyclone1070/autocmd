@@ -1,3 +1,3 @@
 # AutoCmd
 
-Terminal-native AI assistant with tool execution and bash access.
+Convenient terminal native AI assistant with file system and bash access.

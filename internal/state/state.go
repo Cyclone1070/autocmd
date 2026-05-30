@@ -77,6 +77,7 @@ func (m *Manager) Load() (*State, error) {
 
 	homeDir, _ := m.fs.UserHomeDir()
 	if homeDir == "" {
+		s.saveFn = func() error { return m.Save(s) }
 		return s, nil
 	}
 
@@ -85,6 +86,7 @@ func (m *Manager) Load() (*State, error) {
 	data, err := m.fs.ReadFile(statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			s.saveFn = func() error { return m.Save(s) }
 			return s, nil
 		}
 		return nil, err

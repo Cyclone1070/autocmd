@@ -29,15 +29,6 @@ func (m *infoMockLLMRegistry) Get(ctx context.Context, id string) (domain.LLM, e
 	return args.Get(0).(domain.LLM), args.Error(1)
 }
 
-type infoMockState struct {
-	mock.Mock
-}
-
-func (m *infoMockState) Model() string {
-	args := m.Called()
-	return args.String(0)
-}
-
 type infoMockSessionStore struct {
 	mock.Mock
 }
@@ -66,7 +57,6 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 	t.Run("Full Success Scenario", func(t *testing.T) {
 		registry := new(infoMockLLMRegistry)
-		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 		llm := new(infoMockLLM)
 
@@ -75,7 +65,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 			{ID: testFixtureProviderOpenAI, Credential: nil},
 		}, nil)
 
-		state.On("Model").Return("google/gemini-pro")
+		st := &domain.State{Model: "google/gemini-pro"}
 
 		session := &domain.Session{
 			SessionMetadata: domain.SessionMetadata{ID: "sess-123", Name: "Test Session"},
@@ -98,7 +88,7 @@ func TestInfoWorkflow_Run(t *testing.T) {
 		llm.On("DisplayName").Return("Gemini 1.5 Pro")
 		llm.On("ContextWindow").Return(128000)
 
-		wf := NewInfoWorkflow(registry, registry, state, store, "sess-123")
+		wf := NewInfoWorkflow(registry, registry, st, store, "sess-123")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -111,13 +101,11 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 	t.Run("No Model or Session", func(t *testing.T) {
 		registry := new(infoMockLLMRegistry)
-		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
-		state.On("Model").Return("")
 
-		wf := NewInfoWorkflow(registry, registry, state, store, "")
+		wf := NewInfoWorkflow(registry, registry, &domain.State{}, store, "")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -128,14 +116,12 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 	t.Run("Session Not Found", func(t *testing.T) {
 		registry := new(infoMockLLMRegistry)
-		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, nil)
-		state.On("Model").Return("")
 		store.On("GetSession", "missing-sess").Return(nil, fmt.Errorf("not found"))
 
-		wf := NewInfoWorkflow(registry, registry, state, store, "missing-sess")
+		wf := NewInfoWorkflow(registry, registry, &domain.State{}, store, "missing-sess")
 		res, err := wf.gather(ctx)
 
 		assert.NoError(t, err)
@@ -144,12 +130,11 @@ func TestInfoWorkflow_Run(t *testing.T) {
 
 	t.Run("Registry Error", func(t *testing.T) {
 		registry := new(infoMockLLMRegistry)
-		state := new(infoMockState)
 		store := new(infoMockSessionStore)
 
 		registry.On("List", ctx).Return([]domain.ProviderInfo{}, fmt.Errorf("registry fail"))
 
-		wf := NewInfoWorkflow(registry, registry, state, store, "")
+		wf := NewInfoWorkflow(registry, registry, &domain.State{}, store, "")
 		_, err := wf.gather(ctx)
 
 		assert.Error(t, err)

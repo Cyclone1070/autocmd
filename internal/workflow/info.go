@@ -15,10 +15,6 @@ type infoLLMRegistry interface {
 	Get(ctx context.Context, id string) (domain.LLM, error)
 }
 
-type infoState interface {
-	Model() string
-}
-
 type infoSessionStore interface {
 	GetSession(id string) (*domain.Session, error)
 }
@@ -31,7 +27,7 @@ type infoBus interface {
 type InfoWorkflow struct {
 	providerRegistry infoProviderRegistry
 	llmRegistry      infoLLMRegistry
-	state            infoState
+	state            *domain.State
 	store            infoSessionStore
 	sessionID        string
 }
@@ -41,7 +37,7 @@ type InfoDeps struct {
 	Bus              infoBus
 	ProviderRegistry infoProviderRegistry
 	LLMRegistry      infoLLMRegistry
-	State            infoState
+	State            *domain.State
 	Store            infoSessionStore
 	SessionID        string
 }
@@ -65,7 +61,7 @@ func RunInfo(ctx context.Context, deps *InfoDeps) <-chan error {
 }
 
 // NewInfoWorkflow creates a new InfoWorkflow.
-func NewInfoWorkflow(pRegistry infoProviderRegistry, lRegistry infoLLMRegistry, state infoState, store infoSessionStore, sessionID string) *InfoWorkflow {
+func NewInfoWorkflow(pRegistry infoProviderRegistry, lRegistry infoLLMRegistry, state *domain.State, store infoSessionStore, sessionID string) *InfoWorkflow {
 	return &InfoWorkflow{
 		providerRegistry: pRegistry,
 		llmRegistry:      lRegistry,
@@ -91,7 +87,7 @@ func (w *InfoWorkflow) gather(ctx context.Context) (domain.InfoEvent, error) {
 	}
 
 	// 2. Model ID from State
-	modelID := w.state.Model()
+	modelID := w.state.Model
 
 	// 3. Session Info
 	sessionID := w.sessionID

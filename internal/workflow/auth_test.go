@@ -61,14 +61,6 @@ func (m *mockAuthManager) Remove(providerID string) error {
 	return m.Called(providerID).Error(0)
 }
 
-type mockAuthState struct {
-	mock.Mock
-}
-
-func (m *mockAuthState) Model() string      { return m.Called().String(0) }
-func (m *mockAuthState) SetModel(id string) { m.Called(id) }
-func (m *mockAuthState) Save() error        { return m.Called().Error(0) }
-
 type mockProvider struct {
 	mock.Mock
 }
@@ -88,7 +80,7 @@ func TestRunAuth(t *testing.T) {
 
 	registry := new(mockAuthRegistry)
 	authMgr := new(mockAuthManager)
-	state := new(mockAuthState)
+	st := &domain.State{}
 	bus := new(mockAuthBus)
 	actions := make(chan domain.Action, 10)
 	bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
@@ -105,7 +97,8 @@ func TestRunAuth(t *testing.T) {
 			Bus:      bus,
 			Registry: registry,
 			AuthMgr:  authMgr,
-			State:    state,
+			State:    st,
+			Saver:    new(mockStateSaver),
 		})
 
 		// 2. Select Provider
@@ -152,7 +145,8 @@ func TestRunAuth(t *testing.T) {
 			Bus:      bus,
 			Registry: registry,
 			AuthMgr:  authMgr,
-			State:    state,
+			State:    st,
+			Saver:    new(mockStateSaver),
 		})
 
 		actions <- domain.StopAction{}
@@ -168,7 +162,6 @@ func TestRunAuth(t *testing.T) {
 	t.Run("Gather populates AuthMethod", func(t *testing.T) {
 		registry := new(mockAuthRegistry)
 		authMgr := new(mockAuthManager)
-		state := new(mockAuthState)
 
 		infos := []domain.ProviderInfo{
 			{ID: testFixtureProviderOpenAI, Credential: &domain.Credential{Type: domain.AuthMethodAPIKey}},
@@ -176,7 +169,7 @@ func TestRunAuth(t *testing.T) {
 		}
 		registry.On("List", mock.Anything).Return(infos, nil)
 
-		wf := NewAuthWorkflow(registry, authMgr, nil, state)
+		wf := NewAuthWorkflow(registry, authMgr, nil, &domain.State{}, new(mockStateSaver))
 		snapshot, err := wf.Gather(ctx)
 
 		assert.NoError(t, err)
@@ -187,7 +180,6 @@ func TestRunAuth(t *testing.T) {
 	t.Run("EnvVar Fallback Only", func(t *testing.T) {
 		registry := new(mockAuthRegistry)
 		authMgr := new(mockAuthManager)
-		state := new(mockAuthState)
 		bus := new(mockAuthBus)
 		actions := make(chan domain.Action, 10)
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
@@ -200,7 +192,8 @@ func TestRunAuth(t *testing.T) {
 			Bus:      bus,
 			Registry: registry,
 			AuthMgr:  authMgr,
-			State:    state,
+			State:    &domain.State{},
+			Saver:    new(mockStateSaver),
 		})
 
 		// 2. Select Provider
@@ -233,7 +226,6 @@ func TestRunAuth(t *testing.T) {
 		registry := new(mockAuthRegistry)
 		authMgr := new(mockAuthManager)
 		oauthMgr := new(mockOAuthManager)
-		state := new(mockAuthState)
 		bus := new(mockAuthBus)
 		actions := make(chan domain.Action, 10)
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
@@ -247,7 +239,8 @@ func TestRunAuth(t *testing.T) {
 			Registry: registry,
 			AuthMgr:  authMgr,
 			OAuthMgr: oauthMgr,
-			State:    state,
+			State:    &domain.State{},
+			Saver:    new(mockStateSaver),
 		})
 
 		// 2. Select Provider
@@ -294,7 +287,6 @@ func TestRunAuth(t *testing.T) {
 		registry := new(mockAuthRegistry)
 		authMgr := new(mockAuthManager)
 		oauthMgr := new(mockOAuthManager)
-		state := new(mockAuthState)
 		bus := new(mockAuthBus)
 		actions := make(chan domain.Action, 10)
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
@@ -310,7 +302,8 @@ func TestRunAuth(t *testing.T) {
 			Registry: registry,
 			AuthMgr:  authMgr,
 			OAuthMgr: oauthMgr,
-			State:    state,
+			State:    &domain.State{},
+			Saver:    new(mockStateSaver),
 		})
 
 		// 2. Select Provider
@@ -348,7 +341,6 @@ func TestRunAuth(t *testing.T) {
 		registry := new(mockAuthRegistry)
 		authMgr := new(mockAuthManager)
 		oauthMgr := new(mockOAuthManager)
-		state := new(mockAuthState)
 		bus := new(mockAuthBus)
 		actions := make(chan domain.Action, 10)
 		bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
@@ -362,7 +354,8 @@ func TestRunAuth(t *testing.T) {
 			Registry: registry,
 			AuthMgr:  authMgr,
 			OAuthMgr: oauthMgr,
-			State:    state,
+			State:    &domain.State{},
+			Saver:    new(mockStateSaver),
 		})
 
 		// Provider 1: github with OAuth method.

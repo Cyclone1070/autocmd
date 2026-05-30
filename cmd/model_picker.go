@@ -30,6 +30,7 @@ var modelCmd = &cobra.Command{
 			Bus:      bus,
 			Registry: deps.LLMRegistry,
 			State:    deps.State,
+			Saver:    deps.StateMgr,
 		})
 
 		theme := newTheme(deps.Config.UI())

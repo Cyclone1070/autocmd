@@ -19,24 +19,6 @@ func (m *mockModelLLMRegistry) List(ctx context.Context) ([]domain.LLMInfo, erro
 	return args.Get(0).([]domain.LLMInfo), args.Error(1)
 }
 
-type mockModelState struct {
-	mock.Mock
-}
-
-func (m *mockModelState) Model() string {
-	args := m.Called()
-	return args.String(0)
-}
-
-func (m *mockModelState) SetModel(id string) {
-	m.Called(id)
-}
-
-func (m *mockModelState) Save() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
 type mockModelPickerBus struct {
 	mock.Mock
 }
@@ -50,16 +32,24 @@ func (m *mockModelPickerBus) WorkflowActions() <-chan domain.Action {
 	return args.Get(0).(<-chan domain.Action)
 }
 
+type mockStateSaver struct {
+	mock.Mock
+}
+
+func (m *mockStateSaver) Save(s *domain.State) error {
+	args := m.Called(s)
+	return args.Error(0)
+}
+
 func TestRunModelPicker(t *testing.T) {
 	ctx := t.Context()
 
 	registry := new(mockModelLLMRegistry)
-	state := new(mockModelState)
+	st := &domain.State{Model: "m1"}
 	bus := new(mockModelPickerBus)
 
 	models := []domain.LLMInfo{{ID: "m1", DisplayName: "Model 1"}}
 	registry.On("List", mock.Anything).Return(models, nil)
-	state.On("Model").Return("m1")
 
 	// Expect initial snapshot
 	bus.On("SendUIUpdate", mock.MatchedBy(func(ev domain.UIUpdate) bool {
@@ -71,14 +61,17 @@ func TestRunModelPicker(t *testing.T) {
 	bus.On("WorkflowActions").Return((<-chan domain.Action)(actions))
 
 	t.Run("Selection success", func(t *testing.T) {
-		state.On("SetModel", "m2").Return()
-		state.On("Save").Return(nil)
+		saver := new(mockStateSaver)
+		saver.On("Save", mock.MatchedBy(func(s *domain.State) bool {
+			return s.Model == "m2"
+		})).Return(nil)
 		bus.On("SendUIUpdate", domain.DoneEvent{}).Return()
 
 		done := RunModelPicker(ctx, &ModelPickerDeps{
 			Bus:      bus,
 			Registry: registry,
-			State:    state,
+			State:    st,
+			Saver:    saver,
 		})
 
 		actions <- domain.SelectModelAction{ID: "m2"}
@@ -90,7 +83,7 @@ func TestRunModelPicker(t *testing.T) {
 			t.Fatal("workflow timed out")
 		}
 
-		state.AssertExpectations(t)
+		saver.AssertExpectations(t)
 		bus.AssertExpectations(t)
 	})
 }

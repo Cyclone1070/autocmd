@@ -18,10 +18,9 @@ type authManager interface {
 	Remove(providerID string) error
 }
 
-type authState interface {
-	Model() string
-	SetModel(id string)
-	Save() error
+// authStateManager defines the interface for persisting state changes.
+type authStateManager interface {
+	Save(*domain.State) error
 }
 
 type authBus interface {
@@ -35,7 +34,8 @@ type AuthDeps struct {
 	Registry authRegistry
 	AuthMgr  authManager
 	OAuthMgr oauthManager
-	State    authState
+	State    *domain.State
+	Saver    authStateManager
 }
 
 type oauthManager interface {
@@ -49,7 +49,7 @@ func RunAuth(ctx context.Context, deps *AuthDeps) <-chan error {
 		defer close(done)
 		session := &authSession{
 			deps: deps,
-			wf:   NewAuthWorkflow(deps.Registry, deps.AuthMgr, deps.OAuthMgr, deps.State),
+			wf:   NewAuthWorkflow(deps.Registry, deps.AuthMgr, deps.OAuthMgr, deps.State, deps.Saver),
 		}
 
 		// 1. Initial snapshot
@@ -271,16 +271,18 @@ type AuthWorkflow struct {
 	registry authRegistry
 	authMgr  authManager
 	oauthMgr oauthManager
-	state    authState
+	state    *domain.State
+	saver    authStateManager
 }
 
 // NewAuthWorkflow creates a new AuthWorkflow.
-func NewAuthWorkflow(registry authRegistry, authMgr authManager, oauthMgr oauthManager, state authState) *AuthWorkflow {
+func NewAuthWorkflow(registry authRegistry, authMgr authManager, oauthMgr oauthManager, state *domain.State, saver authStateManager) *AuthWorkflow {
 	return &AuthWorkflow{
 		registry: registry,
 		authMgr:  authMgr,
 		oauthMgr: oauthMgr,
 		state:    state,
+		saver:    saver,
 	}
 }
 
@@ -315,9 +317,9 @@ func (w *AuthWorkflow) RemoveAuth(_ context.Context, providerID string) error {
 	}
 
 	// Reset current model if it belongs to the provider we just removed
-	if strings.HasPrefix(w.state.Model(), providerID+"/") {
-		w.state.SetModel("")
-		return w.state.Save()
+	if strings.HasPrefix(w.state.Model, providerID+"/") {
+		w.state.Model = ""
+		return w.saver.Save(w.state)
 	}
 
 	return nil

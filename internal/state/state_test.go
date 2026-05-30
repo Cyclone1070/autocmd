@@ -45,7 +45,7 @@ func TestLoad_NoFile_ReturnsDefault(t *testing.T) {
 
 	s, err := mgr.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "", s.Model()) // Default model should be empty
+	assert.Equal(t, "", s.Model)
 }
 
 func TestSave_PersistsToFile(t *testing.T) {
@@ -53,31 +53,14 @@ func TestSave_PersistsToFile(t *testing.T) {
 	mgr := state.NewManager(fs)
 
 	s, _ := mgr.Load()
-	s.SetModel("custom-model")
+	s.Model = "custom-model"
 
 	err := mgr.Save(s)
 	require.NoError(t, err)
 
-	// Verify file was written
 	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
 	assert.Contains(t, fs.Files, statePath)
 	assert.Contains(t, string(fs.Files[statePath]), "custom-model")
-}
-
-func TestSave_DefaultLoaded_SavesWithoutError(t *testing.T) {
-	fs := &MockFS{Files: make(map[string][]byte)}
-	mgr := state.NewManager(fs)
-
-	s, err := mgr.Load()
-	require.NoError(t, err)
-	s.SetModel("new-model")
-
-	err = s.Save()
-	require.NoError(t, err)
-
-	statePath := filepath.Join("/home/user", domain.ConfigBaseDir, domain.AppName, "state.json")
-	assert.Contains(t, fs.Files, statePath)
-	assert.Contains(t, string(fs.Files[statePath]), "new-model")
 }
 
 func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
@@ -88,5 +71,5 @@ func TestLoad_ExistingFile_ReturnsContent(t *testing.T) {
 	mgr := state.NewManager(fs)
 	s, err := mgr.Load()
 	require.NoError(t, err)
-	assert.Equal(t, "saved-model", s.Model())
+	assert.Equal(t, "saved-model", s.Model)
 }

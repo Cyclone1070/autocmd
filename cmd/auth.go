@@ -34,6 +34,7 @@ var authCmd = &cobra.Command{
 			AuthMgr:  deps.AuthManager,
 			OAuthMgr: deps.OAuthManager,
 			State:    deps.State,
+			Saver:    deps.StateMgr,
 		})
 
 		theme := newTheme(deps.Config.UI())

@@ -17,8 +17,8 @@ import (
 // Deps holds the core dependencies for the CLI commands.
 type Deps struct {
 	Config           *config.Config
-	State            *state.State
-	StateManager     *state.Manager
+	State            *domain.State
+	StateMgr         *state.Manager
 	SessionStore     *session.Store
 	AuthManager      *auth.Manager
 	OAuthManager     *auth.OAuthManager
@@ -59,7 +59,7 @@ func Wire() (*Deps, error) {
 	return &Deps{
 		Config:           cfg,
 		State:            appState,
-		StateManager:     stateMgr,
+		StateMgr:         stateMgr,
 		SessionStore:     sessionStore,
 		AuthManager:      authMgr,
 		OAuthManager:     auth.NewOAuthManager(nil),

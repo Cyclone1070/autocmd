@@ -1,4 +1,3 @@
-// Package state handles persistent application state, such as the current session and selected model.
 package state
 
 import (
@@ -35,50 +34,11 @@ func NewManager(fs FileSystem) *Manager {
 	return &Manager{fs: fs}
 }
 
-// State holds application persistent state.
-type State struct {
-	saveFn func() error
-	model  string
-}
-
-// Model returns the current model.
-func (s *State) Model() string {
-	return s.model
-}
-
-// SetModel sets the current model.
-func (s *State) SetModel(m string) {
-	s.model = m
-}
-
-// Save persists the state using the manager it was loaded from.
-func (s *State) Save() error {
-	if s.saveFn == nil {
-		return fmt.Errorf("state not loaded via manager")
-	}
-	return s.saveFn()
-}
-
-// stateDTO is used for JSON persistence.
-type stateDTO struct {
-	Model string `json:"model"`
-}
-
-// Default returns the default application state.
-func Default() *State {
-	return &State{
-		model: "",
-	}
-}
-
-// Load reads application state using the injected filesystem.
-func (m *Manager) Load() (*State, error) {
-	s := Default()
-
+// Load reads application state from disk using the injected filesystem.
+func (m *Manager) Load() (*domain.State, error) {
 	homeDir, _ := m.fs.UserHomeDir()
 	if homeDir == "" {
-		s.saveFn = func() error { return m.Save(s) }
-		return s, nil
+		return &domain.State{}, nil
 	}
 
 	statePath := filepath.Join(homeDir, domain.ConfigBaseDir, domain.AppName, stateFile)
@@ -86,25 +46,21 @@ func (m *Manager) Load() (*State, error) {
 	data, err := m.fs.ReadFile(statePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			s.saveFn = func() error { return m.Save(s) }
-			return s, nil
+			return &domain.State{}, nil
 		}
 		return nil, err
 	}
 
-	var dto stateDTO
-	if err := json.Unmarshal(data, &dto); err != nil {
+	var s domain.State
+	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, err
 	}
 
-	s.model = dto.Model
-	s.saveFn = func() error { return m.Save(s) }
-
-	return s, nil
+	return &s, nil
 }
 
-// Save writes application state using the injected filesystem.
-func (m *Manager) Save(s *State) error {
+// Save writes application state to disk using the injected filesystem.
+func (m *Manager) Save(s *domain.State) error {
 	if s == nil {
 		return fmt.Errorf("state is nil")
 	}
@@ -121,11 +77,7 @@ func (m *Manager) Save(s *State) error {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
-	dto := stateDTO{
-		Model: s.model,
-	}
-
-	data, err := json.MarshalIndent(dto, "", "  ")
+	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}

@@ -87,7 +87,7 @@ func Execute() {
 }
 
 func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) error {
-	if deps.State.Model() == "" {
+	if deps.State.Model == "" {
 		return withCategory(errSetup, errors.New("no model selected"))
 	}
 
@@ -140,7 +140,7 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 
 	toolRegistry := tool.NewRegistry(tools)
 
-	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model())
+	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model)
 	if err != nil {
 		return withCategory(errSetup, err)
 	}

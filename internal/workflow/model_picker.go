@@ -11,11 +11,9 @@ type modelLLMRegistry interface {
 	List(ctx context.Context) ([]domain.LLMInfo, error)
 }
 
-// modelState defines the interface for managing current model state.
-type modelState interface {
-	Model() string
-	SetModel(id string)
-	Save() error
+// modelStateManager defines the interface for persisting state changes.
+type modelStateManager interface {
+	Save(*domain.State) error
 }
 
 type modelPickerBus interface {
@@ -27,7 +25,8 @@ type modelPickerBus interface {
 type ModelPickerDeps struct {
 	Bus      modelPickerBus
 	Registry modelLLMRegistry
-	State    modelState
+	State    *domain.State
+	Saver    modelStateManager
 }
 
 // RunModelPicker starts the model selection workflow asynchronously.
@@ -35,7 +34,7 @@ func RunModelPicker(ctx context.Context, deps *ModelPickerDeps) <-chan error {
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
-		wf := newModelPickerWorkflow(deps.Registry, deps.State)
+		wf := newModelPickerWorkflow(deps.Registry, deps.State, deps.Saver)
 
 		// 1. Send initial snapshot
 		snapshot, err := wf.prepareSelection(ctx)
@@ -80,13 +79,15 @@ func RunModelPicker(ctx context.Context, deps *ModelPickerDeps) <-chan error {
 
 type modelPickerWorkflow struct {
 	registry modelLLMRegistry
-	state    modelState
+	state    *domain.State
+	saver    modelStateManager
 }
 
-func newModelPickerWorkflow(registry modelLLMRegistry, state modelState) *modelPickerWorkflow {
+func newModelPickerWorkflow(registry modelLLMRegistry, state *domain.State, saver modelStateManager) *modelPickerWorkflow {
 	return &modelPickerWorkflow{
 		registry: registry,
 		state:    state,
+		saver:    saver,
 	}
 }
 
@@ -98,11 +99,11 @@ func (w *modelPickerWorkflow) prepareSelection(ctx context.Context) (domain.Mode
 
 	return domain.ModelListEvent{
 		Models:        models,
-		ActiveModelID: w.state.Model(),
+		ActiveModelID: w.state.Model,
 	}, nil
 }
 
 func (w *modelPickerWorkflow) applySelection(id string) error {
-	w.state.SetModel(id)
-	return w.state.Save()
+	w.state.Model = id
+	return w.saver.Save(w.state)
 }

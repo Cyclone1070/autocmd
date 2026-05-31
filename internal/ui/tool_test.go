@@ -8,6 +8,8 @@ import (
 
 	"github.com/Cyclone1070/autocmd/internal/config"
 	"github.com/Cyclone1070/autocmd/internal/domain"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -256,6 +258,26 @@ func TestRenderDiff_DiffBodyHiddenOnSuccess(t *testing.T) {
 	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 
 	assert.NotContains(t, got, "unique_secret_diff_content", "diff content should be hidden on success")
+}
+
+func TestRenderDiff_StatsStyling_Consistent(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	tr := newTestToolRenderer(t)
+	diff := domain.DiffDisplay{
+		Description: "Refactor",
+		Target:      "Edit big.go",
+		Added:       7,
+		Removed:     0,
+		Diff:        "",
+	}
+	output := tr.RenderDiff(diff, StatusSuccess, "", "✔")
+	// The stats punctuation should be consistently styled, not bare.
+	// Broken: ...\033[0m, \033[0m...  (bare comma after reset = white)
+	// Fixed:  ...\033[MUTEDm, \033[0m... (comma wrapped in muted)
+	assert.NotContains(t, output, "\x1b[0m, ", "comma should not be bare between colored stats")
+	assert.NotContains(t, output, "\x1b[0m)", "closing paren should not be bare after stats")
 }
 
 func TestRenderDiff_ContentHiddenOnSuccess(t *testing.T) {

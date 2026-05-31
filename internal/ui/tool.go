@@ -201,18 +201,14 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 		return spec
 	}
 
-	// Add stats to target if success
-	if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
-		target = fmt.Sprintf("%s (%s, %s)",
-			target,
-			r.Theme.Success(fmt.Sprintf("+%d", d.Added)),
-			r.Theme.Error(fmt.Sprintf("-%d", d.Removed)))
-	}
-
 	diffContent := r.colorizeDiff(d.Diff)
 
 	if target != "" {
-		spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
+		line := r.Theme.Muted(target)
+		if status == StatusSuccess && (d.Added != 0 || d.Removed != 0) {
+			line += r.Theme.Muted(" (") + r.Theme.Success(fmt.Sprintf("+%d", d.Added)) + r.Theme.Muted(", ") + r.Theme.Error(fmt.Sprintf("-%d", d.Removed)) + r.Theme.Muted(")")
+		}
+		spec.ContentLines = append(spec.ContentLines, line)
 	}
 	if diffContent != "" && status == StatusAwaitingApproval {
 		spec.ContentLines = append(spec.ContentLines, strings.Split(diffContent, "\n")...)

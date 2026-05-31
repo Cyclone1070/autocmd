@@ -136,12 +136,93 @@ func (t *Tool) InvokableRun(ctx context.Context, argumentsInJSON string, _ ...ei
 }
 
 func (t *Tool) Preview(input *compose.ToolInput) domain.ToolDisplay {
-	req := &Request{}
-	if err := json.Unmarshal([]byte(input.Arguments), req); err != nil {
-		return domain.NewStringDisplay(fmt.Sprintf("Run \"%s\"", toolName), "")
+	preview, err := t.previewEdit(input.Arguments)
+	if err != nil {
+		displayPath := t.pathResolver.DisplayPath(preview.filePath)
+		return domain.NewDiffDisplay(preview.description, fmt.Sprintf("Edit \"%s\"", displayPath), 0, 0, "")
 	}
-	displayPath := t.pathResolver.DisplayPath(req.FilePath)
-	return domain.NewDiffDisplay(req.Description, fmt.Sprintf("Edit \"%s\"", displayPath), 0, 0, "")
+	return domain.NewDiffDisplay(preview.description, preview.target, preview.added, preview.removed, preview.diff)
+}
+
+// editPreview holds the read-only diff computation for the preview phase.
+type editPreview struct {
+	filePath    string
+	description string
+	diff        string
+	added       int
+	removed     int
+	target      string
+}
+
+func (t *Tool) previewEdit(params string) (*editPreview, error) {
+	req := &Request{}
+	if err := json.Unmarshal([]byte(params), req); err != nil {
+		return nil, fmt.Errorf("failed to parse arguments: %w", err)
+	}
+
+	if req.FilePath == "" {
+		return nil, fmt.Errorf("file_path is required")
+	}
+	if req.Description == "" {
+		return nil, fmt.Errorf("description is required")
+	}
+
+	abs, err := t.pathResolver.ValidateAbs(req.FilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var rawContent string
+	_, err = t.fileOps.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if req.OldString != "" {
+				return nil, fmt.Errorf("file does not exist: %s", abs)
+			}
+			rawContent = ""
+		} else {
+			return nil, fmt.Errorf("failed to stat %s: %w", abs, err)
+		}
+	} else {
+		data, err := t.fileOps.ReadFile(abs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read file %s: %w", abs, err)
+		}
+		rawContent = string(data)
+		if req.OldString == "" && strings.TrimSpace(rawContent) != "" {
+			return nil, fmt.Errorf("cannot create new file - file already exists")
+		}
+	}
+
+	hasCRLF := strings.Contains(rawContent, "\r\n")
+	oldContent := strings.ReplaceAll(rawContent, "\r\n", "\n")
+
+	content, err := t.applyEdit(req, oldContent, abs)
+	if err != nil {
+		return nil, err
+	}
+
+	finalContent := content
+	if hasCRLF {
+		finalContent = strings.ReplaceAll(content, "\n", "\r\n")
+	}
+
+	if int64(len([]byte(finalContent))) > t.maxFileSize {
+		return nil, fmt.Errorf("file too large after edit: %s (size %d, limit %d)", abs, len([]byte(finalContent)), t.maxFileSize)
+	}
+
+	diff, added, removed := computeDiff(oldContent, content)
+
+	displayPath := t.pathResolver.DisplayPath(abs)
+
+	return &editPreview{
+		filePath:    req.FilePath,
+		description: req.Description,
+		diff:        diff,
+		added:       added,
+		removed:     removed,
+		target:      fmt.Sprintf("Edit \"%s\"", filepath.ToSlash(displayPath)),
+	}, nil
 }
 
 func (t *Tool) PreflightValidate(input *compose.ToolInput) error {
@@ -183,6 +264,7 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 	var rawContent string
 	var currentChecksum string
 	var info os.FileInfo
+	var perm os.FileMode
 
 	// Read file and apply edits in memory to compute diff
 	info, err = t.fileOps.Stat(abs)
@@ -193,6 +275,7 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 			}
 			// File doesn't exist and OldString is empty: new file creation
 			rawContent = ""
+			perm = os.FileMode(domain.DefaultFilePerm)
 		} else {
 			return nil, fmt.Errorf("failed to stat %s: %w", abs, err)
 		}
@@ -202,6 +285,7 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 			return nil, fmt.Errorf("failed to read file %s: %w", abs, err)
 		}
 		rawContent = string(data)
+		perm = info.Mode()
 
 		if req.OldString == "" {
 			if strings.TrimSpace(rawContent) != "" {
@@ -225,53 +309,9 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		}
 	}
 
-	// Apply replacement
-	before := strings.ReplaceAll(req.OldString, "\r\n", "\n")
-	after := strings.ReplaceAll(req.NewString, "\r\n", "\n")
-
-	// Strip trailing whitespace from new text unless it is a markdown file
-	// to avoid accidental dirty edits from the LLM.
-	isMarkdown := strings.HasSuffix(abs, ".md") || strings.HasSuffix(abs, ".mdx")
-	if !isMarkdown {
-		after = stripTrailingWhitespace(after)
-	}
-
-	var content string
-	if before == "" {
-		// If OldString is empty, we replace the entire content (which must be empty per check above)
-		content = after
-	} else {
-		var matches int
-		var actualOldString string
-		// Try exact match first
-		if strings.Contains(oldContent, before) {
-			actualOldString = before
-		} else {
-			actual, err := findNormalizedMatch(oldContent, before)
-			if err != nil {
-				return nil, fmt.Errorf("%w.\nString: %s", err, req.OldString)
-			}
-			actualOldString = actual
-		}
-
-		matches = strings.Count(oldContent, actualOldString)
-		if matches == 0 {
-			// Should not happen if we found it above, but safe guard
-			return nil, fmt.Errorf("string to replace not found in file.\nString: %s", req.OldString)
-		}
-
-		if matches > 1 && !req.ReplaceAll {
-			return nil, fmt.Errorf("found %d matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: %s", matches, req.OldString)
-		}
-
-		// Preserve curly quote style in the replacement if the original match had them
-		after = preserveQuoteStyle(before, actualOldString, after)
-
-		if req.ReplaceAll {
-			content = strings.ReplaceAll(oldContent, actualOldString, after)
-		} else {
-			content = strings.Replace(oldContent, actualOldString, after, 1)
-		}
+	content, err := t.applyEdit(req, oldContent, abs)
+	if err != nil {
+		return nil, err
 	}
 
 	// Restore original line endings if file had CRLF
@@ -289,11 +329,6 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 
 	diff, added, removed := computeDiff(oldContent, content)
 
-	perm := os.FileMode(domain.DefaultFilePerm)
-	if info != nil {
-		perm = info.Mode()
-	}
-
 	displayPath := t.pathResolver.DisplayPath(abs)
 
 	return &validatedRequest{
@@ -308,6 +343,52 @@ func (t *Tool) validate(params string) (*validatedRequest, error) {
 		added:            added,
 		removed:          removed,
 	}, nil
+}
+
+// applyEdit performs the in-memory replacement and returns the new content.
+func (t *Tool) applyEdit(req *Request, oldContent, abs string) (string, error) {
+	before := strings.ReplaceAll(req.OldString, "\r\n", "\n")
+	after := strings.ReplaceAll(req.NewString, "\r\n", "\n")
+
+	// Strip trailing whitespace from new text unless it is a markdown file
+	// to avoid accidental dirty edits from the LLM.
+	isMarkdown := strings.HasSuffix(abs, ".md") || strings.HasSuffix(abs, ".mdx")
+	if !isMarkdown {
+		after = stripTrailingWhitespace(after)
+	}
+
+	if before == "" {
+		return after, nil
+	}
+
+	var actualOldString string
+	// Try exact match first
+	if strings.Contains(oldContent, before) {
+		actualOldString = before
+	} else {
+		actual, err := findNormalizedMatch(oldContent, before)
+		if err != nil {
+			return "", fmt.Errorf("%w.\nString: %s", err, req.OldString)
+		}
+		actualOldString = actual
+	}
+
+	matches := strings.Count(oldContent, actualOldString)
+	if matches == 0 {
+		return "", fmt.Errorf("string to replace not found in file.\nString: %s", req.OldString)
+	}
+
+	if matches > 1 && !req.ReplaceAll {
+		return "", fmt.Errorf("found %d matches of the string to replace, but replace_all is false. To replace all occurrences, set replace_all to true. To replace only one occurrence, please provide more context to uniquely identify the instance.\nString: %s", matches, req.OldString)
+	}
+
+	// Preserve curly quote style in the replacement if the original match had them
+	after = preserveQuoteStyle(before, actualOldString, after)
+
+	if req.ReplaceAll {
+		return strings.ReplaceAll(oldContent, actualOldString, after), nil
+	}
+	return strings.Replace(oldContent, actualOldString, after, 1), nil
 }
 
 func (t *Tool) executeEdit(ctx context.Context, req *validatedRequest) (string, domain.ToolDisplay) {

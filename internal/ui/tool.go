@@ -68,11 +68,6 @@ func NewToolRenderer(theme *Theme, width int, g gater) *ToolRenderer {
 	}
 }
 
-// SetShortToolBlock toggles the theme's short tool block mode.
-func (r *ToolRenderer) SetShortToolBlock(b bool) {
-	r.Theme.ShortToolBlock = b
-}
-
 func (r *ToolRenderer) formatError(prefix string, err string) string {
 	if prefix == "" {
 		return r.Theme.Error(err)
@@ -219,7 +214,7 @@ func (r *ToolRenderer) buildDiffSpec(d domain.DiffDisplay, status ToolStatus, er
 	if target != "" {
 		spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(target))
 	}
-	if diffContent != "" && (!r.Theme.ShortToolBlock || status == StatusAwaitingApproval) {
+	if diffContent != "" && status == StatusAwaitingApproval {
 		spec.ContentLines = append(spec.ContentLines, strings.Split(diffContent, "\n")...)
 	}
 	if status == StatusAwaitingApproval {
@@ -269,7 +264,7 @@ func (r *ToolRenderer) buildBashSpec(d domain.BashDisplay, output string, status
 	bashOutput := strings.TrimRight(output, "\n")
 
 	spec.ContentLines = append(spec.ContentLines, r.Theme.Muted(fmt.Sprintf("%s$ %s", d.Cwd, d.Command)))
-	if bashOutput != "" && !r.Theme.ShortToolBlock {
+	if bashOutput != "" {
 		spec.ContentLines = append(spec.ContentLines, r.mutedLines(strings.Split(bashOutput, "\n"))...)
 	}
 	if status == StatusAwaitingApproval {

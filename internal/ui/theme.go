@@ -36,12 +36,11 @@ func ToAdaptiveColor(c ColorInfo) lipgloss.AdaptiveColor {
 
 // Theme provides styling and configuration for the UI.
 type Theme struct {
-	PrimaryCol     lipgloss.AdaptiveColor
-	SuccessCol     lipgloss.AdaptiveColor
-	ErrorCol       lipgloss.AdaptiveColor
-	MutedCol       lipgloss.AdaptiveColor
-	TextCol        lipgloss.AdaptiveColor
-	ShortToolBlock bool
+	PrimaryCol lipgloss.AdaptiveColor
+	SuccessCol lipgloss.AdaptiveColor
+	ErrorCol   lipgloss.AdaptiveColor
+	MutedCol   lipgloss.AdaptiveColor
+	TextCol    lipgloss.AdaptiveColor
 }
 
 // StatusPrefix returns a styled icon with a trailing space.

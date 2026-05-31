@@ -2,5 +2,3 @@
 
     ✔ Adding authentication middleware
        ⎿ Edit auth.go (+10, -5)
-         + new auth logic
-         - old auth logic

@@ -22,7 +22,6 @@ type UIConfig struct {
 	chatWindowWidth  int
 	bashOutputHeight int
 	thinkingHeight   int
-	shortToolBlock   bool
 }
 
 // PrimaryColor returns the primary brand color.
@@ -49,16 +48,10 @@ func (c UIConfig) BashOutputHeight() int { return c.bashOutputHeight }
 // ThinkingHeight returns the height of the thinking/process indicator.
 func (c UIConfig) ThinkingHeight() int { return c.thinkingHeight }
 
-// ShortToolBlock returns whether tool outputs should be rendered in a compact format.
-func (c UIConfig) ShortToolBlock() bool { return c.shortToolBlock }
-
 // Setters for testing
 
 // SetChatWindowWidth updates the chat window width.
 func (c *UIConfig) SetChatWindowWidth(w int) { c.chatWindowWidth = w }
-
-// SetShortToolBlock updates the short tool block setting.
-func (c *UIConfig) SetShortToolBlock(b bool) { c.shortToolBlock = b }
 
 // DTOs for JSON persistence.
 type colorDTO struct {
@@ -75,5 +68,4 @@ type uiDTO struct {
 	ChatWindowWidth  int      `json:"chat_window_width"`
 	BashOutputHeight int      `json:"bash_output_height"`
 	ThinkingHeight   int      `json:"thinking_height"`
-	ShortToolBlock   bool     `json:"short_tool_block"`
 }

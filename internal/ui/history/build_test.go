@@ -31,14 +31,12 @@ const testHistoryWidth = 80
 
 func newTestTheme() *ui.Theme {
 	cfg := config.DefaultConfig().UI()
-	cfg.SetShortToolBlock(false)
 	return &ui.Theme{
-		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ui.ToAdaptiveColor(cfg.TextColor()),
 	}
 }
 
@@ -455,12 +453,11 @@ func TestDivider_Color(t *testing.T) {
 
 	cfg := config.DefaultConfig().UI()
 	theme := &ui.Theme{
-		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ui.ToAdaptiveColor(cfg.TextColor()),
 	}
 
 	// Expected USER first-line gutter (primary color, bold so the pipe pops)

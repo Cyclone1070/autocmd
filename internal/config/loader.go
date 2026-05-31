@@ -101,7 +101,6 @@ func newConfig(dto configDTO) (*Config, error) {
 			chatWindowWidth:  dto.UI.ChatWindowWidth,
 			bashOutputHeight: dto.UI.BashOutputHeight,
 			thinkingHeight:   dto.UI.ThinkingHeight,
-			shortToolBlock:   dto.UI.ShortToolBlock,
 		},
 		providers: dto.Providers,
 	}
@@ -135,7 +134,6 @@ func (m *Manager) Load() (*Config, error) {
 			ChatWindowWidth:  defaults.ui.chatWindowWidth,
 			BashOutputHeight: defaults.ui.bashOutputHeight,
 			ThinkingHeight:   defaults.ui.thinkingHeight,
-			ShortToolBlock:   defaults.ui.shortToolBlock,
 		},
 		Providers: defaults.providers,
 	}

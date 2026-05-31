@@ -110,12 +110,11 @@ func TestHistory_GoldenCombinations(t *testing.T) {
 	elements := getHistoryElements()
 	cfg := config.DefaultConfig().UI()
 	theme := &ui.Theme{
-		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ui.ToAdaptiveColor(cfg.TextColor()),
 	}
 	width := 80
 	isDark := true

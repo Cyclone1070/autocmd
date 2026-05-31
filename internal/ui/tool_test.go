@@ -23,14 +23,12 @@ func (m *mockGater) Gate(lines []string, _ int, _ bool, _ *Theme) ([]string, int
 func newTestToolRenderer(t *testing.T) *ToolRenderer {
 	t.Helper()
 	cfg := config.DefaultConfig().UI()
-	cfg.SetShortToolBlock(false) // Default tests to full mode
 	theme := &Theme{
-		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ToAdaptiveColor(cfg.TextColor()),
 	}
 	// For testing, we inject a gater that uses the standard 12 lines
 	return NewToolRenderer(theme, 80, NewToolOutputGater(12))
@@ -192,14 +190,12 @@ func TestRenderBash_TruncatesByVisualLinesAfterWrap(t *testing.T) {
 
 func TestRenderBash_TruncationIndicatorIsMutedInToolContent(t *testing.T) {
 	cfg := config.DefaultConfig().UI()
-	cfg.SetShortToolBlock(false)
 	theme := &Theme{
-		PrimaryCol:     ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ToAdaptiveColor(cfg.TextColor()),
 	}
 	tr := NewToolRenderer(theme, 80, NewToolOutputGater(2))
 	display := domain.BashDisplay{
@@ -248,23 +244,22 @@ func TestRenderDiff_LongDiffTruncation(t *testing.T) {
 	assertGolden(t, "RenderDiff_Long_Diff_Truncation", got)
 }
 
-func TestRenderDiff_TruncatesByVisualLinesAfterWrap(t *testing.T) {
+func TestRenderDiff_DiffBodyHiddenOnSuccess(t *testing.T) {
 	theme := &Theme{}
 	tr := NewToolRenderer(theme, 30, NewToolOutputGater(2))
 	diff := domain.DiffDisplay{
 		Description: "Big",
 		Target:      "Edit x.go",
-		Diff:        "+" + strings.Repeat("x", 100),
+		Diff:        "\n+unique_secret_diff_content",
 	}
 
 	got := tr.RenderDiff(diff, StatusSuccess, "", "✓")
 
-	assert.Contains(t, got, "▲ [", "wrapped overflow should be truncated by visual lines")
+	assert.NotContains(t, got, "unique_secret_diff_content", "diff content should be hidden on success")
 }
 
-func TestRenderDiff_ShortMode(t *testing.T) {
+func TestRenderDiff_ContentHiddenOnSuccess(t *testing.T) {
 	tr := newTestToolRenderer(t)
-	tr.SetShortToolBlock(true)
 	diff := domain.DiffDisplay{
 		Description: "Massive Change",
 		Target:      "Edit big.go",
@@ -274,19 +269,6 @@ func TestRenderDiff_ShortMode(t *testing.T) {
 	assert.NotContains(t, output, "line 1")
 	assert.Contains(t, output, "Massive Change")
 	assert.Contains(t, output, "Edit big.go")
-}
-
-func TestRenderBash_ShortMode(t *testing.T) {
-	tr := newTestToolRenderer(t)
-	tr.SetShortToolBlock(true)
-	display := domain.BashDisplay{
-		Description: "List Files",
-		Command:     "ls -la",
-	}
-	output := tr.RenderBash(display, "file1.txt\nfile2.txt", StatusSuccess, "", "✔")
-	assert.NotContains(t, output, "file1.txt")
-	assert.Contains(t, output, "List Files")
-	assert.Contains(t, output, "ls -la")
 }
 
 func TestRenderString_UsesHeaderAndTailBlockShape(t *testing.T) {

@@ -65,7 +65,6 @@ func DefaultConfig() *Config {
 			chatWindowWidth:  defaultChatWindowWidth,
 			bashOutputHeight: defaultBashOutputHeight,
 			thinkingHeight:   defaultThinkingHeight,
-			shortToolBlock:   false,
 		},
 		providers: ProviderConfig{
 			domain.ProviderGoogle: {

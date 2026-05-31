@@ -129,11 +129,10 @@ func buildAuthManager(cfg *config.Config) (*auth.Manager, error) {
 // newTheme constructs a ui.Theme from config.UIConfig.
 func newTheme(cfg config.UIConfig) *ui.Theme {
 	return &ui.Theme{
-		PrimaryCol:     ui.ToAdaptiveColor(cfg.PrimaryColor()),
-		SuccessCol:     ui.ToAdaptiveColor(cfg.SuccessColor()),
-		ErrorCol:       ui.ToAdaptiveColor(cfg.ErrorColor()),
-		MutedCol:       ui.ToAdaptiveColor(cfg.MutedColor()),
-		TextCol:        ui.ToAdaptiveColor(cfg.TextColor()),
-		ShortToolBlock: cfg.ShortToolBlock(),
+		PrimaryCol: ui.ToAdaptiveColor(cfg.PrimaryColor()),
+		SuccessCol: ui.ToAdaptiveColor(cfg.SuccessColor()),
+		ErrorCol:   ui.ToAdaptiveColor(cfg.ErrorColor()),
+		MutedCol:   ui.ToAdaptiveColor(cfg.MutedColor()),
+		TextCol:    ui.ToAdaptiveColor(cfg.TextColor()),
 	}
 }

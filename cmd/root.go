@@ -181,6 +181,9 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 			termHeight = height
 		}
 	}
+	if chatWidth <= 0 {
+		chatWidth = 80
+	}
 
 	// Loop UI Wiring
 	glamour := ui.NewGlamourRenderer(chatWidth, true)

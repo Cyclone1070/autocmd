@@ -44,8 +44,16 @@ var historyCmd = &cobra.Command{
 
 		theme := newTheme(deps.Config.UI())
 
+		chatWindowWidth := deps.Config.UI().ChatWindowWidth()
 		width, height, _ := term.GetSize(int(os.Stdout.Fd()))
-		m := history.NewModel(bus, theme, deps.Config.UI().ChatWindowWidth(), deps.Config.UI().BashOutputHeight(), width, height)
+		if chatWindowWidth <= 0 {
+			if width > 0 {
+				chatWindowWidth = width
+			} else {
+				chatWindowWidth = 80
+			}
+		}
+		m := history.NewModel(bus, theme, chatWindowWidth, deps.Config.UI().BashOutputHeight(), width, height)
 		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 		if _, err := p.Run(); err != nil {

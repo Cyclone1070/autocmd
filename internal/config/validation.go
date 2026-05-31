@@ -47,8 +47,8 @@ func (c *Config) Validate() error {
 	validateColor("muted_color", c.ui.mutedColor)
 	validateColor("text_color", c.ui.textColor)
 
-	if c.ui.chatWindowWidth < 1 {
-		errs = append(errs, "ui.chat_window_width must be >= 1")
+	if c.ui.chatWindowWidth < 0 {
+		errs = append(errs, "ui.chat_window_width must be >= 0")
 	}
 	if c.ui.bashOutputHeight < 1 {
 		errs = append(errs, "ui.bash_output_height must be >= 1")

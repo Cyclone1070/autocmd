@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	defaultChatWindowWidth  = 80
+	defaultChatWindowWidth  = 0
 	defaultBashOutputHeight = 12
 	defaultThinkingHeight   = 5
 	defaultMaxFileSize      = 20 * 1024 * 1024

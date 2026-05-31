@@ -43,6 +43,9 @@ func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 
 IMPORTANT: Never overwrite an existing command unless the user explicitly asks you to. The "override" parameter defaults to false for a reason. Always inform the user when a name is taken and ask for their permission before setting override=true.
 
+Before saving a read-only command (inspection, display, etc.), test it first to verify the output looks correct and the command runs without errors.
+For commands with side effects (writes, deletes, modifications), do NOT save them automatically — ask the user for explicit permission first. Make sure the user understands what the command does before saving.
+
 Use this tool when the user asks you to save a command they might want to run again later. Examples:
 - "Save this command so I can use it later" → call save_command with a short name and the full bash command.
 - After figuring out the right incantation for something complex (compiling, git operations, docker commands, etc.), offer to save it.`,

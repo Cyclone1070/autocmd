@@ -14,6 +14,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGraphRunner_ChatTurn_IncludesSystemPrompt(t *testing.T) {
+	reg := &testToolRegistry{tools: map[string]tool.BaseTool{testToolNameGreet: &greetTool{}}}
+	llm := &mockLLM{
+		id:            testMockLLMID,
+		displayName:   testMockLLMDisplayName,
+		contextWindow: 128_000,
+		streams: []*mockStream{
+			{chunks: []mockChunk{{text: "ok"}}},
+		},
+	}
+	runner, err := NewGraphRunner(llm, reg, nil, 20, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	sessionMsgs := []*schema.Message{
+		{Role: schema.User, Content: "hello"},
+	}
+	beforeLen := len(sessionMsgs)
+
+	st := &graphRunState{
+		session: &domain.Session{
+			SessionMessages: domain.SessionMessages{
+				Messages: sessionMsgs,
+			},
+		},
+	}
+
+	_, err = runner.graphChatTurn(context.Background(), st)
+	require.NoError(t, err)
+
+	require.NotNil(t, llm.LastMessages, "LLM should have received messages")
+	require.GreaterOrEqual(t, len(llm.LastMessages), 1, "LLM should have received at least one message")
+	require.Equal(t, schema.System, llm.LastMessages[0].Role, "first message to LLM should be system prompt")
+	require.Equal(t, systemPrompt, llm.LastMessages[0].Content, "system prompt content should match")
+
+	// Session should contain the original user message
+	require.Greater(t, len(st.session.Messages), 0, "session should have messages")
+	require.Equal(t, schema.User, st.session.Messages[0].Role, "session starts with user message")
+	require.Equal(t, "hello", st.session.Messages[0].Content, "session user message preserved")
+	for _, m := range st.session.Messages {
+		require.NotEqual(t, schema.System, m.Role, "system messages should not leak into session")
+	}
+	// Session gained the assistant response
+	require.GreaterOrEqual(t, len(st.session.Messages), beforeLen, "session should have at least original messages")
+}
+
 func TestGraphRunner_ChatTurn_LogsSpecificLLMRecvError(t *testing.T) {
 	var buf bytes.Buffer
 	origLogger := slog.Default()

@@ -23,7 +23,10 @@ func (r *GraphRunner) graphChatTurn(ctx context.Context, st *graphRunState) (*gr
 		slog.Error("graph chat bind tools failed", "error", err, "error_text", err.Error())
 		return st, fmt.Errorf("%w: bind tools: %w", ErrModel, err)
 	}
-	stream, err := modelWithTools.Stream(ctx, st.session.Messages)
+	msgs := append([]*schema.Message{
+		{Role: schema.System, Content: systemPrompt},
+	}, st.session.Messages...)
+	stream, err := modelWithTools.Stream(ctx, msgs)
 	if err != nil {
 		slog.Error("graph chat stream start failed", "error", err, "error_text", err.Error())
 		return st, fmt.Errorf("%w: LLM.Stream: %w", ErrModel, err)

@@ -17,6 +17,7 @@ type mockLLM struct {
 	displayName   string
 	streams       []*mockStream
 	contextWindow int
+	LastMessages  []*schema.Message
 }
 
 func (m *mockLLM) ID() string          { return m.id }
@@ -50,7 +51,8 @@ func (b *mockEinoModelBridge) Generate(ctx context.Context, msgs []*schema.Messa
 	return schema.ConcatMessages(chunks)
 }
 
-func (b *mockEinoModelBridge) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+func (b *mockEinoModelBridge) Stream(_ context.Context, msgs []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	b.llm.LastMessages = msgs
 	if b.llm.streamErr != nil && len(b.llm.streams) == 0 {
 		return nil, b.llm.streamErr
 	}

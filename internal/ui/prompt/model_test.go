@@ -361,6 +361,21 @@ func TestModel_ConnectingEvent(t *testing.T) {
 	assert.Contains(t, v, "Connecting to provider")
 }
 
+func TestModel_MCPLoadingEvent(t *testing.T) {
+	theme := &ui.Theme{}
+	bus := &mockBus{updates: make(chan domain.UIUpdate, 10)}
+	tr := ui.NewToolRenderer(theme, 80, ui.NewNoOpGater())
+	m := NewModel(bus, nil, tr, &mockSpinner{}, theme, &mockStream{flushReturns: []string{}}, ui.NewNoOpGater(), 80)
+	m.state = stateIdle
+
+	res, _ := m.Update(busEventMsg{event: domain.MCPLoadingEvent{}})
+	m = res.(*Model)
+	assert.Equal(t, stateLoadingMCP, m.state)
+
+	v := m.View()
+	assert.Contains(t, v, "Loading MCP servers")
+}
+
 func TestModel_WaitingForNamingEvent(t *testing.T) {
 	var flushed []string
 	theme := &ui.Theme{}

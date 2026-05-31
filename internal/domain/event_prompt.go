@@ -46,6 +46,11 @@ type ConnectingEvent struct{}
 
 func (ConnectingEvent) isUIUpdate() {}
 
+// MCPLoadingEvent is emitted when MCP servers are being loaded.
+type MCPLoadingEvent struct{}
+
+func (MCPLoadingEvent) isUIUpdate() {}
+
 // WaitingForNamingEvent is emitted when the app is waiting for auto session naming.
 type WaitingForNamingEvent struct{}
 

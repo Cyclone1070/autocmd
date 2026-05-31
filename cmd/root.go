@@ -121,52 +121,26 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 		question.NewTool(),
 	}
 
-	mcpPath, err := mcp.ResolveConfigPath()
-	if err == nil {
-		mcpCfg, err := mcp.LoadConfigPath(mcpPath)
-		if err == nil && len(mcpCfg.McpServers) > 0 {
-			mcpMgr := mcp.NewManager(mcpCfg, nil, nil)
-			defer func() {
-				_ = mcpMgr.Close()
-			}()
-
-			fetchedTools, err := mcpMgr.Start(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to start mcp: %w", err)
-			}
-			tools = append(tools, fetchedTools...)
-		}
+	// Load MCP config (file read only, no connection)
+	mcpPath, mcpErr := mcp.ResolveConfigPath()
+	var mcpCfg *mcp.Config
+	if mcpErr == nil {
+		mcpCfg, _ = mcp.LoadConfigPath(mcpPath)
 	}
-
-	toolRegistry := tool.NewRegistry(tools)
-
-	llmInstance, err := deps.LLMRegistry.Get(ctx, deps.State.Model)
-	if err != nil {
-		return withCategory(errSetup, err)
-	}
+	hasMCP := mcpCfg != nil && len(mcpCfg.McpServers) > 0
 
 	// Wiring
 	bus := eventbus.New()
 	defer bus.Close()
 	router := actionrouter.New()
 	defer router.Close()
-	permissionResolver := permission.NewResolver(
-		deps.Config.Tools().PermissionDefault(),
-		deps.Config.Tools().ToolPermissions(),
-	)
-	summarizer := agent.NewSummarizer(llmInstance)
-	graphRunner, err := agent.NewGraphRunner(
-		llmInstance,
-		toolRegistry,
-		router,
-		deps.Config.Tools().MaxIterations(),
-		bus,
-		taskMgr,
-		summarizer,
-		permissionResolver,
-	)
-	if err != nil {
-		return withCategory(errSetup, err)
+
+	// Create MCP manager (lifecycle managed in main goroutine)
+	var mcpMgr *mcp.Manager
+	if hasMCP {
+		mcpMgr = mcp.NewManager(mcpCfg, nil, nil)
+		defer func() { _ = mcpMgr.Close() }()
+		bus.SendUIUpdate(domain.MCPLoadingEvent{})
 	}
 
 	// Calculate width and height capping at terminal size
@@ -205,23 +179,66 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 		chatWidth,
 	)
 
-	depsWP := &workflow.PromptDeps{
-		Store:     deps.SessionStore,
-		LLM:       llmInstance,
-		Agent:     graphRunner,
-		Bus:       bus,
-		Forwarder: router,
-		Session:   sess,
-	}
+	resultCh := make(chan error, 1)
 
-	done := workflow.RunPrompt(ctx, input, depsWP)
+	go func() {
+		var mcpTools []einotool.BaseTool
+		if mcpMgr != nil {
+			mcpTools, _ = mcpMgr.Start(ctx)
+		}
+
+		allTools := append([]einotool.BaseTool{}, tools...)
+		allTools = append(allTools, mcpTools...)
+		toolRegistry := tool.NewRegistry(allTools)
+
+		llmInstance, llmErr := deps.LLMRegistry.Get(ctx, deps.State.Model)
+		if llmErr != nil {
+			bus.SendUIUpdate(domain.DoneEvent{})
+			resultCh <- withCategory(errSetup, llmErr)
+			return
+		}
+
+		permissionResolver := permission.NewResolver(
+			deps.Config.Tools().PermissionDefault(),
+			deps.Config.Tools().ToolPermissions(),
+		)
+		summarizer := agent.NewSummarizer(llmInstance)
+		graphRunner, gErr := agent.NewGraphRunner(
+			llmInstance,
+			toolRegistry,
+			router,
+			deps.Config.Tools().MaxIterations(),
+			bus,
+			taskMgr,
+			summarizer,
+			permissionResolver,
+		)
+		if gErr != nil {
+			bus.SendUIUpdate(domain.DoneEvent{})
+			resultCh <- withCategory(errSetup, gErr)
+			return
+		}
+
+		depsWP := &workflow.PromptDeps{
+			Store:     deps.SessionStore,
+			LLM:       llmInstance,
+			Agent:     graphRunner,
+			Bus:       bus,
+			Forwarder: router,
+			Session:   sess,
+		}
+
+		done := workflow.RunPrompt(ctx, input, depsWP)
+		agentErr := <-done
+		resultCh <- agentErr
+	}()
 
 	p := tea.NewProgram(uiModel)
 	if _, err := p.Run(); err != nil {
 		return withCategory(errSetup, err)
 	}
 
-	agentErr := <-done
+	agentErr := <-resultCh
 	if agentErr != nil && !errors.Is(agentErr, context.Canceled) {
 		if errors.Is(agentErr, agent.ErrModel) {
 			return withCategory(errModelProvider, agentErr)

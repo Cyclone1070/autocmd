@@ -51,6 +51,7 @@ const (
 	stateSummarizing
 	stateConnecting
 	stateWaitingForNaming
+	stateLoadingMCP
 	stateDone
 )
 
@@ -206,7 +207,7 @@ func (m *Model) schedulePollOnly() (tea.Model, tea.Cmd) {
 
 func (m *Model) isReadyForEvent() bool {
 	switch m.state {
-	case stateIdle, stateThinking, stateTooling, stateSummarizing, stateConnecting, stateWaitingForNaming:
+	case stateIdle, stateThinking, stateTooling, stateSummarizing, stateConnecting, stateWaitingForNaming, stateLoadingMCP:
 		return true
 	}
 	return false
@@ -294,6 +295,7 @@ func (m *Model) handleBusToolEndEvent(u domain.ToolEndEvent, flushBlocks []strin
 	return m.schedulePollOnly()
 }
 
+//nolint:gocyclo // dispatch switch — each case is straightforward
 func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	m.isPolling = false
 	m.scrollOffset = 0
@@ -308,6 +310,11 @@ func (m *Model) handleBusEvent(u domain.UIUpdate) (tea.Model, tea.Cmd) {
 	}
 
 	switch u := u.(type) {
+	case domain.MCPLoadingEvent:
+		if m.stream != nil {
+			flushBlocks = append(flushBlocks, m.stream.Flush()...)
+		}
+		return m.flushAndTransition(flushBlocks, stateLoadingMCP)
 	case domain.ConnectingEvent:
 		if m.stream != nil {
 			flushBlocks = append(flushBlocks, m.stream.Flush()...)
@@ -444,6 +451,9 @@ func (m *Model) View() string {
 	case stateConnecting:
 		frame := m.spinnerProvider.Frame(m.spinnerFrame)
 		content = ui.NormalizeBlock(m.toolRenderer.RenderString(domain.NewStringDisplay("Connecting to provider", ""), ui.StatusRunning, "", frame))
+	case stateLoadingMCP:
+		frame := m.spinnerProvider.Frame(m.spinnerFrame)
+		content = ui.NormalizeBlock(m.toolRenderer.RenderString(domain.NewStringDisplay("Loading MCP servers", ""), ui.StatusRunning, "", frame))
 	case stateWaitingForNaming:
 		frame := m.spinnerProvider.Frame(m.spinnerFrame)
 		content = ui.NormalizeBlock(m.toolRenderer.RenderString(domain.NewStringDisplay("Waiting for auto session naming", ""), ui.StatusRunning, "", frame))

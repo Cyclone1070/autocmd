@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/Cyclone1070/autocmd/internal/actionrouter"
@@ -24,6 +25,7 @@ import (
 	"github.com/Cyclone1070/autocmd/internal/tool/mcp"
 	"github.com/Cyclone1070/autocmd/internal/tool/question"
 	"github.com/Cyclone1070/autocmd/internal/tool/read"
+	"github.com/Cyclone1070/autocmd/internal/tool/save"
 	"github.com/Cyclone1070/autocmd/internal/tool/service/checksum"
 	"github.com/Cyclone1070/autocmd/internal/tool/service/executor"
 	"github.com/Cyclone1070/autocmd/internal/tool/write"
@@ -69,6 +71,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		input := strings.Join(args, " ")
+
+		if saved, ok := deps.CommandStore.Get(input); ok {
+			return wrapForUser(runSavedCommand(cmd.Context(), saved.Command, workingDir))
+		}
+
 		return wrapForUser(runAgent(cmd.Context(), deps, input, workingDir))
 	},
 }
@@ -119,6 +126,7 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 		bash.NewTaskStopTool(taskMgr),
 		bash.NewTaskStopAllTool(taskMgr),
 		question.NewTool(),
+		save.NewTool(deps.CommandStore),
 	}
 
 	// Load MCP config (file read only, no connection)
@@ -246,6 +254,26 @@ func runAgent(ctx context.Context, deps *Deps, input string, workingDir string) 
 		return withCategory(errAgenticLoop, agentErr)
 	}
 
+	return nil
+}
+
+func runSavedCommand(ctx context.Context, command, workingDir string) error {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+	//nolint:gosec // intentional: running user-saved commands
+	cmd := exec.CommandContext(ctx, shell, "-c", command)
+	cmd.Dir = workingDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.ExitCode())
+		}
+		return err
+	}
 	return nil
 }
 

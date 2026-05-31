@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Cyclone1070/autocmd/internal/auth"
+	"github.com/Cyclone1070/autocmd/internal/command"
 	"github.com/Cyclone1070/autocmd/internal/config"
 	"github.com/Cyclone1070/autocmd/internal/domain"
 	"github.com/Cyclone1070/autocmd/internal/fs"
@@ -20,6 +21,7 @@ type Deps struct {
 	State            *domain.State
 	StateMgr         *state.Manager
 	SessionStore     *session.Store
+	CommandStore     *command.Store
 	AuthManager      *auth.Manager
 	OAuthManager     *auth.OAuthManager
 	LLMRegistry      *provider.LLMRegistry
@@ -56,11 +58,17 @@ func Wire() (*Deps, error) {
 		return nil, err
 	}
 
+	commandStore, err := buildCommandStore(bootstrapFS)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Deps{
 		Config:           cfg,
 		State:            appState,
 		StateMgr:         stateMgr,
 		SessionStore:     sessionStore,
+		CommandStore:     commandStore,
 		AuthManager:      authMgr,
 		OAuthManager:     auth.NewOAuthManager(nil),
 		LLMRegistry:      llmRegistry,
@@ -87,6 +95,14 @@ func buildSessionStore(filesystem fs.FileSystem) (*session.Store, error) {
 		return nil, err
 	}
 	return session.NewStore(filesystem, storageDir), nil
+}
+
+func buildCommandStore(filesystem fs.FileSystem) (*command.Store, error) {
+	storagePath, err := command.DefaultStorePath()
+	if err != nil {
+		return nil, err
+	}
+	return command.NewStore(filesystem, storagePath), nil
 }
 
 // buildRegistries creates the Provider and LLM registries with injected model lists.

@@ -45,7 +45,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:          "cmd [prompt]",
+	Use:          "autocmd [prompt]",
 	Short:        "AutoCmd is a terminal-native AI assistant",
 	Args:         cobra.ArbitraryArgs,
 	SilenceUsage: true,

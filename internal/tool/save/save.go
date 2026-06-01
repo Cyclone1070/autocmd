@@ -39,7 +39,7 @@ func (t *Tool) IsConcurrentSafe() bool { return true }
 func (t *Tool) Info(_ context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
 		Name: toolName,
-		Desc: `Saves a bash command under a user-facing name so the user can run it later by typing "cmd <name>" without going through the AI loop.
+		Desc: `Saves a bash command under a user-facing name so the user can run it later by typing "autocmd <name>" without going through the AI loop.
 
 IMPORTANT: Never overwrite an existing command unless the user explicitly asks you to. The "override" parameter defaults to false for a reason. Always inform the user when a name is taken and ask for their permission before setting override=true.
 

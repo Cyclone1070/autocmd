@@ -3,8 +3,9 @@
 /node_modules
 /build
 /bin
-cmd
-autocmd
+/cmd
+!/cmd/
+/autocmd
 
 # Go build artifacts
 *.test

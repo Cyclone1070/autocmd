@@ -33,7 +33,7 @@ func (p *GoogleProvider) SupportedAuthMethods() []domain.AuthMethod {
 	return []domain.AuthMethod{
 		domain.APIKeyAuthMethod{
 			ID:   domain.AuthMethodAPIKey,
-			Name: "API Key",
+			Name: authMethodNameAPIKey,
 			Fields: []domain.AuthField{
 				{
 					ID:          domain.AuthFieldAPIKey,

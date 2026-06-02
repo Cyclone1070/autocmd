@@ -17,6 +17,7 @@ const (
 	permissionModeDeny  = "deny"
 
 	contextWindow128k = 128000
+	contextWindow200k = 200000
 	contextWindow256k = 256000
 	contextWindow2M   = 2000000
 )
@@ -67,6 +68,10 @@ func DefaultConfig() *Config {
 			thinkingHeight:   defaultThinkingHeight,
 		},
 		providers: ProviderConfig{
+			domain.ProviderOpenCode: {
+				{ID: "opencode/deepseek-v4-flash-free", Name: "DeepSeek V4 Flash Free", ContextWindow: contextWindow200k},
+				{ID: "opencode/big-pickle", Name: "Big Pickle", ContextWindow: contextWindow200k},
+			},
 			domain.ProviderGoogle: {
 				{ID: "google/gemma-4-31b-it", Name: "Gemma 4", ContextWindow: contextWindow256k},
 				{ID: "google/gemma-4-26b-a4b-it", Name: "Gemma 4 MoE", ContextWindow: contextWindow256k},

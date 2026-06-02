@@ -2,8 +2,9 @@ package domain
 
 // Provider IDs.
 const (
-	ProviderGoogle = "google"
-	ProviderGitHub = "github"
+	ProviderGoogle   = "google"
+	ProviderGitHub   = "github"
+	ProviderOpenCode = "opencode"
 )
 
 // ID Generation Constants.

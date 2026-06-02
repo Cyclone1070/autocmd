@@ -109,11 +109,13 @@ func buildCommandStore(filesystem fs.FileSystem) (*command.Store, error) {
 func buildRegistries(cfg *config.Config, authMgr *auth.Manager) (*provider.LLMRegistry, *provider.Registry) {
 	googleModels := toDomainModels(cfg.Providers()[domain.ProviderGoogle])
 	githubModels := toDomainModels(cfg.Providers()[domain.ProviderGitHub])
+	opencodeModels := toDomainModels(cfg.Providers()[domain.ProviderOpenCode])
 
 	providerRegistry := provider.NewRegistry(
 		authMgr,
 		provider.NewGoogleProvider(googleModels),
 		provider.NewGitHubProvider(githubModels),
+		provider.NewOpenCodeProvider(opencodeModels),
 	)
 
 	llmRegistry := provider.NewLLMRegistry(authMgr, providerRegistry)

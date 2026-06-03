@@ -8,6 +8,9 @@
 
 ---
 
+<img width="1108" height="915" alt="Screenshot 2026-06-03 at 13 05 23" src="https://github.com/user-attachments/assets/feeb5fe2-1eab-4bc0-a7ff-9f22f4d0c6e3" />
+
+
 ## Features
 
 - **AI-powered chat** — Ask questions, run commands, and manipulate files using natural language.
